@@ -82,7 +82,9 @@ test('市场条目与 package.json 说的是同一件事', { skip: !moduleUrl &&
   // built from version.source, so passing "0.1.0" would look for its `.type`.
   assert.equal(
     marketInstallTarget(plugin.name, latest).spec,
-    `${manifest.name}@${manifest.version}`,
+    latest.source.type === 'git'
+      ? `git+${latest.source.url.replace(/\.git$/, '')}.git#${latest.source.commit}`
+      : `${manifest.name}@${manifest.version}`,
   );
 });
 

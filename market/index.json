@@ -1,8 +1,8 @@
 {
   "format": 1,
   "title": {
-    "en": "ChapterWhale (release draft)",
-    "zh": "码章鲸（发行草案，尚未上线）"
+    "en": "ChapterWhale",
+    "zh": "码章鲸 · 小说创作工作台"
   },
   "description": {
     "en": "Sidebar workbench for a local novel-writing pipeline: chapters, shared memory, outlines, publish queue, daily-update jobs, model pricing and cost reports, driven by a local manager service.",
@@ -52,8 +52,8 @@
         "zh": "码章鲸 · AI小说写作与番茄发布"
       },
       "description": {
-        "en": "AI-assisted novel writing and Fanqie publishing with a bundled Windows x64 runtime. Local release candidate, not published.",
-        "zh": "AI 辅助开发的小说写作与番茄发布工作台，内置 Windows x64 运行环境。当前为本地候选版本，尚未公开发布。"
+        "en": "Windows x64 AI novel writing, long-form memory, chapter review and a Fanqie publishing queue. Includes an automatically managed Python backend and browser. Prerelease.",
+        "zh": "Windows x64 小说写作工作台：大纲、长篇记忆、审查润色与番茄发布队列。自动准备 Python 后端与浏览器。公开测试版。"
       },
       "icon": "https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/icon.svg",
       "author": "thus-zhou",
@@ -79,9 +79,11 @@
       "versions": [
         {
           "version": "0.2.0-rc.1",
-          "publishTimestamp": 1794302239,
+          "publishTimestamp": 1794303648,
           "source": {
-            "type": "npm"
+            "type": "git",
+            "url": "https://github.com/thus-zhou/dsh-chapter-whale",
+            "commit": "552206b609f0dc04865d2ab9f5029c2694b50bc1"
           },
           "engines": {
             "dsh": ">=0.2.2-rc.1"
@@ -89,6 +91,5 @@
         }
       ]
     }
-  ],
-  "releaseDraft": true
+  ]
 }
