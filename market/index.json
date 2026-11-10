@@ -48,12 +48,12 @@
     {
       "name": "dsh-chapter-whale",
       "title": {
-        "en": "ChapterWhale — AI Novel Writing & Publishing",
-        "zh": "码章鲸 · AI小说写作与番茄发布"
+        "en": "ChapterWhale — Automated Novel Writing & Publishing",
+        "zh": "码章鲸 · 全自动小说写作与番茄发布"
       },
       "description": {
-        "en": "Windows x64 AI novel writing, long-form memory, chapter review and a Fanqie publishing queue. Includes an automatically managed Python backend and browser. Prerelease.",
-        "zh": "Windows x64 小说写作工作台：大纲、长篇记忆、审查润色与番茄发布队列。自动准备 Python 后端与浏览器。公开测试版。"
+        "en": "Windows x64 unattended novel writing and Fanqie publishing with configurable schedules, chapter counts and word targets, plus optional free-quota models and supported vendor logins. Bundles Python and Chromium.",
+        "zh": "Windows x64 全自动小说写作与番茄发布工作台：自定义更新时间、章数和篇幅，按任务无人值守执行，接入部分免费模型并支持部分厂商账号登录。内置 Python 后端与浏览器。"
       },
       "icon": "https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/icon.svg",
       "author": "thus-zhou",
