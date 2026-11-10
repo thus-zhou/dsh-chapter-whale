@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#193d33"><title>连接你的编辑部 · 小说助手</title>
+  <link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/editorial.css">
+  <script src="/static/pair.js" defer></script>
+</head>
+<body class="pair-page">
+  <main class="pair-shell">
+    <div class="pair-brand"><span class="brand-mark">文</span><span>小说助手<small>THE WRITER’S STUDY</small></span></div>
+    <article class="pair-card">
+      <span class="eyebrow">YOUR STORIES, WITH YOU</span>
+      <h1>把编辑部，<br>带在身边。</h1>
+      <p>在电脑的「连接设备」中生成配对码，<br>接着在这里输入，即可继续创作。</p>
+      <form id="pair-form">
+        <label for="device-name">设备名称<input id="device-name" name="name" maxlength="40" value="我的手机" autocomplete="off" required></label>
+        <label for="pair-code">8 位配对码<input id="pair-code" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" placeholder="00000000" required></label>
+        <p id="pair-error" role="alert" hidden></p>
+        <button class="button button-primary" type="submit">连接编辑部 <span aria-hidden="true">↗</span></button>
+      </form>
+      <small>电脑需保持运行。配对码 10 分钟内有效，仅可使用一次。</small>
+    </article>
+    <p class="pair-footer">一章一章，写向远方。</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# Bundle patch for dsh-chapter-whale.
+#
+# A patch replaces the whole entry it matches, so this file carries the identity
+# of the inserted plugin and nothing else: every value below is either a default
+# from `Config` in index.js or something the user set in their own profile
+# patch. Hard-coding port/rootDir here would silently win over the user's
+# profile configuration and would bake one machine's project path into a package
+# that other machines install.
+#
+# Users who need a fixed rootDir put it in their profile cordis.patch.yml:
+#
+#   - id: novel-helper
+#     config:
+#       rootDir: 'D:\path\to\novel-helper'
+#
+- insert:
+    - id: novel-helper
+      name: dsh-chapter-whale

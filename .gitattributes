@@ -1,0 +1,6 @@
+# Keep source line endings as authored: the panel bundle is shipped verbatim, and a
+# CRLF rewrite would make `npm pack` contents differ between machines.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.svg text

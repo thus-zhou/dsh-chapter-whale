@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ChapterWhale — AI Novel Writing & Publishing",
+    "description": "Native sidebar panel and a novel_helper tool for a local 小说助手 manager service: workspace, chapters, shared memory, house rules, outline, publish queue, daily jobs, provider pricing and cost analysis. The panel can start the local service when it is down; every mutation needs an explicit confirmation."
+  }
+}

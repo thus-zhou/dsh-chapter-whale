@@ -1,0 +1,12 @@
+node_modules/
+runtime/
+*.tgz
+.tmp/
+verification/
+**/__pycache__/
+**/*.pyc
+backend/accounts/
+backend/books/
+backend/integration_data/
+backend/playwright-browsers/
+.env

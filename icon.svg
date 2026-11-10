@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="小说助手">
+  <defs>
+    <linearGradient id="nh-quill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4d91ff"/>
+      <stop offset="1" stop-color="#45d9f4"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="#4d91ff" stroke-opacity="0.42" stroke-width="1.5"/>
+  <path d="M20 16h18l8 8v24a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V18a2 2 0 0 1 2-2z"
+        fill="#0e141e" stroke="#4d91ff" stroke-opacity="0.75" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M38 16v8h8" fill="none" stroke="#4d91ff" stroke-opacity="0.75" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M24 31h14M24 37h14M24 43h9" stroke="#8998af" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+  <path d="M44 42c-4.2 1.4-7 3.6-9.6 7.2l-.6 1 1.1-.4c3.9-1.5 6.6-3.6 9.1-7.8z"
+        fill="url(#nh-quill)"/>
+  <path d="M45.4 38.6l2.6 1.8-1.6 2.6-2.7-1.9 1.7-2.5z" fill="url(#nh-quill)"/>
+  <circle cx="45.5" cy="20.5" r="2.5" fill="#45d9f4" opacity="0.9"/>
+</svg>

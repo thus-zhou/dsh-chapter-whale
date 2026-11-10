@@ -1,0 +1,243 @@
+/* Studio design system. Loaded last: layout and visual tokens live here;
+   the earlier stylesheets continue to own feature behavior and legacy views.
+   Local fonts only. No remote fonts, analytics, or decorative animation loops. */
+:root {
+  --sans: "Microsoft YaHei UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --paper: #eeefeb;
+  --surface: #f8f9f5;
+  --surface-alt: #e9ede8;
+  --nav-surface: #e7eae5;
+  --ink: #273b39;
+  --text: #3e4b48;
+  --muted: #586963;
+  --line: #d9dfd8;
+  --green: #365e56;
+  --green-soft: #e1eae2;
+  --primary-hover: #294c45;
+  --on-primary: #f8faf6;
+  --sidebar-width: 218px;
+  --radius: 16px;
+  --shadow: 0 2px 3px #273b3902, 0 10px 30px #273b3904;
+}
+:root[data-theme="dark"] {
+  --paper: #1c2423;
+  --surface: #242e2c;
+  --surface-alt: #2c3834;
+  --nav-surface: #202926;
+  --ink: #e1e7de;
+  --text: #ced8cf;
+  --muted: #a7b9ac;
+  --line: #3a4841;
+  --green: #b2cdb8;
+  --green-soft: #34483d;
+  --primary-hover: #c7dccb;
+  --on-primary: #253a2b;
+  --shadow: 0 10px 30px #0000000a;
+}
+body { font-weight: 400; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, .brand { font-family: var(--sans); }
+h1 { font-size: 30px; font-weight: 600; letter-spacing: -.045em; line-height: 1.5; }
+h2 { font-weight: 600; letter-spacing: -.025em; }
+button, input, select, textarea { font-family: var(--sans); }
+.sidebar { padding: 27px 14px 20px; border-right-color: transparent; }
+.brand { margin: 0 10px 38px; font-size: 19px; font-weight: 600; letter-spacing: -.05em; gap: 11px; }
+.brand-mark { width: 33px; height: 34px; font-size: 21px; border-radius: 9px 9px 14px 9px; }
+.sidebar-label { font-size: 11px; margin-left: 13px; margin-bottom: 9px; }
+.sidebar-label.second { margin-top: 30px; }
+.nav { gap: 3px; }
+.nav a { min-height: 43px; border-radius: 8px; font-size: 13px; padding: 10px 13px; gap: 12px; font-weight: 400; }
+.nav a.active { background: var(--surface); color: var(--green); font-weight: 600; box-shadow: 0 1px 3px #273b3905; }
+.nav a .icon { width: 17px; height: 17px; opacity: .9; }
+.sidebar-bottom { padding-left: 12px; padding-right: 12px; }
+.connection { line-height: 1.8; }
+.workspace { border-radius: 0; }
+.topbar { height: 62px; padding: 0 40px; border-bottom-color: color-mix(in srgb, var(--line) 60%, transparent); }
+.breadcrumb { font-size: 12px; }
+.topbar-actions { gap: 12px; }
+.icon-button { border-radius: 9px; }
+main { max-width: 1380px; padding: 38px 40px 30px; }
+.page-heading { margin-bottom: 30px; align-items: flex-start; }
+.page-heading p { font-size: 13px; line-height: 1.8; margin-top: 6px; }
+.page-heading .heading-actions { padding-top: 6px; }
+.button { min-height: 39px; border-radius: 8px; font-size: 12px; font-weight: 500; padding: 8px 15px; }
+.button-secondary { background: var(--surface); border-color: var(--line); }
+.button:hover:not(:disabled) { transform: none; }
+.button-primary:active:not(:disabled) { transform: scale(.98); }
+.panel, .project-card, .account-card, .job-card { border-color: var(--line); border-radius: 16px; }
+.panel-header { padding: 24px 26px; }
+.panel-header h2 { font-size: 17px; }
+.panel-form { padding-left: 26px; padding-right: 26px; }
+.panel-form label, .dialog-form label { font-weight: 400; }
+.panel-form input, .panel-form select, .panel-form textarea,
+.dialog-form input, .dialog-form select, .dialog-form textarea {
+  border-radius: 8px; background: var(--surface); box-shadow: none; font-weight: 400;
+}
+.stat-card { border: 1px solid var(--line); border-radius: 14px; padding: 23px; box-shadow: none; }
+.stat-value, .project-metrics strong { font-family: var(--sans); font-weight: 500; letter-spacing: -.05em; }
+.stat-value { font-size: 34px; }
+.stat-label { font-size: 12px; }
+.stat-detail { font-size: 11px; }
+.list-row, .operation-row { padding: 20px 26px; }
+.row-content h3 { font-size: 13px; font-weight: 500; }
+.row-content p { font-size: 12px; line-height: 1.8; }
+.row-icon { background: var(--surface-alt); border-radius: 10px; }
+.project-title { font-family: var(--sans); font-size: 21px; font-weight: 600; line-height: 1.7; }
+.project-main, .account-card, .job-card { padding: 25px; }
+.project-card:hover, .account-card:hover { border-color: var(--line); }
+.pill { border-radius: 6px; font-size: 11px; }
+.notice { border-radius: 10px; line-height: 1.9; }
+.empty-state { padding: 42px 24px; }
+.empty-state h3 { font: 500 16px/1.8 var(--sans); }
+.empty-state p { font-size: 12px; }
+.dialog { border-radius: 18px; box-shadow: 0 24px 90px #16282033; }
+.dialog::backdrop { background: #13271f66; backdrop-filter: blur(5px); }
+.dialog-header h2 { font-size: 20px; }
+.dialog-header { padding: 22px 26px; }
+.chapter-preview { font-family: var(--sans); font-weight: 400; }
+
+/* Model studio: one shared surface, six aligned rows. The expanded editor
+   remains in its original DOM position, so unsaved bindings and focus survive. */
+#page-ai { max-width: 1080px; margin: 0 auto; }
+#page-ai > .page-heading { margin-bottom: 22px; }
+.free-mode-tabs { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0 0 10px; margin-bottom: 25px; width: 100%; gap: 6px; isolation: isolate; }
+.free-mode-tabs button { min-height: 37px; padding: 8px 17px; font-size: 13px; font-weight: 400; }
+.free-mode-tabs button[aria-selected=true] { color: var(--green); font-weight: 600; }
+.ai-tab-slider { top: 0; bottom: 10px; border-radius: 8px; background: var(--green-soft); box-shadow: none; }
+.provider-panel { border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 16px; }
+.provider-panel .panel-header { padding: 25px 28px 19px; border-bottom: 0; }
+.provider-panel .panel-header h2 { font-size: 18px; }
+.provider-panel .panel-header .field-help { font-size: 12px; margin-top: 5px; }
+.team-caption { border: 0; padding: 0; font: 11px var(--mono); background: transparent; letter-spacing: .14em; color: var(--muted); }
+.provider-panel .panel-form { padding: 0 28px 22px; }
+.resource-policy-hint { margin: 0 28px 17px; padding: 9px 12px; background: var(--green-soft); color: var(--green); border-radius: 8px; font-size: 11px; }
+.provider-selectors { display: grid; grid-template-columns: minmax(0,1fr); gap: 0; }
+.team-enable { padding: 0 0 18px; border-bottom: 1px solid var(--line); gap: 12px; flex-direction: row; align-items: center; }
+.team-enable .check-label { font-size: 12px !important; font-weight: 400; }
+.team-enable .field-help { margin: 0; font-size: 11px; }
+.provider-binding, .provider-binding[data-role=default], .provider-binding[data-role=E] {
+  grid-column: 1/-1; background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  border-radius: 0; box-shadow: none; transition: background .18s;
+}
+.provider-binding:hover, .provider-binding[open] { border-color: var(--line); box-shadow: none; }
+.provider-binding > .binding-identity,
+.provider-binding[data-role=default] > .binding-identity,
+.provider-binding[data-role=E] > .binding-identity {
+  display: grid; grid-template-columns: 38px minmax(150px,1fr) minmax(160px,1.2fr) 16px;
+  align-items: center; gap: 15px; min-height: 77px; padding: 15px 2px;
+}
+.provider-binding .binding-letter { grid-column: 1; grid-row: 1; width: 35px; height: 35px; border: 1px solid var(--line); background: var(--surface-alt); color: var(--muted); border-radius: 10px; font: 500 13px var(--sans); }
+.provider-binding .binding-title { grid-column: 2; grid-row: 1; }
+.provider-binding .binding-title strong { font-size: 14px; font-weight: 500; }
+.provider-binding .binding-title small { font-size: 11px; line-height: 1.7; margin-top: 4px; }
+.provider-binding .binding-current { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px; text-align: right; }
+.provider-binding .binding-current b { font: 500 13px/1.6 var(--sans); letter-spacing: 0; overflow-wrap: anywhere; }
+.provider-binding .binding-current small { font-size: 11px; font-weight: 400; }
+.provider-binding .binding-chevron { grid-column: 4; grid-row: 1; font: 14px var(--sans); }
+.provider-binding[open] > .binding-identity .binding-letter { border-color: transparent; background: var(--green-soft); color: var(--green); }
+.provider-binding[open] > .binding-identity .binding-title strong { color: var(--green); }
+.binding-controls, .provider-binding[data-role=default] .binding-controls {
+  grid-template-columns: minmax(0,.9fr) minmax(0,1.3fr); gap: 17px 20px;
+  margin: 0 0 20px 53px; padding: 18px 20px; border: 1px solid var(--line);
+  border-radius: 12px; background: color-mix(in srgb,var(--surface-alt) 45%,var(--surface));
+}
+.binding-label { font-size: 11px; letter-spacing: .025em; margin-bottom: 8px; }
+.binding-controls input, .binding-controls select { min-height: 43px; font-size: 13px; background: var(--surface); padding: 10px 12px; }
+.role-tools { grid-template-columns: minmax(120px,.9fr) minmax(0,1.3fr); gap: 10px 20px; padding: 0; }
+.role-tools-actions { gap: 8px; }
+.role-tools-actions .button { min-height: 43px; padding: 9px 12px; font-size: 12px; }
+.role-check { font-size: 11px; min-height: 18px; line-height: 1.8; }
+.role-health { width: 6px; height: 6px; margin-left: 8px; }
+.binding-note { font-size: 11px; border: 0; padding: 0; line-height: 1.8; }
+.binding-fallbacks summary { font-size: 12px; min-height: 24px; }
+.provider-policy { padding: 18px 2px 0; margin: 0; border: 0; }
+.provider-policy summary { font-size: 12px; }
+.binding-savebar { border: 0; margin: 0; padding-top: 24px; gap: 12px; }
+.binding-savebar .field-help { font-size: 11px; margin: 0; }
+.binding-savebar .button { padding-left: 22px; padding-right: 22px; }
+.binding-budget { padding-top: 15px; }
+.binding-budget summary { font-size: 11px; }
+.binding-budget p { margin: 8px 0 0; }
+.model-menu { border-radius: 10px; padding: 6px; box-shadow: 0 10px 28px #172b2320; }
+.model-menu button { font: 12px/1.7 var(--sans); }
+.model-trigger { color: var(--muted); border-left: 0; }
+.provider-list { padding: 0 28px; }
+.provider-row { gap: 15px; padding: 22px 0; }
+.provider-row strong { font-size: 14px; font-weight: 500; }
+.provider-monogram { background: var(--surface-alt); border: 1px solid var(--line); border-radius: 11px; }
+.free-hub { border-radius: 16px; }
+.free-channel { border-radius: 12px; box-shadow: none; background: var(--surface); padding: 20px; }
+.free-channel:hover { transform: none; box-shadow: var(--shadow); }
+.free-channel h3 { font-weight: 500; }
+.free-channel-grid { gap: 14px; }
+.free-channel-mark { border-radius: 9px; background: var(--surface-alt); color: var(--green); }
+.free-channel-counts { font-size: 12px; }
+.free-channel p { line-height: 1.8; }
+.studio-tabs { border-radius: 10px; }
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  :root { --sidebar-width: 192px; }
+  main { padding: 32px 26px; }
+  .topbar { padding: 0 26px; }
+  .brand { margin-left: 5px; font-size: 17px; }
+  .nav a { padding-left: 11px; }
+  .provider-panel .panel-form { padding-left: 22px; padding-right: 22px; }
+  .binding-controls { margin-left: 0; }
+  .provider-binding > .binding-identity,
+  .provider-binding[data-role=default] > .binding-identity,
+  .provider-binding[data-role=E] > .binding-identity { grid-template-columns: 32px minmax(100px,1fr) minmax(120px,1fr) 12px; gap: 10px; }
+  .role-tools-actions { flex-wrap: nowrap; }
+  .role-tools-actions .button { font-size: 11px; padding-left: 7px; padding-right: 7px; }
+}
+@media (max-width: 760px) {
+  :root { --sidebar-width: 236px; }
+  main { padding: 27px 18px calc(92px + env(safe-area-inset-bottom)); }
+  .topbar { height: 58px; padding: 0 18px; }
+  .topbar-actions { gap: 8px; }
+  .topbar .icon-button { width: 34px; height: 36px; }
+  h1 { font-size: 26px; }
+  .page-heading { margin-bottom: 22px; }
+  .page-heading p { font-size: 12px; }
+  .page-heading .heading-actions { padding: 0; }
+  .button { min-height: 44px; }
+  .free-mode-tabs { gap: 3px; margin-bottom: 20px; padding-bottom: 9px; }
+  .free-mode-tabs button { font-size: 12px; padding: 9px 12px; min-height: 42px; }
+  .ai-tab-slider { top: 0; bottom: 9px; }
+  .provider-panel .panel-header { padding: 22px 18px 17px; }
+  .provider-panel .panel-header h2 { font-size: 17px; }
+  .provider-panel .panel-header .field-help { font-size: 11px; }
+  .provider-panel .panel-form { padding: 0 18px 20px; }
+  .resource-policy-hint { margin-left: 18px; margin-right: 18px; line-height: 1.8; }
+  .team-enable { flex-direction: column; align-items: flex-start; gap: 3px; padding-bottom: 17px; }
+  .team-enable .field-help { font-size: 11px; }
+  .provider-binding > .binding-identity,
+  .provider-binding[data-role=default] > .binding-identity,
+  .provider-binding[data-role=E] > .binding-identity {
+    grid-template-columns: 32px minmax(0,1fr) 12px; gap: 4px 12px; min-height: 113px; padding: 18px 0;
+  }
+  .provider-binding .binding-letter { grid-row: 1/3; align-self: start; width: 32px; height: 33px; font-size: 12px; }
+  .provider-binding .binding-title { grid-row: 1; }
+  .provider-binding .binding-title strong { font-size: 14px; }
+  .provider-binding .binding-title small { margin-top: 3px; font-size: 11px; }
+  .provider-binding .binding-current { grid-column: 2; grid-row: 2; align-items: flex-start; text-align: left; gap: 1px; margin-top: 4px; }
+  .provider-binding .binding-current b { font-size: 12px; }
+  .provider-binding .binding-current small { font-size: 10px; }
+  .provider-binding .binding-chevron { grid-column: 3; grid-row: 1; align-self: start; }
+  .binding-controls, .provider-binding[data-role=default] .binding-controls { grid-template-columns: minmax(0,1fr); margin: 0 0 18px; padding: 16px 13px; gap: 14px; }
+  .binding-controls input, .binding-controls select { font-size: 16px; min-height: 45px; }
+  .role-tools { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  .role-tools-actions { gap: 8px; }
+  .role-tools-actions .button { min-height: 44px; flex: 1; font-size: 11px; padding-left: 7px; padding-right: 7px; }
+  .role-check, .binding-note { font-size: 11px; }
+  .binding-savebar { flex-direction: column; align-items: stretch; padding-top: 20px; gap: 13px; }
+  .binding-savebar .field-help { max-width: none; text-align: center; }
+  .binding-savebar .button { width: 100%; }
+  .provider-list { padding: 0 18px; }
+  .panel-header, .panel-form, .dialog-header, .dialog-content, .dialog-form { padding-left: 20px; padding-right: 20px; }
+  .stat-card { padding: 19px 17px; }
+  .stat-value { font-size: 30px; }
+  .mobile-dock { background: var(--surface); border-top-color: var(--line); backdrop-filter: none; }
+  .mobile-dock a { font-size: 10px; gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

@@ -1,0 +1,474 @@
+ 
+# Copyright (c) 2025 左岚. All rights reserved.
+"""大纲管理 API"""
+
+import os
+import re
+import tempfile
+from pathlib import Path
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query, Depends
+from pydantic import BaseModel
+from services import projects_manager
+from services.activity_logger import get_logger
+from dependencies import get_project_root
+
+router = APIRouter()
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _pick_volume_file(outline_dir: Path, volume: int) -> Optional[Path]:
+    """按与列表页一致的规则选择卷大纲文件（同卷多文件时取内容最多者）。"""
+    files = [f for f in outline_dir.glob(f"第{volume}卷*.md") if f.is_file()]
+    if not files:
+        return None
+    return max(files, key=lambda f: f.stat().st_size)
+
+
+class OutlineItem(BaseModel):
+    """大纲项"""
+    id: str
+    title: str
+    type: str  # volume/chapter
+    content: Optional[str] = None
+    children: List["OutlineItem"] = []
+
+
+class OutlineUpdate(BaseModel):
+    """大纲更新请求"""
+    content: str
+
+
+class CheckContinuityRequest(BaseModel):
+    """连续性校验请求参数"""  # 校验请求体
+    content: str  # 大纲文本内容
+
+
+# get_project_root imported from dependencies
+
+
+@router.get("")
+async def get_outlines(root: Path = Depends(get_project_root)):
+    """获取大纲列表"""
+    outline_dir = root / "大纲"
+    
+    if not outline_dir.exists():
+        return {"outlines": [], "total_outline": None}
+    
+    outlines = []
+    total_outline = None
+    
+    # 读取总纲
+    total_file = outline_dir / "总纲.md"
+    if total_file.exists():
+        content = total_file.read_text(encoding="utf-8")
+        total_outline = {"id": "total", "title": "总纲", "content": content}
+    
+    # 读取卷大纲（按卷号去重，保留内容更多的文件）
+    seen_volumes = {}
+    for f in sorted(outline_dir.glob("第*卷*.md")):
+        match = re.search(r"第(\d+)卷", f.name)
+        if match:
+            volume = int(match.group(1))
+            if volume not in seen_volumes or f.stat().st_size > seen_volumes[volume].stat().st_size:
+                seen_volumes[volume] = f
+
+    for volume in sorted(seen_volumes):
+        f = seen_volumes[volume]
+        content = f.read_text(encoding="utf-8")
+        chaps = parse_outline_chapters(content)  # 解析本卷章节
+        continuity = check_chapter_continuity(chaps)  # 校验连续性
+        outlines.append({
+            "id": f"volume_{volume}",
+            "volume": volume,
+            "title": f.stem,
+            "content": content,
+            "continuity": continuity  # 连续性检查信息
+        })
+    
+    return {"outlines": outlines, "total_outline": total_outline}
+
+
+
+def parse_outline_chapters(content: str) -> List[dict]:
+    """解析大纲内容中的章节列表"""
+    chapters = []
+    if not content:
+        return chapters
+
+    # 定义多种匹配模式（优先匹配"第X章"格式，避免误匹配普通序号列表）
+    patterns = [
+        # 模式0: 混合格式 (## **第1章：标题**) - 优先匹配
+        re.compile(r"^\s*#{1,4}\s*(?:\*{2}|_{2})\s*第\s*(\d+)\s*章[：:]\s*(.+?)(?:\*{2}|_{2})?\s*$", re.MULTILINE),
+
+        # 模式1: Markdown 标题 + 冒号格式 "## 第1章：标题"
+        re.compile(r"^\s*#{1,4}\s*第\s*(\d+)\s*章[：:]\s*(.+?)\s*$", re.MULTILINE),
+        
+        # 模式2: Markdown 标题 + 书名号格式 "### 第61章《标题》"
+        re.compile(r"^\s*#{1,4}\s*第\s*(\d+)\s*章《(.+?)》\s*$", re.MULTILINE),
+        
+        # 模式3: 列表项 + 加粗格式 "- **第121章：标题**"
+        re.compile(r"^\s*[-*]\s*\*{2}第\s*(\d+)\s*章[：:]\s*([^\*]+?)\*{2}\s*$", re.MULTILINE),
+        
+        # 模式4: 纯加粗格式 "**第1章：标题**"
+        re.compile(r"^\s*\*{2}第\s*(\d+)\s*章[：:]\s*([^\*]+?)\*{2}\s*$", re.MULTILINE),
+        
+        # 模式5: 纯文本格式 "第1章：标题" 或 "第1章 标题"
+        re.compile(r"^\s*第\s*(\d+)\s*章[：:\s]\s*(.+?)\s*$", re.MULTILINE),
+        
+        # 模式6: 中文数字格式 "第一章 标题"
+        re.compile(r"^\s*(?:#{1,4}\s*|\*{2})?第\s*([零一二三四五六七八九十百千万]+)\s*章[：:\s《]\s*(.+?)(?:\*{2}|》)?\s*$", re.MULTILINE),
+    ]
+
+    # Lazy import to avoid circular dependency if any
+    try:
+        from utils import chinese_to_arabic
+    except ImportError:
+        chinese_to_arabic = lambda x: 0 # Fallback
+
+    seen_ids = set()
+
+    for pattern in patterns:
+        for m in pattern.finditer(content):
+            try:
+                raw_num = m.group(1)
+                
+                # 尝试判断是否是中文数字
+                if any(c in "零一二三四五六七八九十百千万" for c in raw_num):
+                    chap_num = chinese_to_arabic(raw_num)
+                else:
+                    chap_num = int(raw_num)
+                    
+                # 避免重复 (如果多种模式匹配到了同一行，或者不同模式匹配了同一个章节号)
+                if chap_num in seen_ids:
+                    continue
+                
+                chap_title = m.group(2).strip()
+                # 去掉可能残留的 markdown 标记 (如 **, [], 等)
+                chap_title = re.sub(r"[\*\[\]]", "", chap_title).strip()
+                
+                chapters.append({
+                    "id": f"chapter_{chap_num}",
+                    "chapter": chap_num,
+                    "title": f"第{chap_num}章 {chap_title}",
+                    "type": "chapter",
+                    "children": []
+                })
+                seen_ids.add(chap_num)
+            except:
+                continue
+    
+    # 按章节号排序
+    chapters.sort(key=lambda x: x["chapter"])
+    return chapters
+
+
+def check_chapter_continuity(chapters: List[dict]) -> dict:
+    """校验大纲章节连续性，识别跳号断层"""  # 校验大纲章节连续性
+    if not chapters:
+        return {"is_continuous": True, "discontinuities": []}
+    sorted_chaps = sorted(chapters, key=lambda c: c.get("chapter", 0))  # 按章节编号升序排列
+    discontinuities = []  # 记录跳号区间
+    for i in range(len(sorted_chaps) - 1):
+        curr_num = sorted_chaps[i].get("chapter", 0)  # 当前章号
+        next_num = sorted_chaps[i + 1].get("chapter", 0)  # 下一章号
+        if next_num > curr_num + 1:  # 检测到跳号断层
+            missing_start = curr_num + 1  # 缺失起始章号
+            missing_end = next_num - 1  # 缺失结束章号
+            discontinuities.append({
+                "prev_chapter": curr_num,  # 断层前章号
+                "next_chapter": next_num,  # 断层后章号
+                "missing_range": f"{missing_start}-{missing_end}" if missing_start != missing_end else str(missing_start)  # 缺失区间文本
+            })
+    return {
+        "is_continuous": len(discontinuities) == 0,  # 是否完整连续
+        "discontinuities": discontinuities  # 断层列表
+    }
+
+
+
+@router.get("/tree")
+async def get_outline_tree(root: Path = Depends(get_project_root)):
+    """获取大纲树状结构"""
+    outline_dir = root / "大纲"
+    
+    tree = []
+    
+    # 读取总纲
+    total_file = outline_dir / "总纲.md"
+    if total_file.exists():
+        tree.append({
+            "id": "total",
+            "title": "总纲",
+            "type": "total",
+            "children": []
+        })
+    
+    # 读取卷大纲并构建树（按卷号去重，保留内容更多的文件）
+    seen_volumes = {}
+    for f in sorted(outline_dir.glob("第*卷*.md")):
+        match = re.search(r"第(\d+)卷", f.name)
+        if match:
+            volume = int(match.group(1))
+            if volume not in seen_volumes or f.stat().st_size > seen_volumes[volume].stat().st_size:
+                seen_volumes[volume] = f
+
+    for volume in sorted(seen_volumes):
+        f = seen_volumes[volume]
+        content = f.read_text(encoding="utf-8")
+
+        # 从前10行提取卷名（文件开头可能有说明文字）
+        lines = content.split('\n')[:10]
+        volume_title = f"第{volume}卷"
+
+        for line in lines:
+            clean_line = re.sub(r'^[#\s]+', '', line.strip())
+            if not clean_line:
+                continue
+
+            # 尝试多种卷名格式
+            # 格式1: "第X卷：标题" 或 "第X卷 标题"
+            m = re.search(r"第\s*[\d一二三四五六七八九十百]+\s*卷[大纲]*[：:\s]+(.+?)(?:\s*[\(（]|$)", clean_line)
+            if m:
+                title = m.group(1).strip()
+                title = re.sub(r"[《》【】]", "", title)  # 去书名号
+                title = re.sub(r"\d+章.*$", "", title).strip()  # 去章数后缀
+                if title:
+                    volume_title = f"第{volume}卷 {title}"
+                    break
+
+            # 格式2: "第X卷《标题》" 或 "第X卷【标题】"
+            m = re.search(r"第\s*[\d一二三四五六七八九十百]+\s*卷[大纲]*[：:\s]*[《【](.+?)[》】]", clean_line)
+            if m:
+                title = m.group(1).strip()
+                title = re.sub(r"\d+章.*$", "", title).strip()
+                if title:
+                    volume_title = f"第{volume}卷 {title}"
+                    break
+
+        # 解析章节
+        chapters = parse_outline_chapters(content)
+
+        tree.append({
+            "id": f"volume_{volume}",
+            "volume": volume,
+            "title": volume_title,
+            "type": "volume",
+            "children": chapters
+        })
+    
+    return {"tree": tree}
+
+
+@router.get("/{volume}")
+async def get_volume_outline(volume: int, root: Path = Depends(get_project_root)):
+    """获取卷大纲详情"""
+    outline_dir = root / "大纲"
+    
+    # 查找卷大纲文件（与列表页相同的去重规则，避免“看到的”和“编辑的”不是同一文件）
+    outline_file = _pick_volume_file(outline_dir, volume)
+    
+    if not outline_file:
+        raise HTTPException(status_code=404, detail=f"未找到第{volume}卷大纲")
+    
+    content = outline_file.read_text(encoding="utf-8")
+    
+    # 解析章节列表
+    chapters_data = parse_outline_chapters(content)
+    
+    # 转换为前端需要的简单格式
+    chapters = []
+    for c in chapters_data:
+        # 去掉 "第X章 " 前缀，只保留标题，因为前端可能分别显示
+        # 但这里的 title 已经是 "第X章 标题"
+        # 我们可以保留原样或者做转换，这里保持原有 API返回格式: {chapter: int, title: str}
+        # parse_outline_chapters 返回的 title 是完整标题
+        # 我们从 title 中把纯标题提取出来? 
+        # parse_outline_chapters title 格式: f"第{chap_num}章 {chap_title}"
+        # 简单起见，提取出 chap_title
+        clean_title = c["title"].replace(f"第{c['chapter']}章 ", "")
+        chapters.append({
+            "chapter": c["chapter"],
+            "title": clean_title
+        })
+    
+    return {
+        "volume": volume,
+        "title": outline_file.stem,
+        "content": content,
+        "chapters": chapters
+    }
+
+
+@router.put("/total")
+async def update_total_outline(data: OutlineUpdate, root: Path = Depends(get_project_root)):
+    """更新总纲"""
+    outline_dir = root / "大纲"
+    outline_dir.mkdir(parents=True, exist_ok=True)
+    
+    outline_file = outline_dir / "总纲.md"
+    _write_text_atomic(outline_file, data.content)
+    
+    # 记录活动
+    logger = get_logger(root)
+    if logger:
+        logger.log(
+            type="outline",
+            action="updated",
+            title="更新全书总纲"
+        )
+    
+    return {"success": True, "path": str(outline_file)}
+
+
+@router.put("/{volume}")
+async def update_volume_outline(volume: int, data: OutlineUpdate, root: Path = Depends(get_project_root)):
+    """更新卷大纲"""
+    outline_dir = root / "大纲"
+    outline_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 查找或创建卷大纲文件（同卷多文件时写回列表页实际展示的那一份）
+    outline_file = _pick_volume_file(outline_dir, volume)
+    if not outline_file:
+        outline_file = outline_dir / f"第{volume}卷-详细大纲.md"
+    
+    _write_text_atomic(outline_file, data.content)
+    
+    # 记录活动
+    logger = get_logger(root)
+    if logger:
+        logger.log(
+            type="outline",
+            action="updated",
+            title=f"更新第{volume}卷大纲"
+        )
+
+    return {"success": True, "path": str(outline_file)}
+
+
+@router.delete("/{volume}")
+async def delete_volume_outline(
+    volume: int,
+    delete_related_characters: bool = Query(False, description="是否删除该卷自动生成角色"),
+    root: Path = Depends(get_project_root)
+):
+    """删除卷大纲"""
+    outline_dir = root / "大纲"
+    if not outline_dir.exists():
+        raise HTTPException(status_code=404, detail=f"未找到第{volume}卷大纲")
+
+    pattern = f"第{volume}卷*.md"
+    files = list(outline_dir.glob(pattern))
+
+    if not files:
+        raise HTTPException(status_code=404, detail=f"未找到第{volume}卷大纲")
+
+    for f in files:
+        f.unlink()
+
+    deleted_character_files = []
+    deleted_character_names = []
+    deleted_entity_files = []
+    roster_updated = False
+
+    # 可选：删除该卷自动生成的角色及其他设定档案（危险操作）
+    if delete_related_characters:
+        marker = f"档案创建于第{volume}卷大纲生成时"
+        settings_dir = root / "设定集"
+
+        # 扫描角色库
+        char_lib = settings_dir / "角色库"
+        for category in ["主要角色", "次要角色", "反派角色"]:
+            cat_dir = char_lib / category
+            if not cat_dir.exists():
+                continue
+            for f in sorted(cat_dir.glob("*.md")):
+                try:
+                    content = f.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                if marker in content:
+                    deleted_character_files.append(str(f.relative_to(root)))
+                    deleted_character_names.append(f.stem)
+                    f.unlink()
+
+        # 扫描宝物库、功法库、势力库、地点库
+        for lib_name in ["宝物库", "功法库", "势力库", "地点库"]:
+            lib_dir = settings_dir / lib_name
+            if not lib_dir.exists():
+                continue
+            for f in sorted(lib_dir.glob("*.md")):
+                try:
+                    content = f.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                if marker in content:
+                    deleted_entity_files.append(str(f.relative_to(root)))
+                    f.unlink()
+
+        # 从活跃角色表中移除被删除角色
+        if deleted_character_names:
+            roster_file = char_lib / "活跃角色.md"
+            if roster_file.exists():
+                try:
+                    lines = roster_file.read_text(encoding="utf-8").splitlines()
+                    new_lines = []
+                    deleted_set = set(deleted_character_names)
+                    for line in lines:
+                        if any(f"**{name}**" in line for name in deleted_set):
+                            continue
+                        new_lines.append(line)
+                    if len(new_lines) != len(lines):
+                        roster_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                        roster_updated = True
+                except Exception:
+                    pass
+
+    logger = get_logger(root)
+    if logger:
+        extra = ""
+        if delete_related_characters:
+            total = len(deleted_character_files) + len(deleted_entity_files)
+            extra = f"（联动删除设定档案 {total} 个）"
+        logger.log(
+            type="outline",
+            action="deleted",
+            title=f"删除第{volume}卷大纲{extra}"
+        )
+
+    return {
+        "success": True,
+        "deleted": len(files),
+        "deleted_character_count": len(deleted_character_files),
+        "deleted_character_names": sorted(set(deleted_character_names)),
+        "deleted_character_files": deleted_character_files,
+        "deleted_entity_count": len(deleted_entity_files),
+        "deleted_entity_files": deleted_entity_files,
+        "roster_updated": roster_updated
+    }
+
+
+@router.post("/check-continuity")
+async def check_outline_continuity(req: CheckContinuityRequest):
+    """检测指定大纲文本的连续性与跳号断层"""  # 检测大纲连续性
+    chaps = parse_outline_chapters(req.content)  # 解析章节列表
+    continuity = check_chapter_continuity(chaps)  # 校验章节连续性
+    return {
+        "total_chapters": len(chaps),  # 解析出的总章数
+        "chapters": chaps,  # 章节详情列表
+        "continuity": continuity  # 连续性分析报告
+    }
+

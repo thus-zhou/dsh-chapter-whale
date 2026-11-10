@@ -1,0 +1,103 @@
+{
+  "name": "dsh-chapter-whale",
+  "version": "0.2.0-rc.1",
+  "private": true,
+  "description": "码章鲸：DSH 内的 AI 小说写作与番茄发布工作台。内置独立后端与 Windows 运行环境，支持大纲、长篇记忆、多模型写作、审查润色、章节队列与发布核验。ChapterWhale: AI novel writing, editing and Fanqie publishing for DSH.",
+  "type": "module",
+  "license": "SEE LICENSE IN THIRD_PARTY_NOTICES.md",
+  "author": {
+    "name": "thus-zhou"
+  },
+  "icon": "icon.svg",
+  "homepage": "https://github.com/thus-zhou/dsh-chapter-whale#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thus-zhou/dsh-chapter-whale.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thus-zhou/dsh-chapter-whale/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "novel",
+    "ai-writing",
+    "fiction",
+    "fanqie",
+    "publishing",
+    "小说",
+    "网文",
+    "AI写作",
+    "番茄小说",
+    "自动发布",
+    "码章鲸"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "package.json",
+    "managed-runtime.mjs",
+    "backend/",
+    "runtime-manifest.json",
+    "THIRD_PARTY_NOTICES.md",
+    "runtime/python/",
+    "runtime/browsers/",
+    "runtime-download.json",
+    "RELEASE_STATUS.md"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.1",
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0"
+  },
+  "scripts": {
+    "test": "node --test test/client.test.mjs test/gate.test.mjs test/manifest.test.mjs test/market.test.mjs test/stop.test.mjs",
+    "prepublishOnly": "node scripts/check-release.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml",
+      "platforms": [
+        "win32"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

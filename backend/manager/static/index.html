@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#e9e8e3">
+  <title>小说助手 · 创作编辑部</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/editorial.css">
+  <link rel="stylesheet" href="/static/providers.css">
+  <link rel="stylesheet" href="/static/free-models.css">
+  <link rel="stylesheet" href="/static/studio.css">
+  <script src="/static/app.js" defer></script>
+  <script src="/static/memory.js" defer></script>
+  <script src="/static/costs.js" defer></script>
+  <script src="/static/providers.js" defer></script>
+  <script src="/static/free-models.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主内容</a>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+  <aside class="sidebar" id="sidebar" aria-label="主导航">
+    <a class="brand" href="#dashboard" aria-label="小说助手首页"><span class="brand-mark" aria-hidden="true">文</span><span>小说助手<small>THE WRITER’S STUDY</small></span></a>
+    <div class="sidebar-label">创作与出版</div>
+    <nav class="nav">
+      <a href="#dashboard" data-page="dashboard"><span data-icon="grid"></span>工作台<span class="nav-index">01</span></a>
+      <a href="#projects" data-page="projects"><span data-icon="book"></span>作品管理<span class="nav-index">02</span></a>
+      <a href="#creative" data-page="creative"><span data-icon="spark"></span>创作工作台</a>
+      <a href="#accounts" data-page="accounts"><span data-icon="users"></span>发布账号<span class="nav-index">03</span></a>
+      <a href="#jobs" data-page="jobs"><span data-icon="calendar"></span>日更任务<span class="nav-index">04</span></a>
+      <a href="#queue" data-page="queue"><span data-icon="send"></span>发布队列<span class="nav-badge" id="nav-queue">—</span></a>
+    </nav>
+    <div class="sidebar-label second">编辑部工具</div>
+    <nav class="nav">
+      <a href="#logs" data-page="logs"><span data-icon="activity"></span>运行日志</a>
+      <a href="#ai" data-page="ai"><span data-icon="spark"></span>AI 设置</a>
+      <a href="#costs" data-page="costs"><span data-icon="activity"></span>成本分析</a>
+      <a href="#diagnostics" data-page="diagnostics"><span data-icon="shield"></span>系统诊断</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="sidebar-note"><span class="note-rule"></span>好故事，值得慢慢写。<small>从一页大纲，到下一章正文。</small></div>
+      <div class="connection"><span class="status-dot" id="connection-dot"></span><span id="connection-text">正在连接本地服务</span></div>
+      <span class="sidebar-version">LOCAL WORKSPACE <span>·</span> 创作编辑部</span>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="breadcrumb"><button class="icon-button mobile-menu" id="menu-toggle" aria-label="展开导航" aria-expanded="false" aria-controls="sidebar"><span data-icon="menu"></span></button><span class="breadcrumb-root">我的编辑部</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-page">工作台</span></div>
+      <div class="topbar-actions"><span class="sync-label" id="sync-label">等待同步</span><button class="icon-button" data-action="connect-devices" aria-label="连接设备" title="手机与平板"><span data-icon="users"></span></button><button class="icon-button" id="refresh-button" aria-label="刷新全部数据" title="刷新全部数据"><span data-icon="refresh"></span></button><button class="icon-button" id="theme-button" aria-label="切换深色模式" title="切换深色模式"><span data-icon="moon"></span></button><span class="workspace-avatar" title="创作工作空间">文</span></div>
+    </header>
+    <main id="main" tabindex="-1">
+      <div id="connection-banner" class="alert-banner" role="status" hidden></div>
+      <section class="page" id="page-dashboard" aria-labelledby="dashboard-title">
+        <div class="page-heading"><div><div class="eyebrow">YOUR WRITING DESK</div><h1 id="dashboard-title">创作总览</h1><p>作品、日更与最近进展，一目了然。</p></div><div class="date-block"><span id="date-weekday"></span><strong id="date-day"></strong><span id="date-month"></span></div></div>
+        <div class="hero">
+          <div class="hero-content"><span class="hero-kicker"><span class="tiny-star">✦</span> 你的下一章，从这里开始</span><h2>把故事交给灵感，<br>把琐事交给编辑部。</h2><p>管理作品、大纲与日更节奏，在发布前认真看过每一章。</p><div class="hero-actions"><button class="button button-primary" data-action="create-project"><span data-icon="plus"></span>新建作品</button><button class="button button-ghost" data-action="register-project">登记已有作品<span data-icon="arrow"></span></button></div><div class="hero-footnote"><span class="small-dot"></span>本地创作空间 · 由你掌握发布节奏</div></div>
+          <div class="hero-art" aria-hidden="true"><div class="art-orbit"></div><div class="art-stroke"></div><div class="book-back"></div><div class="book-spine"></div><div class="book-cover"><div class="cover-top">小说助手 · 创作手记</div><div class="cover-title">故事<br>未完</div><div class="cover-seal">续</div><div class="cover-bottom">EVERY CHAPTER<br>IS A NEW BEGINNING</div></div><div class="bookmark"></div><span class="art-caption">A ROOM OF YOUR OWN</span></div>
+        </div>
+        <div class="stats-grid" id="dashboard-stats" aria-live="polite"></div>
+        <div class="dashboard-grid"><article class="panel"><div class="panel-header"><div><span class="eyebrow">MANUSCRIPTS</span><h2>书架上的故事</h2></div><a class="text-link" href="#projects">全部作品 <span data-icon="arrow"></span></a></div><div id="dashboard-projects"></div></article><article class="panel"><div class="panel-header"><div><span class="eyebrow">DAILY RHYTHM</span><h2>接下来的日更</h2></div><a class="text-link" href="#jobs">管理 <span data-icon="arrow"></span></a></div><div id="dashboard-jobs"></div></article></div>
+        <article class="panel recent-panel"><div class="panel-header"><div><span class="eyebrow">EDITOR’S LOG</span><h2>编辑部动态</h2></div><a class="text-link" href="#logs">全部日志 <span data-icon="arrow"></span></a></div><div id="dashboard-operations"></div></article>
+      </section>
+      <section class="page" id="page-projects" aria-labelledby="projects-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">THE BOOKSHELF</div><h1 id="projects-title">作品书架</h1><p>大纲、正文与创作进度，归于一处。</p></div><div class="heading-actions"><button class="button button-secondary" data-action="register-project">登记已有作品</button><button class="button button-primary" data-action="create-project"><span data-icon="plus"></span>新建作品</button></div></div>
+        <div class="filter-bar"><label class="search-field"><span data-icon="search"></span><input id="project-search" type="search" placeholder="按作品名称、题材或路径搜索" aria-label="搜索作品"></label><span class="muted" id="projects-count"></span></div><div id="projects-list" class="project-grid"></div>
+      </section>
+      <section class="page" id="page-accounts" aria-labelledby="accounts-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">PUBLISHING IDENTITIES</div><h1 id="accounts-title">发布账号</h1><p>独立登录，按作品选择发布身份。</p></div><button class="button button-primary" data-action="login"><span data-icon="plus"></span>添加 / 登录账号</button></div>
+        <div class="notice"><span data-icon="info"></span><div>点击“启动登录”后，在打开的浏览器中完成扫码。返回这里，点击“已完成扫码，确认登录”，等待服务验证。</div></div><div id="accounts-list" class="account-grid"></div>
+      </section>
+      <section class="page" id="page-creative" aria-labelledby="creative-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">CREATIVE STUDIO</div><h1 id="creative-title">创作工作台</h1><p>学技法，定方向，再写下一章。</p></div><button class="button button-primary" data-action="studio-generate">开始创作</button></div>
+        <div class="filter-bar"><label class="creative-project-label">这次讨论的作品<select id="creative-project"><option value="">请先新建或登记作品</option></select></label><button class="button button-secondary" data-action="reload-creative">重新载入</button></div>
+        <div id="creative-empty" class="notice"><span data-icon="info"></span><div>请先在作品管理中创建或登记一本小说，再开始沟通。每本书有独立的约定和对话。</div></div>
+        <div class="studio-tabs" role="tablist" aria-label="创作工具"><button type="button" role="tab" data-studio-tab="brief" aria-selected="true" aria-controls="studio-brief">创作约定</button><button type="button" role="tab" data-studio-tab="learning" aria-selected="false" aria-controls="studio-learning">示范学习</button><button type="button" role="tab" data-studio-tab="planning" aria-selected="false" aria-controls="studio-planning">剧情规划</button><button type="button" role="tab" data-studio-tab="memory" aria-selected="false" aria-controls="studio-memory">共享记忆</button></div>
+        <div id="studio-memory" class="studio-view" role="tabpanel" hidden>
+          <article class="panel"><div class="panel-header"><div><span class="eyebrow">THE STORY REMEMBERS</span><h2>这本书的记忆</h2></div><button class="button button-primary" data-action="memory-add"><span data-icon="plus"></span>必须记住</button></div>
+          <div class="memory-toolbar"><label class="search-field"><span data-icon="search"></span><input id="memory-search" type="search" placeholder="搜索人物、设定或事件" aria-label="搜索共享记忆"></label><select id="memory-filter" aria-label="筛选记忆"><option value="">全部记忆</option><option value="canon">固定设定</option><option value="fact">已发生事实</option><option value="foreshadow">伏笔计划</option><option value="preference">创作偏好</option><option value="conflict">待确认</option><option value="stale">来源失效</option><option value="archived">已归档</option></select></div>
+          <div id="memory-summary" class="memory-summary" role="status"></div><div id="memory-list" class="memory-list"></div>
+          <div class="memory-footer"><button class="button button-secondary" data-action="memory-rebuild">从已有正文补建</button><button class="button button-ghost" data-action="memory-preview">查看下一章读取内容</button><p class="field-help">每本书独立保存，A–E 共享读取。补建会调用 D；仅从有效定稿提取，失败不重写正文。</p></div></article>
+        </div>
+        <div id="studio-learning" class="studio-view" role="tabpanel" hidden>
+          <article class="panel learning-panel"><div class="panel-header"><div><span class="eyebrow">LEARN THE CRAFT</span><h2>上传一份示范</h2></div><span class="pill pill-neutral">TXT · 最大 5 MB</span></div><form id="sample-form" class="panel-form"><label class="file-drop" for="sample-file"><span data-icon="file"></span><strong id="sample-file-name">选择 TXT，或拖入这里</strong><span>语言、对话、节奏、结构与人物弧线</span><input type="file" id="sample-file" accept=".txt,text/plain" required></label><div class="form-grid"><label>分析范围<select id="sample-mode"><option value="representative">结构与代表段落 · 较快</option><option value="full">逐段分析 · 更多调用</option></select></label><div class="upload-action"><button type="submit" class="button button-primary">分析并学习</button></div></div><p class="field-help">完成后自动补全创作约定。仅上传有权使用的文本；不会复制原文或把示范放入发布队列。</p></form><div id="samples-list" class="samples-list"></div></article>
+          <article id="learning-guide-panel" class="panel" hidden><div class="panel-header"><h2>已学到的写作技法</h2><span id="learning-coverage" class="pill pill-neutral"></span></div><pre id="learning-guide" class="guide-preview"></pre></article>
+        </div>
+        <div id="studio-planning" class="studio-view" role="tabpanel" hidden><article class="panel"><div class="panel-header"><div><span class="eyebrow">MODEL A · THE STORY ARCHITECT</span><h2>剧情蓝图</h2></div></div><form id="plan-form" class="panel-form"><div class="form-grid"><label>规划接下来的章节<input name="count" type="number" value="5" min="1" max="30" required></label><div class="upload-action"><button class="button button-primary" type="submit">生成规划</button></div></div><p class="field-help">总纲、分卷、人物弧线、伏笔与章节细纲。已有细纲和正文不会覆盖。</p></form><div id="story-plan" class="story-plan"></div><div class="panel-form"><button class="button button-secondary" data-action="studio-outline">编辑章节大纲</button></div></article></div>
+        <div id="studio-brief" role="tabpanel">
+        <div id="creative-workspace" class="creative-layout" hidden>
+          <article class="panel"><div class="panel-header"><div><span class="eyebrow">THE AUTHOR’S CONTRACT</span><h2>创作约定</h2></div><span id="creative-save-state" class="pill pill-neutral">尚未保存</span></div><form id="brief-form" class="panel-form"><div id="brief-fields" class="form-grid"></div><div class="form-actions"><button type="submit" class="button button-primary">保存创作约定</button><button type="button" class="button button-secondary" data-action="expand-brief"><span data-icon="spark"></span>AI 润色</button></div><details class="quiet-details"><summary>约定怎样生效？</summary><p>用于生成、润色和审查，不改写既有正文。约定变更后，未发布旧稿须重新审查。</p></details></form></article>
+          <article class="panel creative-chat-panel"><div class="panel-header"><div><span class="eyebrow">THE CREATIVE PARTNER</span><h2>与 AI 沟通</h2></div></div><div id="creative-messages" class="creative-messages" aria-live="polite"></div><div id="creative-proposal" class="creative-proposal" hidden></div><form id="creative-chat-form" class="panel-form"><label>想法或问题<textarea id="creative-message" maxlength="4000" required placeholder="想写怎样的小说？人物、文风、剧情，先从一个想法开始。"></textarea></label><button type="submit" class="button button-primary"><span data-icon="spark"></span>发送给 AI</button><div id="creative-chat-status" class="inline-result" role="status" hidden></div></form></article>
+        </div>
+        </div>
+      </section>
+      <section class="page" id="page-jobs" aria-labelledby="jobs-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">A CHAPTER A DAY</div><h1 id="jobs-title">日更任务</h1><p>安排更新时间，查看执行与恢复进度。</p></div><button class="button button-primary" data-action="new-job"><span data-icon="plus"></span>创建日更任务</button></div>
+        <article class="scheduler-panel"><div class="scheduler-icon"><span data-icon="clock"></span></div><div><h2>自动调度</h2><p id="scheduler-description">正在读取调度设置…</p><span class="muted">创建任务后，还需要开启自动调度，才能按计划执行。</span></div><label class="switch-control"><input id="scheduler-enabled" type="checkbox" role="switch" disabled><span class="switch-track"></span><span id="scheduler-label">读取中</span></label></article>
+        <div id="jobs-list"></div>
+      </section>
+      <section class="page" id="page-queue" aria-labelledby="queue-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">READY FOR THE READERS</div><h1 id="queue-title">发布队列</h1><p>手动发布与核验；自动日更由原任务推进。</p></div><span class="pill pill-neutral">AI 创作标记已启用</span></div>
+        <div class="stats-grid queue-stats" id="queue-stats"></div>
+        <div class="queue-layout"><article class="panel"><div class="panel-header"><div><span class="eyebrow">PREPARE & PUBLISH</span><h2>安排这次发布</h2></div></div><form id="queue-form" class="panel-form"><label>作品<select name="project_id" id="queue-project" required><option value="">请选择作品</option></select></label><label>发布书名<input name="book" id="queue-book" required maxlength="96" placeholder="与发布平台上的书名一致"></label><label>发布账号<select name="account" id="queue-account"><option value="">请选择已登录账号</option></select></label><label>本次发布章节数<input name="count" type="number" value="1" min="1" max="50" step="1" required></label><p class="field-help">只同步 D 通过或 E 已授权的正文。未核验提交不计入发布成功。</p><div class="form-actions"><button type="button" class="button button-secondary" data-action="queue-stage"><span data-icon="layers"></span>加入队列</button><button type="submit" class="button button-primary"><span data-icon="send"></span>确认并发布</button></div></form></article><article class="panel"><div class="panel-header"><div><span class="eyebrow">LOCAL BRIDGE</span><h2>待发布书架</h2></div></div><div id="queue-list"></div></article></div>
+      </section>
+      <section class="page" id="page-logs" aria-labelledby="logs-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">BEHIND EVERY CHAPTER</div><h1 id="logs-title">运行记录</h1><p>查看进度，追踪结果，继续未完成的操作。</p></div><span class="pill pill-neutral">每 8 秒同步</span></div>
+        <div class="filter-bar"><label class="search-field"><span data-icon="search"></span><input id="log-search" type="search" placeholder="搜索操作类型或编号" aria-label="搜索运行日志"></label><label class="inline-filter">状态<select id="log-status"><option value="">全部状态</option><option value="active">进行中</option><option value="success">已完成</option><option value="failure">失败</option></select></label></div><div class="panel" id="operations-list"></div>
+      </section>
+      <section class="page" id="page-ai" aria-labelledby="ai-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">YOUR CREATIVE PARTNER</div><h1 id="ai-title">AI 设置</h1><p>选好模型，交给合适的角色。</p></div><span id="ai-status" class="pill pill-neutral">等待配置状态</span></div>
+        <div class="settings-layout"><article class="panel"><div class="panel-header"><div><span class="eyebrow">MODEL CONNECTION</span><h2>模型与连接</h2></div></div><form id="ai-form" class="panel-form"><label>API 地址<input name="base_url" id="ai-base-url" type="url" required placeholder="https://api.example.com/v1" autocomplete="off"></label><label>API key <span class="label-note">只写入，不回显</span><div class="password-field"><span data-icon="lock"></span><input name="api_key" id="ai-key" type="password" placeholder="留空保持同一接口的旧 key" autocomplete="new-password" spellcheck="false"></div></label><p class="field-help" id="ai-key-hint">留空使用同一接口的已保存 key；更换地址请填写新 key。</p><div class="model-discovery"><button class="button button-secondary" type="button" data-action="scan-models"><span data-icon="refresh"></span>读取可用模型</button><span id="models-result" class="field-help" role="status">先填地址和密钥，再读取列表，无需先保存。</span></div><label>从接口模型列表选择<select id="ai-model-select" disabled><option value="">尚未读取模型列表</option></select></label><label>当前模型 ID <span class="label-note">也可手动填写</span><input name="model" id="ai-model" required placeholder="选择上方模型，或手动输入模型 ID" autocomplete="off"></label><p class="field-help">列表来自接口，不保证每个模型都支持文本写作。接口不提供列表时仍可手动输入，再测试连接。</p><div class="form-actions"><button class="button button-primary" type="submit">保存设置</button><button class="button button-secondary" type="button" data-action="test-ai"><span data-icon="spark"></span>测试已保存配置</button></div><div id="ai-test-result" class="inline-result" role="status" hidden></div></form></article><aside class="settings-note"><span class="editorial-number">01 / AI</span><h2>写作有搭档，<br>判断仍在你。</h2><p>先读取模型，再选择、保存并测试。随后到“创作沟通”，与 AI 明确这本小说怎么写。</p><div class="note-divider"></div><h3>密钥只发往所填接口</h3><p>页面不会读取完整密钥，也不会将密钥存入浏览器。读取列表使用表单里的密钥，或同一地址的已保存密钥；沟通与连接测试使用已保存配置。</p></aside></div>
+        <article class="panel roles-panel"><div class="panel-header"><div><span class="eyebrow">YOUR FIVE-PART EDITORIAL TEAM</span><h2>模型分工</h2></div><label class="switch-control"><input id="multi-model" type="checkbox" role="switch"><span class="switch-track"></span><span>启用 A–E</span></label></div><form id="roles-form" class="panel-form"><div id="role-fields" class="role-grid"></div><datalist id="role-model-options"></datalist><div class="roles-footer"><label>重点章润色<select id="polish-mode"><option value="key">只润色规划中的重点章</option><option value="all">每章润色</option><option value="none">仅手动润色</option></select></label><label>审核决策<select id="review-policy"><option value="e_decides">E 全自动决策 · D 提供建议</option><option value="strict">D 必须明确通过</option></select></label><div class="form-actions"><button type="submit" class="button button-primary">保存分工</button><button type="button" class="button button-secondary" data-action="test-roles">验证连接</button></div></div><p class="field-help">留空继承通用模型；展开可单独连接。E 可不采纳 D，记录为“E 授权”而非“审查通过”。平台登录、审核与真实结果不受本地权限控制。</p></form></article>
+      </section>
+      <section class="page" id="page-costs" aria-labelledby="costs-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">THE COST OF EACH CHAPTER</div><h1 id="costs-title">成本分析</h1><p>从一次调用，到一本书的创作投入。</p></div><button class="button button-secondary" data-action="cost-prices">设置模型价格</button></div>
+        <div class="cost-filters"><label>作品<select id="cost-project"><option value="">全部作品</option></select></label><label>范围<select id="cost-days"><option value="0">全部时间</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option></select></label><label>章节<select id="cost-chapter"><option value="">全部章节</option></select></label><a class="button button-secondary" id="cost-export" href="/api/costs/export">导出明细</a></div>
+        <p class="cost-note" id="cost-note" role="status">正在读取费用记录…</p>
+        <div class="stats-grid" id="cost-stats"></div>
+        <div class="cost-chart-grid"><article class="panel"><div class="panel-header"><div><span class="eyebrow">DAILY SPEND</span><h2>费用趋势</h2></div></div><div class="cost-chart" id="cost-trend"></div></article><article class="panel"><div class="panel-header"><div><span class="eyebrow">BY WORKFLOW</span><h2>各环节投入</h2></div></div><div class="cost-chart" id="cost-stages"></div></article><article class="panel"><div class="panel-header"><div><span class="eyebrow">BY MODEL</span><h2>模型成本占比</h2></div></div><div class="cost-chart" id="cost-models"></div></article><article class="panel"><div class="panel-header"><div><span class="eyebrow">INPUT & OUTPUT</span><h2>Token 构成</h2></div></div><div class="cost-chart" id="cost-tokens"></div></article></div>
+        <article class="panel cost-detail-panel"><div class="panel-header"><div><span class="eyebrow">CHAPTER BY CHAPTER</span><h2>章节成本</h2></div></div><div id="cost-chapters"></div></article>
+        <details class="panel cost-detail-panel"><summary>最近调用明细</summary><div id="cost-requests"></div></details>
+      </section>
+      <section class="page" id="page-diagnostics" aria-labelledby="diagnostics-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">KEEP THE STUDY RUNNING</div><h1 id="diagnostics-title">系统检查</h1><p>环境、连接与执行条件，一目了然。</p></div><button class="button button-secondary" data-action="check-diagnostics"><span data-icon="refresh"></span>重新检查</button></div><div id="diagnostics-summary"></div><div class="panel" id="diagnostics-list"></div>
+      </section>
+      <footer class="page-footer"><span>小说助手 <span class="footer-dot">·</span> 创作编辑部</span><span>一章一章，写向远方。</span></footer>
+    </main>
+  </div>
+  <dialog id="action-dialog" class="dialog" aria-labelledby="dialog-title"><div class="dialog-header"><div><span id="dialog-eyebrow" class="eyebrow">WRITER’S STUDY</span><h2 id="dialog-title"></h2></div><button class="icon-button" data-action="close-dialog" aria-label="关闭对话框"><span data-icon="close"></span></button></div><div id="dialog-body"></div></dialog>
+  <dialog id="operation-dialog" class="dialog operation-dialog" aria-labelledby="operation-title"><div class="dialog-header"><div><span class="eyebrow">OPERATION DETAILS</span><h2 id="operation-title">操作详情</h2></div><button class="icon-button" data-action="close-operation" aria-label="关闭操作详情"><span data-icon="close"></span></button></div><div id="operation-detail"></div></dialog>
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+  <nav class="mobile-dock" aria-label="快捷导航">
+    <a href="#dashboard" data-page="dashboard"><span data-icon="grid"></span><span>工作台</span></a>
+    <a href="#projects" data-page="projects"><span data-icon="book"></span><span>作品</span></a>
+    <a href="#creative" data-page="creative"><span data-icon="spark"></span><span>创作</span></a>
+    <a href="#jobs" data-page="jobs"><span data-icon="calendar"></span><span>日更</span></a>
+    <a href="#logs" data-page="logs"><span data-icon="activity"></span><span>进度</span></a>
+  </nav>
+</body>
+</html>

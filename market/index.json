@@ -1,0 +1,94 @@
+{
+  "format": 1,
+  "title": {
+    "en": "ChapterWhale (release draft)",
+    "zh": "码章鲸（发行草案，尚未上线）"
+  },
+  "description": {
+    "en": "Sidebar workbench for a local novel-writing pipeline: chapters, shared memory, outlines, publish queue, daily-update jobs, model pricing and cost reports, driven by a local manager service.",
+    "zh": "本地小说写作流水线的侧边栏工作台：作品与章节、共享记忆、大纲规划、发布队列、日更任务、模型定价与成本分析，由本地 manager 服务驱动。"
+  },
+  "metadata": {
+    "categories": {
+      "productivity": {
+        "title": {
+          "en": "Productivity",
+          "zh": "生产力"
+        }
+      },
+      "writing": {
+        "title": {
+          "en": "Writing",
+          "zh": "写作"
+        }
+      }
+    },
+    "labels": {
+      "novel": {
+        "title": {
+          "en": "Novel",
+          "zh": "小说"
+        }
+      },
+      "writing": {
+        "title": {
+          "en": "Writing",
+          "zh": "写作"
+        }
+      },
+      "publishing": {
+        "title": {
+          "en": "Publishing",
+          "zh": "发布"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-chapter-whale",
+      "title": {
+        "en": "ChapterWhale — AI Novel Writing & Publishing",
+        "zh": "码章鲸 · AI小说写作与番茄发布"
+      },
+      "description": {
+        "en": "AI-assisted novel writing and Fanqie publishing with a bundled Windows x64 runtime. Local release candidate, not published.",
+        "zh": "AI 辅助开发的小说写作与番茄发布工作台，内置 Windows x64 运行环境。当前为本地候选版本，尚未公开发布。"
+      },
+      "icon": "https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/icon.svg",
+      "author": "thus-zhou",
+      "homepage": "https://github.com/thus-zhou/dsh-chapter-whale",
+      "repository": {
+        "url": "https://github.com/thus-zhou/dsh-chapter-whale"
+      },
+      "metadata": {
+        "category": "productivity",
+        "keywords": [
+          "novel",
+          "writing",
+          "publishing",
+          "chapters",
+          "manuscript"
+        ],
+        "labels": [
+          "novel",
+          "writing",
+          "publishing"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.0-rc.1",
+          "publishTimestamp": 1794302239,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.1"
+          }
+        }
+      ]
+    }
+  ],
+  "releaseDraft": true
+}
