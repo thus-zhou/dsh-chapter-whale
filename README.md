@@ -4,13 +4,13 @@
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，也可以接入部分免费模型，通过支持的厂商账号渠道完成授权。
 
-**[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
+**[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
 Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 首个公开版本
 
-**安装三步**：① 从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载 `dsh-chapter-whale-*.tgz`（约 277MB）→ ② 在 DSH 插件管理里添加该文件或地址，重启 DSH → ③ 侧栏打开「码章鲸」：建作品、配模型，需要发布时再登录番茄作家后台。
+**安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载完整 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：建作品、配模型，需要发布时再登录番茄作家后台。
 
-首次启动会在 `%LOCALAPPDATA%\ChapterWhale\workspace` 建独立工作区并解包运行时，约占 400MB 磁盘；作品与账号数据都留在该目录，卸载插件不会删除。安装包摘要见发布页的 `SHA256SUMS.txt`。仅支持 Windows x64。
+首次启动会在 `%LOCALAPPDATA%\ChapterWhale\workspace` 建独立工作区并准备运行时，约占 400MB 磁盘。npm 包首次启动自动下载并校验约 278 MB 的固定版本环境；GitHub 完整包已包含环境。作品与账号数据留在独立工作区，卸载插件不会删除。完整包摘要见发布页的 `SHA256SUMS.txt`。仅支持 Windows x64。
 
 ![码章鲸：全自动写作与发布、可自定义任务、部分免费模型与厂商账号登录](assets/chapter-whale-overview.png)
 
@@ -107,7 +107,27 @@ flowchart LR
 
 ## 安装后，按这四步开始
 
-### 1. 安装完整发行包
+### 1. 从 npm 安装，或使用完整发行包
+
+**DSH 桌面版**：在应用内「插件」管理中添加包名 `dsh-chapter-whale`，安装完成后重启。桌面 profile 由应用管理，推荐直接使用应用内的安装入口。
+
+**使用 `dsh web` 的用户**：在终端安装到自己的 web profile：
+
+```powershell
+dsh plugin --profile web add dsh-chapter-whale
+```
+
+安装后重启 `dsh web`，侧栏打开「码章鲸」。自定义 profile 请将 `web` 换成实际名称。npm 包提供插件与后端源码，Python 和浏览器会在首次启动时从 GitHub 自动下载，并核对固定大小与 SHA-256，不需要手动安装。
+
+也可以先从 npm 下载压缩包：
+
+```powershell
+npm pack dsh-chapter-whale@latest
+```
+
+然后把生成的 `.tgz` 文件交给 DSH 插件管理安装。`npm pack` 只下载插件包，首次启动仍需要下载运行环境。
+
+**希望一次下载完整环境**：使用下方 GitHub 完整发行包。
 
 在 DSH 插件管理中添加下方地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
@@ -115,18 +135,28 @@ flowchart LR
 https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.2.0-rc.1/dsh-chapter-whale-0.2.0-rc.1.tgz
 ```
 
-完整包约 **265 MB**，包含独立 Python、写作后端和 Chromium，无需自己安装 Python、下载后端或填写项目目录。
+完整包约 **278 MB（265 MiB）**，包含独立 Python、写作后端和 Chromium，无需自己安装 Python、下载后端或填写项目目录。
 
 <details>
 <summary>使用命令行安装</summary>
 
 ```powershell
-dsh plugin --profile desktop add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.2.0-rc.1/dsh-chapter-whale-0.2.0-rc.1.tgz
+dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.2.0-rc.1/dsh-chapter-whale-0.2.0-rc.1.tgz
 ```
 
-`desktop` 请按自己正在使用的 profile 调整。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；源码安装的首次启动会自动下载并校验同版本环境。
+这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；源码安装的首次启动会自动下载并校验同版本环境。
 
 </details>
+
+#### 后续更新
+
+桌面版请在插件管理中检查更新。使用命令行的 web profile：
+
+```powershell
+dsh plugin --profile web update dsh-chapter-whale
+```
+
+更新后重启对应的 DSH。若旧版宿主未完成升级，可显式安装 `dsh-chapter-whale@latest`。更新只替换插件及随版本提供的代码，作品、账号和任务保存在独立工作区；更新前建议备份该目录。首次环境已准备好且运行时版本未变时，不会重复下载。
 
 ### 2. 创建作品，连接模型和账号
 
@@ -179,6 +209,7 @@ http://127.0.0.1:18765
 - [从安装到自动连载](docs/quickstart.md)：模型、厂商登录、番茄账号、任务和自动调度。
 - [七张实机截图](docs/screenshots.md)：各页面的用途及脱敏说明。
 - [当前版本验证记录](RELEASE_STATUS.md)：47 项插件测试、148 项后端测试、全新安装与独立 DSH 加载验证。
+- [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
 包名为 `dsh-chapter-whale`，当前发行版本为 `0.2.0-rc.1`（首个公开版本）。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

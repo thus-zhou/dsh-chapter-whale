@@ -2,11 +2,11 @@
   "format": 1,
   "title": {
     "en": "ChapterWhale",
-    "zh": "码章鲸 · 小说创作工作台"
+    "zh": "码章鲸 · 全自动小说写作与发布"
   },
   "description": {
-    "en": "Sidebar workbench for a local novel-writing pipeline: chapters, shared memory, outlines, publish queue, daily-update jobs, model pricing and cost reports, driven by a local manager service.",
-    "zh": "本地小说写作流水线的侧边栏工作台：作品与章节、共享记忆、大纲规划、发布队列、日更任务、模型定价与成本分析，由本地 manager 服务驱动。"
+    "en": "Scheduled, unattended novel writing and Fanqie publishing, with configurable tasks and optional free-quota models and vendor logins.",
+    "zh": "自定义小说日更任务，按计划无人值守写作与番茄发布，接入部分免费模型并支持部分厂商账号登录。"
   },
   "metadata": {
     "categories": {
@@ -81,9 +81,8 @@
           "version": "0.2.0-rc.1",
           "publishTimestamp": 1794303648,
           "source": {
-            "type": "git",
-            "url": "https://github.com/thus-zhou/dsh-chapter-whale",
-            "commit": "552206b609f0dc04865d2ab9f5029c2694b50bc1"
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
           },
           "engines": {
             "dsh": ">=0.2.2-rc.1"

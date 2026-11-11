@@ -1,0 +1,58 @@
+{
+  "checkedAt": "2026-11-11T11:19:12.241305+00:00",
+  "npm": {
+    "name": "dsh-chapter-whale",
+    "version": "0.2.0-rc.1",
+    "tag": "latest",
+    "url": "https://www.npmjs.com/package/dsh-chapter-whale",
+    "registryDownloadVerified": true,
+    "isolatedDshInstallVerified": true
+  },
+  "markets": [
+    {
+      "market": "awesome-dsh-plugin / dshmarket",
+      "status": "submitted",
+      "url": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316",
+      "method": "catalog-pr"
+    },
+    {
+      "market": "losebird DSH Plugin Market",
+      "status": "submitted",
+      "url": "https://github.com/losebird/dsh-plugin-market/pull/90",
+      "method": "curated-pr"
+    },
+    {
+      "market": "Open Plugin Market / dshopen.org",
+      "status": "submitted",
+      "url": "https://github.com/polang233/dsh-plugin-index/issues/430",
+      "method": "issue"
+    },
+    {
+      "market": "DSH Plugin Hub / dsh-plugin.org",
+      "status": "submitted",
+      "url": "https://github.com/dshplugin/dsh-plugin-hub/issues/738",
+      "method": "issue"
+    },
+    {
+      "market": "2BingLing DSH Market / dsh.market",
+      "status": "listed",
+      "url": "https://github.com/2BingLing/dsh-market/issues/373",
+      "evidence": "https://raw.githubusercontent.com/2BingLing/dsh-market/master/data/plugins.json",
+      "method": "topic-scan; author submission supplied"
+    },
+    {
+      "market": "bradeGithub DSH Plugins Marketplace",
+      "status": "listed",
+      "url": "https://github.com/bradeGithub/DSH-Plugins-Marketplace",
+      "evidence": "https://raw.githubusercontent.com/bradeGithub/DSH-Plugins-Marketplace/main/registry.json",
+      "method": "topic-scan"
+    },
+    {
+      "market": "LivXue DSH Plugin Shop",
+      "status": "awaiting-discovery",
+      "url": "https://github.com/LivXue/dsh-plugin-shop",
+      "method": "npm-keywords-and-github-topics",
+      "evidence": "https://LivXue.github.io/dsh-plugin-shop/v1/plugins.be78fec193c373928f8323157279b66a9ab8e057b0186dcbbb422c00b5c35590.json"
+    }
+  ]
+}

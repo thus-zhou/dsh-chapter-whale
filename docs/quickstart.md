@@ -8,15 +8,45 @@
 
 当前公开包支持 Windows 10/11 x64，要求 DSH ≥ 0.2.2-rc.1。
 
-1. 打开 DSH 的插件管理，添加下面的完整发行包地址。
+1. 打开 DSH 的插件管理，添加 npm 包名 `dsh-chapter-whale`。
 2. 安装后重启 DSH。
 3. 从侧栏打开「码章鲸」，点击「开始使用码章鲸」，等待本地环境准备完成。
+
+使用 `dsh web` 的用户，也可以在终端执行：
+
+```powershell
+dsh plugin --profile web add dsh-chapter-whale
+```
+
+安装后重启 `dsh web`。自定义 profile 将 `web` 换成实际名称；桌面版请在应用内安装，避免装到另一个 profile。
+
+npm 包首次启动会自动下载约 278 MB 的 Python 与浏览器运行环境，校验固定大小和 SHA-256 后解包。需要能连接 GitHub；首次完成准备且环境版本未变时，后续启动不会重复下载。
+
+若希望下载包含全部环境的包，在插件管理中添加以下 GitHub 地址，或先下载为本地文件再安装：
 
 ```text
 https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.2.0-rc.1/dsh-chapter-whale-0.2.0-rc.1.tgz
 ```
 
-完整包包含 Python、写作后端和浏览器，不需要单独安装开发环境。从源码或市场索引安装时，首次启动会自动下载、校验并解包同版本环境。
+完整包约 278 MB（265 MiB），包含 Python、写作后端和浏览器，不需要单独安装开发环境。两种安装方式使用同一套独立工作区。
+
+### 从 npm 下载文件与后续更新
+
+只下载 npm 压缩包：
+
+```powershell
+npm pack dsh-chapter-whale@latest
+```
+
+把生成的 `.tgz` 文件添加到 DSH 插件管理即可，首次启动仍会准备运行环境。普通 `npm install` 只是把依赖放进当前 Node 项目，不会自动注册到 DSH。
+
+桌面版在应用内检查更新；web profile 可执行：
+
+```powershell
+dsh plugin --profile web update dsh-chapter-whale
+```
+
+更新后重启对应的 DSH。旧版宿主升级未生效时，可在插件管理中显式添加 `dsh-chapter-whale@latest`。作品、登录信息和任务仍保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，建议更新前备份。
 
 ### 两个入口，使用同一份数据
 

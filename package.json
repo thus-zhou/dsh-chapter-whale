@@ -1,8 +1,8 @@
 {
   "name": "dsh-chapter-whale",
   "version": "0.2.0-rc.1",
-  "private": true,
-  "description": "码章鲸：DSH 内的 AI 小说写作与番茄发布工作台。内置独立后端与 Windows 运行环境，支持大纲、长篇记忆、多模型写作、审查润色、章节队列与发布核验。ChapterWhale: AI novel writing, editing and Fanqie publishing for DSH.",
+  "private": false,
+  "description": "码章鲸：DSH 全自动小说写作与番茄发布，支持自定义日更任务、无人值守运行、部分免费模型与厂商账号登录。ChapterWhale: scheduled, unattended novel writing and Fanqie publishing for Windows x64.",
   "type": "module",
   "license": "SEE LICENSE IN THIRD_PARTY_NOTICES.md",
   "author": {
@@ -31,6 +31,10 @@
     "AI写作",
     "番茄小说",
     "自动发布",
+    "automation",
+    "unattended",
+    "novel-writing",
+    "free-models",
     "码章鲸"
   ],
   "exports": {
@@ -53,11 +57,18 @@
     "backend/",
     "runtime-manifest.json",
     "THIRD_PARTY_NOTICES.md",
-    "runtime/python/",
-    "runtime/browsers/",
     "runtime-download.json",
-    "RELEASE_STATUS.md"
+    "RELEASE_STATUS.md",
+    "docs/",
+    "assets/",
+    "screenshots.json",
+    "scripts/check-release.mjs"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
   "engines": {
     "dsh": ">=0.2.2-rc.1",
     "node": ">=22"
