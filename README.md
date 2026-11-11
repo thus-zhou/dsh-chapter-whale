@@ -4,9 +4,13 @@
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，也可以接入部分免费模型，通过支持的厂商账号渠道完成授权。
 
-**[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.2.0-rc.1)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
+**[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 公开测试版
+Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 首个公开版本
+
+**安装三步**：① 从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载 `dsh-chapter-whale-*.tgz`（约 277MB）→ ② 在 DSH 插件管理里添加该文件或地址，重启 DSH → ③ 侧栏打开「码章鲸」：建作品、配模型，需要发布时再登录番茄作家后台。
+
+首次启动会在 `%LOCALAPPDATA%\ChapterWhale\workspace` 建独立工作区并解包运行时，约占 400MB 磁盘；作品与账号数据都留在该目录，卸载插件不会删除。安装包摘要见发布页的 `SHA256SUMS.txt`。仅支持 Windows x64。
 
 ![码章鲸：全自动写作与发布、可自定义任务、部分免费模型与厂商账号登录](assets/chapter-whale-overview.png)
 
@@ -177,6 +181,6 @@ http://127.0.0.1:18765
 - [当前版本验证记录](RELEASE_STATUS.md)：47 项插件测试、148 项后端测试、全新安装与独立 DSH 加载验证。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前发行版本为 `0.2.0-rc.1` 公开测试版。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+包名为 `dsh-chapter-whale`，当前发行版本为 `0.2.0-rc.1`（首个公开版本）。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 **[下载码章鲸，设置你的第一项自动更新任务 →](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.2.0-rc.1)**
