@@ -188,8 +188,8 @@
         "offline: npm test 52 pass / 0 fail; integration 198 OK; manager 70 OK (320 total)",
         "legacy project: adopt (file unchanged) -> link review receipt -> history 1 -> restore -> 2 versions, body bytes unchanged",
         "release: build-runtime 3393 files buildId 311be1b902c498c95e2ee9fb0af85b82ac47d551e3652a37c362e7a4e79dd94e; check-release --local pass; npm pack 1169 files",
-        "real: local free gateway 127.0.0.1:18900, 7 requests (A probe 1, A plan 1, B research 3, B draft 1, C polish 1), 29563 in / 7686 out tokens, 0 CNY",
-        "real: D review blocked before HTTP by request budget guard (requests_per_day=6) -> guard proven live"
+        "real: 本地免费网关 127.0.0.1:18900，实际发出 7 次成功请求（含 1 次连通性探测）：A 探测 1、A 规划 1、B research 3、B draft 1、C polish 1；29,563 in / 7,686 out tokens，0 CNY",
+        "real: 第 8 次（D 初审）被请求预算守卫在发 HTTP 之前拦下；上限 6，实际 7，超出 1 次"
       ],
       "real_requests": 7,
       "checkpoint": "M09 partial: offline integration, legacy migration/restore and release checks pass; real D review and C->D re-review not executed because the 6-request budget was exhausted (7 used: 1 probe + 1 plan + 3 research + 1 draft + 1 polish).",
@@ -299,10 +299,11 @@
         "中断写入保留旧索引；无关项目不受影响；重复重建结果一致",
         "真实请求 10/10（含重试），本地免费网关，费用 0 元；D 返回 JSON 六维评分与事实候选",
         "版本串 0.4.0；runtime-manifest 重建；check-release --local 通过",
-        "独立评估（2026-11-14，提交 708a83e）：自动化 390 项通过，但 F01—F08 接线问题导致验收不通过"
+        "独立评估（2026-11-14，提交 708a83e）：自动化 390 项通过，但 F01—F08 接线问题导致验收不通过",
+        "CI: run 43607973847 (head 1c61b90) all jobs green — backend windows/ubuntu x py3.11/3.13 + node tests; F07 install order, python-multipart, tzdata, DPAPI codec injection and UTF-8 mode fixed"
       ],
       "real_requests": 10,
-      "checkpoint": "M15 的离线机制检查与有限真实检查已执行，但独立评估判定不通过：人物状态未进提示、D 候选在主链路保存失败、门槛变化沿用旧通过、预算预留失败仍继续、修订轮数未受策略约束、报告未绑定约定、发行 CI 失败、工作台信息缺失。本轮已修复 F01—F06、F07 依赖顺序与 F08 的后端/界面缺口，并新增 test_pipeline_fixes（11 项）与 test_bundle（4 项）；真实调用预算已用尽，稳定版结论需在新预算下复验后才成立。",
+      "checkpoint": "M15 的离线机制检查与有限真实检查已执行，但独立评估判定不通过：人物状态未进提示、D 候选在主链路保存失败、门槛变化沿用旧通过、预算预留失败仍继续、修订轮数未受策略约束、报告未绑定约定、发行 CI 失败、工作台信息缺失。本轮已修复 F01—F06、F07 依赖顺序与 F08 的后端/界面缺口，并新增 test_pipeline_fixes（11 项）与 test_bundle（4 项）；真实调用预算已用尽，稳定版结论需在新预算下复验后才成立。 2026-11-14 修复后 CI 全绿（run 43607973847），本地 272+83+53 项通过；真实复验仍缺预算。",
       "remaining": [
         "真实模型复验：D 六维 JSON、C→D 复审、候选落库、跨章状态读取（需新的请求预算，当前为 0）",
         "第二章整章审查与发布资格（预算用尽，未做）",
@@ -342,11 +343,11 @@
     },
     "0.4.0": {
       "local_ready": true,
-      "checks": "integration 255 / manager 82 / npm 53; manifest 3398 files buildId 27dda896; check-release --local ok",
-      "github": "tag v0.4.0 + release 304839826 bytes sha 9855365e (stable)；该节点的 CI 后端作业因 httpx 安装顺序失败，不可再作为稳定交付依据",
+      "checks": "历史节点（提交 708a83e）：integration 255 / manager 82 / npm 53；manifest 3398 files buildId 27dda896；check-release --local ok；其 CI 后端作业失败（F07）",
+      "github": "tag v0.4.0 + release 304839826 bytes sha 9855365e (stable)；发布时 CI 后端作业失败，按方案不应作为稳定交付依据；修复代码在 main（bc0a16b..1c61b90）但未发布新补丁版",
       "npm": "not_requested",
-      "real_model_validation": "10/10 requests, cost 0 CNY, D JSON verified; chapter 2 composed as two scenes but not reviewed; 后续独立评估（提交 708a83e）判定验收不通过，F01—F08 已在主分支修复但尚未做真实复验"
+      "real_model_validation": "10/10 requests (plus 2 ledger-only diagnostic rows), cost 0 CNY; D JSON verified; chapter 2 composed as two scenes but never整章审查; 独立评估判不通过，F01—F08 已修复，缺新预算复验"
     }
   },
-  "updated_at": "2026-11-14T22:10:00+08:00"
+  "updated_at": "2026-11-14T23:20:00+08:00"
 }

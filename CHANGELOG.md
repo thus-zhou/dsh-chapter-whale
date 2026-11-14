@@ -1,4 +1,6 @@
 ## [Unreleased] — 评估修复（2026-11-14）
+- ci: 后端作业在 Windows runner 上改用 UTF-8 模式，避免 cp1252 打印中文失败；manager 测试注入跨平台凭据编解码器（Linux 无 DPAPI），并补装 python-multipart/tzdata。
+
 
 ### 修复
 - F01：D 的事实/人物候选在正文落盘后按原始字节指纹保存并提交，不再静默失败，也不再额外调用一次记忆抽取。
