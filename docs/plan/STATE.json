@@ -165,7 +165,7 @@
     },
     "M08": {
       "status": "completed",
-      "commit": "PENDING_M08",
+      "commit": "6283eb1",
       "checks": [
         "node --test test/distribution.test.mjs -> 5 pass (archive listing, traversal/link rejection, auto-update disabled, installed-file verification)",
         "npm test -> 52 pass / 0 fail (distribution test added to the suite)",
