@@ -2149,7 +2149,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           onClick: () =>
                             act('生成', `/projects/${project.id}/generate`, {
                               word_count: Number(props.studio.wordCount) || 3500,
-                              max_revisions: Number(props.studio.maxRevisions) || 2,
+                              max_revisions: Number.isFinite(Number(props.studio.maxRevisions))
+                      ? Number(props.studio.maxRevisions)
+                      : 1,
                               count: Number(props.studio.count) || 1,
                               scenes: Number(props.studio.scenes) || 0,
                             }),
@@ -3070,7 +3072,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 daily_time: job.daily_time || '09:00',
                 chapters_per_run: job.chapters_per_run || 1,
                 word_count: job.word_count || 3500,
-                max_revisions: job.max_revisions || 2,
+                max_revisions: job.max_revisions ?? 1,
                 enabled: Boolean(job.enabled),
               });
             }
@@ -3117,7 +3119,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   quota_phases: job.quota_phases || [],
                   slot_quotas: job.slot_quotas || null,
                   delivery_mode: job.delivery_mode || 'batch',
-                  max_revisions: Number(draft.max_revisions) || 2,
+                  max_revisions: Number.isFinite(Number(draft.max_revisions)) ? Number(draft.max_revisions) : 1,
                   enabled: Boolean(draft.enabled),
                   approval_mode: job.approval_mode || 'unattended',
                 },
@@ -3176,7 +3178,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         e(Field, { label: '每日时段' }, e(TextInput, { value: draft.daily_time, onChange: (value) => setDraft({ ...draft, daily_time: value }) })),
                         e(Field, { label: '每时段章数' }, e(TextInput, { value: draft.chapters_per_run, onChange: (value) => setDraft({ ...draft, chapters_per_run: value }), type: 'number', min: 1, max: 50 })),
                         e(Field, { label: '每章字数' }, e(TextInput, { value: draft.word_count, onChange: (value) => setDraft({ ...draft, word_count: value }), type: 'number', min: 500, max: 10000 })),
-                        e(Field, { label: '最大修订' }, e(TextInput, { value: draft.max_revisions, onChange: (value) => setDraft({ ...draft, max_revisions: value }), type: 'number', min: 0, max: 5 })),
+                        e(Field, { label: '自动修订轮数（0—3）' }, e(TextInput, { value: draft.max_revisions, onChange: (value) => setDraft({ ...draft, max_revisions: value }), type: 'number', min: 0, max: 3 })),
                       ),
                       e(
                         'label',
@@ -4340,6 +4342,20 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         ),
                       ),
                     ),
+                    tab === 'quality' && report && report.scores
+                      ? e(
+                          'div',
+                          { style: { marginBottom: 8 } },
+                          e(
+                            'div',
+                            { className: 'nh-muted' },
+                            `分项评分（总分 ${report.total ?? '—'}；门槛 ${report.thresholds ? `${report.thresholds.total}/${report.thresholds.item}` : '—'}）`,
+                          ),
+                          ...Object.entries(report.scores).map(([key, value]) =>
+                            e('div', { key }, `· ${(report.names || {})[key] || key}：${value}`),
+                          ),
+                        )
+                      : null,
                     tab === 'quality' && report && report.failures && report.failures.length
                       ? e(
                           'div',
@@ -4597,7 +4613,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [chapter, setChapter] = React.useState(null);
           const [studio, setStudio] = React.useState({
             wordCount: '3500',
-            maxRevisions: '2',
+            maxRevisions: '1',
             count: '1',
             scenes: '0',
           });

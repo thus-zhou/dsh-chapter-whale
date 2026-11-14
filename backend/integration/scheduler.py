@@ -833,7 +833,7 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--timezone", default="Asia/Shanghai", help="时区标签，默认 Asia/Shanghai")
     add.add_argument("--chapters-per-run", type=int, default=1, help="每次生成/发布章节数，默认 1")
     add.add_argument("--word-count", type=int, default=3500, help="每章目标字数，默认 3500")
-    add.add_argument("--max-revisions", type=int, default=2, help="每章最多自动修改轮数，默认 2")
+    add.add_argument("--max-revisions", type=int, default=1, help="每章最多自动修改轮数，默认 1；最终以资源策略 revision_rounds 封顶")
     add.add_argument("--volume", type=int, help="发布前切换到的番茄分卷")
     add.add_argument(
         "--approval-mode",

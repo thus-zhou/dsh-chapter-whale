@@ -425,6 +425,15 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None):
     from .text_checks import guidance
     correction=guidance(project,doc,chapter)
     if correction:lines.append(correction)
+    # 人物档案与认知边界必须进入真实写作提示；没有匹配人物时不塞整库。
+    people = ""
+    try:
+        from . import character_state
+        people = character_state.context(project, chapter).get("text") or ""
+    except Exception:
+        people = ""
+    if people:
+        lines.append(people)
     ids = [];used = sum(len(x) for x in lines); omitted = 0
     for _, item in selected:
         source = item["source"]
@@ -450,14 +459,14 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None):
               "valid_from": record(item)["valid_from"], "valid_to": record(item)["valid_to"]}
              for _, item in selected if item["id"] in ids]
     return {"revision": doc["revision"], "role": role, "chapter": chapter, "ids": ids,
-            "facts": facts,
+            "facts": facts, "characters": people,
             "omitted": omitted + omitted_future + omitted_expired + omitted_stale,
             "omitted_breakdown": {"budget": omitted, "future": omitted_future,
                                   "expired": omitted_expired, "stale": omitted_stale},
             "restricted": [{"reason": "future", "count": omitted_future},
                            {"reason": "expired", "count": omitted_expired},
                            {"reason": "stale", "count": omitted_stale}],
-            "text": "\n".join(lines) if selected else ""}
+            "text": "\n".join(lines) if (selected or people) else ""}
 
 
 @costs.attributed("memory",project="project",chapter="chapter",role="D")
@@ -618,6 +627,14 @@ def current_digest(project, chapter):
     return _chapter(project, chapter)[1]
 
 
+def _digests(project, chapter):
+    """返回 (正文, 原始字节摘要, 规范化摘要)。回执用后者，候选文件用前者。"""
+    from fanqie_auto_publish.publication_safety import body_digest
+
+    body, raw = _chapter(project, chapter)
+    return body, raw, body_digest(body)
+
+
 def candidate_path(project, chapter, sha256):
     return _path(project, f"fact_candidates/{int(chapter):04d}-{str(sha256)[:16]}.json")
 
@@ -674,11 +691,16 @@ def _candidate_rows(review, body, chapter):
     return kept, dropped
 
 
-def save_candidates(project, chapter, review, body_sha256):
-    """审查附带的事实候选先落盘待提交；正文未定稿不写入记忆。"""
+def save_candidates(project, chapter, review, body_sha256=None, raw_sha256=None):
+    """审查附带的事实候选先落盘待提交；正文未定稿不写入记忆。
+
+    审查回执记的是规范化摘要，候选文件按原始字节摘要归档；两种指纹都在这里核对，
+    避免正文结尾换行导致主链路静默丢弃候选。
+    """
     project = Path(project).resolve()
-    body, digest = _chapter(project, chapter)
-    if digest != body_sha256:
+    body, digest, normalized = _digests(project, chapter)
+    provided = [value for value in (body_sha256, raw_sha256) if value]
+    if provided and not set(provided) & {digest, normalized}:
         raise ValueError("事实候选与当前正文不一致")
     path = candidate_path(project, chapter, digest)
     if path.exists():
@@ -692,10 +714,13 @@ def save_candidates(project, chapter, review, body_sha256):
     return {"status": "pending", "count": len(kept), "dropped": len(dropped), "path": str(path)}
 
 
-def commit_candidates(project, chapter, body_sha256):
+def commit_candidates(project, chapter, body_sha256=None):
     """正文定稿并仍有当前审查后才提交；失败保留待处理文件，不重新生成正文。"""
     project = Path(project).resolve()
-    path = candidate_path(project, chapter, body_sha256)
+    body, digest, normalized = _digests(project, chapter)
+    if body_sha256 and body_sha256 not in {digest, normalized}:
+        raise ValueError("正文已变化，事实候选未提交")
+    path = candidate_path(project, chapter, digest)
     if not path.exists():
         raise ValueError("没有待提交的事实候选")
     doc_file = json.loads(path.read_text(encoding="utf-8"))

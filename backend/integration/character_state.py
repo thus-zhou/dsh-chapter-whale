@@ -330,14 +330,22 @@ def candidate_path(project, chapter, sha256):
     return _path(project, f"character_candidates/{int(chapter):04d}-{str(sha256)[:16]}.json")
 
 
-def save_candidates(project, chapter, review, body_sha256):
-    project = Path(project).resolve()
+def _digests(project, chapter):
+    from fanqie_auto_publish.publication_safety import body_digest
+
     body_path = [p for p, number in writer._chapter_files(project) if number == chapter]
     if len(body_path) != 1:
         raise ValueError("正文来源缺失或章节重复")
     body = body_path[0].read_text(encoding="utf-8-sig")
-    digest = hashlib.sha256(body_path[0].read_bytes()).hexdigest()
-    if digest != body_sha256:
+    raw = hashlib.sha256(body_path[0].read_bytes()).hexdigest()
+    return body, raw, body_digest(body)
+
+
+def save_candidates(project, chapter, review, body_sha256=None, raw_sha256=None):
+    project = Path(project).resolve()
+    body, digest, normalized = _digests(project, chapter)
+    provided = [value for value in (body_sha256, raw_sha256) if value]
+    if provided and not set(provided) & {digest, normalized}:
         raise ValueError("人物候选与当前正文不一致")
     path = candidate_path(project, chapter, digest)
     if path.exists():
@@ -351,17 +359,18 @@ def save_candidates(project, chapter, review, body_sha256):
     return {"status": "pending", "count": len(kept), "dropped": len(dropped), "path": str(path)}
 
 
-def commit_candidates(project, chapter, body_sha256):
+def commit_candidates(project, chapter, body_sha256=None):
     project = Path(project).resolve()
-    path = candidate_path(project, chapter, body_sha256)
+    body, digest, normalized = _digests(project, chapter)
+    if body_sha256 and body_sha256 not in {digest, normalized}:
+        raise ValueError("正文已变化，人物候选未提交")
+    body_sha256 = digest
+    path = candidate_path(project, chapter, digest)
     if not path.exists():
         raise ValueError("没有待提交的人物候选")
     doc_file = json.loads(path.read_text(encoding="utf-8"))
     if doc_file.get("state") == "committed":
         return {"status": "reused", "chapter": chapter}
-    body_path = [p for p, number in writer._chapter_files(project) if number == chapter]
-    if len(body_path) != 1 or hashlib.sha256(body_path[0].read_bytes()).hexdigest() != body_sha256:
-        raise ValueError("正文已变化，人物候选未提交")
     if chapter not in writer.reviewed_chapters(project):
         raise ValueError("只能提交具备当前有效审查／E 授权的正文变化")
     added = {"persons": 0, "relations": 0, "knowledge": 0}

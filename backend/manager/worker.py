@@ -93,7 +93,7 @@ def main():
     parser.add_argument("--account")
     parser.add_argument("--job-id")
     parser.add_argument("--word-count", type=int, default=3500)
-    parser.add_argument("--max-revisions", type=int, default=2)
+    parser.add_argument("--max-revisions", type=int, default=1)
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--chapter", type=int, action="append")
     parser.add_argument("--role",choices=list(model_roles.ROLES))

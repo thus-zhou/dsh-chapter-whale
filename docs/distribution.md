@@ -65,3 +65,15 @@
 5. **市场条目的许可字段**（`market/catalog-entry.yml`、`index.json`）应与第 1 条结论保持一致；确定后统一更新。
 
 在这些问题有结论前，发行包按现状发布：不删除任何许可文本，不更改 `LICENSE`，不声称「许可已全部核实」。
+
+## 组装完整发行包
+
+```
+python scripts/build-runtime.py          # 重建 runtime-manifest.json（发行清单）
+python scripts/pack-bundle.py            # npm 文件 + 清单内的 runtime → .tmp/bundle/*.tgz
+python scripts/pack-bundle.py --keep-stage   # 保留解包目录用于核对
+```
+
+`pack-bundle.py` 只复制清单里列出的文件，组装后检查是否混入 `__pycache__`、`.pyc`、
+`test_*.py`；包内 `runtime-download.json` 的 `buildId` 会跟随清单，
+其余摘要字段仅供参考，安装器以 Release 页与 `SHA256SUMS.txt` 为准。

@@ -24,9 +24,12 @@ def _brief(project):
 
 
 def _plan_chapters(project):
+    """规划章节既可能是列表，也可能是 {章号: {...}}；两种都算已规划。"""
     doc = _read(Path(project) / PLAN)
     chapters = doc.get("chapters")
-    return len(chapters) if isinstance(chapters, list) else 0
+    if isinstance(chapters, (list, dict)):
+        return len(chapters)
+    return 0
 
 
 def _chapters(project):

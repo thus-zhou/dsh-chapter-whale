@@ -82,6 +82,15 @@ class WorkflowTest(unittest.TestCase):
         after = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
         self.assertEqual(before, after)
 
+    def test_dict_shaped_plan_counts_as_planned(self):
+        """真实 A 规划按 {章号: {...}} 存储，工作台不能把它当成没规划。"""
+        (self.root / ".webnovel" / "story_plan.json").write_text(json.dumps(
+            {"chapters": {"1": {"title": "开端"}, "2": {"title": "转折"}}}, ensure_ascii=False),
+            encoding="utf-8", newline="\n")
+        state = workflow.state(self.root)
+        self.assertEqual(state["counts"]["plan_chapters"], 2)
+        self.assertTrue(self.step(state, "direction")["done"])
+
     def test_sample_count_is_reported(self):
         samples = self.root / ".webnovel" / "samples"
         samples.mkdir()

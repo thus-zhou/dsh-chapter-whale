@@ -442,6 +442,31 @@ class WriterRunnerTest(unittest.TestCase):
     loader_pure = staticmethod(writer._load_webnovel_services)
 
 
+    def test_generated_body_commits_candidates_without_extra_model_call(self):
+        """主链路：正文落盘后立即提交 D 候选，并且不再额外调一次共享记忆抽取。"""
+        from integration import memory_library
+
+        body = "第1章的正文，因果与时间线完整。"
+        scored = dict(PASS, quality={"scores": {name: 90 for name in
+                                               ("setting", "plot", "character", "prose", "dialogue", "style")}},
+                      fact_candidates=[{"title": "时间线完整", "content": "本章时间线完整",
+                                        "quote": "因果与时间线完整"}])
+
+        async def generated(project, chapter, words, revisions, scenes=0):
+            return {"content": body, "review": scored, "revision_rounds": 0, "executor": self.executor}
+
+        self.generator.side_effect = generated
+        with patch.object(memory_library, "sync_chapter", AsyncMock(return_value={"status": "synced"})) as sync:
+            result = self.generate()
+        self.assertEqual(result["status"], "generated")
+        receipts = json.loads((self.project / ".webnovel" / "writer_receipts.json").read_text(encoding="utf-8"))
+        candidates = receipts["1"]["candidates"]["memory_library"]
+        self.assertEqual(candidates["committed"], "committed")
+        self.assertGreaterEqual(candidates["added"], 1)
+        titles = [item["title"] for item in memory_library.read(self.project)["items"]]
+        self.assertIn("时间线完整", titles)
+        self.assertEqual(sync.await_count, 0)
+
 class ChapterTitleUniquenessTests(unittest.TestCase):
     """Fanqie rejects a repeated chapter title with -3011; generation must not emit one."""
 

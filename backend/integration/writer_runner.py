@@ -349,19 +349,26 @@ def _record_review_attempt(project,chapter,content,review):
     digest=body_digest(content)
     atomic_json(path,{'chapter_id':chapter,'reviewed_at':now_iso(),'body_sha256':digest,'review':review})
     try:
-        quality_gate.save_report(project,chapter,review,body_sha256=digest)
+        quality_gate.save_report(project,chapter,review,body_sha256=digest,
+                                 contract_hash=creative_contract_hash(project))
     except Exception:
         pass  # 报告留档失败不阻断既有回执写入；过期状态由 no_report 表达
-    try:
-        from . import memory_library
-        memory_library.save_candidates(project,chapter,review,digest)
-    except Exception:
-        pass  # 候选只是可选字段；核对失败不改变审查结论，也不写入记忆
-    try:
-        from . import character_state
-        character_state.save_candidates(project,chapter,review,digest)
-    except Exception:
-        pass  # 人物候选同理：只落待提交文件，不阻断审查回执
+
+
+def _commit_review_candidates(project, chapter, content, review):
+    """正文落盘后才核对并提交 D 的候选；失败保留待处理文件，不重新生成正文。"""
+    raw = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    out = {}
+    for name in ("memory_library", "character_state"):
+        try:
+            module = __import__(f"integration.{name}", fromlist=["save_candidates"])
+            saved = module.save_candidates(project, chapter, review, raw_sha256=raw)
+            committed = module.commit_candidates(project, chapter, raw)
+            out[name] = {"saved": saved.get("status"), "committed": committed.get("status"),
+                         "added": committed.get("added")}
+        except Exception as exc:
+            out[name] = {"status": "failed", "error_type": type(exc).__name__}
+    return out
 
 
 def _safe_error(exc):
@@ -370,6 +377,13 @@ def _safe_error(exc):
     for secret in model_roles.secrets(model_roles.load_config()):message=message.replace(secret,'[redacted]')
     from .failure_info import details
     return {'error_type':type(exc).__name__,'message':message[:1200],**details(exc)}
+
+
+def effective_revisions(max_revisions, config=None):
+    """自动修订轮数以资源策略为准：界面多填也不能超过 revision_rounds（0—3）。"""
+    from . import model_roles, resource_policy
+    policy = resource_policy.limits(model_roles.load_config() if config is None else config)
+    return max(0, min(int(max_revisions), int(policy["revision_rounds"])))
 
 
 async def _generate_and_review(
@@ -383,6 +397,7 @@ async def _generate_and_review(
     ai_service = get_ai_service()
     from integration import model_roles, studio
     config=model_roles.load_config()
+    max_revisions=effective_revisions(max_revisions,config)
     multi=model_roles.enabled(config)
     if multi:
         studio.recover_plan(project_root)
@@ -597,7 +612,7 @@ async def _generate_and_review(
 async def generate_chapter_async(
     project_path: Path,
     word_count: int = 3500,
-    max_revisions: int = 2,
+    max_revisions: int = 1,
     chapter_id: Optional[int] = None,
     dry_run: bool = False,
     scenes: int = 0,
@@ -668,11 +683,16 @@ async def _sync_committed_artifacts(
         post_save = {"status": "failed", "reason": "invalid_artifact_result"}
     post_save = {**post_save, "entities": entities}
     from integration import memory_library
-    try:
-        post_save["shared_memory"] = await memory_library.sync_chapter(receipts_path.parent.parent, chapter, content)
-    except Exception as exc:
-        # A committed draft is never regenerated because memory extraction failed.
-        post_save['shared_memory'] = {'status':'failed',**_safe_error(exc)}
+    facts = (receipt.get("candidates") or {}).get("memory_library") or {}
+    if isinstance(facts.get("added"), int) and facts["added"] > 0:
+        # D 的候选取代一轮额外的记忆抽取调用：同一份正文，不再花第二次钱。
+        post_save["shared_memory"] = {"status": "synced", "source": "d_candidates", "added": facts["added"]}
+    else:
+        try:
+            post_save["shared_memory"] = await memory_library.sync_chapter(receipts_path.parent.parent, chapter, content)
+        except Exception as exc:
+            # A committed draft is never regenerated because memory extraction failed.
+            post_save['shared_memory'] = {'status':'failed',**_safe_error(exc)}
     receipt["post_save"] = post_save
     try:
         atomic_json(receipts_path, receipts)
@@ -815,6 +835,13 @@ async def _generate_chapter_locked(
     finally:
         temporary.unlink(missing_ok=True)
     _save_progress(project_root, selected_chapter)
+    candidates = _commit_review_candidates(project_root, selected_chapter, content, generated["review"])
+    receipt["candidates"] = candidates
+    receipts[str(selected_chapter)] = receipt
+    try:
+        atomic_json(receipts_path, receipts)
+    except OSError:
+        pass
     post_save = await _sync_committed_artifacts(
         generated["executor"], selected_chapter, content, receipt, receipts, receipts_path
     )
@@ -887,6 +914,7 @@ async def review_existing_chapter_async(
         if isinstance(previous_receipt,dict) and previous_receipt.get('sha256')==receipt['sha256']:
             receipt['post_save']=previous_receipt.get('post_save',{})
         # A failed fresh review must revoke an earlier pass for the same body.
+        receipt["candidates"] = _commit_review_candidates(project, chapter_id, content, review)
         receipts[str(chapter_id)] = receipt
         atomic_json(receipts_path, receipts)
         result = {"project": str(project), "chapter_id": chapter_id, "destination": str(source),
@@ -911,7 +939,7 @@ def review_existing_chapter(
 def generate_chapter(
     project_path: Path,
     word_count: int = 3500,
-    max_revisions: int = 2,
+    max_revisions: int = 1,
     chapter_id: Optional[int] = None,
     dry_run: bool = False,
 ) -> Dict[str, Any]:
@@ -930,7 +958,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="小说助手：AI 生成、审查并保存下一章")
     parser.add_argument("--project", required=True, help="webnovel 项目目录")
     parser.add_argument("--word-count", type=int, default=3500, help="目标字数，默认 3500")
-    parser.add_argument("--max-revisions", type=int, default=2, help="最多自动修改轮数，默认 2")
+    parser.add_argument("--max-revisions", type=int, default=1, help="最多自动修改轮数，默认 1；最终以资源策略 revision_rounds 封顶")
     parser.add_argument("--chapter", type=int, help="指定章节号；省略时自动取下一章")
     parser.add_argument("--dry-run", action="store_true", help="只检查大纲和目标文件，不调用 AI")
     parser.add_argument("--review-existing", action="store_true", help="仅审查指定的已有正文，不修改原文")

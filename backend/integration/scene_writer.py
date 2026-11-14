@@ -38,6 +38,13 @@ def _prompt(project, chapter, card, previous, guidance):
             pieces.append(context["text"][:6000])
     except (ValueError, OSError):
         pass
+    try:
+        from . import character_state
+        people = character_state.context(project, chapter).get("text") or ""
+        if people:
+            pieces.append(people[:6000])
+    except Exception:
+        pass
     pieces.append("本章场景卡（只写这一段，不要写其他场景）：\n" + json.dumps(card, ensure_ascii=False))
     if previous:
         pieces.append("上一场景的最后一段（用于衔接，不要重复）：\n" + previous[-PREVIOUS_TAIL:])

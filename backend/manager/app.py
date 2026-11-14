@@ -321,7 +321,7 @@ class ContentInput(BaseModel):
 
 class GenerateInput(BaseModel):
     word_count: int = Field(default=3500, ge=500, le=10000)
-    max_revisions: int = Field(default=2, ge=0, le=5)
+    max_revisions: int = Field(default=1, ge=0, le=3)
     count: int = Field(default=1, ge=1, le=30)
     scenes: int = Field(default=0, ge=0, le=3)
 
@@ -428,7 +428,7 @@ class JobInput(BaseModel):
     quota_phases: list[dict] = Field(default_factory=list, max_length=24)
     slot_quotas: dict[str, int] | None = None
     delivery_mode: str = Field(default="batch", pattern="^(batch|serial)$")
-    max_revisions: int = Field(default=2, ge=0, le=5)
+    max_revisions: int = Field(default=1, ge=0, le=3)
     enabled: bool = False
     approval_mode: str = "unattended"
 
@@ -981,7 +981,12 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         items = [x for x in bridge.iter_source_chapters(Path(project(identity)["path"])) if x[1] == chapter]
         if len(items) != 1:
             raise HTTPException(409 if items else 404, "章节重复，请检查正文文件" if items else "未找到章节")
-        return {"content": items[0][3], "title": items[0][2], "id": chapter}
+        words = len([c for c in items[0][3] if not c.isspace()])
+        from integration import quality_gate, writer_runner
+        receipts = writer_runner.reviewed_chapters(Path(project(identity)["path"]))
+        return {"content": items[0][3], "title": items[0][2], "id": chapter, "words": words,
+                "reviewed": chapter in receipts,
+                "review_status": (receipts.get(chapter) or {}).get("review", {}).get("review_decision")}
 
     @app.get("/api/projects/{identity}/chapters/{chapter}/quality")
     def chapter_quality(identity: str, chapter: int):

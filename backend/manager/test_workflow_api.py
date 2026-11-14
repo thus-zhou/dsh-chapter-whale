@@ -55,6 +55,17 @@ class WorkflowApiTests(unittest.TestCase):
         self.assertEqual(state["next"], "results")
         self.assertEqual(state["counts"]["chapters"], 1)
 
+    def test_chapter_detail_reports_words_and_review_state(self):
+        body = "第一章正文，含标点与空白。\n"
+        (self.project / "正文" / "第1章-开局.md").write_text(body, encoding="utf-8", newline="\n")
+        response = self.client.get(f"/api/projects/{self.identity}/chapters/1", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["words"], len([c for c in body if not c.isspace()]))
+        self.assertIn("reviewed", data)
+        self.assertIn("review_status", data)
+        self.assertFalse(data["reviewed"])
+
     def test_unknown_project_is_404(self):
         response = self.client.get("/api/projects/ffffff/workflow", headers=self.headers)
         self.assertEqual(response.status_code, 404)

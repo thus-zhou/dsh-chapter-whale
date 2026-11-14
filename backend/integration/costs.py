@@ -201,8 +201,9 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
     reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
     day = _today()
     project = str(Path(project).resolve()) if project else ''
-    db = connection(db_path)
+    db = None
     try:
+        db = connection(db_path)
         db.execute('BEGIN IMMEDIATE')
         rows = db.execute("SELECT chapter,day,state,tokens,cost_cny,unknown_cost FROM request_budget WHERE project=?",
                           (project,)).fetchall()
@@ -232,11 +233,19 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
                     str(operation or '')))
         db.commit()
         return identity
-    except BaseException:
-        db.rollback()
+    except BudgetExceeded:
+        if db is not None:
+            db.rollback()
         raise
+    except Exception as exc:
+        # 预算已开启但预留写不进去：不能假装限额仍然有效，必须挡住这次请求。
+        if db is not None:
+            db.rollback()
+        record_gap(db_path, 'budget_reserve_failed')
+        raise BudgetExceeded('预算无法预留，已停止新请求', {'error_type': type(exc).__name__}) from exc
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 
 def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled'):
@@ -469,11 +478,19 @@ class Attempt:
             if 'provider_price' in meta:
                 self.event['price'] = dict(selected_price) if isinstance(selected_price,dict) else None
             # 预留必须发生在发请求之前：超限时这里直接抛 BudgetExceeded，不产生费用。
-            self.reservation = reserve_request(
-                self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
-                tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
-                cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
-                operation=self.event["operation"])
+            try:
+                self.reservation = reserve_request(
+                    self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
+                    tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
+                    cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
+                    operation=self.event["operation"])
+            except BudgetExceeded:
+                raise
+            except Exception as exc:
+                # 限额已开启时，预留失败就等于没有限额：这次请求不能发出去。
+                record_gap(self.db_path, 'budget_reserve_failed')
+                raise BudgetExceeded('预算无法预留，已停止新请求',
+                                     {'error_type': type(exc).__name__}) from exc
             self.persist()
         except BudgetExceeded:
             self.event=None

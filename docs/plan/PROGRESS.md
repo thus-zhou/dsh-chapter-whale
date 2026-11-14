@@ -598,3 +598,44 @@ M09：0.3 集成与稳定发布 —— 版本串到 0.3.0、完整隔离检查�
 - 第二章未审查，没有“两章都走完 D”的真实证据；场景进度界面只做了接口与静态守卫，未在浏览器手工验收。
 - 百章只验证索引与视图开销，**不是**百章真实创作验收，也不代表长期质量。
 - 场景合成后的正文由版本存储登记（`source="scenes"`），真实运行中未走 writer 的自动落盘（同一预算原因）。
+
+## 评估修复轮次（2026-11-14，对照独立评估报告）
+
+**依据**：`audit/2026-11-14-chapter-whale/独立评估报告.md`（评估提交 `708a83e`，0.4.0）。结论为验收不通过：
+自动化 390 项通过，但八处模块间接线缺口让真实使用与方案声明不一致。
+
+### 完成内容
+
+| 编号 | 问题 | 处理 |
+| --- | --- | --- |
+| F01 | D 候选用规范化摘要比对原始字节，且早于正文落盘 | `memory_library` / `character_state` 的 `save_candidates` 同时接受两种指纹，候选文件按原始字节命名；`writer_runner` 删除过早的保存调用，改为正文落盘后 `_commit_review_candidates` 保存并提交；当候选已提交时跳过额外 `sync_chapter` 模型调用 |
+| F02 | 人物库没进生成提示 | `memory_library.context` 追加 `character_state.context` 的人物块并返回 `characters`；`scene_writer._prompt` 同样注入 |
+| F03 | 门槛变化仍沿用缓存通过 | `quality_gate.review_passed` / `pass_ok` / `public_report` 一律按当前配置重算，不再读 `review["quality_gate"]` 缓存 |
+| F04 | 预算预留失败仍继续发请求 | `reserve_request` 把数据库/锁定错误转成 `BudgetExceeded`；`Attempt` 对预留的任何失败都在发送前停止 |
+| F05 | 修订轮数未受策略约束 | 新增 `writer_runner.effective_revisions`，主生成按 `resource_policy.revision_rounds` 封顶；后端默认改 1、上限 3；前端填 0 不再被 `|| 2` 改写 |
+| F06 | 报告未绑定创作约定 | 主钩子保存报告时写 `contract_hash`；`status()` 发现记录未绑定即 `contract_unbound`，约定变化即 `contract_changed` |
+| F07 | 发行 CI 因 httpx 缺失失败 | CI 在第一个导入 `services.*` 的套件之前安装 `fastapi httpx` |
+| F08 | 工作台/报告/章节信息 | `workflow._plan_chapters` 兼容 `{章号: {...}}`；质量面板渲染六维分项与总分/门槛；章节详情返回 `words`/`reviewed`/`review_status`；新增 `scripts/pack-bundle.py` 按清单组装发行包，拒绝 `__pycache__`、`.pyc` 与 `test_*.py` 残留，并把包内 `runtime-download.json` 的 buildId 对齐清单 |
+
+### 检查
+
+- `test_pipeline_fixes.py` 11 项：候选规范化/原始指纹、回执绑定约定、人物上下文进提示、门槛 85→95 重算、约定变化过期、未绑定即失效、预算预留失败在发送前停止、修订轮数 0/3/2/默认 1。
+- `test_writer_runner.py` 新增主链路用例：正文落盘后候选自动提交进记忆，且不再额外调用一次抽取。
+- `test_workflow.py` / `test_workflow_api.py` 新增字典规划与章节 `words`/`reviewed` 断言；`test_bundle.py` 4 项校验发行包规则。
+- 离线回归：integration **272 OK** / manager **83 OK** / npm **53 pass**。全部为离线用例，模型调用 0 次。
+
+### 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | F01—F08 已修复并提交到主分支 |
+| 真实模型验证 | **未完成**：本轮 0 次调用；0.4.0 的 10 次预算已用尽，修复后的复验需要新预算 |
+| GitHub 推送 | 见本轮提交与推送记录 |
+| Release | **0.4.0 仍是既有稳定版标签**，但其 CI 失败、且修复前验收不通过；是否发布 0.4.1 需所有者决定（方案只授权到 0.4.0 节点） |
+
+### 剩余
+
+1. 在新预算下复验：D 六维 JSON、C→D 复审、候选落库、第二章跨章状态读取。
+2. 浏览器桌面与约 390px 手工验收（开发版前端未安装到个人环境）。
+3. 0.4.1 补丁版决策与发布说明（不得沿用 0.4.0 的“稳定交付”表述）。
+

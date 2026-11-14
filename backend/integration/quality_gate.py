@@ -82,23 +82,21 @@ def legacy_passed(review):
     return bool(isinstance(review, dict) and review.get("success") is True and review.get("needs_revision") is False)
 
 
-def review_passed(review):
-    """review_passed 的新实现：旧语义 + 质量门禁不得明确否决。"""
+def review_passed(review, config=None):
+    """review_passed 的新实现：旧语义 + 按**当前**门槛重算的质量判断。
+
+    缓存里的 quality_gate 只是当时的结论；门槛改过之后必须重新计算，不能沿用旧通过。
+    """
     if not legacy_passed(review):
         return False
-    result = review.get("quality_gate") if isinstance(review.get("quality_gate"), dict) else judge(review)
-    return result.get("quality_pass") is not False
+    return judge(review, config).get("quality_pass") is not False
 
 
-def pass_ok(review, body_sha256=None, project=None, chapter=None):
-    """质量通过分支的唯一判定：旧的无分项回执仍可兼容，但一旦带了分项就必须过门槛。"""
+def pass_ok(review, body_sha256=None, project=None, chapter=None, config=None):
+    """质量通过分支的唯一判定：旧的无分项回执仍可兼容，但必须按当前门槛重算。"""
     if not isinstance(review, dict):
         return False
-    explicit = review.get("quality_gate")
-    if isinstance(explicit, dict) and explicit.get("quality_pass") is not None:
-        result = explicit
-    else:
-        result = judge(review)
+    result = judge(review, config)
     if body_sha256 is not None:
         bound = review.get("body_sha256") or (review.get("quality") or {}).get("body_sha256")
         if bound and bound != body_sha256:
@@ -196,10 +194,21 @@ def status(project, chapter, record=None, body_sha256=None, contract_hash=None, 
     bound = {value for value in (raw, digest, body_sha256) if value}
     if bound and record.get("body_sha256") and record["body_sha256"] not in bound:
         return {"valid": False, "stale_reason": "body_changed", "recompute_only": False}
-    if contract_hash and record.get("contract_hash") and contract_hash != record["contract_hash"]:
-        return {"valid": False, "stale_reason": "contract_changed", "recompute_only": False}
+    if contract_hash is None:
+        try:
+            from . import bridge
+            contract_hash = bridge.creative_contract_hash(project)
+        except Exception:
+            contract_hash = ""
+    bound_contract = record.get("contract_hash")
+    if contract_hash:
+        if not bound_contract:
+            return {"valid": False, "stale_reason": "contract_unbound", "recompute_only": False}
+        if contract_hash != bound_contract:
+            return {"valid": False, "stale_reason": "contract_changed", "recompute_only": False}
     if score.config_hash(values(config)) != record.get("review_config_hash"):
-        return {"valid": True, "stale_reason": "config_changed", "recompute_only": True}
+        return {"valid": True, "stale_reason": "config_changed", "recompute_only": True,
+                "current_pass": judge(record.get("review") or {}, config).get("quality_pass")}
     return {"valid": True, "stale_reason": None, "recompute_only": False}
 
 
@@ -209,7 +218,8 @@ def public_report(project, chapter, config=None):
     if not record:
         return {"chapter_id": int(chapter), "report": None, "status": {"valid": False, "stale_reason": "no_report"}}
     review = record.get("review") or {}
-    result = review.get("quality_gate") if isinstance(review.get("quality_gate"), dict) else judge(review, config)
+    # 永远按当前配置重算：报告的分数是证据，能否通过由现在的门槛决定。
+    result = judge(review, config)
     computed = result.get("computed") or {}
     return {
         "chapter_id": int(chapter),

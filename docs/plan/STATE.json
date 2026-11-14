@@ -290,22 +290,24 @@
       ]
     },
     "M15": {
-      "status": "completed",
-      "commit": "c251241",
+      "status": "in_progress",
+      "commit": "708a83e",
       "checks": [
         "integration 255 OK（新增 test_longform.py 11 项）/ manager 82 OK / npm 53 pass",
         "20 章回放夹具：认知边界、关系去重、伏笔证据、未来隐藏、历史修改影响、恢复",
         "100 章索引与状态视图：索引 100 章、状态视图有界，未做百章真实创作验收",
         "中断写入保留旧索引；无关项目不受影响；重复重建结果一致",
         "真实请求 10/10（含重试），本地免费网关，费用 0 元；D 返回 JSON 六维评分与事实候选",
-        "版本串 0.4.0；runtime-manifest 重建；check-release --local 通过"
+        "版本串 0.4.0；runtime-manifest 重建；check-release --local 通过",
+        "独立评估（2026-11-14，提交 708a83e）：自动化 390 项通过，但 F01—F08 接线问题导致验收不通过"
       ],
       "real_requests": 10,
-      "checkpoint": "M15 完成离线机制检查与有限真实检查：第 1 章走完 B→C×2→D×2→记忆/连续性同步；第 2 章用 2 个场景生成正文（未审查，预算用尽）。D 的 JSON 契约、加权门禁、事实候选在真实调用中成立。0.4.0 发布时会注明真实检查范围，并说明未做百章真实创作验收。",
+      "checkpoint": "M15 的离线机制检查与有限真实检查已执行，但独立评估判定不通过：人物状态未进提示、D 候选在主链路保存失败、门槛变化沿用旧通过、预算预留失败仍继续、修订轮数未受策略约束、报告未绑定约定、发行 CI 失败、工作台信息缺失。本轮已修复 F01—F06、F07 依赖顺序与 F08 的后端/界面缺口，并新增 test_pipeline_fixes（11 项）与 test_bundle（4 项）；真实调用预算已用尽，稳定版结论需在新预算下复验后才成立。",
       "remaining": [
-        "第二章的真实审查与场景进度界面联调（需要新的真实请求预算）",
-        "真实模型下第二章跨章状态读取的效果抽样（预算不足，未做）",
-        "浏览器中的桌面与 390px 手工验收（开发版前端随插件加载，未安装到个人环境）"
+        "真实模型复验：D 六维 JSON、C→D 复审、候选落库、跨章状态读取（需新的请求预算，当前为 0）",
+        "第二章整章审查与发布资格（预算用尽，未做）",
+        "浏览器桌面与 390px 手工验收（开发版前端随插件加载，未安装到个人环境）",
+        "是否发布 0.4.1 补丁版：0.4.0 已在 CI 失败状态下发布，需所有者决定新节点"
       ]
     }
   },
@@ -341,10 +343,10 @@
     "0.4.0": {
       "local_ready": true,
       "checks": "integration 255 / manager 82 / npm 53; manifest 3398 files buildId 27dda896; check-release --local ok",
-      "github": "tag v0.4.0 + release 304839826 bytes sha 9855365e (stable)",
+      "github": "tag v0.4.0 + release 304839826 bytes sha 9855365e (stable)；该节点的 CI 后端作业因 httpx 安装顺序失败，不可再作为稳定交付依据",
       "npm": "not_requested",
-      "real_model_validation": "10/10 requests, cost 0 CNY, D JSON verified; chapter 2 composed as two scenes but not reviewed"
+      "real_model_validation": "10/10 requests, cost 0 CNY, D JSON verified; chapter 2 composed as two scenes but not reviewed; 后续独立评估（提交 708a83e）判定验收不通过，F01—F08 已在主分支修复但尚未做真实复验"
     }
   },
-  "updated_at": "2026-11-14T19:02:00+08:00"
+  "updated_at": "2026-11-14T22:10:00+08:00"
 }
