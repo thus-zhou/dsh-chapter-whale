@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M10",
+  "current_module": "M11",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -200,12 +200,21 @@
       ]
     },
     "M10": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "dc9180a",
+      "checks": [
+        "offline: integration 208 OK / manager 73 OK / npm 52 pass (333 total, zero model calls)",
+        "legacy memory without new fields reads and derives claim=body_fact, valid_from=chapter",
+        "future record (valid_from 9) hidden at chapter 4, shown at chapter 6; content not leaked",
+        "duplicate candidate commit reused, no duplicate facts; interrupted commit kept pending then recovered",
+        "author correction creates a new manual record, old record marked superseded with quote unchanged",
+        "release: manifest 3393 files buildId 9dacc2d673501e921d2aa7b485c0318e9f8fecf4bbf963ee75afb75535a06be1, check-release --local pass"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "M10 complete: fact provenance, validity windows, author corrections and D fact candidates wired through review receipt -> pending candidates -> commit after final body.",
+      "remaining": [
+        "D fact_candidates prompt path is covered by parsing tests only; a real D output sample stays in M15 budget"
+      ]
     },
     "M11": {
       "status": "pending",
@@ -285,5 +294,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T14:45:00+08:00"
+  "updated_at": "2026-11-14T15:35:00+08:00"
 }
