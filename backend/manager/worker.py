@@ -103,6 +103,7 @@ def main():
     parser.add_argument("--batch-id")
     parser.add_argument("--ai-used", choices=["0", "1"], default="1")
     parser.add_argument("--serial-step", action="store_true")
+    parser.add_argument("--preview", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "login":
@@ -126,7 +127,7 @@ def main():
             result=studio.batch(Path(args.project),args.count,args.word_count,args.max_revisions,args.batch_id)
         elif args.command == "polish":
             if not args.chapter or len(args.chapter)!=1:raise ValueError("请选择一个章节")
-            result=studio.polish_existing(Path(args.project),args.chapter[0])
+            result=studio.polish_existing(Path(args.project),args.chapter[0],preview=args.preview)
         elif args.command == "generate":
             result = writer_runner.generate_chapter(Path(args.project), args.word_count, args.max_revisions)
             result.pop("review", None)
@@ -163,7 +164,7 @@ def main():
         result=sanitized_result(result)
         result_file(result)
         print(json.dumps(result, ensure_ascii=False, default=str), flush=True)
-        return 0 if result.get("status") in {"success", "progress", "configured", "generated", "reviewed", "authorized", "queued", "logged_in", "already_run", "already_ran", "ok", "learned", "planned", "polished", "memory_synced"} else 2
+        return 0 if result.get("status") in {"success", "progress", "configured", "generated", "reviewed", "authorized", "queued", "logged_in", "already_run", "already_ran", "ok", "learned", "planned", "polished", "preview", "memory_synced"} else 2
     except Exception as exc:
         from integration.failure_info import details
         message=str(exc) or type(exc).__name__

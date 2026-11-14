@@ -199,6 +199,10 @@ test('写白名单里的具体路径确实通过，未列出的不行', () => {
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'samples', 'abc', 'delete']), true);
   assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'style-profile']), true);
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'style-profile', 'rebuild']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'chapters', '3', 'revision']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'chapters', '3', 'revision', 'accept']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'chapters', '3', 'revision', 'reject']), true);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'chapters', '3', 'revision']), false, 'GET 不能当写操作');
   assert.equal(allowsMutation('DELETE', ['api', 'projects', 'demo', 'samples', 'abc']), false, '未列出的写法不放行');
   assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'creative', 'chat']), false, 'GET 不能当写操作');
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'creative', 'chat', 'extra']), false);

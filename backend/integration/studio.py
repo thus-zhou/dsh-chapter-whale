@@ -298,8 +298,9 @@ def batch(project,count,word_count,max_revisions,identity):
             raise
 
 
-def polish_existing(project,chapter,min_words=0):
+def polish_existing(project,chapter,min_words=0,preview=False):
     project=Path(project).resolve()
+    from . import revision_plan
     with writer.file_lock(project/".webnovel"/"writer.lock"):
         for record in bridge.load_manifest().get("books",{}).values():
             if Path(record.get("project_root","")).resolve()==project and record.get("chapters",{}).get(str(chapter),{}).get("status")=="published":
@@ -315,11 +316,28 @@ def polish_existing(project,chapter,min_words=0):
         if min_words:
             executor.polish_token_budget=24000
         contract=bridge.creative_contract_hash(project)
+        base_sha=hashlib.sha256(old).hexdigest()
+        meta={} if preview else None
+        def keep(reason,candidate):
+            if source.read_bytes()!=old or bridge.creative_contract_hash(project)!=contract:
+                raise ValueError("润色期间正文或要求已改变，候选未保存")
+            record=revision_plan.save_preview(project,chapter,content,candidate,base_sha256=base_sha,
+                contract_hash=contract,mode=(meta or {}).get('mode','targeted_fix'),
+                auto_issues=((meta or {}).get('plan') or {}).get('auto',[]),
+                author_issues=((meta or {}).get('plan') or {}).get('author',[]),
+                patch_report=(meta or {}).get('patch_report'),stop_reason=reason)
+            return {"status":"preview","chapter_id":chapter,"stop_reason":reason,"preview":record}
         async def run():
             from .revision_workflow import revise
-            return await revise(project,chapter,content,hashlib.sha256(old).hexdigest(),contract,executor,config,min_words)
-        rewritten,review=asyncio.run(run())
+            return await revise(project,chapter,content,hashlib.sha256(old).hexdigest(),contract,executor,config,min_words,meta=meta)
+        try:
+            rewritten,review=asyncio.run(run())
+        except revision_plan.RevisionStopped as stopped:
+            if preview and stopped.candidate and bridge.body_digest(stopped.candidate)!=bridge.body_digest(content):
+                return keep(stopped.reason,stopped.candidate)
+            raise
         if source.read_bytes()!=old or bridge.creative_contract_hash(project)!=contract:raise ValueError("润色期间正文或要求已改变，原文未覆盖")
+        if preview:return keep('ready',rewritten)
         backup=project_file(project,"originals",uuid.uuid4().hex,".md");backup.parent.mkdir(parents=True,exist_ok=True)
         bridge._write_text_atomic(backup,content)
         payload=rewritten.encode("utf-8");receipts_path=project/".webnovel"/"writer_receipts.json"

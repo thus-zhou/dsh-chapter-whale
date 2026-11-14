@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M05",
+  "current_module": "M06",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -106,12 +106,24 @@
       ]
     },
     "M05": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "PENDING_M05",
+      "checks": [
+        "python -m unittest backend.integration.test_revision -> 22 pass",
+        "python -m unittest discover -s backend/integration -p test_*.py -t backend -> 184 pass",
+        "python -m unittest discover -s backend/manager -p test_*.py -t backend -> 61 pass",
+        "npm test -> 47 pass",
+        "no model call: anchor, scope, length and preview tests use fixed local text"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": [
+        "backend/integration/revision_plan.py (schema_version 1): paragraph anchors with paragraph hash + index + neighbour-context hash, refusing empty/not-found/ambiguous/moved/changed anchors; scope check by paragraph-level difflib against the C patch report (reports truncate text to 80 chars); issue classification into auto (prose/dialogue/style, non-critical, no structural words) and author (plot/motivation/facts/structure) with a single merged C request of at most 6 instructions; length policy separating complete-draft 12% growth guard from short-draft top-up; diff hunks; previews under .webnovel/revision_previews stored as chapter-version candidates and closed only with accept/reject. revision_workflow.revise(meta=...) runs the strict path for interactive previews: classify, stop on author-only or exhausted rounds, check scope/length after C, stop on zero change without a second D call, and keeps the candidate. studio.polish_existing(preview=True) re-checks body bytes and creative contract before saving a preview; worker --preview and manager GET/POST /revision, /revision/accept, /revision/reject plus index.js whitelist; chapter modal shows diff, stop reason, author items and accept/reject. CI runs test_revision.py."
+      ],
+      "remaining": [
+        "real C/D round-trip is not exercised yet (M09 owns real model calls)",
+        "a revision candidate is bound to the creative contract hash but historical contract values are not archived per preview",
+        "automatic (already authorized) jobs keep the previous policy and still write the chapter directly"
+      ]
     },
     "M06": {
       "status": "pending",
@@ -231,5 +243,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T11:10:00+08:00"
+  "updated_at": "2026-11-14T12:03:21+08:00"
 }

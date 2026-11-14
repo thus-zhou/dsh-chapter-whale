@@ -1994,9 +1994,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                       kind: 'ghost',
                                       busy: busy[`polish-${row.id}`],
                                       onClick: () =>
-                                        act('润色', `/projects/${project.id}/chapters/${row.id}/polish`),
+                                        act('修订预览', `/projects/${project.id}/chapters/${row.id}/revision`),
                                     },
-                                    '润色',
+                                    '修订预览',
                                   ),
                                   e(
                                     Button,
@@ -3695,7 +3695,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function ChapterModal(props) {
           const [data, setData] = React.useState(null);
           const [quality, setQuality] = React.useState(null);
+          const [revision, setRevision] = React.useState(null);
+          const [revBusy, setRevBusy] = React.useState(false);
+          const [tick, setTick] = React.useState(0);
           const [loading, setLoading] = React.useState(false);
+          const toast = useToast();
 
           React.useEffect(() => {
             if (!props.open || !props.projectId || !props.chapter) return undefined;
@@ -3719,10 +3723,44 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               .catch(() => {
                 if (alive) setQuality(null);
               });
+            api(`/projects/${props.projectId}/chapters/${props.chapter}/revision`)
+              .then((value) => {
+                if (alive) setRevision(value);
+              })
+              .catch(() => {
+                if (alive) setRevision(null);
+              });
             return () => {
               alive = false;
             };
-          }, [props.open, props.projectId, props.chapter]);
+          }, [props.open, props.projectId, props.chapter, tick]);
+
+          const preview = revision && revision.preview;
+          const stopLabels = {
+            ready: '候选已就绪，可直接接受',
+            no_change: '修订没有改变正文',
+            author_decision_required: '有需要作者决定的问题，未自动修改',
+            revision_rounds_exhausted: '已达自动修订轮数，保留候选',
+            outside_patch: '补丁改动了申请范围之外的段落，已拒绝',
+            anchor_ambiguous: '原文有重复段落，锚点不唯一，已拒绝',
+            anchor_not_found: '锚点未找到，已拒绝',
+            anchor_paragraph_changed: '锚点所在段落已变化，已拒绝',
+            anchor_context_changed: '锚点上下文已变化，已拒绝',
+            below_min_words: '低于平台最低字数',
+            growth_too_large: '完整稿增幅超过保护阈值',
+          };
+          const revCall = async (label, path, body) => {
+            setRevBusy(true);
+            try {
+              await api(path, { method: 'POST', body: body || {} });
+              toast.push(`${label} 已提交`, 'ok');
+              setTick((value) => value + 1);
+            } catch (error) {
+              toast.push(`${label} 失败：${error.message}`, 'err');
+            } finally {
+              setRevBusy(false);
+            }
+          };
 
           const report = quality && quality.report;
           const status = (quality && quality.status) || {};
@@ -3793,6 +3831,102 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     report && report.summary
                       ? e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, report.summary)
                       : null,
+                    e(
+                      'div',
+                      { style: { marginBottom: 10 } },
+                      e(
+                        'div',
+                        { className: 'nh-row', style: { gap: 8, marginBottom: 6 } },
+                        e(
+                          Button,
+                          {
+                            size: 'sm',
+                            kind: 'ghost',
+                            busy: revBusy,
+                            onClick: () =>
+                              revCall('修订预览', `/projects/${props.projectId}/chapters/${props.chapter}/revision`),
+                          },
+                          '修订预览',
+                        ),
+                        e(
+                          Button,
+                          {
+                            size: 'sm',
+                            kind: 'ghost',
+                            busy: revBusy,
+                            onClick: () => setTick((value) => value + 1),
+                          },
+                          '刷新',
+                        ),
+                        preview
+                          ? e(Badge, { tone: preview.stop_reason === 'ready' ? 'ok' : 'warn' },
+                              stopLabels[preview.stop_reason] || preview.stop_reason || '待处理候选')
+                          : null,
+                      ),
+                      preview
+                        ? e(
+                            'div',
+                            { style: { marginBottom: 8 } },
+                            preview.diff && preview.diff.hunks && preview.diff.hunks.length
+                              ? e(
+                                  'div',
+                                  { className: 'nh-muted', style: { marginBottom: 6 } },
+                                  `差异 ${preview.diff.changes || 0} 处，字数 ${preview.diff.before_chars} → ${preview.diff.after_chars}（${preview.diff.delta_chars >= 0 ? '+' : ''}${preview.diff.delta_chars}）`,
+                                )
+                              : e('div', { className: 'nh-muted', style: { marginBottom: 6 } }, '没有段落差异'),
+                            ...(preview.diff && preview.diff.hunks ? preview.diff.hunks : []).slice(0, 8).map((hunk, index) =>
+                              e(
+                                'div',
+                                { key: index, style: { marginBottom: 6, fontSize: 12 } },
+                                hunk.before
+                                  ? e('div', { style: { color: 'var(--nh-err, #b42318)' } }, `- ${hunk.before}`)
+                                  : null,
+                                hunk.after
+                                  ? e('div', { style: { color: 'var(--nh-ok, #027a48)' } }, `+ ${hunk.after}`)
+                                  : null,
+                              ),
+                            ),
+                            preview.author_issues && preview.author_issues.length
+                              ? e(
+                                  'div',
+                                  { className: 'nh-muted', style: { marginBottom: 6 } },
+                                  `留给作者：${preview.author_issues.slice(0, 3).map((item) => item.issue || item).join('；')}`,
+                                )
+                              : null,
+                            e(
+                              'div',
+                              { className: 'nh-row', style: { gap: 8 } },
+                              e(
+                                Button,
+                                {
+                                  size: 'sm',
+                                  busy: revBusy,
+                                  disabled: preview.stop_reason !== 'ready',
+                                  onClick: () =>
+                                    revCall('接受修订', `/projects/${props.projectId}/chapters/${props.chapter}/revision/accept`, {
+                                      preview_id: preview.preview_id,
+                                    }),
+                                },
+                                '接受修订',
+                              ),
+                              e(
+                                Button,
+                                {
+                                  size: 'sm',
+                                  kind: 'ghost',
+                                  busy: revBusy,
+                                  onClick: () =>
+                                    revCall('放弃候选', `/projects/${props.projectId}/chapters/${props.chapter}/revision/reject`, {
+                                      preview_id: preview.preview_id,
+                                      reason: '作者放弃',
+                                    }),
+                                },
+                                '放弃候选',
+                              ),
+                            ),
+                          )
+                        : null,
+                    ),
                     e('pre', { className: 'nh-pre', style: { maxHeight: '56vh' } }, data.content || '(正文为空)'),
                   )
                 : e(Empty, null, '读取失败'),

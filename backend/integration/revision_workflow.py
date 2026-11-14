@@ -8,8 +8,13 @@ from .length_policy import body_chars
 from .text_checks import issues
 
 
-async def revise(project,chapter,content,source_sha,contract,executor,config,min_words=0):
+async def revise(project,chapter,content,source_sha,contract,executor,config,min_words=0,meta=None):
     project=Path(project)
+    from . import revision_plan,resource_policy
+    strict=meta is not None
+    cap=max(1,min(3,int(resource_policy.limits(config).get('revision_rounds') or 1)))
+    rounds=0
+    if strict:meta.setdefault('mode','targeted_fix')
     if roles.enabled(config):executor.editorial_review_context=editorial.canonical_context(project,chapter)
     identity={'chapter':chapter,'source_sha256':source_sha,'contract':contract,'min_words':min_words}
     key=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()[:20]
@@ -46,11 +51,48 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
             if state.get('review'):suggestions+='\n'+editorial.revision_guidance(history,state['review'])
             mode=('targeted_fix' if state.get('review',{}).get('review_decision')=='needs_revision'
                   and not too_short and not state.get('force_rewrite') else 'rewrite')
+            plan=None
+            if state.get('review') and state['review'].get('review_decision')=='needs_revision':
+                plan=revision_plan.classify(state['review'])
+                if strict:
+                    if plan['mode']=='none' and not failures and not too_short:
+                        state['phase']='stopped';save()
+                        raise revision_plan.RevisionStopped('author_decision_required',
+                            '审查提出的问题涉及情节、动机或事实，已保留候选并转作者处理',
+                            candidate=rewritten,author_issues=plan['author'])
+                    if rounds>=cap:
+                        state['phase']='stopped';save()
+                        raise revision_plan.RevisionStopped('revision_rounds_exhausted',
+                            f'已达到设定的 {cap} 轮修订上限；候选正文已保留',
+                            candidate=rewritten,author_issues=plan['author'])
+                    if plan['mode']=='targeted_fix' and plan['auto']:
+                        suggestions+='\n'+revision_plan.instructions(plan['auto'])
+                        mode='targeted_fix'
+                    meta['plan']=plan
+                rounds+=1
             if state.get('force_rewrite'):suggestions+='\n上次定点补丁未实际修改正文；请修正有效冲突并输出完整改稿，保留其余已修好部分。'
+            if strict:meta['mode']=mode
             attempts+=1;state['phase']='editing';save()
             result=await executor.execute_polish(chapter,rewritten,suggestions,mode=mode)
             candidate=require_polish(result,'修订模型未完成；已完成稿件和原文均保留')
+            if strict:
+                if isinstance(meta,dict) and result.get('patch_report'):meta['patch_report']=result['patch_report']
+                check=(revision_plan.check_scope(rewritten,candidate,result.get('patch_report'))
+                       if mode=='targeted_fix' else {'ok':True})
+                if not check.get('ok'):
+                    state['phase']='stopped';save()
+                    raise revision_plan.RevisionStopped(check.get('reason','outside_patch'),
+                        '补丁超出声明范围或没有实际改动，未提交',
+                        author_issues=(plan or {}).get('author',[]))
+                length=revision_plan.validate_length(rewritten,candidate,chapter=chapter,mode=mode,min_words=min_words)
+                if not length.get('ok'):
+                    state['phase']='stopped';save()
+                    raise revision_plan.RevisionStopped(length.get('reason','length_policy'),
+                        '修订稿未通过长度策略，未提交',candidate=candidate)
             if mode=='targeted_fix' and bridge.body_digest(candidate)==bridge.body_digest(rewritten):
+                if strict:
+                    state['phase']='stopped';save()
+                    raise revision_plan.RevisionStopped('no_change','补丁未改变正文，未再调用审查')
                 state.update(force_rewrite=True,phase='needs_revision');save()
                 need_edit=True
                 continue

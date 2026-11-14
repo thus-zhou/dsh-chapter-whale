@@ -340,6 +340,11 @@ class StyleProfileInput(BaseModel):
     overrides: dict[str, str] | None = None
 
 
+class RevisionClose(BaseModel):
+    preview_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    reason: str = Field(default="", max_length=200)
+
+
 class StageInput(BaseModel):
     book: str = Field(min_length=1, max_length=96)
     chapters: list[int] | None = None
@@ -854,6 +859,33 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if chapter <= 0: raise ValueError("章节号无效")
         from integration import quality_gate
         return quality_gate.public_report(Path(project(identity)["path"]), chapter)
+
+    @app.get("/api/projects/{identity}/chapters/{chapter}/revision")
+    def chapter_revision(identity: str, chapter: int):
+        """最后一次待处理的修订候选：差异、原因、留给作者的问题。只读。"""
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import revision_plan
+        return revision_plan.public(Path(project(identity)["path"]), chapter)
+
+    @app.post("/api/projects/{identity}/chapters/{chapter}/revision")
+    def start_revision(identity: str, chapter: int):
+        if chapter <= 0: raise ValueError("章节号无效")
+        item = project(identity)
+        if not public_ai()["configured"]: raise ValueError("请先配置 AI 模型")
+        return ops.start("polish", ["polish", "--project", item["path"], "--chapter", str(chapter), "--preview"],
+                         f"project:{identity}", {"project_id": identity})
+
+    @app.post("/api/projects/{identity}/chapters/{chapter}/revision/accept")
+    def accept_revision(identity: str, chapter: int, data: RevisionClose):
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import revision_plan
+        return revision_plan.accept(Path(project(identity)["path"]), chapter, data.preview_id)
+
+    @app.post("/api/projects/{identity}/chapters/{chapter}/revision/reject")
+    def reject_revision(identity: str, chapter: int, data: RevisionClose):
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import revision_plan
+        return revision_plan.reject(Path(project(identity)["path"]), chapter, data.preview_id, data.reason)
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/review")
     def review_existing(identity: str, chapter: int):
