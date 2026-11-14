@@ -2896,6 +2896,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               ),
             ),
 
+            (() => {
+              const info = (props.overview && props.overview.ai && props.overview.ai.credential_store) || null;
+              if (!info) return null;
+              const protectedMode = info.mode === 'dpapi';
+              return e(Badge, { tone: protectedMode ? 'ok' : 'warn' },
+                protectedMode ? '密钥：系统凭据保护' : '密钥：仅本用户可读的配置文件');
+            })(),
+
             tab === 'roles'
               ? e(
                   'div',

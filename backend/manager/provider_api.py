@@ -6,10 +6,15 @@ from integration import providers, model_roles, bridge, writer_runner
 def install(app, load, config_path):
     from manager import role_checks
     role_checks.install(app,load,config_path)
+    def write_config(doc):
+        bridge.write_json_atomic(config_path, doc)
+        bridge.harden_secret_file(config_path)
+
     def transaction(change):
         with writer_runner.file_lock(config_path.with_suffix('.lock'), blocking=True):
             doc=providers.migrate(load());result=change(doc)
-            bridge.write_json_atomic(config_path,doc);bridge.harden_secret_file(config_path)
+            from integration import secret_store
+            secret_store.save(config_path.parent, doc, write_config)
             return result
     from manager import free_model_api
     free_model_api.install(app,load,transaction,lambda:listing())

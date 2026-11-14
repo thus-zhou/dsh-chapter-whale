@@ -37,6 +37,12 @@ def load_config():
     if not path.exists():return {}
     value=json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(value,dict):raise ValueError("AI 配置损坏")
+    # 密钥可能已迁移到系统凭据保护；内存里始终还原为完整配置。
+    try:
+        from . import secret_store
+        value = secret_store.load(path.parent, value)
+    except Exception:
+        pass
     return value
 
 

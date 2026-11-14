@@ -59,7 +59,8 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("secret-test-123", response.text)
         response = self.client.put("/api/ai", json={**config, "api_key": ""}, headers=self.headers)
-        self.assertEqual(json.loads(module.AI_PATH.read_text())["api_key"], "secret-test-123")
+        self.assertEqual(module.load_ai()["api_key"], "secret-test-123")
+        self.assertNotIn("secret-test-123", module.AI_PATH.read_text(encoding="utf-8"))
         self.assertNotIn("secret-test-123", self.client.get("/api/ai").text)
 
     def test_outline_edit_creates_backup_and_does_not_merge_volumes(self):

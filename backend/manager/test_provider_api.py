@@ -1,6 +1,7 @@
 import json
 import unittest
 from manager import test_app as fixture
+from manager import app as module
 from integration import model_roles
 
 
@@ -32,7 +33,8 @@ class ProviderApiTests(unittest.TestCase):
         self.assertEqual(updated.status_code,200,updated.text)
         current=json.loads((self.root/'ai.json').read_text(encoding='utf-8'))
         self.assertEqual(current['default_binding'],{'provider_id':first,'model_id':'new','fallbacks':[]})
-        self.assertEqual(model_roles.connection('B',current)['api_key'],'PRIVATE-ONE')
+        self.assertNotIn('PRIVATE-ONE',(self.root/'ai.json').read_text(encoding='utf-8'))
+        self.assertEqual(model_roles.connection('B',module.load_ai())['api_key'],'PRIVATE-ONE')
 
     def test_invalid_binding_and_price_do_not_modify_file(self):
         doc=self.initialize();path=self.root/'ai.json';original=path.read_bytes()

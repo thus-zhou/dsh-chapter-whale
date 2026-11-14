@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
-from integration import model_roles, studio, memory_library, style_profile
+from integration import model_roles, studio, memory_library, style_profile, secret_store
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
@@ -472,7 +472,27 @@ class CostPricingInput(BaseModel):
     reprice_unpriced: bool = False
 
 
+def _write_ai_config(config):
+    """配置落盘：密钥交给凭据适配层，非秘密字段照旧原子写入并收紧 ACL。"""
+    bridge.write_json_atomic(AI_PATH, config)
+    bridge.harden_secret_file(AI_PATH)
+
+
+def _persist_ai(config):
+    try:
+        return secret_store.save(DATA, config, _write_ai_config)
+    except (OSError, ValueError, secret_store.SecretCorrupt):
+        _write_ai_config(config)
+        return {"mode": "plaintext-acl", "migrated": False, "stored": 0,
+                "detail": "凭据保护暂不可用，已保留明文配置"}
+
+
+_AI_MIGRATION_TRIED = False
+
+
 def load_ai():
+    global _AI_MIGRATION_TRIED
+
     def read_config(path):
         config = writer_runner.strict_json(path, {})
         if not isinstance(config, dict):
@@ -481,7 +501,13 @@ def load_ai():
         if not isinstance(role_values,dict) or set(role_values)-set(model_roles.ROLES) or any(not isinstance(v,dict) for v in role_values.values()):raise ValueError("多模型配置损坏")
         return config
     if AI_PATH.is_file():
-        return read_config(AI_PATH)
+        config = secret_store.load(DATA, read_config(AI_PATH))
+        plaintext = secret_store.collect({key: value for key, value in config.items() if key != "secret_store"})
+        if plaintext and not _AI_MIGRATION_TRIED and secret_store.codec() is not None:
+            # 迁移只尝试一次：写受保护存储 → 读回校验 → 再移除明文。
+            _AI_MIGRATION_TRIED = True
+            _persist_ai(config)
+        return config
     if os.getenv('CHAPTER_WHALE_MANAGED') == '1':
         return {}
     # Read-only fallback for users with an existing upstream configuration.
@@ -507,7 +533,8 @@ def public_ai():
             "multi_model":model_roles.enabled(config),"polish_mode":config.get("polish_mode","key"),"review_policy":config.get("review_policy","e_decides"),
             "roles":{role:{"model":config.get("roles",{}).get(role,{}).get("model",""),
                 "base_url":config.get("roles",{}).get(role,{}).get("base_url",""),
-                "key_masked":"••••••••" if config.get("roles",{}).get(role,{}).get("api_key") else ""} for role in model_roles.ROLES}}
+                "key_masked":"••••••••" if config.get("roles",{}).get(role,{}).get("api_key") else ""} for role in model_roles.ROLES},
+            "credential_store":secret_store.status(DATA)}
 
 
 def project_summary(item: dict):
@@ -1086,8 +1113,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             if key:config["api_key"] = key
             from integration.providers import bind_legacy
             bind_legacy(config,['default'])
-            bridge.write_json_atomic(AI_PATH, config)
-            bridge.harden_secret_file(AI_PATH)
+            _persist_ai(config)
         return public_ai()
 
     @app.put("/api/ai/roles")
@@ -1111,8 +1137,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             bind_legacy(config,list(model_roles.ROLES))
             if data.multi_model:
                 for role in model_roles.ROLES:model_roles.connection(role,config)
-            writer_runner.atomic_json(AI_PATH,config)
-            bridge.harden_secret_file(AI_PATH)
+            _persist_ai(config)
         return public_ai()
 
     @app.post("/api/ai/models")
