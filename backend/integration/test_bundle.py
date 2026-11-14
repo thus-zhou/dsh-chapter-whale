@@ -33,7 +33,10 @@ class BundleRulesTest(unittest.TestCase):
     def test_manifest_files_all_exist(self):
         data, files = self.module.manifest_files(ROOT)
         self.assertTrue(data.get("buildId"))
-        missing = [name for name in files if not (ROOT / name).is_file()]
+        # runtime/ 是发行时才安装的产物（仓库里被 gitignore）；干净检出只核对源码部分。
+        bundled = (ROOT / "runtime").is_dir()
+        missing = [name for name in files
+                   if (bundled or not str(name).startswith("runtime/")) and not (ROOT / name).is_file()]
         self.assertEqual(missing, [])
 
     def test_manifest_has_the_entry_points(self):
