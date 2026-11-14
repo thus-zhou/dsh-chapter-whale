@@ -1,4 +1,4 @@
-{
+﻿{
   "plan_version": "3.0",
   "target_releases": [
     "0.3.0",
@@ -127,7 +127,7 @@
     },
     "M06": {
       "status": "completed",
-      "commit": "PENDING_M06",
+      "commit": "ba52144",
       "checks": [
         "python -m unittest backend.integration.test_history -> 8 pass",
         "python -m unittest backend.manager.test_history_api -> 4 pass",
