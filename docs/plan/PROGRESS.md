@@ -367,3 +367,46 @@ npm test                                                                        
 ### 下一步
 
 M08：成本与预算的可视化闭环（面板展示预算状态、超限提示与账本缺口）。
+
+## M08 可信分发与许可边界（2026-11-14）
+
+### 完成内容
+
+- `managed-runtime.mjs`：下载包改用 `tar -tvzf` 详细列表校验，只接受 `package/` 下的普通文件与目录；拒绝 `..`、反斜杠、绝对路径、符号链接/硬链接与特殊文件。新增 `validateTarListing`、`verifyInstalled`。
+- 安装后逐文件比对 `runtime-manifest.json`；不一致或缺失时报错且不写 `.chapter-whale-release.json`。已有安装复用前抽查 `manager`/`integration`，防止旧源码继续运行。
+- 自动更新明确关闭：`AUTO_UPDATE_ENABLED = false`，`updateAvailable()` 返回原因（没有签名与公钥，只能手动安装）。
+- `scripts/build-runtime.py` 排除 `test_*.py`、`.pyc/.pyo`、`integration_data/` 与锁文件；`backend/.npmignore` 同步排除测试、`.dpapi`、`.webnovel`。
+- `scripts/check-release.mjs` 新增残留检查（`__pycache__`、`.pyc`、`test_*`、`.webnovel/`、`正文/`、`integration_data/`、`*.dpapi`、`*.publish.json`、`scheduler.json*`）、关键文件存在性检查，以及“运行时 site-packages 内不得有后端同名模块（避免旧源码覆盖新版）”。
+- 新增 `test/distribution.test.mjs`（5 项）并加入 `npm test`。
+- 新增 `docs/distribution.md`：来源表、信任模型、安装/覆盖/回滚、发行前检查、许可现状与 5 个需要所有者决定的问题。
+
+### 必要检查
+
+```
+node --test test/distribution.test.mjs                      -> 5 pass
+npm test                                                    -> 52 pass / 0 fail
+python scripts/build-runtime.py                             -> 3393 files / buildId 311be1b9…
+node scripts/check-release.mjs --local                       -> 发行清单校验通过
+npm pack --dry-run                                          -> 1169 files，无 test_*.py，许可文本齐全
+```
+
+首次运行新检查时确实抓到问题：`backend/integration_data/scheduler.json.lock` 被集成测试重新生成并混入清单，已通过排除本地状态与锁文件修复。
+
+### 四类状态
+
+| 项目 | 状态 |
+| --- | --- |
+| 代码实现 | 完成：`managed-runtime.mjs`、`scripts/build-runtime.py`、`scripts/check-release.mjs`、`backend/.npmignore`、`test/distribution.test.mjs`、`docs/distribution.md` |
+| 真实模型验证 | 不涉及（本模块 0 次调用） |
+| GitHub 推送 | 随开发分支推送 |
+| Release | 随 0.3.0 节点；`runtime-download.json` 仍指向 beta.1 包，M09 重新打包后更新 |
+
+### 尚存限制
+
+- 没有签名清单与公钥，自动更新只关闭不实现；哈希校验不等于来源认证（已在文档中写明）。
+- 安装后校验按文件逐个哈希，`buildId` 未变时抽查 `manager`/`integration`；不覆盖用户手改过的运行时文件（会直接报错要求重装）。
+- 许可问题（MIT 根许可 + GPLv3 组件、源码提供方式、vendor 来源、市场许可字段）需要所有者决定，未自行更改。
+
+### 下一步
+
+M09：0.3 集成与稳定发布 —— 版本串到 0.3.0、完整隔离检查、≤6 次真实模型验证，然后打 tag 与 Release。

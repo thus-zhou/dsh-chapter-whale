@@ -49,7 +49,10 @@ def main():
     files = {}
     for base in [ROOT/'backend', runtime/'python', browsers]:
         for path in sorted(base.rglob('*')):
-            if path.is_file() and '__pycache__' not in path.parts and '.links' not in path.parts and path.name != '.npmignore':
+            if (path.is_file() and '__pycache__' not in path.parts and '.links' not in path.parts
+                    and path.name != '.npmignore' and not path.name.endswith(('.pyc', '.pyo'))
+                    and not (path.name.startswith('test_') and path.suffix == '.py')
+                    and path.parts[1:2] != ('integration_data',) and not path.name.endswith('.lock')):
                 files[path.relative_to(ROOT).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     build_id = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
     manifest = {'version': '0.3.0-beta.1', 'platform': 'win32-x64', 'python': '3.13.17',

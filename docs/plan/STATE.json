@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M08",
+  "current_module": "M09",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -164,12 +164,22 @@
       ]
     },
     "M08": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "PENDING_M08",
+      "checks": [
+        "node --test test/distribution.test.mjs -> 5 pass (archive listing, traversal/link rejection, auto-update disabled, installed-file verification)",
+        "npm test -> 52 pass / 0 fail (distribution test added to the suite)",
+        "node scripts/check-release.mjs --local -> 发行清单校验通过 after excluding tests and local state",
+        "npm pack --dry-run -> 1169 files, no test_*.py, licenses present (LICENSE, THIRD_PARTY_NOTICES.md, writer GPLv3, vendor LICENSEs)",
+        "rebuilt runtime-manifest.json -> 3393 files / buildId 311be1b902c498c95e2ee9fb0af85b82ac47d551e3652a37c362e7a4e79dd94e"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "Distribution integrity: managed-runtime now validates the verbose tar listing (only files/dirs under package/, no traversal, no backslashes, no symlink/hardlink or special members), verifies every installed backend file against runtime-manifest.json after copying and refuses to write the release marker on mismatch, and re-checks manager/integration files on reuse so an old runtime copy cannot silently keep running. Auto-update stays disabled (AUTO_UPDATE_ENABLED=false, updateAvailable() returns the reason) because no signing key exists; docs/distribution.md records provenance, trust model, manual install/rollback, and the license review. check-release.mjs rejects test residue, __pycache__, .pyc, .webnovel, 正文, integration_data, .dpapi, .publish.json, scheduler.json, and backend sources inside runtime site-packages; build-runtime.py excludes tests, local state and lock files.",
+      "remaining": [
+        "no signed manifest or Ed25519 key: enabling automatic updates still requires publisher signing, a distributed public key, downgrade policy and key rotation",
+        "runtime-download.json still points at the 0.3.0-beta.1 bundle (buildId 740292a4); the 0.3.0 bundle and its digest are produced at the M09 release node",
+        "license questions in docs/distribution.md section 6 need the project owner's decision (MIT root license vs bundled GPLv3 component, source-offer wording, vendor provenance, market license field)"
+      ]
     },
     "M09": {
       "status": "pending",
@@ -265,5 +275,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T13:45:00+08:00"
+  "updated_at": "2026-11-14T14:05:00+08:00"
 }

@@ -92,7 +92,7 @@
     "@deepseek-ai/cordis": "~4.1.0"
   },
   "scripts": {
-    "test": "node --test test/client.test.mjs test/gate.test.mjs test/manifest.test.mjs test/market.test.mjs test/stop.test.mjs",
+    "test": "node --test test/client.test.mjs test/gate.test.mjs test/manifest.test.mjs test/market.test.mjs test/stop.test.mjs test/distribution.test.mjs",
     "prepublishOnly": "node scripts/check-release.mjs"
   },
   "dsh": {

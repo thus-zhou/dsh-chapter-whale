@@ -14,6 +14,49 @@ export function managedRoot() {
   return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'ChapterWhale', 'workspace');
 }
 
+// 没有签名清单与可信公钥，自动跟随新版本的能力保持关闭。
+// 哈希只证明“下载内容与清单一致”，不等于来源认证；新版本由用户手动下载安装。
+export const AUTO_UPDATE_ENABLED = false;
+export function updateAvailable() {
+  return { enabled: false, reason: '未配置发布方签名与公钥，自动更新已关闭；请手动下载新的发行包覆盖安装。' };
+}
+
+export function validateTarListing(text) {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (!lines.length) throw new Error('发行包目录为空，未解包。');
+  for (const line of lines) {
+    const verbose = /^[dlhbcps-][rwxStTs-]{9}/.test(line);
+    let member = line;
+    if (verbose) {
+      if (!/^[-d]/.test(line) || line.includes(' -> ')) throw new Error('发行包包含链接或特殊文件，未解包。');
+      const at = line.indexOf('package/');
+      if (at < 0) throw new Error('发行包路径异常，未解包。');
+      member = line.slice(at);
+    }
+    if (!member.startsWith('package/') || member.split(/[\\/]/).includes('..') || member.includes('\\')) {
+      throw new Error('发行包路径异常，未解包。');
+    }
+  }
+  return lines.length;
+}
+
+export async function verifyInstalled(rootDir, manifest, names) {
+  const { readFile: read } = await import('node:fs/promises');
+  const result = { checked: 0, missing: [], mismatched: [] };
+  for (const [name, hash] of Object.entries(manifest.files || {})) {
+    if (!names.some((prefix) => name.startsWith(`backend/${prefix}/`))) continue;
+    const path = join(rootDir, name.slice('backend/'.length));
+    try {
+      const actual = createHash('sha256').update(await read(path)).digest('hex');
+      result.checked += 1;
+      if (actual !== hash) result.mismatched.push(name);
+    } catch {
+      result.missing.push(name);
+    }
+  }
+  return result;
+}
+
 export function runtimeAvailable() {
   return (existsSync(join(PACKAGE_ROOT, 'runtime', 'python', 'python.exe'))
     || existsSync(join(PACKAGE_ROOT, 'runtime-download.json')))
@@ -43,10 +86,8 @@ export async function downloadRuntime(workspace, manifest) {
   if (bytes !== spec.bytes || hash.digest('hex') !== spec.sha256) throw new Error('运行环境校验失败，未执行下载的文件。请重试安装。');
   const execute = promisify(execFile);
   const options = { windowsHide: true, maxBuffer: 8 * 1024 * 1024 };
-  const { stdout } = await execute('tar.exe', ['-tzf', archive], options);
-  for (const member of stdout.trim().split(/\r?\n/)) {
-    if (!member.startsWith('package/') || member.split(/[\\/]/).includes('..') || member.includes('\\')) throw new Error('发行包路径异常，未解包。');
-  }
+  const { stdout } = await execute('tar.exe', ['-tvzf', archive], options);
+  validateTarListing(stdout);
   await execute('tar.exe', ['-xzf', archive, '-C', staging], options);
   const payload = join(staging, 'package');
   const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
@@ -68,6 +109,11 @@ export async function prepareManaged(config) {
     let installed;
     try { installed = JSON.parse(await readFile(marker, 'utf8')); } catch {}
     if (installed?.buildId === manifest.buildId && existsSync(config.python) && existsSync(config.entry)) {
+      const spot = await verifyInstalled(config.rootDir, manifest, ['manager', 'integration']);
+      if (spot.missing.length || spot.mismatched.length) {
+        config.entryExists = false;
+        throw new Error('已安装的后端与发行清单不一致，请重新安装完整发行包。');
+      }
       config.entryExists = true;
       return;
     }
@@ -89,7 +135,14 @@ export async function prepareManaged(config) {
         `python313.zip\n.\nLib/site-packages\n${config.rootDir}\n`);
       await cp(join(payload, 'runtime', 'browsers'), join(config.rootDir, 'playwright-browsers'), { recursive: true });
       await mkdir(join(config.rootDir, 'integration_data'), { recursive: true });
-      await writeFile(marker, JSON.stringify({ buildId: manifest.buildId, installedAt: new Date().toISOString() }));
+      const verification = await verifyInstalled(
+        config.rootDir, manifest, ['manager', 'integration', 'webnovel-writer', 'fanqie_auto_publish', 'vendor']);
+      if (verification.missing.length || verification.mismatched.length) {
+        throw new Error(`安装后校验失败（${verification.mismatched.length} 个文件不一致，${verification.missing.length} 个缺失），未写入发行标记。`);
+      }
+      await writeFile(marker, JSON.stringify({
+        buildId: manifest.buildId, installedAt: new Date().toISOString(), verifiedFiles: verification.checked,
+      }));
       config.entryExists = (await stat(config.entry)).isFile();
     } finally {
       await rm(lock, { recursive: false }).catch(async () => {
