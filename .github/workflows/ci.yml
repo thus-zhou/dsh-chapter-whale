@@ -25,6 +25,11 @@ jobs:
         os: [windows-latest, ubuntu-latest]
         python: ['3.11', '3.13']
     runs-on: ${{ matrix.os }}
+    env:
+      # Windows runners default to a legacy console code page; these suites and
+      # their messages are UTF-8, so force UTF-8 mode instead of cp1252.
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
