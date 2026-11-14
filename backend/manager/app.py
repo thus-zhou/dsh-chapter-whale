@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
-from integration import model_roles, studio, memory_library
+from integration import model_roles, studio, memory_library, style_profile
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
@@ -332,6 +332,12 @@ class PlanInput(BaseModel):
 class LearnInput(BaseModel):
     revision: int = Field(ge=0)
     full: bool = False
+
+
+class StyleProfileInput(BaseModel):
+    enabled: bool | None = None
+    strength: int | None = Field(default=None, ge=0, le=100)
+    overrides: dict[str, str] | None = None
 
 
 class StageInput(BaseModel):
@@ -789,6 +795,28 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         args=["learn","--project",item["path"],"--sample-id",sample,"--revision",str(data.revision)]
         if data.full:args.append("--full")
         return ops.start("learn",args,f"project:{identity}",{"project_id":identity,"sample_id":sample})
+
+    @app.get("/api/projects/{identity}/style-profile")
+    def style_public(identity: str):
+        return style_profile.public(Path(project(identity)["path"]))
+
+    @app.put("/api/projects/{identity}/style-profile")
+    def style_options(identity: str,data: StyleProfileInput):
+        path=Path(project(identity)["path"])
+        style_profile.options(path,enabled=data.enabled,strength=data.strength,overrides=data.overrides)
+        return style_profile.public(path)
+
+    @app.post("/api/projects/{identity}/style-profile/rebuild")
+    def style_rebuild(identity: str):
+        path=Path(project(identity)["path"])
+        style_profile.rebuild(path)
+        return style_profile.public(path)
+
+    @app.post("/api/projects/{identity}/samples/{sample}/delete")
+    def delete_sample(identity: str,sample: str):
+        path=Path(project(identity)["path"])
+        studio.project_file(path,"samples",sample)
+        return studio.delete_sample(path,sample)
 
     @app.post("/api/projects/{identity}/plan")
     def plan_project(identity: str,data: PlanInput):

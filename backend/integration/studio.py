@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from . import writer_runner as writer, bridge, model_roles as roles, memory_library
 from . import costs
+from . import style_profile, style_stats
 
 MAX_UPLOAD=5*1024*1024
 
@@ -49,6 +50,8 @@ def upload(project,filename,raw):
     bridge._write_text_atomic(path,text)
     record={"id":identity,"name":name,"characters":len(text),"encoding":encoding,"sha256":bridge.sha256_text(text),"status":"uploaded","created_at":bridge.now_iso()}
     writer.atomic_json(project_file(project,"samples",identity),record)
+    try:style_profile.stat_sample(project,identity,text,record["sha256"])
+    except (ValueError,OSError):pass
     return record
 
 
@@ -77,6 +80,16 @@ def segments(text,full):
     return [text[i:i+size] for i in points]
 
 
+def learning_budget(config=None):
+    """代表片段预算：档位上限，受模型窗口/输出/余量约束；窗口未知时退回保守 12000 字。"""
+    try:
+        from . import context_budget, resource_policy
+        options=resource_policy.context(config or {},max_output=2600)
+        return max(2000,min(42000,int(context_budget.available_tokens(**options)["available"])))
+    except (ValueError,TypeError,KeyError):
+        return 12000
+
+
 @costs.attributed("learning",project="project",role="A")
 async def learn_async(project,identity,revision,full=False):
     project=Path(project).resolve();service=brief_service()
@@ -85,7 +98,9 @@ async def learn_async(project,identity,revision,full=False):
         meta_path=project_file(project,"samples",identity);meta=writer.strict_json(meta_path,{})
         text=project_file(project,"samples",identity,".txt").read_text(encoding="utf-8")
         if bridge.sha256_text(text)!=meta.get("sha256"):raise ValueError("示范文件已改变，请重新上传")
-        parts=segments(text,full);config=roles.load_config()
+        config=roles.load_config()
+        plan=style_stats.sample_plan(text,learning_budget(config))
+        parts=segments(text,True) if full else ["".join(style_stats.excerpt(text,plan))]
         conn=roles.connection("A",config)
         token=bridge.sha256_text(meta["sha256"]+str(full)+conn["base_url"]+conn["model"])
         if doc.get("learning",{}).get("token")==token:
@@ -97,7 +112,7 @@ async def learn_async(project,identity,revision,full=False):
         progress=writer.strict_json(checkpoint,{})
         notes=progress.get("notes",[]) if progress.get("token")==token else []
         if not isinstance(notes,list) or len(notes)>len(parts):raise ValueError("学习断点记录无效")
-        meta.update(status="analyzing",mode="full" if full else "representative",total_segments=len(parts),analyzed_segments=len(notes))
+        meta.update(status="analyzing",mode="full" if full else "representative",total_segments=len(parts),analyzed_segments=len(notes),sampling=["全文"] if full else [item.get("label") for item in plan])
         writer.atomic_json(meta_path,meta)
         try:
             for index in range(len(notes),len(parts)):
@@ -128,12 +143,36 @@ async def learn_async(project,identity,revision,full=False):
                 learning={"sample_id":identity,"token":token,"guide":guide.strip(),"mode":meta["mode"],"segments":len(parts),"characters":len(text),"learned_at":bridge.now_iso()})
             writer.atomic_json(project/".webnovel"/"creative_brief.json",doc)
             meta.update(status="learned",finished_at=bridge.now_iso());writer.atomic_json(meta_path,meta)
+            try:style_profile.after_learn(project,identity,guide=guide.strip(),mode=meta["mode"],segments=len(parts))
+            except (ValueError,OSError):pass
             return {"status":"learned","sample":meta,"creative":doc}
-        except Exception:
-            meta["status"]="failed";writer.atomic_json(meta_path,meta);raise
+        except Exception as error:
+            meta["status"]="failed";writer.atomic_json(meta_path,meta)
+            try:style_profile.mark_failed(project,identity,str(error))
+            except (ValueError,OSError):pass
+            raise
 
 
 def learn(project,identity,revision,full=False):return asyncio.run(learn_async(project,identity,revision,full))
+
+
+def delete_sample(project,identity):
+    """删除样本及其派生引用；档案里对应条目一并移除，写作仍可继续。"""
+    project=Path(project).resolve()
+    meta=project_file(project,"samples",identity)
+    if not meta.is_file():raise ValueError("样本不存在")
+    for path in (meta,project_file(project,"samples",identity,".txt"),project_file(project,"learning",identity),
+                 project_file(project,"samples",identity,".json")):
+        try:path.unlink()
+        except FileNotFoundError:pass
+    try:profile=style_profile.remove_sample(project,identity)
+    except (ValueError,OSError):profile=None
+    doc=writer.strict_json(project/".webnovel"/"creative_brief.json",{})
+    if isinstance(doc,dict) and (doc.get("learning") or {}).get("sample_id")==identity:
+        doc["learning"]={}
+        doc["revision"]=int(doc.get("revision",0))+1
+        writer.atomic_json(project/".webnovel"/"creative_brief.json",doc)
+    return {"deleted":identity,"profile":style_profile.public(project)}
 
 
 @costs.attributed("brief",project="project",role="E")

@@ -692,7 +692,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             cache: 'no-store',
             credentials: 'same-origin',
           };
-          if (options && options.body !== undefined) {
+          if (options && options.form !== undefined) {
+            init.body = options.form;
+          } else if (options && options.body !== undefined) {
             init.headers['content-type'] = 'application/json';
             init.body = JSON.stringify(options.body);
           }
@@ -3193,6 +3195,184 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     ),
                   )
                 : e('div', null, e(Skeleton, {}), e(Skeleton, {})),
+            ),
+            e(StylePanel, { project, revision: draft ? draft.revision : null }),
+          );
+        }
+
+        /* ---------------------------------------------------------- 文风档案 */
+
+        const STYLE_STATES = {
+          ready: ['已就绪', 'ok'],
+          limited: ['仅统计', 'warn'],
+          unavailable: ['无样本', 'mute'],
+          disabled: ['已禁用', 'mute'],
+        };
+
+        function StylePanel(props) {
+          const { project, revision } = props;
+          const toast = useToast();
+          const [busy, setBusy] = React.useState('');
+          const [strength, setStrength] = React.useState(null);
+          const profile = usePoll(
+            () => (project ? api(`/projects/${project.id}/style-profile`) : Promise.resolve(null)),
+            [project && project.id],
+            4000,
+          );
+          const data = profile.data;
+          React.useEffect(() => {
+            if (data && strength === null) setStrength(data.strength);
+          }, [data, strength]);
+          if (!project) return null;
+          const refresh = () => profile.reload(true);
+          const save = async (patch) => {
+            setBusy('save');
+            try {
+              await api(`/projects/${project.id}/style-profile`, { method: 'PUT', body: patch });
+              toast.push('文风档案已保存', 'ok');
+              refresh();
+            } catch (error) {
+              toast.push(`保存失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+          const upload = async (event) => {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+            setBusy('upload');
+            try {
+              const form = new FormData();
+              form.append('file', file);
+              await api(`/projects/${project.id}/samples`, { method: 'POST', form });
+              toast.push('样本已上传，并已生成程序统计', 'ok');
+              refresh();
+            } catch (error) {
+              toast.push(`上传失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+          const learn = async (row) => {
+            if (revision === null || revision === undefined) {
+              toast.push('创作约定尚未载入，稍后再试', 'warn');
+              return;
+            }
+            setBusy(row.sample_id);
+            try {
+              await api(`/projects/${project.id}/samples/${row.sample_id}/learn`, {
+                method: 'POST',
+                body: { revision, full: false },
+              });
+              toast.push(`已开始学习：${row.name || row.sample_id}`, 'ok');
+              refresh();
+            } catch (error) {
+              toast.push(`学习失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+          const remove = async (row) => {
+            if (!window.confirm(`删除样本「${row.name || row.sample_id}」及其派生文风记录？`)) return;
+            setBusy(row.sample_id);
+            try {
+              await api(`/projects/${project.id}/samples/${row.sample_id}/delete`, { method: 'POST', body: {} });
+              toast.push('样本已删除', 'ok');
+              refresh();
+            } catch (error) {
+              toast.push(`删除失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+          const status = data ? data.status : 'unavailable';
+          const state = STYLE_STATES[status] || [status, 'mute'];
+          const rows = (data && data.samples) || [];
+          const merged = (data && data.stats) || {};
+          return e(
+            Card,
+            {
+              title: '文风学习与档案',
+              hint: data ? `${rows.length} 个样本` : '',
+              actions: e(
+                'label',
+                { className: 'nh-btn nh-btn-sm', style: { cursor: 'pointer' } },
+                busy === 'upload' ? '上传中…' : '上传 TXT',
+                e('input', { type: 'file', accept: '.txt,text/plain', style: { display: 'none' }, onChange: upload }),
+              ),
+            },
+            e(
+              'div',
+              { className: 'nh-col', style: { gap: 12 } },
+              e(
+                'div',
+                { className: 'nh-row', style: { gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+                e(Badge, { tone: state[1] }, state[0]),
+                e('span', { className: 'nh-muted', style: { fontSize: 12 } }, data ? data.note : ''),
+                e('span', { className: 'nh-spacer' }),
+                data
+                  ? e(
+                      Button,
+                      {
+                        kind: 'ghost',
+                        size: 'sm',
+                        busy: busy === 'save',
+                        onClick: () => save({ enabled: !data.enabled }),
+                      },
+                      data.enabled ? '禁用注入' : '启用注入',
+                    )
+                  : null,
+              ),
+              data && merged.characters
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 4 } },
+                    e('span', { className: 'nh-muted', style: { fontSize: 12 } },
+                      `合并统计：${merged.characters} 字 · 句长中位 ${(merged.sentence_length || {}).median || 0} · 段长中位 ${(merged.paragraph_length || {}).median || 0} · 对话占比约 ${Math.round((merged.dialogue_ratio || 0) * 100)}%（程序统计）`),
+                  )
+                : null,
+              e(
+                Field,
+                { label: `参考强度 ${strength === null ? (data ? data.strength : 60) : strength}/100` },
+                e(
+                  'div',
+                  { className: 'nh-row', style: { gap: 10, alignItems: 'center' } },
+                  e('input', {
+                    type: 'range',
+                    min: 0,
+                    max: 100,
+                    step: 5,
+                    value: strength === null ? (data ? data.strength : 60) : strength,
+                    style: { flex: 1 },
+                    onChange: (event) => setStrength(Number(event.target.value)),
+                    onMouseUp: () => save({ strength }),
+                    onTouchEnd: () => save({ strength }),
+                  }),
+                  e('span', { className: 'nh-muted', style: { fontSize: 12 } }, '强度只是参考程度，不承诺线性效果'),
+                ),
+              ),
+              rows.length
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 6 } },
+                    rows.map((row) =>
+                      e(
+                        'div',
+                        { key: row.sample_id, className: 'nh-row', style: { gap: 8, alignItems: 'center' } },
+                        e('span', { style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' } },
+                          `${row.name || row.sample_id} · ${row.characters} 字`),
+                        e(Badge, { tone: row.state === 'learned' ? 'ok' : row.state === 'failed' ? 'err' : 'mute' },
+                          row.state === 'learned' ? '已学习' : row.state === 'failed' ? '学习失败' : '仅统计'),
+                        e(Button, { kind: 'ghost', size: 'sm', busy: busy === row.sample_id, onClick: () => learn(row) },
+                          row.state === 'learned' ? '重新学习' : '学习'),
+                        e(Button, { kind: 'ghost', size: 'sm', onClick: () => remove(row) }, '删除'),
+                      ),
+                    ),
+                  )
+                : e(Empty, null, '还没有示范样本：上传 TXT 会先生成统计，点击学习才会调用已配置的模型。'),
+              e('p', { className: 'nh-muted', style: { fontSize: 12, margin: 0 } },
+                '样本全文可能发送给已配置的模型服务；档案只保存哈希与统计，不保存样本正文。禁用后停止注入，档案保留。'),
             ),
           );
         }

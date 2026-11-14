@@ -124,6 +124,14 @@ def creative_contract_hash(project):
     if not isinstance(learning,dict) or not isinstance(learning.get("guide",""),str):
         raise PublicationBlocked("invalid_creative_contract")
     if learning.get("guide","").strip():values["__learned_guide__"]=learning["guide"].strip()
+    style_path=Path(project)/".webnovel"/"style_profile.json"
+    if style_path.exists():
+        import sys
+        root=str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:sys.path.insert(0,root)
+        from integration import style_profile
+        style=style_profile.digest(project=project)
+        if style:values["__style_profile__"]=style
     memory_path=Path(project)/".webnovel"/"shared_memory.json"
     if memory_path.exists() or memory_path.is_symlink():
         import sys

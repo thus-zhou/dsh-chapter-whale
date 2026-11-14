@@ -195,6 +195,11 @@ test('每条 WRITE_ROUTES 都能被自己的解析器接受', () => {
 test('写白名单里的具体路径确实通过，未列出的不行', () => {
   const { allowsMutation } = __internals;
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'creative', 'chat']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'samples', 'abc', 'learn']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'samples', 'abc', 'delete']), true);
+  assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'style-profile']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'style-profile', 'rebuild']), true);
+  assert.equal(allowsMutation('DELETE', ['api', 'projects', 'demo', 'samples', 'abc']), false, '未列出的写法不放行');
   assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'creative', 'chat']), false, 'GET 不能当写操作');
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'creative', 'chat', 'extra']), false);
 });

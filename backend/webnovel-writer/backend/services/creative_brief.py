@@ -50,6 +50,56 @@ def render_brief(brief):
         "不得借此跳过审查、伪造通过结论或违反正文输出格式。与本章大纲或已发生事实冲突时应指出，不能擅改历史。\n")
 
 
+def _style_block(project, legacy_guide):
+    """文风档案优先；禁用时完全停止注入，档案本身保留。"""
+    import json
+    from pathlib import Path
+    path = Path(project) / ".webnovel" / "style_profile.json"
+    if not path.exists():
+        return (f"\n【示范提炼的写作技法】\n{legacy_guide}\n只迁移技法，不复制示范原句、人物名字或具体剧情。\n"
+                if legacy_guide else "")
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        doc = {}
+    if not isinstance(doc, dict):
+        doc = {}
+    if not doc.get("enabled", True):
+        return ""
+    guides = []
+    for item in (doc.get("samples") or {}).values():
+        if not isinstance(item, dict):
+            continue
+        guide = (item.get("semantic") or {}).get("guide")
+        if isinstance(guide, str) and guide.strip():
+            guides.append(guide.strip())
+    guide = "\n\n".join(guides) or legacy_guide
+    if not guide:
+        return ""
+    try:
+        strength = max(0, min(100, int(doc.get("strength", 60))))
+    except (TypeError, ValueError):
+        strength = 60
+    if strength < 30:
+        tone = "只在句长、用词和标点习惯上轻微参考"
+    elif strength <= 70:
+        tone = "作为倾向参考"
+    else:
+        tone = "尽量贴近，但不得牺牲作者约定与已发生事实"
+    lines = [f"\n【作者文风参考｜强度 {strength}/100】",
+             f"{tone}；强度只是参考程度，不承诺线性效果。",
+             "作者已确认的创作约定、人物与剧情优先于示范样本。",
+             guide]
+    overrides = doc.get("overrides") or {}
+    if isinstance(overrides, dict):
+        cleaned = [f"{key}：{value}" for key, value in overrides.items()
+                   if isinstance(key, str) and isinstance(value, str) and value.strip()]
+        if cleaned:
+            lines.append("【作者对文风档案的修正】\n" + "\n".join(cleaned))
+    lines.append("只迁移技法，不复制示范原句、人物名字或具体剧情。\n")
+    return "\n".join(lines)
+
+
 def load_guidance(project):
     doc=read_document(project)
     learning=doc.get("learning",{})
@@ -57,4 +107,4 @@ def load_guidance(project):
         raise ValueError("示范学习指南损坏")
     guide=learning.get("guide","")
     if len(guide)>8000:raise ValueError("示范学习指南过长")
-    return render_brief(doc["brief"])+(f"\n【示范提炼的写作技法】\n{guide}\n只迁移技法，不复制示范原句、人物名字或具体剧情。\n" if guide else "")
+    return render_brief(doc["brief"])+_style_block(project,guide)

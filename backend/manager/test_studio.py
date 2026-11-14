@@ -110,12 +110,12 @@ class StudioTests(unittest.TestCase):
     def test_learning_failure_preserves_brief_and_resumes_map_checkpoint(self):
         text="测试片段。"*6000;sample=studio.upload(self.project,"示范.txt",text.encode())
         with patch.object(roles,"json_call",AsyncMock(side_effect=[{"analysis":"第一段记录"},ValueError("failure")])):
-            with self.assertRaises(ValueError):studio.learn(self.project,sample["id"],0)
+            with self.assertRaises(ValueError):studio.learn(self.project,sample["id"],0,True)
         self.assertEqual(self.service.read_document(self.project)["revision"],0)
         self.assertEqual(studio.sample_list(self.project)[0]["status"],"failed")
-        remaining=len(studio.segments(text,False))-1
+        remaining=len(studio.segments(text,True))-1
         mock=AsyncMock(side_effect=[{"analysis":"后续段"}]*remaining+[self.learn_result()])
-        with patch.object(roles,"json_call",mock):result=studio.learn(self.project,sample["id"],0)
+        with patch.object(roles,"json_call",mock):result=studio.learn(self.project,sample["id"],0,True)
         self.assertEqual(mock.await_count,remaining+1);self.assertEqual(result["status"],"learned")
 
     def test_full_analysis_reduces_all_segments_not_just_first_notes(self):
