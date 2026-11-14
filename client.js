@@ -2363,6 +2363,51 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             [project && project.id],
             POLL_MS,
           );
+          const people = usePoll(
+            () => (project ? api(`/projects/${project.id}/characters`) : Promise.resolve({ persons: [] })),
+            [project && project.id],
+            POLL_MS,
+          );
+          const [personDraft, setPersonDraft] = React.useState(null);
+          const [correcting, setCorrecting] = React.useState(null);
+
+          const savePerson = async (draft) => {
+            setBusy(true);
+            try {
+              await api(`/projects/${project.id}/characters`, {
+                method: 'POST',
+                body: {
+                  name: draft.name || '',
+                  aliases: String(draft.aliases || '').split(/[、,，\s]+/).filter(Boolean),
+                  identity: draft.identity || '',
+                },
+              });
+              toast.push('人物已保存', 'ok');
+              setPersonDraft(null);
+              people.reload(true);
+            } catch (error) {
+              toast.push(`保存失败：${error.message}`, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          const correctPerson = async (draft) => {
+            setBusy(true);
+            try {
+              await api(`/projects/${project.id}/characters/${draft.id}/correct`, {
+                method: 'PUT',
+                body: { field: draft.field, value: draft.value, reason: draft.reason || '' },
+              });
+              toast.push('已保存作者纠正，后续提取不会覆盖', 'ok');
+              setCorrecting(null);
+              people.reload(true);
+            } catch (error) {
+              toast.push(`保存失败：${error.message}`, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
 
           const all = (memory.data && memory.data.items) || [];
           const counts = (memory.data && memory.data.counts) || {};
@@ -2558,6 +2603,119 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 ),
               ),
             ),
+            e(
+              'div',
+              { style: { marginTop: 'var(--nh-gap)' } },
+              e(
+                Card,
+                {
+                  title: '人物档案',
+                  hint: `${((people.data && people.data.persons) || []).length} 人 · 同名或别名不会自动合并`,
+                  actions: e(
+                    Button,
+                    { kind: 'primary', size: 'sm', icon: 'plus', onClick: () => setPersonDraft({ name: '', aliases: '', identity: '' }) },
+                    '新增人物',
+                  ),
+                },
+                ((people.data && people.data.persons) || []).length === 0
+                  ? e(Empty, null, '还没有人物档案。新增后会记录身份、目标、关系与“谁在第几章得知了什么”。')
+                  : e(
+                      'div',
+                      { className: 'nh-col', style: { gap: 0 } },
+                      ((people.data && people.data.persons) || []).map((person) =>
+                        e(
+                          'div',
+                          { key: person.id, style: { padding: '10px 0', borderBottom: '1px solid var(--nh-border-soft)' } },
+                          e(
+                            'div',
+                            { className: 'nh-row', style: { gap: 8, marginBottom: 4 } },
+                            e('span', { style: { fontSize: 12, fontWeight: 500 } }, person.name),
+                            (person.aliases || []).map((alias) => e(Badge, { key: alias, tone: 'mute' }, alias)),
+                            (person.unknown || []).length ? e(Badge, { tone: 'warn' }, `未知 ${person.unknown.length} 项`) : null,
+                            e('span', { className: 'nh-spacer' }),
+                            e(Button, { size: 'sm', kind: 'ghost', onClick: () => setCorrecting({ id: person.id, name: person.name, field: 'identity', value: person.profile.identity || '', reason: '' }) }, '纠正'),
+                          ),
+                          e(
+                            'div',
+                            { className: 'nh-dim2 nh-wrap', style: { fontSize: 12, lineHeight: 1.65 } },
+                            [
+                              person.profile.identity ? `身份：${person.profile.identity}` : '身份：未知',
+                              person.profile.goal ? `目标：${person.profile.goal}` : '目标：未知',
+                              person.profile.voice ? `口吻：${person.profile.voice}` : null,
+                            ].filter(Boolean).join(' · '),
+                          ),
+                          (person.relations || []).length
+                            ? e(
+                                'div',
+                                { className: 'nh-dim2 nh-wrap', style: { fontSize: 12, marginTop: 4 } },
+                                person.relations.map((relation) => `第${relation.chapter}章 · ${relation.kind}：${relation.event}（涉及 ${relation.other_name}）`).join('；'),
+                              )
+                            : null,
+                          (person.knowledge || []).length
+                            ? e(
+                                'div',
+                                { className: 'nh-dim2 nh-wrap', style: { fontSize: 12, marginTop: 4 } },
+                                person.knowledge.map((row) => `第${row.chapter}章 ${row.scope_label}·${row.status_label}：${row.info}`).join('；'),
+                              )
+                            : null,
+                        ),
+                      ),
+                    ),
+              ),
+            ),
+            e(Modal, {
+              open: Boolean(personDraft),
+              title: '新增人物',
+              onClose: () => setPersonDraft(null),
+              children: personDraft
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 12 } },
+                    e(Field, { label: '姓名' }, e(TextInput, { value: personDraft.name, onChange: (value) => setPersonDraft({ ...personDraft, name: value }) })),
+                    e(Field, { label: '别名（用顿号或逗号分隔）' }, e(TextInput, { value: personDraft.aliases, onChange: (value) => setPersonDraft({ ...personDraft, aliases: value }) })),
+                    e(Field, { label: '身份' }, e(TextInput, { value: personDraft.identity, onChange: (value) => setPersonDraft({ ...personDraft, identity: value }) })),
+                    e(
+                      'div',
+                      { className: 'nh-row', style: { gap: 8, justifyContent: 'flex-end' } },
+                      e(Button, { kind: 'primary', disabled: busy, onClick: () => savePerson(personDraft) }, '保存'),
+                    ),
+                  )
+                : null,
+            }),
+            e(Modal, {
+              open: Boolean(correcting),
+              title: correcting ? `纠正 ${correcting.name}` : '纠正人物',
+              onClose: () => setCorrecting(null),
+              children: correcting
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 12 } },
+                    e(
+                      Field,
+                      { label: '字段' },
+                      e(Select, {
+                        value: correcting.field,
+                        onChange: (value) => setCorrecting({ ...correcting, field: value }),
+                        options: [
+                          { value: 'identity', label: '身份' },
+                          { value: 'goal', label: '目标' },
+                          { value: 'motive', label: '动机' },
+                          { value: 'limits', label: '能力限制' },
+                          { value: 'voice', label: '口吻' },
+                          { value: 'history', label: '重要经历' },
+                        ],
+                      }),
+                    ),
+                    e(Field, { label: '更正内容' }, e(TextInput, { value: correcting.value, onChange: (value) => setCorrecting({ ...correcting, value }) })),
+                    e(Field, { label: '原因（可留空）' }, e(TextInput, { value: correcting.reason, onChange: (value) => setCorrecting({ ...correcting, reason: value }) })),
+                    e(
+                      'div',
+                      { className: 'nh-row', style: { gap: 8, justifyContent: 'flex-end' } },
+                      e(Button, { kind: 'primary', disabled: busy || !correcting.value.trim(), onClick: () => correctPerson(correcting) }, '保存纠正'),
+                    ),
+                  )
+                : null,
+            }),
             e(Modal, {
               open: Boolean(editing),
               title: editing && editing.id ? '编辑记忆' : '新增记忆',

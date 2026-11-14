@@ -357,6 +357,11 @@ def _record_review_attempt(project,chapter,content,review):
         memory_library.save_candidates(project,chapter,review,digest)
     except Exception:
         pass  # 候选只是可选字段；核对失败不改变审查结论，也不写入记忆
+    try:
+        from . import character_state
+        character_state.save_candidates(project,chapter,review,digest)
+    except Exception:
+        pass  # 人物候选同理：只落待提交文件，不阻断审查回执
 
 
 def _safe_error(exc):

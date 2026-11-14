@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
-from integration import model_roles, studio, memory_library, style_profile, secret_store
+from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
@@ -373,6 +373,18 @@ class MemoryRevisionInput(BaseModel):
 
 
 class MemoryCorrectionInput(MemoryItemInput):
+    reason: str = Field(default="", max_length=400)
+
+
+class CharacterInput(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    aliases: list[str] = Field(default_factory=list, max_length=12)
+    identity: str = Field(default="", max_length=2000)
+
+
+class CharacterCorrectionInput(BaseModel):
+    field: str = Field(pattern="^(identity|goal|motive|limits|voice|history)$")
+    value: str = Field(min_length=1, max_length=2000)
     reason: str = Field(default="", max_length=400)
 
 
@@ -832,6 +844,30 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if chapter<=0:raise ValueError("章节号无效")
         path=Path(project(identity)["path"])
         return memory_library.commit_candidates(path,chapter,memory_library.current_digest(path,chapter))
+
+    @app.get("/api/projects/{identity}/characters")
+    def characters(identity: str,chapter: int=0):
+        return character_state.view(Path(project(identity)["path"]),chapter)
+
+    @app.post("/api/projects/{identity}/characters")
+    def add_character(identity: str,data: CharacterInput):
+        profile = {"identity": data.identity} if data.identity else {}
+        return character_state.upsert_person(Path(project(identity)["path"]),name=data.name,
+                                             aliases=data.aliases,profile=profile,origin="作者录入")
+
+    @app.put("/api/projects/{identity}/characters/{person}/correct")
+    def correct_character(identity: str,person: str,data: CharacterCorrectionInput):
+        return character_state.correct(Path(project(identity)["path"]),person,field=data.field,
+                                       value=data.value,reason=data.reason)
+
+    @app.post("/api/projects/{identity}/characters/candidates/{chapter}/commit")
+    def commit_character_candidates(identity: str,chapter: int):
+        if chapter<=0:raise ValueError("章节号无效")
+        path=Path(project(identity)["path"])
+        body=[p for p,n in writer_runner._chapter_files(path) if n==chapter]
+        if len(body)!=1:raise ValueError("正文来源缺失或章节重复")
+        digest=hashlib.sha256(body[0].read_bytes()).hexdigest()
+        return character_state.commit_candidates(path,chapter,digest)
 
     @app.post("/api/projects/{identity}/memory/rebuild")
     def rebuild_memory(identity: str):

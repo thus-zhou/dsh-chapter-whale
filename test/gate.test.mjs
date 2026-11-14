@@ -201,6 +201,9 @@ test('写白名单里的具体路径确实通过，未列出的不行', () => {
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'style-profile', 'rebuild']), true);
   assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'memory', 'items', 'abc', 'correct']), true);
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'memory', 'candidates', '3', 'commit']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'characters']), true);
+  assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'characters', 'abc', 'correct']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'characters', 'candidates', '3', 'commit']), true);
   assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'memory', 'state']), false, '只读接口不列入写白名单');
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'chapters', '3', 'revision']), true);
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'chapters', '3', 'revision', 'accept']), true);

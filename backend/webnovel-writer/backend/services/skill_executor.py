@@ -4840,6 +4840,7 @@ class SkillExecutor:
 5. 大纲与前章冲突只作为规划建议，不要求改写已发布前章。
 6. 总长度 600 字以内（issues 除外）。
 7. fact_candidates 最多 6 条，只写本章首次明确发生、值得长期记住的事实；quote 必须从本章正文逐字复制连续片段；计划、推测、对话中的谎言或未证实传闻标 claim=speculation 或不写；没有就给空数组。
+8. character_candidates 可选，最多 6 条，只写本章明确出现的人物状态变化：kind=person（name/field/identity|goal|motive|limits|voice/history/value）、kind=relation（source/target/relation/event）、kind=knowledge（person/info/event/scope=character|reader|author/status=confirmed|guess）；每条都必须带本章原文 quote；推测标 status=guess；没有就给空数组。
 """
 
         system_prompt += "\n" + self.creative_guidance + "\n" + self._shared_memory("D",chapter_id,chapter_outline+"\n"+str(content or "")[:4000])
@@ -4900,6 +4901,9 @@ class SkillExecutor:
                  if isinstance(candidates, list):
                      # 可选字段：旧审查没有它也能读；这里只截断数量，逐条核对留给记忆层。
                      review["fact_candidates"] = candidates[:12]
+                 rows = payload.get("character_candidates") if isinstance(payload, dict) else None
+                 if isinstance(rows, list):
+                     review["character_candidates"] = rows[:12]
              except (ValueError, TypeError):
                  pass
              return review
