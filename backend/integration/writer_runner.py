@@ -352,6 +352,11 @@ def _record_review_attempt(project,chapter,content,review):
         quality_gate.save_report(project,chapter,review,body_sha256=digest)
     except Exception:
         pass  # 报告留档失败不阻断既有回执写入；过期状态由 no_report 表达
+    try:
+        from . import memory_library
+        memory_library.save_candidates(project,chapter,review,digest)
+    except Exception:
+        pass  # 候选只是可选字段；核对失败不改变审查结论，也不写入记忆
 
 
 def _safe_error(exc):

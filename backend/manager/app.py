@@ -364,10 +364,16 @@ class MemoryItemInput(BaseModel):
     source_chapter: int = Field(default=0,ge=0,le=100000)
     due_chapter: int = Field(default=0,ge=0,le=100000)
     clue_state: str = Field(default="planned",pattern="^(planned|planted|resolved)$")
+    valid_to: int = Field(default=0,ge=0,le=100000)
+    story_time: str = Field(default="",max_length=80)
 
 
 class MemoryRevisionInput(BaseModel):
     revision: int = Field(ge=0)
+
+
+class MemoryCorrectionInput(MemoryItemInput):
+    reason: str = Field(default="", max_length=400)
 
 
 class AccountInput(BaseModel):
@@ -810,6 +816,22 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def memory_context(identity: str,role: str="B",chapter: int=0,q: str=""):
         path=Path(project(identity)["path"])
         return memory_library.context(path,role,chapter or writer_runner.next_chapter_id(path),q[:8000])
+
+    @app.get("/api/projects/{identity}/memory/state")
+    def memory_state(identity: str,chapter: int=0):
+        path=Path(project(identity)["path"])
+        return memory_library.state(path,chapter or None)
+
+    @app.put("/api/projects/{identity}/memory/items/{item}/correct")
+    def correct_memory(identity: str,item: str,data: MemoryCorrectionInput):
+        return memory_library.correct(Path(project(identity)["path"]),item,data.revision,
+                                      data.model_dump(),data.reason)
+
+    @app.post("/api/projects/{identity}/memory/candidates/{chapter}/commit")
+    def commit_memory_candidates(identity: str,chapter: int):
+        if chapter<=0:raise ValueError("章节号无效")
+        path=Path(project(identity)["path"])
+        return memory_library.commit_candidates(path,chapter,memory_library.current_digest(path,chapter))
 
     @app.post("/api/projects/{identity}/memory/rebuild")
     def rebuild_memory(identity: str):

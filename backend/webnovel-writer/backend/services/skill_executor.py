@@ -4830,7 +4830,7 @@ class SkillExecutor:
         
         user_content += """
 请只输出一个 JSON 对象（不要代码块以外的解释），字段固定：
-{"conclusion":"结论：无需修改 或 结论：需修改","verdict":"pass 或 needs_revision","scores":{"设定自洽":0-100,"情节推进":0-100,"人物塑造":0-100,"文笔":0-100,"对话":0-100,"文风":0-100},"not_applicable":["确实无法判断的维度名"],"issues":[{"dimension":"维度名","severity":"critical|high|advisory","issue":"问题","evidence":"依据（引用原文/作者约定/设定/大纲）","advice":"怎么改"}],"summary":"一句话原因"}
+{"conclusion":"结论：无需修改 或 结论：需修改","verdict":"pass 或 needs_revision","scores":{"设定自洽":0-100,"情节推进":0-100,"人物塑造":0-100,"文笔":0-100,"对话":0-100,"文风":0-100},"not_applicable":["确实无法判断的维度名"],"issues":[{"dimension":"维度名","severity":"critical|high|advisory","issue":"问题","evidence":"依据（引用原文/作者约定/设定/大纲）","advice":"怎么改"}],"fact_candidates":[{"title":"稳定主题名","content":"本章明确发生、需要长期记住的事实","quote":"本章原文逐字引用","claim":"body_fact 或 speculation"}],"summary":"一句话原因"}
 
 要求：
 1. conclusion 只能是“结论：无需修改”或“结论：需修改”，必须出现。
@@ -4839,6 +4839,7 @@ class SkillExecutor:
 4. 真正无法判断的维度放进 not_applicable，不要随便打分；能给分的维度都要给分。
 5. 大纲与前章冲突只作为规划建议，不要求改写已发布前章。
 6. 总长度 600 字以内（issues 除外）。
+7. fact_candidates 最多 6 条，只写本章首次明确发生、值得长期记住的事实；quote 必须从本章正文逐字复制连续片段；计划、推测、对话中的谎言或未证实传闻标 claim=speculation 或不写；没有就给空数组。
 """
 
         system_prompt += "\n" + self.creative_guidance + "\n" + self._shared_memory("D",chapter_id,chapter_outline+"\n"+str(content or "")[:4000])
@@ -4893,6 +4894,14 @@ class SkillExecutor:
              except Exception as e:
                  # 评分解析失败不影响既有审查结论；门禁会把缺失如实记为“证据不足”。
                  self._debug(f"[REVIEW DEBUG] 质量评分解析失败: {e}")
+             try:
+                 payload = json.loads(self._extract_json_object_text(result_str) or "{}")
+                 candidates = payload.get("fact_candidates") if isinstance(payload, dict) else None
+                 if isinstance(candidates, list):
+                     # 可选字段：旧审查没有它也能读；这里只截断数量，逐条核对留给记忆层。
+                     review["fact_candidates"] = candidates[:12]
+             except (ValueError, TypeError):
+                 pass
              return review
 
         except Exception as e:

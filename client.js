@@ -2358,6 +2358,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             [project && project.id],
             POLL_MS,
           );
+          const memoryState = usePoll(
+            () => (project ? api(`/projects/${project.id}/memory/state`) : Promise.resolve({ active: [], future: [], expired: [], stale: [] })),
+            [project && project.id],
+            POLL_MS,
+          );
 
           const all = (memory.data && memory.data.items) || [];
           const counts = (memory.data && memory.data.counts) || {};
@@ -2379,7 +2384,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             setBusy(true);
             try {
               const revision = (memory.data && memory.data.revision) || 0;
-              if (draft.id) {
+              if (draft.id && draft.correct) {
+                await api(`/projects/${project.id}/memory/items/${draft.id}/correct`, {
+                  method: 'PUT',
+                  body: { ...draft, revision, reason: draft.correction_reason || '' },
+                });
+                toast.push('已保存为作者更正，原证据保留', 'ok');
+              } else if (draft.id) {
                 await api(`/projects/${project.id}/memory/items/${draft.id}`, {
                   method: 'PUT',
                   body: { ...draft, revision },
@@ -2394,6 +2405,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               }
               setEditing(null);
               memory.reload(true);
+              memoryState.reload(true);
             } catch (error) {
               toast.push(`保存失败：${error.message}`, 'err');
             } finally {
@@ -2424,6 +2436,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               'div',
               { className: 'nh-stats' },
               e(Stat, { label: '记忆总数', value: num(all.length), foot: `revision ${(memory.data && memory.data.revision) || 0}` }),
+              e(Stat, {
+                label: '当前可用',
+                value: num(((memoryState.data && memoryState.data.active) || []).length),
+                foot: `未来 ${((memoryState.data && memoryState.data.future) || []).length} · 失效 ${((memoryState.data && memoryState.data.stale) || []).length}`,
+              }),
               Object.keys(CATEGORY_LABELS).map((key) =>
                 e(Stat, { key, label: CATEGORY_LABELS[key], value: num(counts[key] || 0) }),
               ),
@@ -2476,6 +2493,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             source_chapter: 0,
                             due_chapter: 0,
                             clue_state: 'planned',
+                            valid_to: 0,
+                            story_time: '',
                           }),
                       },
                       '新增',
@@ -2501,6 +2520,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             'div',
                             { className: 'nh-row', style: { gap: 8, marginBottom: 4 } },
                             e(Badge, { tone: item.category === 'canon' ? 'accent' : 'mute' }, CATEGORY_LABELS[item.category] || item.category),
+                            e(
+                              Badge,
+                              { tone: item.claim === 'author_setting' ? 'ok' : item.claim === 'speculation' ? 'warn' : 'mute' },
+                              item.claim_label || '正文事实',
+                            ),
+                            item.valid_to ? e(Badge, { tone: 'mute' }, `有效至第${item.valid_to}章`) : null,
+                            item.story_time ? e(Badge, { tone: 'mute' }, item.story_time) : null,
+                            item.status === 'superseded' ? e(Badge, { tone: 'mute' }, '已被更正') : null,
                             item.pinned ? e(Badge, { tone: 'warn' }, '置顶') : null,
                             e('span', { style: { fontSize: 12, fontWeight: 500 } }, item.title || '(无标题)'),
                             e('span', { className: 'nh-spacer' }),
@@ -2562,6 +2589,49 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         onChange: (event) => setEditing({ ...editing, content: event.target.value }),
                       }),
                     ),
+                    e(
+                      'div',
+                      { className: 'nh-formgrid' },
+                      e(
+                        Field,
+                        { label: '有效至章节（0 表示仍有效）' },
+                        e(TextInput, {
+                          value: String(editing.valid_to || 0),
+                          onChange: (value) => setEditing({ ...editing, valid_to: Math.max(0, parseInt(value, 10) || 0) }),
+                        }),
+                      ),
+                      e(
+                        Field,
+                        { label: '故事时间（可留空表示未知）' },
+                        e(TextInput, {
+                          value: editing.story_time || '',
+                          onChange: (value) => setEditing({ ...editing, story_time: value }),
+                        }),
+                      ),
+                    ),
+                    editing.id && editing.source && editing.source.kind === 'chapter'
+                      ? e(
+                          'div',
+                          { className: 'nh-col', style: { gap: 8 } },
+                          e(
+                            'label',
+                            { className: 'nh-row', style: { gap: 6, fontSize: 12, cursor: 'pointer' } },
+                            e('input', {
+                              type: 'checkbox',
+                              checked: Boolean(editing.correct),
+                              onChange: (event) => setEditing({ ...editing, correct: event.target.checked }),
+                            }),
+                            '作为作者更正保存（原正文证据保留，旧记录标记为已被更正）',
+                          ),
+                          editing.correct
+                            ? e(TextInput, {
+                                placeholder: '更正原因（可留空）',
+                                value: editing.correction_reason || '',
+                                onChange: (value) => setEditing({ ...editing, correction_reason: value }),
+                              })
+                            : null,
+                        )
+                      : null,
                     e(
                       'div',
                       { className: 'nh-row', style: { gap: 16 } },

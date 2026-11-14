@@ -11,7 +11,10 @@ from . import bridge, writer_runner as writer, model_roles as roles
 from . import costs
 
 CATEGORIES = {"canon": "固定设定", "fact": "已发生事实", "foreshadow": "伏笔计划", "preference": "创作偏好"}
+# 第四类“记录性质”与分类正交：分类说主题，claim 说这句话凭什么成立。
+CLAIMS = {"body_fact": "正文事实", "author_setting": "作者设定", "speculation": "待确认推测", "plan": "创作计划"}
 MAX_ITEMS = 12000
+MAX_CANDIDATES = 8
 
 
 def _path(project, name="shared_memory.json"):
@@ -45,12 +48,77 @@ def _fact_text(fact, field, limit, index):
             f"长度={size}，上限={limit}），未写入") from None
 
 
+def _claim(item):
+    """Derive the claim kind; explicit values win, old records stay readable."""
+    value = item.get("claim")
+    if value in CLAIMS:
+        return value
+    if item.get("category") == "foreshadow":
+        return "plan"
+    if item.get("source", {}).get("kind") == "manual":
+        return "author_setting"
+    return "body_fact"
+
+
+def record(item):
+    """Additive view of one record; never rewrites the stored file."""
+    source = item.get("source", {})
+    chapter = int(source.get("chapter") or 0)
+    return {
+        **item,
+        "claim": _claim(item),
+        "claim_label": CLAIMS[_claim(item)],
+        "valid_from": int(item.get("valid_from") or chapter),
+        "valid_to": int(item.get("valid_to") or 0),
+        "story_time": str(item.get("story_time") or ""),
+        "story_time_known": bool(item.get("story_time_known", bool(item.get("story_time")))),
+        "entities": [str(x) for x in item.get("entities") or [] if str(x).strip()],
+        "record_version": int(item.get("record_version") or 1),
+        "confirmed_by_author": bool(item.get("confirmed_by_author", source.get("kind") == "manual")),
+        "correction_reason": str(item.get("correction_reason") or ""),
+        "superseded_by": str(item.get("superseded_by") or ""),
+        "supersedes": str(item.get("supersedes") or ""),
+    }
+
+
+def _visible(item, chapter):
+    """A record is usable only before its own chapter and inside its range."""
+    view = record(item)
+    if view["valid_from"] and view["valid_from"] >= chapter:
+        return "future"
+    if view["valid_to"] and chapter > view["valid_to"]:
+        return "expired"
+    return ""
+
+
+def _story_time(value, known):
+    if value is not None and (not isinstance(value, str) or len(value) > 80 or "\0" in value):
+        raise ValueError("故事时间格式无效")
+    if known is not None and type(known) is not bool:
+        raise ValueError("故事时间是否已知必须是布尔值")
+    text = (value or "").strip()
+    return {"story_time": text, "story_time_known": bool(known) if known is not None else bool(text)}
+
+
+def _entities(value):
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 8:
+        raise ValueError("实体引用必须是最多 8 项的数组")
+    result = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry.strip() or len(entry) > 40:
+            raise ValueError("实体引用无效")
+        result.append(entry.strip())
+    return result
+
+
 def validate_item(item):
     if not isinstance(item, dict) or item.get("category") not in CATEGORIES:
         raise ValueError("记忆分类无效")
     _text(item.get("title"), 120)
     _text(item.get("content"), 2000)
-    if item.get("status") not in {"active", "conflict", "archived"} or type(item.get("pinned")) is not bool:
+    if item.get("status") not in {"active", "conflict", "archived", "superseded"} or type(item.get("pinned")) is not bool:
         raise ValueError("记忆状态无效")
     if not re.fullmatch(r"[a-f0-9]{32}", str(item.get("id", ""))):
         raise ValueError("记忆编号无效")
@@ -69,6 +137,19 @@ def validate_item(item):
         if source["chapter"] <= 0 or not re.fullmatch(r"[a-f0-9]{64}", str(source.get("sha256", ""))):
             raise ValueError("记忆来源证据无效")
         _text(source.get("quote"), 800)
+    if item.get("claim") not in (None, "", *CLAIMS):
+        raise ValueError("记忆记录性质无效")
+    for field, low, high in (("valid_from", 0, 100000), ("valid_to", 0, 100000), ("record_version", 1, 1000000)):
+        value = item.get(field)
+        if value is not None and (type(value) is not int or not low <= value <= high):
+            raise ValueError(f"记忆{field}无效")
+    _story_time(item.get("story_time"), item.get("story_time_known"))
+    if item.get("entities") is not None:
+        _entities(item.get("entities"))
+    if item.get("superseded_by") and not re.fullmatch(r"[a-f0-9]{32}", str(item["superseded_by"])):
+        raise ValueError("记忆替代关系无效")
+    if item.get("correction_reason") and (not isinstance(item["correction_reason"], str) or len(item["correction_reason"]) > 400):
+        raise ValueError("记忆更正说明过长")
 
 
 def read(project):
@@ -135,13 +216,27 @@ def save_item(project, value, revision, identity=None, source=None):
             preserved_source = dict(source)
         else:
             preserved_source = {"kind": "manual", "chapter": value.get("source_chapter", 0)}
+        base = record(previous) if previous else {}
+        story = _story_time(
+            value.get("story_time") or base.get("story_time", ""),
+            value.get("story_time_known", base.get("story_time_known")),
+        )
         item = {"id": identity or uuid.uuid4().hex, "category": value.get("category"),
                 "title": _mask(_text(value.get("title"), 120)), "content": _mask(_text(value.get("content"), 2000)),
                 "pinned": value.get("pinned", False), "status": value.get("status", "active"),
                 "due_chapter": value.get("due_chapter", 0),
                 "clue_state": value.get("clue_state", "planned") if value.get("category") == "foreshadow" else "",
                 "source": preserved_source,
+                "valid_from": int(value.get("valid_from", base.get("valid_from") or preserved_source.get("chapter", 0) or 0)),
+                "valid_to": int(value.get("valid_to", base.get("valid_to") or 0)),
+                "entities": _entities(value.get("entities", base.get("entities"))),
+                "story_time": story["story_time"], "story_time_known": story["story_time_known"],
+                "record_version": int(base.get("record_version") or 0) + 1,
+                "confirmed_by_author": preserved_source.get("kind") == "manual",
+                "correction_reason": str(value.get("correction_reason") or base.get("correction_reason") or "")[:400],
+                "superseded_by": base.get("superseded_by", ""), "supersedes": base.get("supersedes", ""),
                 "created_at": (previous or {}).get("created_at", bridge.now_iso()), "updated_at": bridge.now_iso(), "updated_revision": doc["revision"]+1}
+        item["claim"] = value.get("claim") or base.get("claim") or _claim(item)
         validate_item(item)
         # An explicit author correction supersedes machine facts, never evidence.
         if item['source']['kind'] == 'manual' and item['status'] == 'active':
@@ -244,7 +339,7 @@ def freshness(project, item, cache):
 def public(project, doc=None):
     doc = read(project) if doc is None else doc
     cache = {}
-    items = [{**x, "freshness": freshness(project, x, cache)} for x in doc["items"]]
+    items = [{**record(x), "freshness": freshness(project, x, cache)} for x in doc["items"]]
     receipts=writer.strict_json(Path(project)/".webnovel/writer_receipts.json",{})
     pending=[]
     if isinstance(receipts,dict):
@@ -257,8 +352,10 @@ def public(project, doc=None):
     return {"revision": doc["revision"], "items": items, "chapters": doc["chapters"],
             "pending_chapters":sorted(pending),
             "counts": {k: sum(x["category"] == k and x["status"] == "active" for x in items) for k in CATEGORIES},
+            "claims": {k: sum(x["claim"] == k and x["status"] == "active" for x in items) for k in CLAIMS},
             "conflicts": sum(x["status"] == "conflict" for x in items),
-            "stale": sum(x["freshness"] == "stale" and x["status"] != "archived" for x in items)}
+            "stale": sum(x["freshness"] == "stale" and x["status"] != "archived" for x in items),
+            "pending_candidates": pending_candidates(project)}
 
 
 def _terms(text):
@@ -289,12 +386,24 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None):
         raise ValueError("记忆检索角色或章节无效")
     doc = read(project) if doc is None else doc
     terms = _terms(query[:8000]);cache = {}; selected = []; latest = {}
+    omitted_future = omitted_expired = omitted_stale = 0
     for item in doc["items"]:
-        if item["status"] != "active" or freshness(project, item, cache) == "stale":
+        if item["status"] != "active":
+            continue
+        if freshness(project, item, cache) == "stale":
+            omitted_stale += 1
             continue
         source_chapter = item["source"].get("chapter", 0)
         # Current/next chapter is not established history yet. No future leaks.
         if source_chapter >= chapter and source_chapter:
+            omitted_future += 1
+            continue
+        reason = _visible(item, chapter)
+        if reason == "future":
+            omitted_future += 1
+            continue
+        if reason == "expired":
+            omitted_expired += 1
             continue
         key = _key(item)
         authored=item["source"]["kind"]=="manual"
@@ -333,8 +442,20 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None):
         lines.append(content);ids.append(item["id"]);used += len(content) + 1
     if omitted:
         lines.append(f"另有 {omitted} 条因上下文预算未纳入；必要时缩小主题检索。")
+    facts = [{"id": item["id"], "claim": record(item)["claim"], "title": item["title"],
+              "source": {"kind": item["source"]["kind"], "chapter": item["source"].get("chapter", 0),
+                         "sha256": item["source"].get("sha256", "")},
+              "valid_from": record(item)["valid_from"], "valid_to": record(item)["valid_to"]}
+             for _, item in selected if item["id"] in ids]
     return {"revision": doc["revision"], "role": role, "chapter": chapter, "ids": ids,
-            "omitted": omitted, "text": "\n".join(lines) if selected else ""}
+            "facts": facts,
+            "omitted": omitted + omitted_future + omitted_expired + omitted_stale,
+            "omitted_breakdown": {"budget": omitted, "future": omitted_future,
+                                  "expired": omitted_expired, "stale": omitted_stale},
+            "restricted": [{"reason": "future", "count": omitted_future},
+                           {"reason": "expired", "count": omitted_expired},
+                           {"reason": "stale", "count": omitted_stale}],
+            "text": "\n".join(lines) if selected else ""}
 
 
 @costs.attributed("memory",project="project",chapter="chapter",role="D")
@@ -402,6 +523,216 @@ async def sync_chapter(project, chapter, content, config=None):
         doc["chapters"][str(chapter)] = {"sha256": digest, "facts": len(candidates), "synced_at": bridge.now_iso()}
         _commit(project, doc, old, "chapter_sync")
     return {"status": "synced", "chapter": chapter, "facts": len(candidates), "conflicts": sum(x["status"] == "conflict" for x in candidates)}
+
+
+def correct(project, identity, revision, value, reason=""):
+    """作者更正保存为新的有来源记录；旧证据只标记替代关系，不改写内容。"""
+    project = Path(project).resolve()
+    with writer.file_lock(_path(project, "writer.lock")), writer.file_lock(_path(project, "memory.lock")):
+        doc = read(project)
+        if doc["revision"] != revision:
+            raise ValueError("记忆已更新，请重新载入后再保存")
+        previous = next((x for x in doc["items"] if x["id"] == identity), None)
+        if not previous:
+            raise KeyError("记忆不存在")
+        new_id = uuid.uuid4().hex
+        category = value.get("category") or previous["category"]
+        story = _story_time(
+            value.get("story_time", previous.get("story_time", "")),
+            value.get("story_time_known", previous.get("story_time_known")),
+        )
+        item = {
+            "id": new_id, "category": category,
+            "title": _mask(_text(value.get("title") or previous["title"], 120)),
+            "content": _mask(_text(value.get("content"), 2000)),
+            "pinned": bool(value.get("pinned", previous.get("pinned", False))),
+            "status": "active", "due_chapter": int(value.get("due_chapter", previous.get("due_chapter", 0)) or 0),
+            "clue_state": (value.get("clue_state") or previous.get("clue_state") or "") if category == "foreshadow" else "",
+            "source": {"kind": "manual", "chapter": 0},
+            "claim": "author_setting",
+            "valid_from": int(value.get("valid_from") or 0), "valid_to": int(value.get("valid_to") or 0),
+            "entities": _entities(value.get("entities", previous.get("entities"))),
+            "story_time": story["story_time"], "story_time_known": story["story_time_known"],
+            "record_version": 1, "confirmed_by_author": True,
+            "correction_reason": _text(reason, 400, required=False) if reason else "",
+            "supersedes": identity, "superseded_by": "",
+            "created_at": bridge.now_iso(), "updated_at": bridge.now_iso(), "updated_revision": doc["revision"] + 1,
+        }
+        validate_item(item)
+        previous["status"] = "superseded"
+        previous["superseded_by"] = new_id
+        previous["updated_revision"] = doc["revision"] + 1
+        previous["updated_at"] = bridge.now_iso()
+        doc["items"].append(item)
+        _commit(project, doc, previous, "author_correction")
+        return public(project, doc)
+
+
+def state(project, chapter=None, doc=None):
+    """按当前章节位置的状态视图；未来记录只报数量，不泄露内容。"""
+    project = Path(project).resolve()
+    doc = read(project) if doc is None else doc
+    chapter = writer.next_chapter_id(project) if chapter in (None, 0) else int(chapter)
+    if not 1 <= chapter <= 100000:
+        raise ValueError("章节位置无效")
+    cache = {}
+    active, future, expired, stale = [], [], [], []
+    for item in doc["items"]:
+        view = record(item)
+        if view["status"] != "active":
+            continue
+        if freshness(project, item, cache) == "stale":
+            stale.append({"id": view["id"], "title": view["title"], "source_chapter": view["source"].get("chapter", 0)})
+            continue
+        reason = _visible(item, chapter)
+        row = {"id": view["id"], "title": view["title"], "claim": view["claim"], "category": view["category"],
+               "valid_from": view["valid_from"], "valid_to": view["valid_to"],
+               "story_time": view["story_time"], "story_time_known": view["story_time_known"]}
+        if reason == "future":
+            future.append({"id": row["id"], "valid_from": row["valid_from"]})
+            continue
+        if reason == "expired":
+            expired.append({"id": row["id"], "valid_to": row["valid_to"]})
+            continue
+        active.append(row)
+    known_times = []
+    for row in active:
+        if row["story_time"] and row["story_time"] not in known_times:
+            known_times.append(row["story_time"])
+    return {
+        "schema": 1, "revision": doc["revision"], "chapter": chapter,
+        "counts": {k: sum(record(x)["category"] == k and x["status"] == "active" for x in doc["items"]) for k in CATEGORIES},
+        "claims": {k: sum(record(x)["claim"] == k and x["status"] == "active" for x in doc["items"]) for k in CLAIMS},
+        "active": active, "future": future, "expired": expired, "stale": stale,
+        "story_time": {"known": known_times, "unknown": sum(not row["story_time_known"] for row in active)},
+        "restricted": [{"reason": "future", "count": len(future)}, {"reason": "expired", "count": len(expired)},
+                       {"reason": "stale", "count": len(stale)}],
+        "note": "只显示当前章节可知的记录；未来记录不提前展示内容；故事时间未知不等同于没有发生。",
+    }
+
+
+def current_digest(project, chapter):
+    """当前正文的原始字节摘要，供提交候选前复核。"""
+    return _chapter(project, chapter)[1]
+
+
+def candidate_path(project, chapter, sha256):
+    return _path(project, f"fact_candidates/{int(chapter):04d}-{str(sha256)[:16]}.json")
+
+
+def pending_candidates(project):
+    folder = _path(project, "fact_candidates")
+    if not folder.is_dir():
+        return []
+    rows = []
+    for path in sorted(folder.glob("*.json")):
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and doc.get("state") == "pending":
+            rows.append({"chapter": doc.get("chapter_id"), "body_sha256": doc.get("body_sha256"),
+                         "count": len(doc.get("candidates") or []), "dropped": len(doc.get("dropped") or [])})
+    return rows
+
+
+def _candidate_rows(review, body, chapter):
+    """校验 D 给出的事实候选；不可核对的一律丢弃并记原因，不伪装成事实。"""
+    raw = review.get("fact_candidates") if isinstance(review, dict) else None
+    if raw is None and isinstance(review, dict):
+        raw = review.get("facts")
+    if not isinstance(raw, list):
+        return [], []
+    normalized = _normalize(body)
+    kept, dropped = [], []
+    for index, entry in enumerate(raw[:MAX_CANDIDATES * 2], 1):
+        if len(kept) >= MAX_CANDIDATES:
+            dropped.append({"index": index, "reason": "over_limit"})
+            continue
+        if not isinstance(entry, dict):
+            dropped.append({"index": index, "reason": "not_object"})
+            continue
+        try:
+            title = _text(entry.get("title"), 120)
+            content = _text(entry.get("content"), 2000)
+            quote = _text(entry.get("quote"), 800)
+        except ValueError:
+            dropped.append({"index": index, "reason": "field_invalid"})
+            continue
+        if len(_normalize(quote)) < 8 or _normalize(quote) not in normalized:
+            dropped.append({"index": index, "reason": "quote_not_in_body"})
+            continue
+        from .text_checks import literal_issues
+        if literal_issues(content):
+            dropped.append({"index": index, "reason": "literal_count_error"})
+            continue
+        claim = entry.get("claim") if entry.get("claim") in {"body_fact", "speculation"} else "body_fact"
+        kept.append({"title": title, "content": content, "quote": quote, "claim": claim,
+                     "entities": _entities(entry.get("entities"))})
+    return kept, dropped
+
+
+def save_candidates(project, chapter, review, body_sha256):
+    """审查附带的事实候选先落盘待提交；正文未定稿不写入记忆。"""
+    project = Path(project).resolve()
+    body, digest = _chapter(project, chapter)
+    if digest != body_sha256:
+        raise ValueError("事实候选与当前正文不一致")
+    path = candidate_path(project, chapter, digest)
+    if path.exists():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if existing.get("state") == "committed" and existing.get("body_sha256") == digest:
+            return {"status": "reused", "count": len(existing.get("candidates") or []), "path": str(path)}
+    kept, dropped = _candidate_rows(review, body, chapter)
+    writer.atomic_json(path, {"schema_version": 1, "chapter_id": chapter, "body_sha256": digest,
+                              "candidates": kept, "dropped": dropped, "state": "pending",
+                              "created_at": bridge.now_iso()})
+    return {"status": "pending", "count": len(kept), "dropped": len(dropped), "path": str(path)}
+
+
+def commit_candidates(project, chapter, body_sha256):
+    """正文定稿并仍有当前审查后才提交；失败保留待处理文件，不重新生成正文。"""
+    project = Path(project).resolve()
+    path = candidate_path(project, chapter, body_sha256)
+    if not path.exists():
+        raise ValueError("没有待提交的事实候选")
+    doc_file = json.loads(path.read_text(encoding="utf-8"))
+    if doc_file.get("body_sha256") != body_sha256:
+        raise ValueError("事实候选与指定正文不一致")
+    if doc_file.get("state") == "committed":
+        return {"status": "reused", "chapter": chapter}
+    body, digest = _chapter(project, chapter)
+    if digest != body_sha256:
+        raise ValueError("正文已变化，事实候选未提交")
+    if chapter not in writer.reviewed_chapters(project):
+        raise ValueError("只能提交具备当前有效审查／E 授权的正文事实")
+    candidates = doc_file.get("candidates") or []
+    with writer.file_lock(_path(project, "memory.lock")):
+        doc = read(project)
+        if doc["chapters"].get(str(chapter), {}).get("sha256") == digest:
+            doc_file["state"] = "committed"
+            writer.atomic_json(path, doc_file)
+            return {"status": "reused", "chapter": chapter}
+        items = []
+        for entry in candidates:
+            items.append({"id": uuid.uuid4().hex, "category": "fact", "title": entry["title"], "content": entry["content"],
+                          "pinned": False, "status": "active", "due_chapter": 0, "clue_state": "",
+                          "claim": entry.get("claim") or "body_fact", "entities": entry.get("entities") or [],
+                          "valid_from": chapter, "valid_to": 0, "story_time": "", "story_time_known": False,
+                          "record_version": 1, "confirmed_by_author": False, "superseded_by": "", "supersedes": "",
+                          "source": {"kind": "chapter", "chapter": chapter, "sha256": digest, "quote": entry["quote"]},
+                          "created_at": bridge.now_iso()})
+        for item in items:
+            validate_item(item)
+        existing = {(x["source"].get("chapter"), _key(x), x["content"]) for x in doc["items"]
+                    if x.get("source", {}).get("kind") == "chapter"}
+        added = [x for x in items if (chapter, _key(x), x["content"]) not in existing]
+        doc["items"].extend(added)
+        doc["chapters"][str(chapter)] = {"sha256": digest, "facts": len(added), "synced_at": bridge.now_iso()}
+        _commit(project, doc, None, "fact_candidates")
+    doc_file["state"] = "committed"
+    writer.atomic_json(path, doc_file)
+    return {"status": "committed", "chapter": chapter, "added": len(added), "skipped": len(items) - len(added)}
 
 
 def rebuild(project):

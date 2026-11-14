@@ -217,6 +217,8 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/memory/items',
   'PUT /api/projects/:identity/memory/items/:item',
   'POST /api/projects/:identity/memory/items/:item/archive',
+  'PUT /api/projects/:identity/memory/items/:item/correct',
+  'POST /api/projects/:identity/memory/candidates/:chapter/commit',
   'POST /api/projects/:identity/memory/rebuild',
   'POST /api/projects/:identity/samples',
   'POST /api/projects/:identity/samples/:sample/learn',
