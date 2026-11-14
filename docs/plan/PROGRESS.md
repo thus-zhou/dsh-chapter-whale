@@ -136,7 +136,7 @@ M01：在既有 `.webnovel/review_attempts/` 与回执上扩展正文版本能�
 | --- | --- |
 | 代码实现 | 完成（`backend/integration/chapter_versions.py` + `test_chapter_versions.py` + CI 后端 job）|
 | 真实模型验证 | 无（本模块要求 0 次）|
-| GitHub 推送 | 待执行（本地提交）|
+| GitHub 推送 | 本地提交 `a0fa5e9`；推送待 0.3.0-alpha.1 节点 |
 | Release | 不涉及（M01—M03 合并为 0.3.0-alpha.1 节点）|
 
 ### 下一步
@@ -149,5 +149,42 @@ M02：在 `integration/costs.py`、`fallback_budget.py` 与现有调用入口上
 | --- | --- |
 | 代码实现 | 完成：新增 `docs/plan/STATE.json`、`docs/plan/PROGRESS.md`（仅文档，未改运行代码）|
 | 真实模型验证 | 无（本模块要求 0 次）|
-| GitHub 推送 | 待执行 |
+| GitHub 推送 | 本地提交 `640b5df`；推送待 0.3.0-alpha.1 节点 |
 | Release | 不涉及（M00 无版本节点）|
+
+---
+
+## M02 预算与上下文（2026-11-14）
+
+### 完成内容
+
+- **请求前预留**：`costs.request_budget` 表（项目/章/阶段/日期/Token/费用/未知标记/状态）+ `reserve_request()`，在 `Attempt.__init__` 里、写 `usage_events` 之前调用；超限直接抛 `BudgetExceeded`，请求不会发出。
+- **完成后结算**：`Attempt.finish()` 用真实 usage 调 `settle_request()`；`success→settled`、`interrupted→cancelled`、其余 `failed`。预留找不到时记 `budget_settlement_missing` gap，不静默丢弃。
+- **上限项**：`requests_per_day`、`request_tokens`（单次）、`chapter_tokens`、`project_tokens`、`chapter_cost_cny`、`project_cost_cny`。默认全为 `None`（不限），旧行为不变；配置后才生效。
+- **金额未知**：报价缺失或汇率缺失时按 `unknown_reserve_cny`（默认 1 元）保守占用并记 `unknown_cost_requests`，不当作 0。
+- **每步尝试次数**：`resource_policy.configure()` 把 `network_attempts`（默认 2）压到客户端，且只收紧不放松——`model_roles.service()` 原本设的 `max_retries=1` 保持 1，不会被放大成 2。
+- **自动修订轮数**：`revision_rounds` 默认 1，允许 0—3，越界直接报错。
+- **上下文预算**：`context_budget.py` 三档 8000/16000/32000，再与「模型窗口 − 输出上限 − 安全余量」取小；未知窗口时要求显式配置（`BudgetUnconfigured`，reason=`model_window_unknown`），不偷偷放大；必要块超限抛 `CannotFit(over_by=…)` 而不是静默截断，可选块被丢弃时逐个列出名字。
+- **记忆上下文接线**：`memory_library.context()` 默认预算改为按配置档位计算；未配置模型窗口时仍是 12000，与旧行为一致。
+
+### 单一计量入口（实测）
+
+`backend/integration/*.py` 内没有任何绕过 `Attempt` 的直连 HTTP（无 `session.post` / `httpx.` / `requests.post`），因此规划、初稿、润色、修订、复审、样本学习、记忆抽取、角色/RAG/连续性、格式修复全部落在同一本账上，不需要另建表。
+
+### 检查（离线，0 次模型调用）
+
+- `test_budget.py` 23 项：默认不限、非法值拒绝、重试只收紧、档位上限、窗口/输出/余量取小、未知窗口报配置缺失、保守窗口生效、必要块拒绝、可选块丢弃、预留/结算、跨进程计数、缺失预留记 gap、超限在发请求前抛错、取消保留保守占用。
+- 集成 126 项、manager 55 项、`npm test` 47 项全过。
+
+### M02 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成（`context_budget.py` 新增；`costs.py`、`resource_policy.py`、`fallback_budget.py`、`memory_library.py` 扩展；`test_budget.py` 23 项）|
+| 真实模型验证 | 无（本模块要求 0 次）|
+| GitHub 推送 | 本地提交 `2c2eaa5`；推送待 0.3.0-alpha.1 节点 |
+| Release | 不涉及（与 M01、M03 合并为 0.3.0-alpha.1）|
+
+### 下一步
+
+M03：把质量判断收敛成单一入口——`quality_score`（六维加权）+ `quality_gate`（85/70 门槛），`review_passed` 改为兼容包装器，报告绑定正文/约定/配置版本，正文变化即过期；章节页最小入口 + 代理白名单同步 + 后端测试入 CI。
