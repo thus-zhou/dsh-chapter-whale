@@ -377,6 +377,7 @@ async def _generate_and_review(
     chapter_id: int,
     word_count: int,
     max_revisions: int,
+    scenes: int = 0,
 ) -> Dict[str, Any]:
     SkillExecutor, get_ai_service = _load_webnovel_services()
     ai_service = get_ai_service()
@@ -468,6 +469,12 @@ async def _generate_and_review(
     if reused:
         print(f'恢复第{chapter_id}章已保存的 B 中间稿（尚未具备发布资格）',flush=True)
         first={'content':checkpoint['draft'],'review':None}
+    elif scenes:
+        from . import scene_writer
+        first = await scene_writer.draft(project_root, chapter_id, word_count, scenes, config=config)
+        if not first.get('content'):
+            raise RuntimeError('场景生成没有产出可保存的正文')
+        preserve('draft', first['content'])
     else:
         first = await _read_stream_result(executor.execute_write_stream(chapter_id, word_count=word_count))
         if first['errors']:
@@ -593,14 +600,15 @@ async def generate_chapter_async(
     max_revisions: int = 2,
     chapter_id: Optional[int] = None,
     dry_run: bool = False,
+    scenes: int = 0,
 ) -> Dict[str, Any]:
     root = Path(project_path).expanduser().resolve()
     if dry_run:
-        return await _generate_chapter_locked(root, word_count, max_revisions, chapter_id, True)
+        return await _generate_chapter_locked(root, word_count, max_revisions, chapter_id, True, scenes)
     if not root.is_dir():
         raise FileNotFoundError(f"项目目录不存在：{root}")
     with file_lock(root / ".webnovel" / "writer.lock"):
-        return await _generate_chapter_locked(root, word_count, max_revisions, chapter_id, False)
+        return await _generate_chapter_locked(root, word_count, max_revisions, chapter_id, False, scenes)
 
 
 def _save_progress(project_root: Path, chapter: int) -> None:
@@ -680,6 +688,7 @@ async def _generate_chapter_locked(
     max_revisions: int,
     chapter_id: Optional[int],
     dry_run: bool,
+    scenes: int = 0,
 ) -> Dict[str, Any]:
     project_root = project_path.expanduser().resolve()
     if not project_root.is_dir():
@@ -763,6 +772,7 @@ async def _generate_chapter_locked(
         selected_chapter,
         word_count,
         max_revisions,
+        scenes,
     )
     if not review_eligible(generated.get("review"),body_digest(str(generated.get("content","")).strip()),project_root,selected_chapter):
         raise RuntimeError("保存前审查验证失败")

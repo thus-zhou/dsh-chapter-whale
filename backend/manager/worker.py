@@ -104,6 +104,7 @@ def main():
     parser.add_argument("--ai-used", choices=["0", "1"], default="1")
     parser.add_argument("--serial-step", action="store_true")
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--scenes", type=int, default=0)
     args = parser.parse_args()
     try:
         if args.command == "login":
@@ -124,7 +125,7 @@ def main():
         elif args.command == "plan":
             result=studio.plan(Path(args.project),args.count)
         elif args.command == "batch":
-            result=studio.batch(Path(args.project),args.count,args.word_count,args.max_revisions,args.batch_id)
+            result=studio.batch(Path(args.project),args.count,args.word_count,args.max_revisions,args.batch_id,args.scenes)
         elif args.command == "polish":
             if not args.chapter or len(args.chapter)!=1:raise ValueError("请选择一个章节")
             result=studio.polish_existing(Path(args.project),args.chapter[0],preview=args.preview)

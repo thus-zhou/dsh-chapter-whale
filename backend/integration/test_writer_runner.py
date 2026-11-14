@@ -56,7 +56,7 @@ class WriterRunnerTest(unittest.TestCase):
         self.addCleanup(self.generator_patch.stop)
         self.generator.side_effect = self.generated
 
-    async def generated(self, project, chapter, words, revisions):
+    async def generated(self, project, chapter, words, revisions, scenes=0):
         return {"content": f"第{chapter}章的正文，因果与时间线完整。",
                 "review": dict(PASS), "revision_rounds": 0, "executor": self.executor}
 

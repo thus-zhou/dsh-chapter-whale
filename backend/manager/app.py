@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
-from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity
+from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
@@ -323,6 +323,7 @@ class GenerateInput(BaseModel):
     word_count: int = Field(default=3500, ge=500, le=10000)
     max_revisions: int = Field(default=2, ge=0, le=5)
     count: int = Field(default=1, ge=1, le=30)
+    scenes: int = Field(default=0, ge=0, le=3)
 
 
 class PlanInput(BaseModel):
@@ -871,6 +872,12 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                                      chapter=data.chapter,event=data.event,quote=data.quote,sha256=data.sha256,
                                      expected=data.expected,note=data.note,author=data.author)
 
+    @app.get("/api/projects/{identity}/scenes")
+    def scenes_view(identity: str,chapter: int=0,count: int=2,word_count: int=3500):
+        root=Path(project(identity)["path"])
+        target=chapter if chapter>0 else writer_runner.next_chapter_id(root)
+        return {**scenes.public(root,target,count=count,word_count=word_count),"estimate_detail":scene_writer.estimate(count)}
+
     @app.post("/api/projects/{identity}/continuity/index")
     def continuity_index(identity: str):
         return continuity.build_index(Path(project(identity)["path"]))
@@ -1073,7 +1080,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             raise ValueError("请先完成 AI 设置")
         batch=uuid.uuid4().hex
         return ops.start("generate", ["batch", "--project", item["path"], "--word-count", str(data.word_count),
-                          "--max-revisions", str(data.max_revisions),"--count",str(data.count),"--batch-id",batch], f"project:{identity}",{"project_id":identity,"batch_id":batch})
+                          "--max-revisions", str(data.max_revisions),"--count",str(data.count),"--batch-id",batch,
+                          "--scenes",str(data.scenes)], f"project:{identity}",{"project_id":identity,"batch_id":batch,"scenes":data.scenes})
 
     @app.post("/api/projects/{identity}/stage")
     def stage(identity: str, data: StageInput):

@@ -257,7 +257,8 @@ def is_key_scene(project,chapter):
     return bool(value.get("chapters",{}).get(str(chapter),{}).get("key_scene"))
 
 
-def batch(project,count,word_count,max_revisions,identity):
+def batch(project,count,word_count,max_revisions,identity,scenes=0):
+    scenes=max(0,min(3,int(scenes or 0)))
     if type(count) is not int or not 1<=count<=30:raise ValueError("批量创作每次 1–30 章")
     project=Path(project).resolve();path=project_file(project,"batches",identity)
     with writer.file_lock(project/".webnovel"/"batch.lock"),writer.file_lock(project/".webnovel"/"writer.lock"):
@@ -274,7 +275,7 @@ def batch(project,count,word_count,max_revisions,identity):
                 if pending.get("status") in {"running","partial","waiting"}:
                     raise ValueError("有未完成的创作批次，请在原运行记录中继续")
             start=writer.next_chapter_id(project)
-            doc={"id":identity,"targets":list(range(start,start+count)),"word_count":word_count,"max_revisions":max_revisions,"status":"running","created_at":bridge.now_iso()}
+            doc={"id":identity,"targets":list(range(start,start+count)),"word_count":word_count,"max_revisions":max_revisions,"scenes":scenes,"status":"running","created_at":bridge.now_iso()}
             writer.atomic_json(path,doc)
         if not isinstance(doc,dict) or not isinstance(doc.get("targets"),list) or not doc["targets"] or len(doc["targets"])>30 or any(type(c) is not int or c<=0 for c in doc["targets"]) or len(set(doc["targets"]))!=len(doc["targets"]):raise ValueError("批次记录损坏")
         # A resumed batch must not remain visually "partial" while its model runs.
@@ -286,7 +287,7 @@ def batch(project,count,word_count,max_revisions,identity):
         try:
             for chapter in doc["targets"]:
                 print(f"创作第{chapter}章",flush=True)
-                asyncio.run(writer._generate_chapter_locked(project,doc["word_count"],doc["max_revisions"],chapter,False))
+                asyncio.run(writer._generate_chapter_locked(project,doc["word_count"],doc["max_revisions"],chapter,False,int(doc.get("scenes") or 0)))
                 result["completed"].append(chapter);doc.update(result,status="running");writer.atomic_json(path,doc)
             doc.update(result,status="generated",finished_at=bridge.now_iso());writer.atomic_json(path,doc)
             return doc

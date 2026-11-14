@@ -2051,21 +2051,47 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   ),
                   e(
                     Field,
+                    { label: '生成模式' },
+                    e(Select, {
+                      value: props.studio.scenes,
+                      options: [
+                        { value: '0', label: '整章一次生成（原有模式）' },
+                        { value: '1', label: '场景模式：1 个场景' },
+                        { value: '2', label: '场景模式：2 个场景' },
+                        { value: '3', label: '场景模式：3 个场景' },
+                      ],
+                      onChange: (value) => props.studio.setScenes(value),
+                    }),
+                  ),
+                  e(
+                    Field,
                     { label: ' ' },
                     e(
-                      Button,
-                      {
-                        kind: 'primary',
-                        icon: 'pen',
-                        busy: busy.generate,
-                        onClick: () =>
-                          act('生成', `/projects/${project.id}/generate`, {
-                            word_count: Number(props.studio.wordCount) || 3500,
-                            max_revisions: Number(props.studio.maxRevisions) || 2,
-                            count: Number(props.studio.count) || 1,
-                          }),
-                      },
-                      '开始生成',
+                      'div',
+                      { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+                      e(
+                        Button,
+                        {
+                          kind: 'primary',
+                          icon: 'pen',
+                          busy: busy.generate,
+                          onClick: () =>
+                            act('生成', `/projects/${project.id}/generate`, {
+                              word_count: Number(props.studio.wordCount) || 3500,
+                              max_revisions: Number(props.studio.maxRevisions) || 2,
+                              count: Number(props.studio.count) || 1,
+                              scenes: Number(props.studio.scenes) || 0,
+                            }),
+                        },
+                        '开始生成',
+                      ),
+                      Number(props.studio.scenes) > 0
+                        ? e(
+                            'span',
+                            { style: { fontSize: '12px', color: 'var(--nh-text-3)' } },
+                            `每章 ${Number(props.studio.scenes)} 次场景生成 + 1 次整章审查；重试计入统一预算。`,
+                          )
+                        : null,
                     ),
                   ),
                 ),
@@ -4477,6 +4503,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             wordCount: '3500',
             maxRevisions: '2',
             count: '1',
+            scenes: '0',
           });
 
           const overview = usePoll(() => api('/overview'), [], POLL_MS);
@@ -4516,9 +4543,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               wordCount: studio.wordCount,
               maxRevisions: studio.maxRevisions,
               count: studio.count,
+              scenes: studio.scenes,
               setWordCount: (value) => setStudio((current) => ({ ...current, wordCount: value })),
               setMaxRevisions: (value) => setStudio((current) => ({ ...current, maxRevisions: value })),
               setCount: (value) => setStudio((current) => ({ ...current, count: value })),
+              setScenes: (value) => setStudio((current) => ({ ...current, scenes: value })),
             },
             onOpenChapter: (id) => setChapter(id),
           };

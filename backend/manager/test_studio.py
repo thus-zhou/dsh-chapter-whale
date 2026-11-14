@@ -206,7 +206,7 @@ class StudioTests(unittest.TestCase):
     def test_batch_stops_and_recovers_reserved_ids_without_duplicate_writes(self):
         (self.project/"大纲"/"卷一.md").write_text("\n".join(f"## 第{i}章 标题{i}\n具体事件。" for i in range(1,5)),encoding="utf-8")
         calls=[]
-        async def generated(project,chapter,words,revisions):
+        async def generated(project,chapter,words,revisions,scenes=0):
             calls.append(chapter)
             if chapter==2 and calls.count(2)==1:raise ValueError("failed on second")
             return {"content":f"第{chapter}章原创正文。","review":PASS,"revision_rounds":0,"executor":self.executor}
