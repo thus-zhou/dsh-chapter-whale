@@ -1,0 +1,112 @@
+# Chapter Whale 进度记录
+
+方案：`方案_优化终版_v3.0`（plan_version 3.0）。本文件是本仓库唯一进度记录，`docs/plan/STATE.json` 是机器可读状态。
+规则：代码实现、真实模型验证、GitHub 推送、Release 四类状态分别记录，互不冒充。
+
+---
+
+## M00 基线（2026-11-14）
+
+### 结论
+
+- 仓库、分支、远端、工作区均已确认为可开发状态；`docs/plan/` 此前不存在，因此**没有任何模块可以复用**，M00 是第一个模块。
+- 现有代码不是"只有文档声明"：方案里点名的复用目标（writer_runner、revision_workflow、studio、memory_library、costs、fallback_budget、publication_safety）在 `backend/integration/` 与 `backend/fanqie_auto_publish/` 中**真实存在**，且已有 148 项后端测试。
+
+### 实际版本与环境
+
+| 项 | 实测值 |
+| --- | --- |
+| 分支 / HEAD | `main` / `78d09ec`（与方案 reference_commit 一致）|
+| 工作区 | 干净，0 改动；`## main...origin/main` 未分叉 |
+| 版本 | `0.2.0-rc.1`（`package.json:3`，`package-lock.json:3,9`）|
+| 已有标签 | 仅 `v0.2.0-rc.1` |
+| 依赖 | Node ≥22（实测 v24.18.0）；捆绑 Python 3.13.17（`runtime/python/python.exe`）|
+| 平台 | 运行环境仅 win32-x64（`package.json` bundle.platforms）|
+| 插件形态 | DSH 插件：`index.js`(1061 行) 宿主 + `client.js`(3954 行) Web 面板 + `managed-runtime.mjs` 托管 Python 后端 |
+
+### 目录与复用表（实测行号）
+
+| 复用目标 | 真实位置 | 用途 | 后续模块 |
+| --- | --- | --- | --- |
+| 正文与回执 | `backend/integration/writer_runner.py`（851 行）：`review_passed` :154、`reviewed_chapters` :160、`_record_review_attempt` :343、`_generate_and_review` :354、`main` :912 | A→B→C→D→E 主链路、正文保存、回执 | M01 M03 M05 |
+| 正文落盘 | `正文/第{章号}章 {标题}.md`；文件名由 `bridge.output_filename` 生成，实际写入在 job 交付层（`serial_delivery.py`/`ten_chapter_delivery.py` → `bridge.stage_project`）| 现有正文只有单一当前版本 | M01 |
+| 草稿检查点 | `.webnovel/draft_checkpoints/{章:04d}-{key}.json`（`schema:1`、`draft`/`draft_sha256`/`polished`/`polished_sha256`）；key = sha256(章号+字数+约定+大纲+plan 哈希) | 已有不可变中间稿，但约定一变即孤儿 | M01 |
+| 审查尝试 | `.webnovel/review_attempts/{章:04d}-{uuid}.json` = `{chapter_id, reviewed_at, body_sha256, review}` | 已有多条历史，缺索引与当前版本指针 | M01 M03 |
+| 放行判定 | `backend/fanqie_auto_publish/publication_safety.py:184 review_eligible()` | 唯一放行函数 | M03 |
+| 旧判定 | `backend/integration/writer_runner.py:154 review_passed()` | 将被改造成兼容包装器 | M03 |
+| 原子写/锁 | `publication_safety.py:39 atomic_json()`、`:57 file_lock()`、`:103 queue_lock()`、`:107 account_lock()` | 已具备临时文件+fsync+重试替换、非阻塞 OS 锁 | M01 |
+| 正文哈希 | `publication_safety.py:180 body_digest()`（规范化文本）、`:111 digest_file()`（原始字节） | 报告/回执绑定 | M01 M03 |
+| 创作约定绑定 | `publication_safety.py:115 creative_contract_hash()` | 约定+文风+作者记忆 → 单一哈希 | M03 M04 |
+| 发布证据 | `publication_safety.py:205 journal_path()`、`:220 valid_receipt()`、`:245 archive_confirmed()`、`:263 validate_origin_plan()` | 发布队列最终资格 | M03 M08 |
+| 修订流程 | `backend/integration/revision_workflow.py:76`,`:81` | C 修订 + D 复审 | M05 |
+| 作者规则豁免 | `backend/integration/editorial_release.py:109`,`:119`,`:157` | `waived_by_author_rule` | M03 |
+| E 豁免 | `backend/integration/model_roles.py:272` | `waived_by_E` | M03 |
+| 费用账本 | `backend/integration/costs.py`（`Attempt`、`scope`、`attributed`、`report`、`export_csv`）；库 `integration_data/costs.sqlite3`，表 `usage_events(id, created_at, project, chapter, stage, model, payload)` + `pricing(id=1,payload)`，WAL | 逐请求入账 | M02 |
+| 预留/结算 | `backend/integration/fallback_budget.py:reserve/settle/status`（`BEGIN IMMEDIATE`，每项目每日 20 CNY，仅 fallback 路径生效） | 预算占用 | M02 |
+| 恢复预算 | `backend/integration/retry_budget.py:status/extension` | 每日重试上限 | M02 |
+| 共享记忆 | `backend/integration/memory_library.py`（22KB，`contract()` 参与约定哈希）| 作者确认优先 | M10 M11 M12 |
+| 创作台/调度 | `backend/integration/studio.py`、`scheduler.py`、`manager/app.py`（55KB，127.0.0.1:8765）| 现有 UI 后端路由 | M06 M14 |
+| 插件代理 | `index.js:211 WRITE_ROUTES`（写白名单）、`:294 allowsRead`、`:876 assertToolPath` | 新写接口必须同时登记 | 全模块 |
+| 前端 | `client.js`：`api()` `:688`、`usePoll` `:847`、`useService` `:772`、导航 `:3564`、路由表 `:3763` | 新面板入口 | M03 M06 M14 |
+
+### 放行调用链（实测）
+
+```
+writer_runner 章节完成
+  └ review_passed(review)            writer_runner.py:154        （旧判定：success 且 needs_revision 为假）
+  └ review_eligible(review, body_digest(text), project, chapter)  publication_safety.py:184
+      ├ review_decision == "pass"                                → 质量通过
+      ├ review_decision == "waived_by_author_rule"               → editorial_release.valid(review, digest)
+      └ review_decision == "waived_by_E"                         → model_roles.enabled() && review_policy == "e_decides"
+                                                                    && executor_authorization.body_sha256 == 当前正文
+发布队列
+  └ validate_origin_plan()            publication_safety.py:263
+      └ qualification_contract_matches() :140  （约定哈希 + 51 章窄范围豁免证据）
+      └ review_eligible() 复查当前正文
+      └ valid_receipt() 复查发布证据
+```
+
+要点：放行已经**由正文规范化哈希绑定**，不是布尔开关；作者豁免与 E 豁免都带独立授权对象，不会伪装成 `pass`。M03 要做的是把"质量判断"从两个函数收敛到一个入口，并补上六维评分与报告过期判定，而不是另起一套。
+
+### 已核对的自动化检查
+
+| 检查 | 命令 | 实测结果 |
+| --- | --- | --- |
+| 插件测试 | `npm test` | 47 通过，0 失败，1.4s，无外网 |
+| 后端集成测试 | `python -m unittest discover -s backend\integration -p "test_*.py" -t backend` | 93 通过，7.2s |
+| 后端管理测试 | `python -m unittest discover -s backend\manager -p "test_*.py" -t backend` | 55 通过，12.0s |
+| 发行清单 | `node scripts/check-release.mjs --local` | 见 M08（改动代码后需重新生成 manifest 才通过）|
+
+注：Windows 控制台读中文需 `$env:PYTHONIOENCODING='utf-8'`，否则输出乱码；unittest 用 stderr 打印进度，`[exit code: 1]` 不代表失败，以 `OK` / `FAILED` 行为准。
+
+### 关键风险
+
+1. **发行清单会因任何代码改动而失效**：`runtime-manifest.json` 记录了每个发行文件的 sha256，`scripts/check-release.mjs:10-13` 逐项校验。改代码后必须用 `scripts/build-runtime.py` 重建 manifest（含 `buildId`），不能手改哈希。
+2. **版本号重复 12 处**（`package.json`、`package-lock.json`、`market/index.json:81`、`market/losebird-entry.json:8`、`market/submissions.json:5`、`market/catalog-entry.yml:4`、`docs/quickstart.md:28,203`、`README.md:135,144,215,217`、`RELEASE_STATUS.md:1,18,32,36`、`runtime-download.json:2`、`runtime-manifest.json:2`、`scripts/build-runtime.py:55`）。`runtime-download.json` 的 `sha256`/`bytes`/`buildId` 必须与实际 tgz 一致。
+3. **CI 只跑 JS 测试**（`.github/workflows/ci.yml`：windows+ubuntu，node 22，`npm test`），后端 148 项测试当前不在 CI 中 → M03 需要把后端隔离测试接入 CI。
+4. **市场版本漂移不会被干净 CI 抓到**：`test/market.test.mjs:79` 在没有 DSH 安装时跳过版本比对。
+5. **托管模式重装会覆盖代码目录**（`managed-runtime.mjs:83` force 复制 manager/integration/webnovel-writer/fanqie_auto_publish/vendor）；用户数据在 `%LOCALAPPDATA%\ChapterWhale\workspace\integration_data`（不覆盖）。本项目自身开发在仓库内进行，不受此影响。
+6. **写接口必须三处同步**：`index.js:211 WRITE_ROUTES` + `index.js:876 assertToolPath` + `client.js` 导航/路由；`test/gate.test.mjs:178` 会校验表与解析器一致。
+7. 方案目录的模块文档只是需求，不等于已完成；`docs/plan/` 此前不存在即为证据。
+
+### 仅属旧文档声明、本次未复核的内容
+
+- `RELEASE_STATUS.md` 中的真实平台发布记录、GitHub Release 资产哈希、npm 安装实测、社区目录 PR 状态（需联网核对，未在本轮执行）。
+- 真实模型生成质量、真实账号发布成功率（方案明确不在普通模块验证）。
+
+### 后续模块工作量（初判）
+
+小：M00、M07；中：M01、M02、M04、M05、M06、M08、M10、M11、M12、M13、M14；大：M03、M09、M15。
+
+### 下一步
+
+M01：在既有 `.webnovel/review_attempts/` 与回执上扩展正文版本能力（保存候选、读取/列出版本、比较当前版本、提交候选、幂等操作标识），保留旧格式兼容读取。
+
+### M00 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成：新增 `docs/plan/STATE.json`、`docs/plan/PROGRESS.md`（仅文档，未改运行代码）|
+| 真实模型验证 | 无（本模块要求 0 次）|
+| GitHub 推送 | 待执行 |
+| Release | 不涉及（M00 无版本节点）|

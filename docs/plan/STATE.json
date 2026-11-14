@@ -1,0 +1,195 @@
+{
+  "plan_version": "3.0",
+  "target_releases": [
+    "0.3.0",
+    "0.4.0"
+  ],
+  "reference_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
+  "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
+  "branch": "main",
+  "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
+  "current_module": "M00",
+  "authorization": {
+    "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
+    "npm_publish": "not_authorized",
+    "real_model_budget": {
+      "max_requests": 0,
+      "max_tokens": null,
+      "max_cost_cny": 0,
+      "scope": "No paid calls this round. M09 at most 6 real requests, M15 at most 10, retries included. Free/known-free resources only; unknown cost is never treated as free."
+    }
+  },
+  "modules": {
+    "M00": {
+      "status": "completed",
+      "commit": null,
+      "checks": [
+        "npm test -> 47 pass / 0 fail",
+        "python -m unittest discover -s backend\\integration -p test_*.py -t backend -> 93 pass",
+        "python -m unittest discover -s backend\\manager -p test_*.py -t backend -> 55 pass",
+        "git status clean at 78d09ec; docs/plan absent before this module (no reusable progress)"
+      ],
+      "real_requests": 0,
+      "checkpoint": "baseline recorded in docs/plan/PROGRESS.md: real version 0.2.0-rc.1, reuse table with file:line, release gate call chain, risks, check commands, effort estimates",
+      "remaining": []
+    },
+    "M01": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M02": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M03": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M04": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M05": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M06": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M07": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M08": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M09": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M10": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M11": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M12": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M13": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M14": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    },
+    "M15": {
+      "status": "pending",
+      "commit": null,
+      "checks": [],
+      "real_requests": 0,
+      "checkpoint": null,
+      "remaining": []
+    }
+  },
+  "releases": {
+    "0.3.0-alpha.1": {
+      "local_ready": false,
+      "checks": "pending",
+      "github": "pending",
+      "npm": "not_requested",
+      "real_model_validation": "pending"
+    },
+    "0.3.0-beta.1": {
+      "local_ready": false,
+      "checks": "pending",
+      "github": "pending",
+      "npm": "not_requested",
+      "real_model_validation": "pending"
+    },
+    "0.3.0": {
+      "local_ready": false,
+      "checks": "pending",
+      "github": "pending",
+      "npm": "not_requested",
+      "real_model_validation": "pending"
+    },
+    "0.4.0-alpha.1": {
+      "local_ready": false,
+      "checks": "pending",
+      "github": "pending",
+      "npm": "not_requested",
+      "real_model_validation": "pending"
+    },
+    "0.4.0": {
+      "local_ready": false,
+      "checks": "pending",
+      "github": "pending",
+      "npm": "not_requested",
+      "real_model_validation": "pending"
+    }
+  },
+  "updated_at": "2026-11-14T08:20:00+08:00"
+}
