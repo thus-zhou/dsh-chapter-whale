@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fanqie_auto_publish import publication_safety
 from integration import quality_gate, quality_score
@@ -203,14 +204,20 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(quality_gate.public_report(self.project, 9)['status']['stale_reason'], 'no_report')
 
     def test_multiple_reports_keep_history_and_latest_wins(self):
-        quality_gate.save_report(self.project, 1, review(quality=payload(verdict='pass')), body_sha256='a')
-        second = quality_gate.save_report(self.project, 1, review(raw_review='结论：需修改',
+        # Windows clocks can return the same timestamp for adjacent writes.
+        with mock.patch.object(quality_gate, '_now', return_value='2026-11-15T00:00:00+00:00'):
+            quality_gate.save_report(self.project, 1, review(quality=payload(verdict='pass')), body_sha256='a')
+            second = quality_gate.save_report(self.project, 1, review(raw_review='结论：需修改',
                                                                  review_decision='needs_revision',
                                                                  needs_revision=True,
                                                                  quality=payload({k: 60 for k, _ in quality_score.DIMENSIONS})),
-                                          body_sha256='b')
+                                              body_sha256='b')
         self.assertEqual(len(quality_gate.history(self.project, 1)), 2)
         self.assertEqual(quality_gate.latest(self.project, 1)['report_id'], second['report_id'])
+        third = quality_gate.save_report(self.project, 1, second['review'], body_sha256='c')
+        self.assertNotEqual(third['report_id'], second['report_id'])
+        self.assertEqual(len(quality_gate.history(self.project, 1)), 3)
+        self.assertEqual(quality_gate.latest(self.project, 1)['body_sha256'], 'c')
 
 
 if __name__ == '__main__':

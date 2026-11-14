@@ -83,8 +83,8 @@ python scripts/pack-bundle.py --keep-stage   # 保留解包目录用于核对
 
 ```
 npm pack --ignore-scripts --pack-destination .tmp
-node scripts/verify-package.mjs .tmp/bundle/dsh-chapter-whale-0.4.1.tgz
-node scripts/verify-package.mjs .tmp/dsh-chapter-whale-0.4.1.tgz .tmp/bundle/dsh-chapter-whale-0.4.1.tgz
+node scripts/verify-package.mjs .tmp/bundle/dsh-chapter-whale-0.4.2.tgz
+node scripts/verify-package.mjs .tmp/dsh-chapter-whale-0.4.2.tgz .tmp/bundle/dsh-chapter-whale-0.4.2.tgz
 ```
 
 上述第二种验证用实际完整包字节提供下载响应，在发布前走完真正的轻量安装入口；

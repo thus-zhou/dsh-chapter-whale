@@ -1,10 +1,10 @@
 {
-  "version": "0.4.1",
+  "version": "0.4.2",
   "platform": "win32-x64",
   "python": "3.13.17",
   "pythonSource": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-embeddable-amd64.zip",
   "pythonSha256": "0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8",
-  "buildId": "c8ccb0ff275d9fcc566584d094271d23aefd38a61a088ced39bfcf11646ee8f2",
+  "buildId": "79a1db4ee1f940169ef80b58c7b3a4f6317947939caf8955575f85c70bef0e0f",
   "files": {
     "backend/manager/__init__.py": "25bf932079fe1bfd101f94cec4ee47c279847dce466f19d01b9d407122945697",
     "backend/manager/ai_tools.py": "f7f2167248276bec76075bf2df52b13ac6a5d30a1ef260e781a78d004a93064a",
@@ -60,7 +60,7 @@
     "backend/integration/provider_circuit.py": "35cc47d80e7991cb1d043e94f551420f7935eac6910e83b31f213fcdee228efa",
     "backend/integration/provider_client.py": "cb94bb55571eb69158d30696baebdf246acf0f45ee2ecfcbb349e1de156c1c5a",
     "backend/integration/providers.py": "74514986037269427952a01b004f89f58ab8ed882ea56d99df0b17a8a74db9c2",
-    "backend/integration/quality_gate.py": "b1f2f38cc4b3eedbbbd1bff70849a7fed09f112ebaf2a30044a05481445f7d7d",
+    "backend/integration/quality_gate.py": "53927d091e0223146275e7e738acd0502d58baea2d50b35ab84a5b24aeadfe93",
     "backend/integration/quality_score.py": "3850b5ff1784f3d2a6f9926fbd359bbbb7931045651951eb2d7e7cdf7bcfad18",
     "backend/integration/README.md": "b04ae200d30408e948dca75d086789e76b73bc35938bddc1b2cdeeb229c143f2",
     "backend/integration/reasoning.py": "90f961404ed390de00265546e1eb331bba9734cbb41d3027d0c998c1846b50f7",

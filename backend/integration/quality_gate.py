@@ -5,7 +5,7 @@
 """
 import hashlib
 import json
-import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -130,7 +130,8 @@ def save_report(project, chapter, review, *, body_sha256, version_id=None, contr
     record = {
         "schema_version": SCHEMA,
         "chapter_id": int(chapter),
-        "report_id": report_id(review),
+        "report_id": uuid.uuid4().hex[:16],
+        "review_fingerprint": report_id(review),
         "created_at": _now(),
         "body_sha256": body_sha256,
         "version_id": version_id,
@@ -142,10 +143,13 @@ def save_report(project, chapter, review, *, body_sha256, version_id=None, contr
     }
     directory = reports_dir(project)
     directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{int(chapter):04d}-{record['report_id']}.json"
-    tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
-    os.replace(tmp, target)
+    from . import writer_runner as writer
+    with writer.file_lock(directory / f"{int(chapter):04d}.lock", blocking=True):
+        previous = history(project, chapter)
+        record["sequence"] = max((item.get("sequence", 0) for item in previous
+                                  if type(item.get("sequence", 0)) is int), default=0) + 1
+        target = directory / f"{int(chapter):04d}-{record['report_id']}.json"
+        writer.atomic_json(target, record)
     return record
 
 
@@ -162,7 +166,8 @@ def history(project, chapter):
         if isinstance(doc, dict) and doc.get("chapter_id") == int(chapter):
             doc["path"] = str(path)
             records.append(doc)
-    records.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+    records.sort(key=lambda item: (item.get("sequence", 0) if type(item.get("sequence", 0)) is int else 0,
+                                  item.get("created_at", "")), reverse=True)
     return records
 
 

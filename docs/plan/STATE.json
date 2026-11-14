@@ -368,6 +368,7 @@
     },
     "real_model_requests": 0,
     "real_model_validation": "partial; missing two-chapter, whole-chapter scene review and style-learning evidence remains pending",
-    "distribution": "final 0.4.1 package validation and publication in progress"
+    "distribution": "final 0.4.2 package validation and publication in progress; 0.4.1 tag retained after same-timestamp report failure in its CI",
+    "additional_fix": "lock-serialized report sequence and unique report instances prevent timestamp ties and same-review overwrites"
   }
 }
