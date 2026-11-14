@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
-from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer
+from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer, workflow
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
@@ -871,6 +871,10 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         return continuity.transition(Path(project(identity)["path"]),item,data.revision,data.state,
                                      chapter=data.chapter,event=data.event,quote=data.quote,sha256=data.sha256,
                                      expected=data.expected,note=data.note,author=data.author)
+
+    @app.get("/api/projects/{identity}/workflow")
+    def workflow_state(identity: str):
+        return workflow.state(Path(project(identity)["path"]))
 
     @app.get("/api/projects/{identity}/scenes")
     def scenes_view(identity: str,chapter: int=0,count: int=2,word_count: int=3500):

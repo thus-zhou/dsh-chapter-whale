@@ -18,6 +18,20 @@ import vm from 'node:vm';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFileSync(join(root, 'client.js'), 'utf8');
 
+/* The workbench flow card and the chapter modal tabs are plain markup, so a
+   text-level guard is enough here: it catches a rename that silently drops the
+   step list or one of the four tabs. */
+test('工作台的创作流程与章节标签仍在', () => {
+  assert.match(source, /\/projects\/\$\{project\.id\}\/workflow/);
+  assert.match(source, /function usePoll/);
+  assert.match(source, /document\.addEventListener\('visibilitychange'/);
+  for (const id of ["'body'", "'quality'", "'revision'", "'versions'"]) {
+    assert.ok(source.includes(id), `缺少标签 ${id}`);
+  }
+  assert.match(source, /@media \(max-width:720px\)/);
+  assert.match(source, /className: 'nh-seg'/);
+});
+
 const noop = () => {};
 const fakeNode = () => ({
   style: { setProperty: noop, removeProperty: noop },

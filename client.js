@@ -580,6 +580,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
   .nh-herowrap{gap:16px;}
   .nh-ring{width:92px;height:92px;flex-basis:92px;}
 }
+@media (max-width:720px){
+  .nh-page{padding:12px 10px 0;}
+  .nh-head{gap:8px;padding:8px 10px;}
+  .nh-modal-mask{align-items:stretch;padding:0;}
+  .nh-modal{width:100%;max-width:none;height:100%;max-height:none;display:flex;flex-direction:column;}
+  .nh-modal>.nh-scroll,.nh-modal>div{min-height:0;}
+  .nh-tabs,.nh-row{flex-wrap:wrap;}
+  .nh-table{display:block;overflow-x:auto;white-space:nowrap;}
+  .nh-formgrid{grid-template-columns:1fr!important;}
+  .nh-pre{font-size:12px;line-height:1.7;}
+}
 `;
 
         /* ============================================================== utils */
@@ -893,6 +904,16 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }, interval);
             return () => clearInterval(timer);
           }, [run, interval]);
+
+          /* Coming back to a hidden tab refreshes once instead of replaying
+             every missed tick. */
+          React.useEffect(() => {
+            const onVisible = () => {
+              if (!document.hidden) run(true);
+            };
+            document.addEventListener('visibilitychange', onVisible);
+            return () => document.removeEventListener('visibilitychange', onVisible);
+          }, [run]);
 
           return { data, error, loading, reload: run, setData };
         }
@@ -1535,10 +1556,60 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const completed = (cycle && cycle.local_completed_ids) || [];
           const localProgress = (cycle && cycle.local_progress) || null;
           const recovery = work.recovery;
+          const flow = usePoll(
+            () => (project ? api(`/projects/${project.id}/workflow`) : Promise.resolve(null)),
+            [project ? project.id : ''],
+            POLL_MS,
+          );
+          const flowSteps = (flow.data && flow.data.steps) || [];
+          const flowCounts = (flow.data && flow.data.counts) || {};
 
           return e(
             'div',
             { className: 'nh-page' },
+            project
+              ? e(
+                  Card,
+                  {
+                    title: '创作流程',
+                    hint: '按顺序走完即可；内部结构不需要你处理',
+                    actions: flowCounts.chapters
+                      ? e(Badge, { tone: 'mute' }, `已写 ${flowCounts.chapters} 章`)
+                      : null,
+                  },
+                  flow.error
+                    ? e('div', { className: 'nh-muted' }, `读取流程状态失败：${flow.error}`)
+                    : !flow.data
+                      ? e(Skeleton, {})
+                      : e(
+                          'div',
+                          { className: 'nh-grid', style: { gap: 6 } },
+                          ...flowSteps.map((step, index) =>
+                            e(
+                              'div',
+                              { key: step.id, className: 'nh-row', style: { gap: 10, alignItems: 'flex-start' } },
+                              e(Badge, { tone: step.done ? 'ok' : index === flowSteps.findIndex((item) => !item.done) ? 'warn' : 'mute' },
+                                step.done ? '完成' : String(index + 1)),
+                              e(
+                                'div',
+                                { style: { flex: 1, minWidth: 0 } },
+                                e('div', { style: { fontSize: 13, fontWeight: 550 } }, step.title),
+                                e('div', { className: 'nh-muted', style: { fontSize: 12 } }, step.detail),
+                                step.blocked_reason
+                                  ? e('div', { className: 'nh-muted', style: { fontSize: 12 } }, `需要：${step.blocked_reason}`)
+                                  : null,
+                              ),
+                              step.done
+                                ? null
+                                : e(Button, { size: 'sm', kind: 'ghost', onClick: () => props.navigate(step.action.page) },
+                                    step.action.label),
+                            ),
+                          ),
+                          e('div', { className: 'nh-muted', style: { fontSize: 12, marginTop: 4 } },
+                            (flow.data && flow.data.note) || ''),
+                        ),
+                )
+              : null,
             e(
               'div',
               { className: 'nh-hero', 'data-tone': work.tone === 'mute' ? 'accent' : work.tone },
@@ -4090,6 +4161,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [bench, setBench] = React.useState(null);
           const [versionBody, setVersionBody] = React.useState(null);
           const [revBusy, setRevBusy] = React.useState(false);
+          const [tab, setTab] = React.useState('body');
           const [tick, setTick] = React.useState(0);
           const [loading, setLoading] = React.useState(false);
           const toast = useToast();
@@ -4246,7 +4318,29 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     staleText
                       ? e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, staleText)
                       : null,
-                    report && report.failures && report.failures.length
+                    e(
+                      'div',
+                      { className: 'nh-seg', style: { marginBottom: 10, flexWrap: 'wrap' } },
+                      ...[
+                        ['body', '正文'],
+                        ['quality', '质量报告'],
+                        ['revision', '修订'],
+                        ['versions', '版本历史'],
+                      ].map(([id, label]) =>
+                        e(
+                          'button',
+                          {
+                            key: id,
+                            type: 'button',
+                            className: 'nh-segbtn',
+                            'data-active': tab === id ? 'true' : 'false',
+                            onClick: () => setTab(id),
+                          },
+                          label,
+                        ),
+                      ),
+                    ),
+                    tab === 'quality' && report && report.failures && report.failures.length
                       ? e(
                           'div',
                           { style: { marginBottom: 8 } },
@@ -4256,17 +4350,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           ),
                         )
                       : null,
-                    report && report.restricted && report.restricted.length
+                    tab === 'quality' && report && report.restricted && report.restricted.length
                       ? e(
                           'div',
                           { className: 'nh-muted', style: { marginBottom: 8 } },
                           `受限范围：${report.restricted.join('、')}`,
                         )
                       : null,
-                    report && report.summary
+                    tab === 'quality' && report && report.summary
                       ? e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, report.summary)
                       : null,
-                    e(
+                    tab === 'revision' ? e(
                       'div',
                       { style: { marginBottom: 10 } },
                       e(
@@ -4361,9 +4455,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             ),
                           )
                         : null,
-                    ),
-                    e('pre', { className: 'nh-pre', style: { maxHeight: '56vh' } }, data.content || '(正文为空)'),
-                    e(
+                    ) : null,
+                    tab === 'body'
+                      ? e('pre', { className: 'nh-pre', style: { maxHeight: '56vh' } }, data.content || '(正文为空)')
+                      : null,
+                    tab === 'versions' ? e(
                       'div',
                       { style: { marginTop: 14 } },
                       e('div', { className: 'nh-muted', style: { marginBottom: 6 } }, '版本历史'),
@@ -4424,7 +4520,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             ),
                           )
                         : null,
-                    ),
+                    ) : null,
                   )
                 : e(Empty, null, '读取失败'),
           });
