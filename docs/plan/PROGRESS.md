@@ -221,3 +221,34 @@ M03：把质量判断收敛成单一入口——`quality_score`（六维加权�
 ### 下一步
 
 M04：文风学习（样本 → 可复现的文风指南），并把学习结果纳入创作约定哈希，避免改学习库却不触发报告过期。
+
+## M04 文风学习与档案（2026-11-14）
+
+### 完成内容
+
+- **确定性统计**：新增 `backend/integration/style_stats.py`，统计句长/段长分布、标点频次、按引号内字符估算的对话占比、高频字；统一标注“程序统计”，长文只统计前 40 万字并在结果里写明范围，语义判断不混入。
+- **代表片段抽样**：开头/中部/结尾各取 14000 字窗口，外加对话最密的一段；总预算内能少取不多取，超长样本不再默认逐段读完。
+- **文风档案**：新增 `backend/integration/style_profile.py`，写入 `.webnovel/style_profile.json`（`schema_version: 1`）：每个样本的哈希、字数、统计、抽样范围、语义提炼；多样本按字数加权合并；`enabled`、`strength`（0—100）、`overrides`（作者修正）持久化；状态为 ready / limited / unavailable / disabled。
+- **学习接线**：`studio.upload` 上传后立即生成统计（不调用模型）；`learn_async` 按 `learning_budget` 抽样（档位上限受模型窗口、输出与安全余量约束，窗口未知时保守 12000 字），代表性模式一次 A 调用完成分析；成功写入档案，失败保留统计并标记 `failed`，不影响继续写作。
+- **删除与禁用**：`studio.delete_sample` 删除样本 txt/json、学习断点、档案条目，并清空创作约定里的学习引用；禁用后 `creative_brief.load_guidance` 完全停止注入，档案文件保留可恢复。
+- **注入与契约**：`creative_brief.load_guidance` 注入档案指南、强度语气与作者修正；`publication_safety.creative_contract_hash` 在档案启用且有内容时计入 `__style_profile__`，禁用时哈希回到原值（旧项目不受影响）。
+- **接口与界面**：新增 `GET/PUT /api/projects/{id}/style-profile`、`POST /style-profile/rebuild`、`POST /samples/{id}/delete`，同步 `index.js` 写白名单；创作约定页新增“文风学习与档案”卡片（上传、统计、强度滑杆、启用/禁用、学习/重学、删除），并注明样本可能发送给已配置模型、档案只存哈希与统计。
+
+### 检查（离线，固定样本，0 次模型调用）
+
+- `test_style.py` 13 项：统计可复现、程序统计标注、抽样预算与标签、上传后 limited、学习后 ready 与指南注入、失败保留统计、强度/覆盖持久化与摘要变化、非法强度拒绝、多档预算（12000 保守 / 32000 充分 / 窄窗口不低于 2000）、多样本加权合并、删除清理文件与条目、契约哈希仅在启用时变化、禁用后注入停止。
+- `test_style_api.py` 3 项：空档案 unavailable、上传→调强度与覆盖→重建→删除、非法强度 400。
+- 集成 162 项、manager 61 项、`npm test` 47 项全部通过；CI 后端作业新增 `test_style.py`。
+
+### M04 四类状态
+
+| 项目 | 状态 |
+| --- | --- |
+| 代码实现 | 完成：`style_stats.py`、`style_profile.py`、`studio.py`、`creative_brief.py`、`publication_safety.py`、`manager/app.py`、`index.js`、`client.js`、CI |
+| 真实模型验证 | 未进行；样本分析调用留给 M09 的真实模型检查（≤6 次） |
+| GitHub 推送 | 本模块提交随开发分支推送 |
+| Release | 0.3.0-alpha.1 已于本节点前发布，M04 不单独发版 |
+
+### 下一步
+
+M05：自动修订与差异预览 —— 未通过且有可靠局部修复时最多一次 C 修订与 D 复审，候选正文与当前版本对比，保留原稿。
