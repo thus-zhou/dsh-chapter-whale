@@ -4890,7 +4890,7 @@ class SkillExecutor:
              }
              try:
                  from integration import quality_gate, quality_score
-                 review["quality"] = quality_score.extract(result_str)
+                 review["quality"] = quality_score.compute(result_str)
                  review["quality_gate"] = quality_gate.judge(review)
              except Exception as e:
                  # 评分解析失败不影响既有审查结论；门禁会把缺失如实记为“证据不足”。

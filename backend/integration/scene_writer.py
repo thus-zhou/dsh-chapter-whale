@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from . import bridge, memory_library, model_roles, scenes, writer_runner as writer
+from . import bridge, costs, memory_library, model_roles, scenes, writer_runner as writer
 
 SCHEMA = 1
 PREVIOUS_TAIL = 600
@@ -66,9 +66,11 @@ async def draft(project, chapter, word_count, count=2, *, config=None):
             done.append({"id": card["id"], "chars": len(row["text"]), "reused": True})
             previous = row["text"]
             continue
-        result = await model_roles.json_call("B", _prompt(project, chapter, card, previous, guidance),
-                                             config=config, max_tokens=min(6000, max(1200, card["target_chars"] * 2)),
-                                             timeout=240)
+        # 每次场景生成都要记进同一本费用账：否则预算只看得到整章调用。
+        with costs.scope(stage="draft", chapter=int(chapter), project=str(Path(project).resolve())):
+            result = await model_roles.json_call("B", _prompt(project, chapter, card, previous, guidance),
+                                                 config=config, max_tokens=min(6000, max(1200, card["target_chars"] * 2)),
+                                                 timeout=240)
         text = str(result.get("text") or "").strip()
         if len(text) < 50:
             raise ValueError(f"场景 {card['id']} 生成内容过短，未保存")

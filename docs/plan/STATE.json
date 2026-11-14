@@ -290,12 +290,23 @@
       ]
     },
     "M15": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
-      "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "status": "completed",
+      "commit": "PENDING_M15",
+      "checks": [
+        "integration 255 OK（新增 test_longform.py 11 项）/ manager 82 OK / npm 53 pass",
+        "20 章回放夹具：认知边界、关系去重、伏笔证据、未来隐藏、历史修改影响、恢复",
+        "100 章索引与状态视图：索引 100 章、状态视图有界，未做百章真实创作验收",
+        "中断写入保留旧索引；无关项目不受影响；重复重建结果一致",
+        "真实请求 10/10（含重试），本地免费网关，费用 0 元；D 返回 JSON 六维评分与事实候选",
+        "版本串 0.4.0；runtime-manifest 重建；check-release --local 通过"
+      ],
+      "real_requests": 10,
+      "checkpoint": "M15 完成离线机制检查与有限真实检查：第 1 章走完 B→C×2→D×2→记忆/连续性同步；第 2 章用 2 个场景生成正文（未审查，预算用尽）。D 的 JSON 契约、加权门禁、事实候选在真实调用中成立。0.4.0 发布时会注明真实检查范围，并说明未做百章真实创作验收。",
+      "remaining": [
+        "第二章的真实审查与场景进度界面联调（需要新的真实请求预算）",
+        "真实模型下第二章跨章状态读取的效果抽样（预算不足，未做）",
+        "浏览器中的桌面与 390px 手工验收（开发版前端随插件加载，未安装到个人环境）"
+      ]
     }
   },
   "releases": {
@@ -328,12 +339,12 @@
       "real_model_validation": "pending: M13/M14 are offline; real round trip scheduled for M15 within 10 requests"
     },
     "0.4.0": {
-      "local_ready": false,
-      "checks": "pending",
-      "github": "pending",
+      "local_ready": true,
+      "checks": "integration 255 / manager 82 / npm 53; manifest rebuilt; check-release --local ok",
+      "github": "PENDING",
       "npm": "not_requested",
-      "real_model_validation": "pending"
+      "real_model_validation": "10/10 requests, cost 0 CNY, D JSON verified; chapter 2 reviewed: no"
     }
   },
-  "updated_at": "2026-11-14T17:44:09+08:00"
+  "updated_at": "2026-11-14T18:50:00+08:00"
 }

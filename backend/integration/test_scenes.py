@@ -116,5 +116,15 @@ class ScenesCase(unittest.TestCase):
         self.assertEqual(inspect.signature(writer_runner.generate_chapter_async).parameters["scenes"].default, 0)
 
 
+    def test_dict_shaped_story_plan_is_understood(self):
+        """真实规划把 chapters 写成 {章号: {...}}；场景卡读取不能只认列表。"""
+        path = self.root / ".webnovel" / "story_plan.json"
+        path.write_text(json.dumps({
+            "chapters": {"2": {"id": 2, "title": "送表的邮差", "outline": "沈砚核对字迹。林禾再次送信。"}},
+        }, ensure_ascii=False), encoding="utf-8", newline="\n")
+        cards = scenes.plan(self.root, 2, count=1, word_count=800)
+        self.assertEqual(len(cards["cards"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -165,6 +165,16 @@ class ReportTest(unittest.TestCase):
             os.environ['NOVEL_HELPER_AI_CONFIG'] = self._old
         self.tmp.cleanup()
 
+    def test_stored_review_carries_the_weighted_total(self):
+        """真实审查落盘的是 compute 的结果：报告要直接有总分，而不是只有分项。"""
+        computed = quality_score.compute(payload())
+        self.assertIsNotNone(computed["total"])
+        self.assertAlmostEqual(computed["total"], 90.0)
+        record = quality_gate.save_report(self.project, 1, review(quality=computed), body_sha256="aaa")
+        path = quality_gate.reports_dir(self.project) / f"{1:04d}-{record['report_id']}.json"
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(stored["review"]["quality"]["total"], computed["total"])
+
     def test_report_binds_body_and_expires_on_change(self):
         record = quality_gate.save_report(self.project, 1, review(quality=payload()), body_sha256='aaa',
                                           contract_hash='c1')

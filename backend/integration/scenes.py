@@ -37,7 +37,14 @@ def _chapter_entry(project, chapter):
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    for row in doc.get("chapters") or []:
+    rows = doc.get("chapters") or []
+    # 规划作者可能把章节写成列表，也可能写成 {章号: {...}}；两种都要能读。
+    if isinstance(rows, dict):
+        rows = [dict(value, id=value.get("id") or key) if isinstance(value, dict) else {"id": key}
+                for key, value in rows.items()]
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
         if int(row.get("id") or 0) == int(chapter):
             return row
     return {}
