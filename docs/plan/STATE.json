@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M11",
+  "current_module": "M12",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -217,12 +217,22 @@
       ]
     },
     "M11": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "201ccfd",
+      "checks": [
+        "offline: integration 219 OK / manager 76 OK / npm 52 pass (347 total, zero model calls)",
+        "two aliases resolve to one stable person id; alias owned by another person is refused instead of merged",
+        "similar names stay separate; knowledge only visible after its learning event chapter",
+        "author correction in overrides wins over later D candidates; relation rows carry event and chapter",
+        "duplicate candidate commit reused with no extra relations/knowledge; quote outside body dropped",
+        "release: manifest 3394 files buildId dc9370874f40364f21db5219b3f2564b8c5d5a5a27441ae848e41a606c5e30fd, check-release --local pass"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "M11 complete: characters.json with stable ids, alias registry, profile/relations/knowledge, author overrides, D character candidates, manager routes, memory-page UI.",
+      "remaining": [
+        "D character_candidates prompt path only covered by parsing tests; real output sample stays within M15 budget",
+        "Existing 设定集 markdown cards are not auto-imported; author records people explicitly or via candidates"
+      ]
     },
     "M12": {
       "status": "pending",
@@ -294,5 +304,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T15:35:00+08:00"
+  "updated_at": "2026-11-14T15:55:00+08:00"
 }
