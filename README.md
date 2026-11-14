@@ -132,7 +132,7 @@ npm pack dsh-chapter-whale@latest
 在 DSH 插件管理中添加下方地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.0/dsh-chapter-whale-0.4.0.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.1/dsh-chapter-whale-0.4.1.tgz
 ```
 
 完整包约 **278 MB（265 MiB）**，包含独立 Python、写作后端和 Chromium，无需自己安装 Python、下载后端或填写项目目录。
@@ -141,7 +141,7 @@ https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.0/dsh-chap
 <summary>使用命令行安装</summary>
 
 ```powershell
-dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.0/dsh-chapter-whale-0.4.0.tgz
+dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.1/dsh-chapter-whale-0.4.1.tgz
 ```
 
 这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；源码安装的首次启动会自动下载并校验同版本环境。
@@ -212,6 +212,6 @@ http://127.0.0.1:18765
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前发行版本为 `0.4.0`（0.3.0 预发行）。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+包名为 `dsh-chapter-whale`，当前发行版本为 `0.4.1`（0.3.0 预发行）。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-**[下载码章鲸，设置你的第一项自动更新任务 →](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.0)**
+**[下载码章鲸，设置你的第一项自动更新任务 →](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.1)**

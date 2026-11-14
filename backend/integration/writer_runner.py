@@ -355,15 +355,16 @@ def _record_review_attempt(project,chapter,content,review):
         pass  # 报告留档失败不阻断既有回执写入；过期状态由 no_report 表达
 
 
-def _commit_review_candidates(project, chapter, content, review):
+def _commit_review_candidates(project, chapter, content, review, *, _writer_locked=False):
     """正文落盘后才核对并提交 D 的候选；失败保留待处理文件，不重新生成正文。"""
-    raw = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    digest = body_digest(content)
     out = {}
     for name in ("memory_library", "character_state"):
         try:
             module = __import__(f"integration.{name}", fromlist=["save_candidates"])
-            saved = module.save_candidates(project, chapter, review, raw_sha256=raw)
-            committed = module.commit_candidates(project, chapter, raw)
+            saved = module.save_candidates(project, chapter, review, body_sha256=digest)
+            options = {"_writer_locked": _writer_locked} if name == "character_state" else {}
+            committed = module.commit_candidates(project, chapter, digest, **options)
             out[name] = {"saved": saved.get("status"), "committed": committed.get("status"),
                          "added": committed.get("added")}
         except Exception as exc:
@@ -835,7 +836,7 @@ async def _generate_chapter_locked(
     finally:
         temporary.unlink(missing_ok=True)
     _save_progress(project_root, selected_chapter)
-    candidates = _commit_review_candidates(project_root, selected_chapter, content, generated["review"])
+    candidates = _commit_review_candidates(project_root, selected_chapter, content, generated["review"], _writer_locked=True)
     receipt["candidates"] = candidates
     receipts[str(selected_chapter)] = receipt
     try:
@@ -914,8 +915,9 @@ async def review_existing_chapter_async(
         if isinstance(previous_receipt,dict) and previous_receipt.get('sha256')==receipt['sha256']:
             receipt['post_save']=previous_receipt.get('post_save',{})
         # A failed fresh review must revoke an earlier pass for the same body.
-        receipt["candidates"] = _commit_review_candidates(project, chapter_id, content, review)
         receipts[str(chapter_id)] = receipt
+        atomic_json(receipts_path, receipts)
+        receipt["candidates"] = _commit_review_candidates(project, chapter_id, content, review, _writer_locked=True)
         atomic_json(receipts_path, receipts)
         result = {"project": str(project), "chapter_id": chapter_id, "destination": str(source),
                   "review": receipt["review"], "review_decision": receipt["review"].get("review_decision"),

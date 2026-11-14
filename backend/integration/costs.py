@@ -464,7 +464,12 @@ class Attempt:
         self.event=None
         self.reservation=None
         if not self.db_path: return
+        capped = True  # A policy-read failure must not disable the budget.
         try:
+            policy = budget_limits()
+            capped = any(policy.get(key) is not None for key in (
+                'requests_per_day', 'request_tokens', 'chapter_tokens',
+                'project_tokens', 'chapter_cost_cny', 'project_cost_cny'))
             meta=META.get();url=provider(base_url)
             if secret: url=url.replace(secret,"[redacted]");model=str(model).replace(secret,"[redacted]")
             project=str(Path(meta["project"]).resolve()) if meta.get("project") else ""
@@ -483,7 +488,7 @@ class Attempt:
                     self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
                     tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
                     cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
-                    operation=self.event["operation"])
+                    operation=self.event["operation"], limits=policy)
             except BudgetExceeded:
                 raise
             except Exception as exc:
@@ -495,9 +500,12 @@ class Attempt:
         except BudgetExceeded:
             self.event=None
             raise
-        except Exception:
+        except Exception as exc:
             self.event=None
             record_gap(self.db_path, 'initial_record_failed')
+            if capped:
+                raise BudgetExceeded('预算初始化失败，已停止新请求',
+                                     {'error_type': type(exc).__name__}) from exc
             print("[费用记录] 无法建立记录；请检查成本数据库",flush=True)
 
     def observe(self, payload):

@@ -10,8 +10,8 @@
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
   "current_module": "M15",
   "authorization": {
-    "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
-    "npm_publish": "not_authorized",
+    "github_push_and_release": "granted 2026-11-14/15: user requests repairs from second independent retest and GitHub synchronization; patch release 0.4.1 included",
+    "npm_publish": "granted 2026-11-15: user explicitly requests latest plugin market synchronization and completes npm login",
     "real_model_budget": {
       "max_requests": 0,
       "max_tokens": null,
@@ -349,5 +349,25 @@
       "real_model_validation": "10/10 requests (plus 2 ledger-only diagnostic rows), cost 0 CNY; D JSON verified; chapter 2 composed as two scenes but never整章审查; 独立评估判不通过，F01—F08 已修复，缺新预算复验"
     }
   },
-  "updated_at": "2026-11-14T23:20:00+08:00"
+  "updated_at": "2026-11-15T00:11:04.365620+08:00",
+  "second_retest": {
+    "date": "2026-11-15",
+    "issues": [
+      "R01",
+      "R02",
+      "R03",
+      "R04",
+      "R05",
+      "R06"
+    ],
+    "source_fixes": "implemented with production-path regressions",
+    "checks": {
+      "integration": 277,
+      "manager": 83,
+      "node": 54
+    },
+    "real_model_requests": 0,
+    "real_model_validation": "partial; missing two-chapter, whole-chapter scene review and style-learning evidence remains pending",
+    "distribution": "final 0.4.1 package validation and publication in progress"
+  }
 }

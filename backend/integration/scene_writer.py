@@ -31,26 +31,21 @@ def _saved(path):
 
 
 def _prompt(project, chapter, card, previous, guidance):
-    pieces = [guidance.strip()[:6000]]
-    try:
-        context = memory_library.context(project, role="B", chapter=chapter)
-        if context.get("text"):
-            pieces.append(context["text"][:6000])
-    except (ValueError, OSError):
-        pass
-    try:
-        from . import character_state
-        people = character_state.context(project, chapter).get("text") or ""
-        if people:
-            pieces.append(people[:6000])
-    except Exception:
-        pass
+    pieces = [guidance.strip()]
     pieces.append("本章场景卡（只写这一段，不要写其他场景）：\n" + json.dumps(card, ensure_ascii=False))
     if previous:
         pieces.append("上一场景的最后一段（用于衔接，不要重复）：\n" + previous[-PREVIOUS_TAIL:])
     pieces.append("要求：保持人物、设定与已发生事实一致；只输出一个 JSON 对象，键为 text，值为场景正文。"
                   "不要输出标题、流程说明或 Markdown 围栏。")
-    return "\n\n".join(pieces)[:PROMPT_LIMIT]
+    available = PROMPT_LIMIT - len("\n\n".join(pieces)) - 2
+    if available < 0:
+        raise memory_library.ContextBudgetExceeded("场景卡或创作要求超过提示预算，请缩小场景")
+    context = memory_library.context(
+        project, role="B", chapter=chapter, query=json.dumps(card, ensure_ascii=False),
+        names=card.get("characters") or None, budget=min(6000, available))
+    if context.get("text"):
+        pieces.insert(1, context["text"])
+    return "\n\n".join(pieces)
 
 
 async def draft(project, chapter, word_count, count=2, *, config=None):

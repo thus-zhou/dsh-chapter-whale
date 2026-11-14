@@ -201,7 +201,7 @@ def status(project, chapter, record=None, body_sha256=None, contract_hash=None, 
         except Exception:
             contract_hash = ""
     bound_contract = record.get("contract_hash")
-    if contract_hash:
+    if contract_hash or bound_contract:
         if not bound_contract:
             return {"valid": False, "stale_reason": "contract_unbound", "recompute_only": False}
         if contract_hash != bound_contract:

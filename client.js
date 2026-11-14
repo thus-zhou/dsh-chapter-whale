@@ -2785,7 +2785,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             ? e(
                                 'div',
                                 { className: 'nh-dim2 nh-wrap', style: { fontSize: 12, marginTop: 4 } },
-                                person.knowledge.map((row) => `第${row.chapter}章 ${row.scope_label}·${row.status_label}：${row.info}`).join('；'),
+                                person.knowledge.map((row) => `第${row.chapter}章 ${row.scope_label}·${row.status_label}${row.source_status === 'pending_review' ? '·来源已变，待复核' : ''}：${row.info}`).join('；'),
                               )
                             : null,
                         ),

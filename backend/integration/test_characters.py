@@ -53,13 +53,13 @@ class CharacterCase(unittest.TestCase):
 
     def test_knowledge_requires_learning_event(self):
         person = people.upsert_person(self.root, name="沈青")["person"]
-        people.learn(self.root, person=person["id"], info="怀表停在七点二十", chapter=2,
+        people.learn(self.root, person=person["id"], info="怀表停在七点二十", chapter=1,
                      event="沈青看到怀表", quote="怀表停在七点二十。", sha256=self.sha)
-        before = people.knows(self.root, person["id"], 2)
+        before = people.knows(self.root, person["id"], 1)
         self.assertEqual(before["confirmed"], [])
         after = people.knows(self.root, person["id"], 3)
         self.assertEqual(len(after["confirmed"]), 1)
-        self.assertEqual(after["confirmed"][0]["chapter"], 2)
+        self.assertEqual(after["confirmed"][0]["chapter"], 1)
 
     def test_guess_is_not_confirmed(self):
         person = people.upsert_person(self.root, name="沈青")["person"]

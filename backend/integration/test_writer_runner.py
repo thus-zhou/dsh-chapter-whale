@@ -42,7 +42,7 @@ class WriterRunnerTest(unittest.TestCase):
         (self.project / "大纲" / "卷一.md").write_text(
             "\n".join(f"## 第{i}章 标题{i}\n故事梗概。" for i in range(1, 15)), encoding="utf-8")
         self.executor = Mock()
-        from integration import memory_library
+        from integration import memory_library, character_state
         self.enterContext(patch.object(memory_library,"sync_chapter",AsyncMock(return_value={"status":"synced"})))
         self.executor._extract_chapter_entities = AsyncMock(return_value={"extraction": {}})
         self.executor._apply_extraction_results = AsyncMock(return_value={"success": True, "created": 0})
@@ -447,10 +447,14 @@ class WriterRunnerTest(unittest.TestCase):
         from integration import memory_library
 
         body = "第1章的正文，因果与时间线完整。"
+        from integration import character_state
+        character_state.upsert_person(self.project, name="阿岚")
         scored = dict(PASS, quality={"scores": {name: 90 for name in
                                                ("setting", "plot", "character", "prose", "dialogue", "style")}},
                       fact_candidates=[{"title": "时间线完整", "content": "本章时间线完整",
-                                        "quote": "因果与时间线完整"}])
+                                        "quote": "因果与时间线完整"}],
+                      character_candidates=[{"kind": "knowledge", "person": "阿岚", "info": "时间线完整",
+                                             "event": "核对", "quote": "因果与时间线完整"}])
 
         async def generated(project, chapter, words, revisions, scenes=0):
             return {"content": body, "review": scored, "revision_rounds": 0, "executor": self.executor}
@@ -465,6 +469,8 @@ class WriterRunnerTest(unittest.TestCase):
         self.assertGreaterEqual(candidates["added"], 1)
         titles = [item["title"] for item in memory_library.read(self.project)["items"]]
         self.assertIn("时间线完整", titles)
+        self.assertEqual(receipts["1"]["candidates"]["character_state"]["added"]["knowledge"], 1)
+        self.assertEqual(len(character_state.read(self.project)["knowledge"]), 1)
         self.assertEqual(sync.await_count, 0)
 
 class ChapterTitleUniquenessTests(unittest.TestCase):

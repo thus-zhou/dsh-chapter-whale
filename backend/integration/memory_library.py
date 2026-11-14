@@ -17,6 +17,10 @@ MAX_ITEMS = 12000
 MAX_CANDIDATES = 8
 
 
+class ContextBudgetExceeded(ValueError):
+    """Required rules/characters cannot fit; callers must stop before generation."""
+
+
 def _path(project, name="shared_memory.json"):
     project = Path(project).resolve()
     folder = project / ".webnovel"
@@ -382,8 +386,10 @@ def context_budget_default():
         return 12000
 
 
-def context(project, role="B", chapter=1, query="", doc=None, budget=None):
+def context(project, role="B", chapter=1, query="", doc=None, budget=None, names=None):
     budget = context_budget_default() if budget is None else budget
+    if type(budget) is not int or budget < 0:
+        raise ValueError("上下文预算必须是非负整数")
     if role not in roles.ROLES or type(chapter) is not int or not 1 <= chapter <= 100000:
         raise ValueError("记忆检索角色或章节无效")
     doc = read(project) if doc is None else doc
@@ -425,16 +431,27 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None):
     from .text_checks import guidance
     correction=guidance(project,doc,chapter)
     if correction:lines.append(correction)
-    # 人物档案与认知边界必须进入真实写作提示；没有匹配人物时不塞整库。
-    people = ""
-    try:
-        from . import character_state
-        people = character_state.context(project, chapter).get("text") or ""
-    except Exception:
-        people = ""
+    # Use scene names when supplied; otherwise match the chapter plan/query.
+    # Required character constraints are atomic and share the facts budget.
+    from . import character_state, scenes
+    people_doc = character_state.read(project)
+    if names is None:
+        entry = scenes._chapter_entry(project, chapter)
+        relevant = _normalize(query + " " + json.dumps(entry, ensure_ascii=False))
+        names = [item["name"] for item in people_doc["persons"].values()
+                 if any(_normalize(alias) in relevant for alias in
+                        [item["name"], *(item.get("aliases") or [])] if _normalize(alias))]
+    people_result = character_state.context(project, chapter, names=names, doc=people_doc)
+    people = people_result.get("text") or ""
+    omitted_stale += len(people_result.get("stale") or [])
     if people:
         lines.append(people)
-    ids = [];used = sum(len(x) for x in lines); omitted = 0
+    ids = [];used = len("\n".join(lines)); omitted = 0
+    notice = "部分事实因上下文预算未纳入；必要时缩小主题检索。"
+    if (selected or people) and used > budget:
+        raise ContextBudgetExceeded("必要规则或相关人物资料超过上下文预算，请缩小场景人物范围或提高预算")
+    # Pinned facts precede optional facts; never silently drop required canon.
+    selected.sort(key=lambda pair: (not pair[1]["pinned"], -pair[0], pair[1]["id"]))
     for _, item in selected:
         source = item["source"]
         label = "作者确认" if source["kind"] == "manual" else f"第{source['chapter']}章提取·需结合原文判断"
@@ -447,12 +464,18 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None):
                 content += f"（{clue}，计划回收第{due_chapter}章）"
             else:
                 content += f"（{clue}）"
-        if used + len(content) + 1 > budget:
+        reserve = 0 if item["pinned"] else len(notice) + 1
+        if used + len(content) + 1 + reserve > budget:
+            if item["pinned"]:
+                raise ContextBudgetExceeded("必须记住的设定超过上下文预算，请整理固定设定或提高预算")
             omitted += 1
             continue
         lines.append(content);ids.append(item["id"]);used += len(content) + 1
     if omitted:
-        lines.append(f"另有 {omitted} 条因上下文预算未纳入；必要时缩小主题检索。")
+        if used + len(notice) + 1 <= budget:
+            lines.append(notice)
+        else:
+            raise ContextBudgetExceeded("必要资料与缩减说明超过上下文预算，请提高预算")
     facts = [{"id": item["id"], "claim": record(item)["claim"], "title": item["title"],
               "source": {"kind": item["source"]["kind"], "chapter": item["source"].get("chapter", 0),
                          "sha256": item["source"].get("sha256", "")},
@@ -720,6 +743,7 @@ def commit_candidates(project, chapter, body_sha256=None):
     body, digest, normalized = _digests(project, chapter)
     if body_sha256 and body_sha256 not in {digest, normalized}:
         raise ValueError("正文已变化，事实候选未提交")
+    body_sha256 = digest
     path = candidate_path(project, chapter, digest)
     if not path.exists():
         raise ValueError("没有待提交的事实候选")

@@ -46,7 +46,7 @@ def _reports(project, chapter: int) -> List[Dict[str, Any]]:
 
 
 def _attach(meta: Dict[str, Any], receipts: List[Dict[str, Any]], reports: List[Dict[str, Any]],
-            config=None) -> Dict[str, Any]:
+            config=None, contract_hash="") -> Dict[str, Any]:
     from . import quality_gate
 
     digest = meta.get("body_digest")
@@ -58,11 +58,15 @@ def _attach(meta: Dict[str, Any], receipts: List[Dict[str, Any]], reports: List[
     quality = None
     if report:
         review = report.get("review") or {}
-        gate = review.get("quality_gate") if isinstance(review.get("quality_gate"), dict) else quality_gate.judge(review, config)
+        gate = quality_gate.judge(review, config)
+        bound_contract = report.get("contract_hash")
+        stale_reason = ("contract_unbound" if not bound_contract else "contract_changed") if (
+            (contract_hash or bound_contract) and bound_contract != contract_hash) else None
         computed = gate.get("computed") or {}
         quality = {
             "report_id": report.get("report_id"),
-            "pass": gate.get("quality_pass"),
+            "pass": gate.get("quality_pass") is True and stale_reason is None,
+            "stale_reason": stale_reason,
             "total": computed.get("total"),
             "blocking": len(computed.get("blocking") or []),
             "created_at": report.get("created_at"),
@@ -101,11 +105,13 @@ def history(project, chapter: int, *, limit: int = _MAX_VERSIONS, config=None) -
     current_id = (current or {}).get("sha256")
     receipts = attempts(project, chapter)
     reports = _reports(project, chapter)
+    from . import bridge
+    contract_hash = bridge.creative_contract_hash(project)
     rows = []
     for meta in reversed(versions[-limit:]):
         meta = dict(meta)
         meta["current"] = meta.get("sha256") == current_id
-        rows.append(_attach(meta, receipts, reports, config))
+        rows.append(_attach(meta, receipts, reports, config, contract_hash))
     from . import revision_plan
 
     preview = revision_plan.public(project, chapter).get("preview")

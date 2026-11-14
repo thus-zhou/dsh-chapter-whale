@@ -1,10 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validateTarListing, verifyInstalled, AUTO_UPDATE_ENABLED, updateAvailable } from '../managed-runtime.mjs';
+
+test('lightweight download descriptor matches the current runtime and version', async () => {
+  const read = async name => JSON.parse(await readFile(new URL('../' + name, import.meta.url), 'utf8'));
+  const [pkg, manifest, spec] = await Promise.all(['package.json', 'runtime-manifest.json', 'runtime-download.json'].map(read));
+  assert.equal(manifest.version, pkg.version);
+  assert.equal(spec.buildId, manifest.buildId);
+  assert.match(spec.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(Number.isSafeInteger(spec.bytes) && spec.bytes > 0 && spec.bytes <= 512 * 1024 * 1024);
+  assert.equal(spec.url, `https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v${pkg.version}/dsh-chapter-whale-${pkg.version}.tgz`);
+});
 
 test('accepts a normal package listing', () => {
   const listing = [

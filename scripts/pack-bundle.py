@@ -45,18 +45,18 @@ def stage(root, stage_dir):
     package = stage_dir / "package"
     for relative in files:
         source = root / relative
-        if not source.is_file():
+        if not source.is_file() or source.is_symlink() or root.resolve() not in source.resolve().parents:
             raise SystemExit(f"清单文件缺失：{relative}")
+        if hashlib.sha256(source.read_bytes()).hexdigest() != files[relative]:
+            raise SystemExit(f"清单摘要不匹配：{relative}")
         target = package / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-    # 包内 json 只用于说明这次发行：buildId 跟随清单，字节与摘要以 Release 资产为准。
+    # The bundled installer never downloads itself. A self-hash inside the same
+    # archive cannot be correct; only the lightweight package carries this spec.
     download = package / "runtime-download.json"
     if download.is_file():
-        payload = json.loads(download.read_text(encoding="utf-8"))
-        payload["buildId"] = data.get("buildId")
-        payload["note"] = "归档内的摘要仅供参考；安装器以 Release 页与 SHA256SUMS.txt 为准。"
-        download.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        download.unlink()
     names = [str(path.relative_to(stage_dir)) for path in stage_dir.rglob("*") if path.is_file()]
     bad = unwanted(names)
     if bad:
@@ -67,20 +67,23 @@ def stage(root, stage_dir):
 def build(keep_stage=False):
     version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
     target = TMP / f"dsh-chapter-whale-{version}.tgz"
+    if TMP.is_symlink() or ROOT.resolve() not in TMP.resolve().parents:
+        raise SystemExit("暂存目录必须位于当前发行工作区")
     if TMP.exists():
         shutil.rmtree(TMP)
     TMP.mkdir(parents=True)
-    subprocess.run(["npm", "pack", "--pack-destination", str(TMP)], cwd=ROOT, check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, shell=True)
+    subprocess.run([shutil.which("npm.cmd") or shutil.which("npm"), "pack", "--ignore-scripts", "--pack-destination", str(TMP)], cwd=ROOT, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     packs = sorted(TMP.glob("*.tgz"))
     if len(packs) != 1:
         raise SystemExit(f"应只有一个 npm 包，实际：{packs}")
     stage_dir = TMP / "stage"
     stage_dir.mkdir()
     with tarfile.open(packs[0]) as tar:
-        tar.extractall(stage_dir)
+        tar.extractall(stage_dir, filter="data")
     packs[0].unlink()
     data, copied = stage(ROOT, stage_dir)
+    subprocess.run(["node", str(stage_dir / "package/scripts/check-release.mjs"), "--local"], check=True)
     with tarfile.open(target, "w:gz", compresslevel=6) as tar:
         tar.add(stage_dir / "package", arcname="package")
     blob = target.read_bytes()
@@ -91,6 +94,9 @@ def build(keep_stage=False):
               "buildId": data.get("buildId"), "manifest_files": copied}
     (TMP / "bundle.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n",
                                      encoding="utf-8", newline="\n")
+    spec = {"url": f"https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v{version}/{target.name}",
+            "bytes": len(blob), "sha256": digest, "buildId": data.get("buildId")}
+    (ROOT / "runtime-download.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8", newline="\n")
     if not keep_stage:
         shutil.rmtree(stage_dir, ignore_errors=True)
     print(json.dumps(result, ensure_ascii=False), flush=True)

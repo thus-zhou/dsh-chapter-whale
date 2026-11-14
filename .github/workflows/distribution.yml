@@ -1,0 +1,43 @@
+name: Distribution first start
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download the complete release and pack the lightweight installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          New-Item -ItemType Directory artifacts/full, artifacts/light | Out-Null
+          gh release download "v$version" --repo thus-zhou/dsh-chapter-whale --pattern "dsh-chapter-whale-$version.tgz" --dir artifacts/full
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm pack --ignore-scripts --pack-destination artifacts/light
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Start the actual full package in a new workspace
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          node scripts/verify-package.mjs "artifacts/full/dsh-chapter-whale-$version.tgz" - artifacts/full-result.json
+          exit $LASTEXITCODE
+      - name: Start the lightweight package using the live GitHub download
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          node scripts/verify-package.mjs "artifacts/light/dsh-chapter-whale-$version.tgz" - artifacts/light-result.json
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: first-start-results
+          path: artifacts/*-result.json

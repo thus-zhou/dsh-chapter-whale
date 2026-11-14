@@ -5,6 +5,7 @@ import json
 import re
 import unicodedata
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 
 from . import bridge, writer_runner as writer
@@ -93,7 +94,7 @@ def resolve(project, text):
     return item["id"] if item else None
 
 
-def upsert_person(project, *, name, aliases=None, profile=None, origin="", person=None, op_id=""):
+def upsert_person(project, *, name, aliases=None, profile=None, origin="", person=None, op_id="", _writer_locked=False):
     """新增或更新人物；ID 稳定，别名冲突必须由作者解决。"""
     name = _text(name, 60)
     aliases = [ _text(alias, 60) for alias in (aliases or []) ]
@@ -101,7 +102,7 @@ def upsert_person(project, *, name, aliases=None, profile=None, origin="", perso
     unknown_fields = set(profile) - set(PROFILE_FIELDS)
     if unknown_fields:
         raise ValueError("人物档案字段无效")
-    with writer.file_lock(_path(project, "writer.lock")):
+    with (nullcontext() if _writer_locked else writer.file_lock(_path(project, "writer.lock"))):
         doc = read(project)
         if op_id:
             for row in doc.get("operations", []):
@@ -164,9 +165,9 @@ def _person_id(doc, text):
     return item["id"]
 
 
-def relate(project, *, source, target, kind, direction, chapter, event, quote, sha256):
+def relate(project, *, source, target, kind, direction, chapter, event, quote, sha256, _writer_locked=False):
     """关系变化必须有事件与来源；同一事件只记一次。"""
-    with writer.file_lock(_path(project, "writer.lock")):
+    with (nullcontext() if _writer_locked else writer.file_lock(_path(project, "writer.lock"))):
         doc = read(project)
         left, right = _person_id(doc, source), _person_id(doc, target)
         if direction not in {"one-way", "mutual"}:
@@ -185,9 +186,9 @@ def relate(project, *, source, target, kind, direction, chapter, event, quote, s
         return {"status": "saved", "relation": row}
 
 
-def learn(project, *, person, info, chapter, event, scope="character", status="confirmed", quote, sha256):
+def learn(project, *, person, info, chapter, event, scope="character", status="confirmed", quote, sha256, _writer_locked=False):
     """人物获知一条信息：记录事件与章节位置；作者/读者/人物三种认知分开。"""
-    with writer.file_lock(_path(project, "writer.lock")):
+    with (nullcontext() if _writer_locked else writer.file_lock(_path(project, "writer.lock"))):
         doc = read(project)
         ident = _person_id(doc, person)
         if scope not in SCOPES or status not in STATUSES:
@@ -201,21 +202,41 @@ def learn(project, *, person, info, chapter, event, scope="character", status="c
                "evidence": {"sha256": sha256, "quote": _text(quote, 800)}, "created_at": bridge.now_iso()}
         for old in doc["knowledge"]:
             if (old["person"], old["info"], old["event"], old["chapter"], old["scope"]) == \
-                    (row["person"], row["info"], row["event"], row["chapter"], row["scope"]):
+                    (row["person"], row["info"], row["event"], row["chapter"], row["scope"]) and old.get("evidence") == row["evidence"]:
                 return {"status": "reused", "knowledge": old}
         doc["knowledge"].append(row)
         _commit(project, doc, "knowledge_added")
         return {"status": "saved", "knowledge": row}
 
 
-def knows(project, person, chapter, doc=None):
+def source_status(project, row, cache=None):
+    """Keep evidence intact; a changed/missing/ambiguous source needs review."""
+    cache = {} if cache is None else cache
+    chapter = row.get("chapter")
+    if chapter not in cache:
+        try:
+            body, raw, normalized = _digests(project, chapter)
+            cache[chapter] = (body, {raw, normalized})
+        except (ValueError, OSError, UnicodeError):
+            cache[chapter] = ("", set())
+    body, digests = cache[chapter]
+    evidence = row.get("evidence") or {}
+    return "current" if (evidence.get("sha256") in digests and evidence.get("quote")
+                          and evidence["quote"] in body) else "pending_review"
+
+
+def knows(project, person, chapter, doc=None, cache=None):
     """只返回获知事件确实发生在当前章节之前的认知；猜测单独标注。"""
     doc = read(project) if doc is None else doc
     ident = person if person in doc["persons"] else _person_id(doc, person)
     rows = [row for row in doc["knowledge"] if row["person"] == ident and row["chapter"] < int(chapter)]
+    cache = {} if cache is None else cache
+    stale = [row for row in rows if source_status(project, row, cache) != "current"]
+    rows = [row for row in rows if row not in stale]
     confirmed = [row for row in rows if row["status"] == "confirmed"]
     guesses = [row for row in rows if row["status"] == "guess"]
     return {"confirmed": confirmed, "guess": guesses,
+            "pending_review": stale,
             "unknown": "未记录不等于人物不知道；程序只能核对本书记录。"}
 
 
@@ -223,6 +244,7 @@ def view(project, chapter=0):
     doc = read(project)
     chapter = int(chapter or 0)
     persons = []
+    cache = {}
     for item in doc["persons"].values():
         row = _person_view(item)
         knowledge = [entry for entry in doc["knowledge"] if entry["person"] == item["id"]
@@ -233,8 +255,11 @@ def view(project, chapter=0):
         row["knowledge"] = [{"id": x["id"], "info": x["info"], "event": x["event"], "chapter": x["chapter"],
                              "scope": x["scope"], "scope_label": SCOPES[x["scope"]],
                              "status": x["status"], "status_label": STATUSES[x["status"]],
+                             "source_status": source_status(project, x, cache),
+                             "source_status_label": "来源有效" if source_status(project, x, cache) == "current" else "来源已变，待复核",
                              "quote": x["evidence"]["quote"]} for x in sorted(knowledge, key=lambda x: x["chapter"])]
         row["relations"] = [{"id": x["id"], "kind": x["kind"], "direction": x["direction"], "chapter": x["chapter"],
+                             "source_status": source_status(project, x, cache),
                              "event": x["event"], "other": x["target"] if x["source"] == item["id"] else x["source"]}
                             for x in sorted(relations, key=lambda x: x["chapter"])]
         persons.append(row)
@@ -253,8 +278,10 @@ def context(project, chapter, names=None, doc=None):
     wanted = {_norm(name) for name in (names or []) if str(name).strip()}
     lines = ["【人物状态 · 只含当前章节可知的记录】"]
     used = []
+    stale = []
+    cache = {}
     for item in doc["persons"].values():
-        if wanted and not ({_norm(item["name"])} | {_norm(x) for x in item.get("aliases") or []}) & wanted:
+        if names is not None and not ({_norm(item["name"])} | {_norm(x) for x in item.get("aliases") or []}) & wanted:
             continue
         row = _person_view(item)
         parts = [f"{row['name']}"]
@@ -263,7 +290,8 @@ def context(project, chapter, names=None, doc=None):
         for field in ("identity", "goal", "motive", "limits", "voice"):
             if row["profile"].get(field):
                 parts.append(f"{field}={row['profile'][field]}")
-        known = knows(project, item["id"], chapter, doc)
+        known = knows(project, item["id"], chapter, doc, cache)
+        stale.extend(row["id"] for row in known["pending_review"])
         for entry in known["confirmed"]:
             if entry["scope"] == "character":
                 parts.append(f"第{entry['chapter']}章得知：{entry['info']}")
@@ -273,9 +301,9 @@ def context(project, chapter, names=None, doc=None):
         lines.append("- " + "；".join(parts))
         used.append(row["id"])
     if not used:
-        return {"ids": [], "text": ""}
+        return {"ids": [], "text": "", "stale": stale}
     lines.append("未知字段保持未知；不要把猜测写成已确认事实，也不要让人物知道本章尚未获知的信息。")
-    return {"ids": used, "text": "\n".join(lines)}
+    return {"ids": used, "text": "\n".join(lines), "stale": stale}
 
 
 def _candidate_rows(review, body, chapter):
@@ -359,7 +387,7 @@ def save_candidates(project, chapter, review, body_sha256=None, raw_sha256=None)
     return {"status": "pending", "count": len(kept), "dropped": len(dropped), "path": str(path)}
 
 
-def commit_candidates(project, chapter, body_sha256=None):
+def commit_candidates(project, chapter, body_sha256=None, *, _writer_locked=False):
     project = Path(project).resolve()
     body, digest, normalized = _digests(project, chapter)
     if body_sha256 and body_sha256 not in {digest, normalized}:
@@ -387,17 +415,17 @@ def commit_candidates(project, chapter, body_sha256=None):
                     skipped += 1  # 已有不同记录，保持待确认，不静默改写
                     continue
                 upsert_person(project, name=entry["name"], profile={entry["field"]: entry["value"]},
-                              origin=f"第{chapter}章", person=target)
+                              origin=f"第{chapter}章", person=target, _writer_locked=_writer_locked)
                 added["persons"] += 1
             elif entry["kind"] == "relation":
                 result = relate(project, source=entry["source"], target=entry["target"], kind=entry["relation"],
                                 direction=entry.get("direction", "one-way"), chapter=chapter,
-                                event=entry["event"], quote=entry["quote"], sha256=body_sha256)
+                                event=entry["event"], quote=entry["quote"], sha256=body_sha256, _writer_locked=_writer_locked)
                 added["relations"] += 1 if result["status"] == "saved" else 0
             else:
                 result = learn(project, person=entry["person"], info=entry["info"], chapter=chapter,
                                event=entry["event"], scope=entry["scope"], status=entry["status"],
-                               quote=entry["quote"], sha256=body_sha256)
+                               quote=entry["quote"], sha256=body_sha256, _writer_locked=_writer_locked)
                 added["knowledge"] += 1 if result["status"] == "saved" else 0
         except (ValueError, KeyError):
             skipped += 1

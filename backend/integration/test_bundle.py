@@ -2,6 +2,8 @@
 import importlib.util
 import json
 import unittest
+import hashlib
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,9 +47,27 @@ class BundleRulesTest(unittest.TestCase):
                      "backend/fanqie_auto_publish/publication_safety.py"):
             self.assertIn(name, files)
 
-    def test_stage_rewrites_build_id(self):
-        data, _ = self.module.manifest_files(ROOT)
-        self.assertIsInstance(data.get("buildId"), str)
+    def test_actual_stage_copies_only_manifest_and_removes_self_download(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "source"
+            root.mkdir()
+            stage_dir = Path(tmp) / "stage"
+            package = stage_dir / "package"
+            package.mkdir(parents=True)
+            (root / "runtime").mkdir()
+            (root / "runtime/real.txt").write_bytes(b"runtime")
+            (root / "runtime/unlisted.txt").write_bytes(b"residue")
+            manifest = {"buildId": "new", "files": {"runtime/real.txt": hashlib.sha256(b"runtime").hexdigest()}}
+            (root / "runtime-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (package / "runtime-download.json").write_text('{"buildId":"old"}', encoding="utf-8")
+            data, count = self.module.stage(root, stage_dir)
+            self.assertEqual((data["buildId"], count), ("new", 1))
+            self.assertEqual((package / "runtime/real.txt").read_bytes(), b"runtime")
+            self.assertFalse((package / "runtime/unlisted.txt").exists())
+            self.assertFalse((package / "runtime-download.json").exists())
+            (root / "runtime/real.txt").write_bytes(b"changed")
+            with self.assertRaises(SystemExit):
+                self.module.stage(root, stage_dir)
 
 
 if __name__ == "__main__":

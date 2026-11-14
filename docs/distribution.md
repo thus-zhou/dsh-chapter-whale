@@ -69,11 +69,24 @@
 ## 组装完整发行包
 
 ```
-python scripts/build-runtime.py          # 重建 runtime-manifest.json（发行清单）
+python scripts/build-runtime.py --manifest-only # 复用本地环境，重建当前清单
+python scripts/build-runtime.py          # 需要重新准备依赖时使用
 python scripts/pack-bundle.py            # npm 文件 + 清单内的 runtime → .tmp/bundle/*.tgz
 python scripts/pack-bundle.py --keep-stage   # 保留解包目录用于核对
 ```
 
 `pack-bundle.py` 只复制清单里列出的文件，组装后检查是否混入 `__pycache__`、`.pyc`、
-`test_*.py`；包内 `runtime-download.json` 的 `buildId` 会跟随清单，
-其余摘要字段仅供参考，安装器以 Release 页与 `SHA256SUMS.txt` 为准。
+`test_*.py`。组装前核对每个源文件摘要，并在隔离暂存目录执行发行检查。
+
+完整包使用自带环境，不携带自指摘要的 `runtime-download.json`。完整包生成后，脚本自动将其
+实际大小、SHA-256、buildId 和版本地址写回源码的下载描述，再构建轻量包：
+
+```
+npm pack --ignore-scripts --pack-destination .tmp
+node scripts/verify-package.mjs .tmp/bundle/dsh-chapter-whale-0.4.1.tgz
+node scripts/verify-package.mjs .tmp/dsh-chapter-whale-0.4.1.tgz .tmp/bundle/dsh-chapter-whale-0.4.1.tgz
+```
+
+上述第二种验证用实际完整包字节提供下载响应，在发布前走完真正的轻量安装入口；
+发布后省略第二个包参数，使用固定 GitHub 地址联网回验。验证创建独立工作目录，启动后核对空数据、
+禁用调度及写作引擎导入，最后停止服务。发布 npm 时使用这个已验收的轻量压缩包。
