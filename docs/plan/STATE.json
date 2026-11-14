@@ -107,7 +107,7 @@
     },
     "M05": {
       "status": "completed",
-      "commit": "PENDING_M05",
+      "commit": "6ddb8c0",
       "checks": [
         "python -m unittest backend.integration.test_revision -> 22 pass",
         "python -m unittest discover -s backend/integration -p test_*.py -t backend -> 184 pass",
@@ -243,5 +243,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T12:03:21+08:00"
+  "updated_at": "2026-11-14T12:10:00+08:00"
 }
