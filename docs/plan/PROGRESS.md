@@ -283,3 +283,46 @@ M05：自动修订与差异预览 —— 未通过且有可靠局部修复时最
 ### 下一步
 
 M06：历史恢复与差异对比 —— 在版本存储与预览之上补恢复界面、来源与影响范围标注。
+
+## M06 版本历史与质量工作台（2026-11-14）
+
+### 完成内容
+
+- `backend/integration/version_history.py`：章节版本历史（轮次倒序、当前标记、来源、操作标识、父子引用）、审查回执与质量报告按哈希关联、最佳版本推荐、恢复与工作台聚合。版本标识沿用 M01 的原始字节 `sha256`，报告按规范化摘要绑定，两种指纹任一命中即视为同一正文。
+- `chapter_versions.snapshot()`：恢复前把当前磁盘正文登记为 `backup` 版本，不重写正文；作者在两次操作之间的手改不会因为恢复而消失。
+- `quality_gate.status()`：修正 M03 遗留的比对口径问题（报告存规范化摘要、旧代码拿原始字节比对），现在原始字节或规范化摘要任一匹配都算同一正文。
+- `backend/manager/app.py`：`GET workbench`、`GET versions`、`GET versions/{64hex}`、`POST restore`；`index.js` 白名单同步 `POST .../restore`。
+- `client.js` 章节弹窗：推荐行、版本行（当前/第 N 版、来源、字节数、质量徽标）、按需查看正文、恢复（含快照与报告过期提示）。
+- 未通过版本只作推荐；推荐逻辑在没有质量报告时保持当前正文不动。
+
+### 必要检查
+
+| 检查 | 结果 |
+| --- | --- |
+| `python -m unittest backend.integration.test_history` | 8 通过（倒序/当前、哈希关联、通过版本优先于更高分未通过版本、无报告不改正文、单版读取、恢复新增版本、备份手改、恢复后报告复用或标需复核） |
+| `python -m unittest backend.manager.test_history_api` | 4 通过（工作台不含正文、按需读取、恢复写新版本、报告绑定） |
+| `python -m unittest discover -s backend/integration -p "test_*.py" -t backend` | 192 通过 |
+| `python -m unittest discover -s backend/manager -p "test_*.py" -t backend` | 65 通过 |
+| `npm test` | 47 通过 |
+| 真实模型调用 | 0 次；全部使用隔离临时项目与固定文本 |
+
+界面检查未做浏览器截图验收（旧页面未变，只新增章节弹窗内区域）；按方案留到需要时再看。
+
+### M06 四类状态
+
+| 项目 | 状态 |
+| --- | --- |
+| 代码实现 | 完成：`version_history.py`、`chapter_versions.snapshot`、`quality_gate.status`、`manager/app.py`、`index.js`、`client.js`、CI |
+| 真实模型验证 | 未进行；真实“修订→接受→恢复”往返留给 M09（≤6 次） |
+| GitHub 推送 | 随开发分支推送 |
+| Release | 随 0.3.0-beta.1 节点 |
+
+### 尚存限制
+
+- 取消任务依赖终止 worker 进程；没有单独的“取消后迟到结果隔离”文件，若子进程在终止前已完成写入，仍会留下候选（不会自动提交）。
+- 文风、质量、问题与差异视图分布在既有页面（创作约定、章节弹窗、修订面板），没有重做成单一大屏工作台。
+- 版本按原始字节哈希标识，同一正文不同换行风格会视为不同版本（与“恢复也是新操作”的语义一致，但列表可能多出等价项）。
+
+### 下一步
+
+M07：密钥与关键访问安全 —— 检查 API Key 返回面、设备令牌、日志脱敏与危险写接口的边界。

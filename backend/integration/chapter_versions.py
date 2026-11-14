@@ -1,4 +1,4 @@
-﻿"""正文版本、候选与提交（方案 v3.0 M01）。
+"""正文版本、候选与提交（方案 v3.0 M01）。
 
 单一职责：为报告、修订和恢复提供最小可靠存储。不换数据库，也不改现有
 正文目录（``正文/*.md`` 仍是唯一"当前稿"）。本模块只追加：
@@ -546,6 +546,36 @@ def report_ref(project, chapter: int, version_id: Optional[str] = None) -> Dict[
     return {"chapter_id": int(chapter), "version_id": meta["sha256"], "sha256": meta["sha256"],
             "body_digest": meta.get("body_digest"), "path": str(path) if path else None,
             "stale": disk != meta["sha256"], "reason": None if disk == meta["sha256"] else "chapter_changed"}
+
+
+def snapshot(project, chapter: int, *, source: str = "backup", note: str = "") -> Optional[Dict[str, Any]]:
+    """把当前磁盘正文登记为一个版本，不改变正文。
+
+    恢复之前用它保底：作者在两次操作之间的手改不会因为恢复而消失。
+    """
+    paths = _ensure(project)
+    path = chapter_path(project, chapter)
+    if path is None:
+        return None
+    data = path.read_bytes()
+    sha = raw_sha256(data)
+    text = _decode(data)
+    with file_lock(paths["lock"]):
+        index = load_index(project)
+        entry = _chapter_entry(index, chapter)
+        for meta in entry.get("versions", []):
+            if meta.get("sha256") == sha:
+                entry["current"] = sha
+                _save_index(project, index)
+                return meta
+        _store_object(project, data)
+        meta = _register_version(entry, sha256=sha, digest=body_digest(text), size=len(data),
+                                 source=source, op_id=None, run_id=None, attempt_id=None,
+                                 parent=entry.get("current"), title=_chapter_title(project, chapter),
+                                 note=note or "恢复前备份")
+        entry["current"] = sha
+        _save_index(project, index)
+    return meta
 
 
 def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[str] = None,

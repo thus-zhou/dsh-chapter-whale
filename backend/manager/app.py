@@ -345,6 +345,10 @@ class RevisionClose(BaseModel):
     reason: str = Field(default="", max_length=200)
 
 
+class RestoreInput(BaseModel):
+    version_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class StageInput(BaseModel):
     book: str = Field(min_length=1, max_length=96)
     chapters: list[int] | None = None
@@ -886,6 +890,32 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if chapter <= 0: raise ValueError("章节号无效")
         from integration import revision_plan
         return revision_plan.reject(Path(project(identity)["path"]), chapter, data.preview_id, data.reason)
+
+    @app.get("/api/projects/{identity}/chapters/{chapter}/workbench")
+    def chapter_workbench(identity: str, chapter: int):
+        """质量工作台：报告、版本、候选、最佳推荐一次返回，正文按需另取。"""
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import version_history
+        return version_history.workbench(Path(project(identity)["path"]), chapter, config=load_ai())
+
+    @app.get("/api/projects/{identity}/chapters/{chapter}/versions")
+    def chapter_versions_list(identity: str, chapter: int):
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import version_history
+        return version_history.history(Path(project(identity)["path"]), chapter, config=load_ai())
+
+    @app.get("/api/projects/{identity}/chapters/{chapter}/versions/{version}")
+    def chapter_version_body(identity: str, chapter: int, version: str):
+        if chapter <= 0: raise ValueError("章节号无效")
+        if not re.fullmatch(r"[0-9a-f]{64}", version): raise ValueError("版本标识无效")
+        from integration import version_history
+        return version_history.read(Path(project(identity)["path"]), chapter, version)
+
+    @app.post("/api/projects/{identity}/chapters/{chapter}/restore")
+    def restore_chapter(identity: str, chapter: int, data: RestoreInput):
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import version_history
+        return version_history.restore(Path(project(identity)["path"]), chapter, data.version_id, config=load_ai())
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/review")
     def review_existing(identity: str, chapter: int):

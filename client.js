@@ -3696,6 +3696,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [data, setData] = React.useState(null);
           const [quality, setQuality] = React.useState(null);
           const [revision, setRevision] = React.useState(null);
+          const [bench, setBench] = React.useState(null);
+          const [versionBody, setVersionBody] = React.useState(null);
           const [revBusy, setRevBusy] = React.useState(false);
           const [tick, setTick] = React.useState(0);
           const [loading, setLoading] = React.useState(false);
@@ -3730,6 +3732,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               .catch(() => {
                 if (alive) setRevision(null);
               });
+            api(`/projects/${props.projectId}/chapters/${props.chapter}/workbench`)
+              .then((value) => {
+                if (alive) setBench(value);
+              })
+              .catch(() => {
+                if (alive) setBench(null);
+              });
             return () => {
               alive = false;
             };
@@ -3760,6 +3769,41 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             } finally {
               setRevBusy(false);
             }
+          };
+          const showVersion = async (versionId) => {
+            try {
+              const value = await api(`/projects/${props.projectId}/chapters/${props.chapter}/versions/${versionId}`);
+              setVersionBody(value);
+            } catch (error) {
+              toast.push(`读取版本失败：${error.message}`, 'err');
+            }
+          };
+          const restoreVersion = async (versionId) => {
+            if (!window.confirm('恢复会先备份当前正文，再把这个版本写回正文。继续？')) return;
+            setRevBusy(true);
+            try {
+              const value = await api(`/projects/${props.projectId}/chapters/${props.chapter}/restore`, {
+                method: 'POST',
+                body: { version_id: versionId },
+              });
+              const reason = (value.report_status || {}).stale_reason;
+              toast.push(reason ? `已恢复；质量报告${reason === 'body_changed' ? '因正文变化需复核' : '需要重算'}` : '已恢复，报告仍然有效', 'ok');
+              setVersionBody(null);
+              setTick((item) => item + 1);
+            } catch (error) {
+              toast.push(`恢复失败：${error.message}`, 'err');
+            } finally {
+              setRevBusy(false);
+            }
+          };
+          const versionRows = (bench && bench.history && bench.history.versions) || [];
+          const bestRow = bench && bench.best;
+          const sourceLabels = {
+            writer: '写作',
+            revision: '修订',
+            restored: '恢复',
+            'legacy-adopted': '旧稿登记',
+            'originals-legacy': '旧原稿',
           };
 
           const report = quality && quality.report;
@@ -3928,6 +3972,68 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         : null,
                     ),
                     e('pre', { className: 'nh-pre', style: { maxHeight: '56vh' } }, data.content || '(正文为空)'),
+                    e(
+                      'div',
+                      { style: { marginTop: 14 } },
+                      e('div', { className: 'nh-muted', style: { marginBottom: 6 } }, '版本历史'),
+                      bestRow && bestRow.recommended
+                        ? e(
+                            'div',
+                            { className: 'nh-muted', style: { marginBottom: 6 } },
+                            `推荐：第 ${bestRow.recommended.seq || '?'} 版（${bestRow.status === 'passing' ? '质量通过' : '尚无通过版本，仅供参考'}）· ${bestRow.note}`,
+                          )
+                        : null,
+                      versionRows.length
+                        ? e(
+                            'div',
+                            { style: { marginBottom: 8 } },
+                            ...versionRows.slice(0, 10).map((row) => {
+                              const quality = row.quality || {};
+                              const label =
+                                quality.pass === true ? '质量通过' : quality.pass === false ? '未通过' : '无报告';
+                              const tone = quality.pass === true ? 'ok' : quality.pass === false ? 'err' : 'mute';
+                              return e(
+                                'div',
+                                { key: row.version_id, className: 'nh-row', style: { gap: 8, marginBottom: 4 } },
+                                e(Badge, { tone: row.current ? 'ok' : 'mute' }, row.current ? '当前' : `第${row.seq || '?'}版`),
+                                e('span', { className: 'nh-muted' }, sourceLabels[row.source] || row.source || '未知来源'),
+                                e('span', { className: 'nh-muted' }, `${num(row.bytes)} 字节`),
+                                e(Badge, { tone }, label),
+                                e(
+                                  Button,
+                                  { size: 'sm', kind: 'ghost', onClick: () => showVersion(row.version_id) },
+                                  '查看',
+                                ),
+                                row.current
+                                  ? null
+                                  : e(
+                                      Button,
+                                      { size: 'sm', kind: 'ghost', busy: revBusy, onClick: () => restoreVersion(row.version_id) },
+                                      '恢复',
+                                    ),
+                              );
+                            }),
+                          )
+                        : e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, '还没有版本记录；首次保存或修订后才会有历史。'),
+                      versionBody
+                        ? e(
+                            'div',
+                            { style: { marginBottom: 8 } },
+                            e(
+                              'div',
+                              { className: 'nh-row', style: { gap: 8, marginBottom: 4 } },
+                              e('span', { className: 'nh-muted' }, `历史版本 ${versionBody.version_id.slice(0, 10)}…`),
+                              e(Button, { size: 'sm', kind: 'ghost', onClick: () => setVersionBody(null) }, '收起'),
+                            ),
+                            e(
+                              'pre',
+                              { className: 'nh-pre', style: { maxHeight: '32vh' } },
+                              (versionBody.body || '').slice(0, 4000) +
+                                ((versionBody.body || '').length > 4000 ? '\n…（按需显示前 4000 字）' : ''),
+                            ),
+                          )
+                        : null,
+                    ),
                   )
                 : e(Empty, null, '读取失败'),
           });

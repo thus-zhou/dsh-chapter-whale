@@ -173,19 +173,28 @@ def latest(project, chapter):
     return records[0] if records else None
 
 
+def _current_digests(project, chapter):
+    """当前正文的两种指纹：原始字节 sha256 与规范化文本摘要。"""
+    from .chapter_versions import chapter_path, raw_sha256
+    from fanqie_auto_publish.publication_safety import body_digest
+
+    path = chapter_path(project, chapter)
+    if not path or not Path(path).exists():
+        return None, None
+    data = Path(path).read_bytes()
+    return raw_sha256(data), body_digest(data.decode("utf-8-sig", errors="replace"))
+
+
 def status(project, chapter, record=None, body_sha256=None, contract_hash=None, config=None):
     """报告是否仍然适用。仅门槛/权重变化时只要求重算，不要求重新调用模型。"""
     record = latest(project, chapter) if record is None else record
     if not record:
         return {"valid": False, "stale_reason": "no_report", "recompute_only": False}
+    raw, digest = _current_digests(project, chapter)
     if body_sha256 is None:
-        try:
-            from .chapter_versions import chapter_path, file_sha256
-            path = chapter_path(project, chapter)
-            body_sha256 = file_sha256(path) if path and Path(path).exists() else None
-        except Exception:
-            body_sha256 = None
-    if body_sha256 and record.get("body_sha256") and body_sha256 != record["body_sha256"]:
+        body_sha256 = raw
+    bound = {value for value in (raw, digest, body_sha256) if value}
+    if bound and record.get("body_sha256") and record["body_sha256"] not in bound:
         return {"valid": False, "stale_reason": "body_changed", "recompute_only": False}
     if contract_hash and record.get("contract_hash") and contract_hash != record["contract_hash"]:
         return {"valid": False, "stale_reason": "contract_changed", "recompute_only": False}

@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M06",
+  "current_module": "M07",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -126,12 +126,23 @@
       ]
     },
     "M06": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "PENDING_M06",
+      "checks": [
+        "python -m unittest backend.integration.test_history -> 8 pass",
+        "python -m unittest backend.manager.test_history_api -> 4 pass",
+        "python -m unittest discover -s backend/integration -p test_*.py -t backend -> 192 pass",
+        "python -m unittest discover -s backend/manager -p test_*.py -t backend -> 65 pass",
+        "npm test -> 47 pass",
+        "no model call: version/quality fixtures are local files; restore works on an isolated temp project"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "backend/integration/version_history.py: per-chapter history newest-first with current flag, review receipts and quality reports linked only by hash (version_id == raw sha256, report binding by normalized body digest), best-version recommendation that prefers a quality pass over a higher failing score and never writes the body, restore() that snapshots the current bytes first, appends a new restored version, and re-checks report validity; workbench() returns report + history(20) + preview + best without any chapter body. chapter_versions.snapshot() registers the current disk text as a version without rewriting it. quality_gate.status() now accepts the raw byte hash or the normalized digest, fixing every real report being reported as body_changed. Manager routes GET workbench, GET versions, GET versions/{sha}, POST restore (64-hex validated) with index.js whitelist; chapter modal shows the recommendation, version rows with source/bytes/quality badges, on-demand body (first 4000 characters) and restore with conflict/report feedback.",
+      "remaining": [
+        "cancel-late-result protection relies on the worker being killed before it writes; there is no separate post-cancel result quarantine file",
+        "style, quality, issue and diff views live in the existing pages (brief page, chapter modal, revision panel) rather than a single redesigned workbench screen",
+        "real-model revision -> accept -> restore round trip still needs M09 validation"
+      ]
     },
     "M07": {
       "status": "pending",
@@ -243,5 +254,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T12:10:00+08:00"
+  "updated_at": "2026-11-14T12:50:00+08:00"
 }

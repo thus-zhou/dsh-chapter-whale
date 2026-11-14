@@ -230,6 +230,7 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/chapters/:chapter/revision',
   'POST /api/projects/:identity/chapters/:chapter/revision/accept',
   'POST /api/projects/:identity/chapters/:chapter/revision/reject',
+  'POST /api/projects/:identity/chapters/:chapter/restore',
   'PUT /api/projects/:identity/outline',
   'POST /api/projects/:identity/generate',
   'POST /api/projects/:identity/stage',
