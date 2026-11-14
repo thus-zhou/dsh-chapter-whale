@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M00",
+  "current_module": "M02",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -22,7 +22,7 @@
   "modules": {
     "M00": {
       "status": "completed",
-      "commit": null,
+      "commit": "640b5df",
       "checks": [
         "npm test -> 47 pass / 0 fail",
         "python -m unittest discover -s backend\\integration -p test_*.py -t backend -> 93 pass",
@@ -34,12 +34,21 @@
       "remaining": []
     },
     "M01": {
-      "status": "pending",
+      "status": "completed",
       "commit": null,
-      "checks": [],
+      "checks": [
+        "python -m unittest discover -s backend\\integration -p \"test_chapter_versions.py\" -t backend -> 10 pass (legacy read, save/reload identity, concurrent modification refused, duplicate op_id, failed write + recover_pending, corrupt object, adoption rollback + re-adopt, originals by digest, review attempt linking, restore as new operation)",
+        "python -m unittest discover -s backend\\integration -p \"test_*.py\" -t backend -> 103 pass",
+        "python -m unittest discover -s backend\\manager -p \"test_*.py\" -t backend -> 55 pass",
+        "npm test -> 47 pass",
+        "real project copy (102 chapters, 52 review attempts) -> 102 adopted, 52 attempts linked by normalized digest, report_ref stale=false"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "backend/integration/chapter_versions.py: content-addressed objects + per-chapter index + candidates + commit journal (prepared/chapter_written/committed/conflict); API save_candidate/commit_candidate/write_chapter/read_version/list_versions/current_version/compare_current/report_ref/recover_pending/restore_version/adopt_legacy/adopt_originals/link_review_attempts/prune_adopted; raw sha256 vs body_digest kept separate; no DB change, no rewrite of 正文",
+      "remaining": [
+        "full restore UI deferred to M06 as planned",
+        "callers wired in M03 (report binding) and M05 (revision/diff)"
+      ]
     },
     "M02": {
       "status": "pending",
@@ -191,5 +200,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T08:20:00+08:00"
+  "updated_at": "2026-11-14T08:49:22+08:00"
 }

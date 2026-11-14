@@ -102,6 +102,47 @@ writer_runner 章节完成
 
 M01：在既有 `.webnovel/review_attempts/` 与回执上扩展正文版本能力（保存候选、读取/列出版本、比较当前版本、提交候选、幂等操作标识），保留旧格式兼容读取。
 
+## M01 正文版本与提交（completed）
+
+**新增** `backend/integration/chapter_versions.py`（唯一新增存储层，未换库、未改 `正文/*.md` 结构、未批量重写旧数据）：
+
+| 目录（`<project>/.webnovel/chapter_versions/`）| 作用 |
+| --- | --- |
+| `objects/<sha256>.txt` | 不可变正文，按**原始字节** sha256 命名；读时校验，哈希不符报 `VersionCorrupt` |
+| `index.json` | 每章 `current` + 版本列表（`seq`/`sha256`/`body_digest`/`source`/`op_id`/`run_id`/`attempt_id`/`parent`），`schema_version:1`，102 章约 72KB |
+| `candidates/<id>.json` | 候选稿：正文 + 基线版本 + 来源引用，提交前不碰当前稿 |
+| `commits/<op_id>.json` | 提交标记：`prepared → chapter_written → committed`，崩溃留 `conflict` |
+| `.lock` | 复用 `publication_safety.file_lock`（跨进程非阻塞锁，同线程可重入）|
+
+**两种哈希分工**（报告契约基础）：`sha256` = 原始字节（校验对象、判断并发修改、保存后读回一致）；`body_digest()` = 规范化文本（统一换行 + 去行尾空白），与既有 review 回执的 `body_sha256` **同一算法**——实测真实项目 52 条回执全部能按此关联到版本。
+
+**API**：`save_candidate` / `commit_candidate` / `write_chapter`（一步）/ `read_version` / `list_versions` / `current_version` / `compare_current` / `report_ref` / `recover_pending` / `restore_version` / `adopt_legacy` / `adopt_originals` / `link_review_attempts` / `prune_adopted`。
+
+**约定**：`project_id` = 项目绝对路径（`/` 分隔）；`chapter_id` = 整数章号；`version_id` = 正文原始字节 sha256；`op_id` = 幂等操作标识（同 op 重复提交返回原记录，内容不同报 `operation_id_reused`）；`run_id`/`attempt_id` 由调用方透传。
+
+**提交顺序与失败语义**：`expected_sha256` 与磁盘当前字节不符即 `concurrent_modification`，绝不覆盖；多文件写入**不是事务**，只是"逐个原子写 + 提交标记 + `recover_pending()` 补齐"，补齐时若当前稿已被第三方改成第三种内容则标 `conflict` 并保留现场。兼容登记（`adopt_legacy`/`adopt_originals`）只读、幂等、不改 `.md`；`prune_adopted` 只删本模块登记的兼容条目与无引用对象。
+
+**检查**（全部离线、0 次模型调用）：
+- `test_chapter_versions.py` 10 项全过：旧格式读取、保存后读回一致、并发修改拒绝覆盖、重复 op 不加版本、写入失败 + `recover_pending` 补齐、对象被篡改检出、迁移→回滚→再迁移、旧 `originals` 按哈希引用、回执关联、恢复是新操作。
+- 集成 103 项、manager 55 项、`npm test` 47 项全过。
+- 真实项目**副本**（102 章、52 条审查回执）：102 章登记成功、52 条回执按规范化哈希关联、`report_ref` 非过期。
+- CI 增加 `backend` job：新测试 + manager 套件（windows/ubuntu × py3.11/3.13）；导入 `services.*` 的编辑器套件暂不入 CI（依赖未锁定），版本节点再评估。
+
+**未做**：完整恢复 UI（按方案留 M06）；调用方接线在 M03（报告绑定）与 M05（修订/差异）。
+
+### M01 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成（`backend/integration/chapter_versions.py` + `test_chapter_versions.py` + CI 后端 job）|
+| 真实模型验证 | 无（本模块要求 0 次）|
+| GitHub 推送 | 待执行（本地提交）|
+| Release | 不涉及（M01—M03 合并为 0.3.0-alpha.1 节点）|
+
+### 下一步
+
+M02：在 `integration/costs.py`、`fallback_budget.py` 与现有调用入口上补齐**请求前预留 + 结算**、请求数/单章/项目上限、小型 `context_budget`，全部入账（规划/样本/修订/复审/记忆/格式修复），未知金额显示未知。
+
 ### M00 四类状态
 
 | 类别 | 状态 |
