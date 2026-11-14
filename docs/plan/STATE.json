@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M13",
+  "current_module": "M14",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -253,12 +253,22 @@
       ]
     },
     "M13": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "418b79c",
+      "checks": [
+        "test_scenes.py 8 OK (cards, validate, stale, compose, resume, estimate, writer hook defaults)",
+        "integration 236 OK",
+        "manager 79 OK",
+        "npm test 52 pass / 0 fail",
+        "manifest 3397 files buildId df5fe26c1bef44da5b0ddc4cb09212880551d1cf947926de10b696ce6dd8c7f2",
+        "node scripts/check-release.mjs --local -> 发行清单校验通过",
+        "zero real model calls"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "scene cards from plan/outline, per-scene B requests with resumable files, composed chapter enters the same D review and revision path; UI scene mode selector defaults to whole-chapter",
+      "remaining": [
+        "真实场景生成往返留 M15 的 10 次预算（本模块零真实调用）"
+      ]
     },
     "M14": {
       "status": "pending",
@@ -314,5 +324,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T16:12:00+08:00"
+  "updated_at": "2026-11-14T17:15:56+08:00"
 }
