@@ -326,3 +326,44 @@ M06：历史恢复与差异对比 —— 在版本存储与预览之上补恢复
 ### 下一步
 
 M07：密钥与关键访问安全 —— 检查 API Key 返回面、设备令牌、日志脱敏与危险写接口的边界。
+
+## M07 密钥与关键访问安全（2026-11-14）
+
+### 完成内容
+
+- 新增 `backend/integration/secret_store.py`：Windows DPAPI 加密存储（`secrets.dpapi` + `secrets.dpapi.bak`），槽位为 `root` / `roles:<R>` / `providers:<id>`。迁移顺序是“先写加密块并读回校验 → 再改写配置去掉明文”，失败则保留明文并在接口里标注 `plaintext-acl`，不伪称成功。
+- `manager/app.py` 的 `load_ai` / `_persist_ai` / `PUT /api/ai` / `PUT /api/ai/roles`、`provider_api.transaction`、`model_roles.load_config` 都走同一适配层，后台 worker/runner 与前端拿到的仍是完整配置，磁盘上不再留明文。
+- `public_ai()` 增加 `credential_store` 状态，AI 设置页显示“系统凭据保护 / 仅本用户可读的配置文件”徽标。
+- 访问面检查：缺 `X-Novel-Helper`、跨 Origin、无头的写请求被拒；跨项目版本读取、路径穿越、未注册项目、非法章节号均按预期返回 4xx；日志与错误经既有 `redact()` 处理，测试断言响应不含明文密钥。
+- CI 增加 `test_secrets.py` 步骤；manager 目录整跑自动包含 `test_access_api.py`。
+
+### 必要检查
+
+```
+python -m unittest discover -s backend/integration -p test_secrets.py -t backend      -> 6 pass
+python -m unittest discover -s backend/manager -p test_access_api.py -t backend      -> 5 pass
+python -m unittest discover -s backend/integration -p "test_*.py" -t backend         -> 198 pass
+python -m unittest discover -s backend/manager -p "test_*.py" -t backend             -> 70 pass
+npm test                                                                             -> 47 pass
+```
+
+全部为离线测试，使用可注入的假保护器模拟“可用/不可用/写后校验失败”，未调用任何真实模型。
+
+### 四类状态
+
+| 项目 | 状态 |
+| --- | --- |
+| 代码实现 | 完成：`secret_store.py`、`manager/app.py`、`provider_api.py`、`model_roles.py`、`client.js`、CI |
+| 真实模型验证 | 未进行；按方案本模块不验证连通性（留给 M09） |
+| GitHub 推送 | 随开发分支推送 |
+| Release | 随 0.3.0 节点 |
+
+### 尚存限制
+
+- DPAPI 绑定当前 Windows 用户；换用户或换机器需要重新输入密钥（文档说明，不自动迁移）。
+- 设备配对与本机令牌行为由既有测试覆盖，没有再做一次端到端渗透。
+- 明文回退路径保留（凭据能力不可用时），此时仅依赖 ACL 限制读取。
+
+### 下一步
+
+M08：成本与预算的可视化闭环（面板展示预算状态、超限提示与账本缺口）。

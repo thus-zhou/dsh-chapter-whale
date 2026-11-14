@@ -1,4 +1,4 @@
-﻿{
+{
   "plan_version": "3.0",
   "target_releases": [
     "0.3.0",
@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M07",
+  "current_module": "M08",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -145,12 +145,23 @@
       ]
     },
     "M07": {
-      "status": "pending",
-      "commit": null,
-      "checks": [],
+      "status": "completed",
+      "commit": "d02812e",
+      "checks": [
+        "python -m unittest discover -s backend/integration -p test_secrets.py -t backend -> 6 pass",
+        "python -m unittest discover -s backend/manager -p test_access_api.py -t backend -> 5 pass",
+        "python -m unittest discover -s backend/integration -p test_*.py -t backend -> 198 pass",
+        "python -m unittest discover -s backend/manager -p test_*.py -t backend -> 70 pass",
+        "npm test -> 47 pass",
+        "no model call, no paid verification: connectivity stays in M09; only credential storage and client adaptation are exercised"
+      ],
       "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checkpoint": "backend/integration/secret_store.py: Windows DPAPI-backed store (.webnovel/../secrets.dpapi with a .bak copy) keyed by root / roles:<R> / providers:<id>; migration writes the encrypted store first, reads it back, and only then rewrites ai.json without api_key; any failure keeps the plaintext config and reports mode=plaintext-acl with a Chinese reason instead of claiming success. manager.load_ai / _persist_ai / provider_api.transaction and model_roles.load_config all go through the adapter, so the background worker, runner and providers read the same secrets. public_ai exposes credential_store status and the AI page shows a badge (system credential protection vs user-readable file). Tests cover fake-key round trip, unavailable codec fallback, failed write preserving the old file, corrupt store, encrypted backup restore, missing X-Novel-Helper / cross-origin / headless writes rejected, cross-project version reads, traversal, and unregistered projects.",
+      "remaining": [
+        "DPAPI binding is per Windows user; moving the store to another account or machine needs the original plaintext or a re-entry of the keys (documented, not automated)",
+        "device pairing and loopback token behaviour are re-verified by existing tests, not re-penetrated end to end",
+        "real provider connectivity is intentionally not checked here (M09)"
+      ]
     },
     "M08": {
       "status": "pending",
@@ -226,11 +237,11 @@
       "real_model_validation": "pending (M09, at most 6 requests)"
     },
     "0.3.0-beta.1": {
-      "local_ready": false,
-      "checks": "pending",
-      "github": "pending",
+      "local_ready": true,
+      "checks": "repository checks at 3eeddc5: npm test 47 pass; integration 192 pass; manager 65 pass; release manifest 3427 files / buildId 740292a4; check-release --local passed; no real model calls",
+      "github": "published 2026-11-14: tag v0.3.0-beta.1, https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.3.0-beta.1, asset dsh-chapter-whale-0.3.0-beta.1.tgz 304832203 bytes sha256 adff3b86cefe578a6c9400163798d158079e45b5103bd2a9a42f59fd54c3dd70, marked pre-release",
       "npm": "not_requested",
-      "real_model_validation": "pending"
+      "real_model_validation": "pending (M09, at most 6 requests)"
     },
     "0.3.0": {
       "local_ready": false,
@@ -254,5 +265,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T12:50:00+08:00"
+  "updated_at": "2026-11-14T13:45:00+08:00"
 }
