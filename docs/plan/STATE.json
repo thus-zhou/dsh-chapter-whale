@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M09",
+  "current_module": "M10",
   "authorization": {
     "github_push_and_release": "granted 2026-11-14: local commits, non-force push of the development branch, tags and GitHub Releases for the plan's version nodes. Pre-releases marked as pre-release.",
     "npm_publish": "not_authorized",
@@ -182,12 +182,22 @@
       ]
     },
     "M09": {
-      "status": "pending",
+      "status": "partial",
       "commit": null,
-      "checks": [],
-      "real_requests": 0,
-      "checkpoint": null,
-      "remaining": []
+      "checks": [
+        "offline: npm test 52 pass / 0 fail; integration 198 OK; manager 70 OK (320 total)",
+        "legacy project: adopt (file unchanged) -> link review receipt -> history 1 -> restore -> 2 versions, body bytes unchanged",
+        "release: build-runtime 3393 files buildId 311be1b902c498c95e2ee9fb0af85b82ac47d551e3652a37c362e7a4e79dd94e; check-release --local pass; npm pack 1169 files",
+        "real: local free gateway 127.0.0.1:18900, 7 requests (A probe 1, A plan 1, B research 3, B draft 1, C polish 1), 29563 in / 7686 out tokens, 0 CNY",
+        "real: D review blocked before HTTP by request budget guard (requests_per_day=6) -> guard proven live"
+      ],
+      "real_requests": 7,
+      "checkpoint": "M09 partial: offline integration, legacy migration/restore and release checks pass; real D review and C->D re-review not executed because the 6-request budget was exhausted (7 used: 1 probe + 1 plan + 3 research + 1 draft + 1 polish).",
+      "remaining": [
+        "Real D review JSON output (six dimensions) and C->D re-review: needs +2 requests beyond the 6-request M09 cap (pipeline research x3 and automatic C polish consumed the budget)",
+        "Real browser click-through of report -> revision -> accept -> restore (only API-level tests were run)",
+        "Interactive accept/restore on real model output"
+      ]
     },
     "M10": {
       "status": "pending",
@@ -254,11 +264,11 @@
       "real_model_validation": "pending (M09, at most 6 requests)"
     },
     "0.3.0": {
-      "local_ready": false,
-      "checks": "pending",
-      "github": "pending",
+      "local_ready": true,
+      "checks": "npm 52 / integration 198 / manager 70 / manifest 3393 files buildId 311be1b9 / check-release --local pass",
+      "github": "not_released: stable release waits for real model validation (D review and C->D re-review)",
       "npm": "not_requested",
-      "real_model_validation": "pending"
+      "real_model_validation": "partial: 7/6 requests used, D blocked by budget guard; 0 CNY on local free gateway"
     },
     "0.4.0-alpha.1": {
       "local_ready": false,
@@ -275,5 +285,5 @@
       "real_model_validation": "pending"
     }
   },
-  "updated_at": "2026-11-14T14:05:00+08:00"
+  "updated_at": "2026-11-14T14:45:00+08:00"
 }
