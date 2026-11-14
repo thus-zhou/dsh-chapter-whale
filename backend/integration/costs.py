@@ -104,6 +104,11 @@ def connection(db_path):
             CREATE INDEX IF NOT EXISTS usage_project_chapter ON usage_events(project,chapter);
             CREATE INDEX IF NOT EXISTS usage_created ON usage_events(created_at);
             CREATE TABLE IF NOT EXISTS pricing(id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS request_budget(id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
+              project TEXT NOT NULL, chapter INTEGER NOT NULL, stage TEXT NOT NULL, day TEXT NOT NULL,
+              state TEXT NOT NULL, tokens INTEGER NOT NULL DEFAULT 0, cost_cny TEXT,
+              unknown_cost INTEGER NOT NULL DEFAULT 0, operation TEXT);
+            CREATE INDEX IF NOT EXISTS budget_project_day ON request_budget(project,day);
                 """)
                 _INITIALIZED_DBS.add(key)
     except BaseException:
@@ -149,6 +154,150 @@ def number(value):
     except InvalidOperation as exc: raise ValueError("价格或汇率无效") from exc
     if not amount.is_finite() or amount < 0 or amount > 1000000: raise ValueError("价格或汇率超出范围")
     return str(amount)
+
+
+class BudgetExceeded(RuntimeError):
+    """请求前就被预算拦下：调用方在发请求之前收到，不会产生费用。"""
+    error_code = 'budget_exceeded'
+    retryable = False
+
+    def __init__(self, reason, detail=None):
+        super().__init__(reason)
+        self.reason = reason
+        self.detail = detail or {}
+
+
+def _today():
+    return datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+
+
+def budget_limits(config=None):
+    from .resource_policy import limits
+    if config is None:
+        try:
+            from .model_roles import load_config
+            config = load_config()
+        except Exception:
+            config = {}
+    return limits(config)
+
+
+def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None,
+                    operation=None, config=None, limits=None):
+    """发请求前预留一次网络尝试。超限抛 BudgetExceeded，且不写入任何占位。
+
+    未配置任何上限时返回 None（不改动既有行为）。金额未知时记
+    ``unknown_cost=1`` 并按 ``unknown_reserve_cny`` 保守占用，不当作 0。
+    """
+    policy = limits if limits is not None else budget_limits(config)
+    if not db_path:
+        return None
+    capped = any(policy[key] is not None for key in ('requests_per_day', 'request_tokens', 'chapter_tokens',
+                                                     'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))
+    if not capped:
+        return None
+    tokens = int(tokens or 0)
+    amount = None if cost_cny is None else Decimal(str(cost_cny))
+    reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
+    day = _today()
+    project = str(Path(project).resolve()) if project else ''
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        rows = db.execute("SELECT chapter,day,state,tokens,cost_cny,unknown_cost FROM request_budget WHERE project=?",
+                          (project,)).fetchall()
+        today_rows = [row for row in rows if row['day'] == day]
+        chapter_rows = [row for row in rows if int(row['chapter']) == int(chapter or 0)]
+        def cost_of(group):
+            return sum((Decimal(row['cost_cny']) for row in group if row['cost_cny'] is not None), Decimal(0))
+        checks = (
+            ('requests_per_day', len(today_rows), 1, '今日请求次数已到上限'),
+            ('request_tokens', 0, tokens, '本次请求 Token 超过单次上限'),
+            ('chapter_tokens', sum(int(row['tokens']) for row in chapter_rows), tokens, '本章 Token 已到上限'),
+            ('project_tokens', sum(int(row['tokens']) for row in rows), tokens, '本书 Token 已到上限'),
+            ('chapter_cost_cny', cost_of(chapter_rows), reserve_amount, '本章费用已到上限'),
+            ('project_cost_cny', cost_of(rows), reserve_amount, '本书费用已到上限'),
+        )
+        for key, used, delta, message in checks:
+            limit = policy.get(key)
+            if limit is None:
+                continue
+            if Decimal(used) + Decimal(delta) > Decimal(limit):
+                raise BudgetExceeded(message, {'limit': key, 'limit_value': str(limit),
+                                               'used': str(used), 'requested': str(delta)})
+        identity = uuid.uuid4().hex
+        db.execute('INSERT INTO request_budget VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                   (identity, datetime.now(timezone.utc).isoformat(), project, int(chapter or 0), str(stage or 'other'),
+                    day, 'reserved', tokens, str(reserve_amount), 1 if amount is None else 0,
+                    str(operation or '')))
+        db.commit()
+        return identity
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled'):
+    """请求结束后结算这次预留；未知金额保持未知并带 unknown_cost 标记。"""
+    if not db_path or not identity:
+        return None
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT * FROM request_budget WHERE id=?', (identity,)).fetchone()
+        if row is None:
+            db.rollback()
+            record_gap(db_path, 'budget_settlement_missing')
+            return None
+        amount = row['cost_cny']
+        if cost_cny is not None:
+            amount = str(Decimal(str(cost_cny)))
+        elif row['unknown_cost']:
+            amount = row['cost_cny']
+        db.execute('UPDATE request_budget SET state=?, tokens=COALESCE(?,tokens), cost_cny=? WHERE id=?',
+                   (state, None if tokens is None else int(tokens), amount, identity))
+        db.commit()
+        return identity
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def budget_status(db_path, project=None, config=None, limits=None):
+    """给面板看的请求预算状态；未配置上限时明确 unlimited。"""
+    policy = limits if limits is not None else budget_limits(config)
+    day = _today()
+    result = {'day': day, 'limits': {key: policy[key] for key in
+                                     ('requests_per_day', 'request_tokens', 'chapter_tokens', 'chapter_cost_cny',
+                                      'project_tokens', 'project_cost_cny')},
+              'unknown_reserve_cny': policy['unknown_reserve_cny'],
+              'unlimited': not any(policy[key] is not None for key in
+                                   ('requests_per_day', 'request_tokens', 'chapter_tokens',
+                                    'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))}
+    if not db_path:
+        return result
+    db = connection(db_path)
+    try:
+        rows = db.execute("SELECT chapter,day,state,tokens,cost_cny,unknown_cost FROM request_budget" +
+                          (" WHERE project=?" if project else ""),
+                          ((str(Path(project).resolve()),) if project else ())).fetchall()
+    finally:
+        db.close()
+    today = [row for row in rows if row['day'] == day]
+    result.update({
+        'requests_today': len(today),
+        'tokens_today': sum(int(row['tokens']) for row in today),
+        'cost_today_cny': str(sum((Decimal(row['cost_cny']) for row in today if row['cost_cny'] is not None), Decimal(0))),
+        'tokens_project': sum(int(row['tokens']) for row in rows),
+        'cost_project_cny': str(sum((Decimal(row['cost_cny']) for row in rows if row['cost_cny'] is not None), Decimal(0))),
+        'unknown_cost_requests': sum(1 for row in rows if row['unknown_cost']),
+        'pending': sum(1 for row in rows if row['state'] == 'reserved'),
+    })
+    return result
 
 
 def price_for(doc, base_url, model, provider_id=None):
@@ -276,6 +425,27 @@ def estimate(value):
     return max(0,math.ceil(cjk*1.5+(len(text)-cjk)/4))
 
 
+def _reserve_cost(price, input_tokens, max_tokens):
+    """按报价与输出上限估算保守费用；缺报价或汇率时返回 None（记为未知，不当作 0）。"""
+    if not isinstance(price, dict):
+        return None
+    try:
+        inp = Decimal(str(price["input"]))
+        out = Decimal(str(price["output"]))
+        limit = int(max_tokens or 0)
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        return None
+    if limit <= 0:
+        return None
+    amount = (Decimal(int(input_tokens or 0)) * inp + Decimal(limit) * out) / Decimal(1000000)
+    if price.get("currency") == "USD":
+        rate = price.get("usd_to_cny")
+        if rate is None:
+            return None
+        amount *= Decimal(str(rate))
+    return amount
+
+
 class Attempt:
     def __init__(self, base_url, model, inputs, attempt=1, embedding=False, secret="", stage=None):
         self.db_path=META.get().get("db") or os.getenv("NOVEL_HELPER_COST_DB")
@@ -283,6 +453,7 @@ class Attempt:
         self.embedding=embedding; self.started=time.monotonic();self.usage=None;self.completed=False;self.output_chars=0;self.output_cjk=0
         self.input_estimate=estimate(inputs)
         self.event=None
+        self.reservation=None
         if not self.db_path: return
         try:
             meta=META.get();url=provider(base_url)
@@ -297,7 +468,16 @@ class Attempt:
             selected_price = meta.get('provider_price')
             if 'provider_price' in meta:
                 self.event['price'] = dict(selected_price) if isinstance(selected_price,dict) else None
+            # 预留必须发生在发请求之前：超限时这里直接抛 BudgetExceeded，不产生费用。
+            self.reservation = reserve_request(
+                self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
+                tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
+                cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
+                operation=self.event["operation"])
             self.persist()
+        except BudgetExceeded:
+            self.event=None
+            raise
         except Exception:
             self.event=None
             record_gap(self.db_path, 'initial_record_failed')
@@ -338,6 +518,10 @@ class Attempt:
                 self.event.update(input_tokens=self.input_estimate,
                     output_tokens=0 if self.embedding else math.ceil(self.output_cjk*1.5+(self.output_chars-self.output_cjk)/4),metering="estimated")
             self.event.update(calculate(self.event));self.persist()
+            if self.reservation is not None:
+                settle_request(self.db_path, self.reservation, tokens=int(self.event.get("input_tokens") or 0)+int(self.event.get("output_tokens") or 0),
+                               cost_cny=self.event.get("cost_cny"),
+                               state={"success":"settled","interrupted":"cancelled"}.get(self.event["status"],"failed"))
         except Exception:
             record_gap(self.db_path, 'finalization_failed')
             print("[费用记录] 无法完成记录；保留待核对状态",flush=True)
@@ -398,7 +582,8 @@ def report(db_path, project=None, chapter=None, days=0):
     return {"summary":summary,"stages":groups(lambda e:e["stage"],lambda e:STAGES.get(e["stage"],e["stage"])),
             'providers':groups(lambda e:e.get('provider_id') or e['base_url'],lambda e:e.get('provider_name') or e['base_url']),
             'fallback':aggregate([e for e in events if e.get('fallback_from')]),
-            'resource_policy':policy,'fallback_budgets':fallback_status(db_path,project,limit_cny=policy['fallback_cost_limit_cny']),
+            'resource_policy':policy,'budget':budget_status(db_path,project,limits=policy['limits']),
+            'fallback_budgets':fallback_status(db_path,project,limit_cny=policy['fallback_cost_limit_cny']),
             "models":groups(lambda e:(e.get('provider_id') or e["base_url"])+"|"+e["model"],lambda e:e["model"]+(' · '+e['provider_name'] if e.get('provider_name') else '')),
             "chapters":groups(lambda e:(e["project"],e["chapter"]),lambda e:f"第 {e['chapter']} 章" if e["chapter"] else "全书与共用"),
             "daily":groups(lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat(),

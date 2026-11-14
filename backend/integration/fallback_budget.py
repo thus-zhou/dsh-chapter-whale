@@ -54,6 +54,23 @@ def settle(db_path, identity):
     finally:db.close()
 
 
+def cancel(db_path, identity):
+    """请求被取消或未能发出：保留预留（保守占用），标注状态，不静默释放。"""
+    if not db_path or not identity:
+        return None
+    db = costs.connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute("UPDATE fallback_reservations SET state='cancelled' WHERE id=? AND state='reserved'", (identity,))
+        db.commit()
+        return identity
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def status(db_path,project=None,limit_cny='20'):
     day=datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
     db=costs.connection(db_path)

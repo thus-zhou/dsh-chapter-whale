@@ -269,7 +269,22 @@ def _terms(text):
     return words
 
 
-def context(project, role="B", chapter=1, query="", doc=None, budget=12000):
+def context_budget_default():
+    """记忆上下文的默认预算：未配置模型窗口时沿用既有的 12000，绝不放大。"""
+    try:
+        from . import model_roles, resource_policy, context_budget
+        policy = resource_policy.limits(model_roles.load_config())
+        if not policy.get('model_window'):
+            return 12000
+        return context_budget.available_tokens(policy['context_profile'], model_window=policy['model_window'],
+                                               max_output=policy['output_tokens'],
+                                               safety=policy['safety_tokens'])['available']
+    except Exception:
+        return 12000
+
+
+def context(project, role="B", chapter=1, query="", doc=None, budget=None):
+    budget = context_budget_default() if budget is None else budget
     if role not in roles.ROLES or type(chapter) is not int or not 1 <= chapter <= 100000:
         raise ValueError("记忆检索角色或章节无效")
     doc = read(project) if doc is None else doc
