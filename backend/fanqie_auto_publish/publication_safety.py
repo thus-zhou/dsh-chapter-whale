@@ -181,9 +181,22 @@ def body_digest(text):
     return hashlib.sha256(normalized_body(text).encode("utf-8")).hexdigest()
 
 
+def _quality_pass_ok(review,body_sha256=None,project=None,chapter=None):
+    """质量通过分支再交由唯一门禁复查；旧的无分项回执保持兼容。"""
+    try:
+        import sys
+        root=str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:sys.path.insert(0,root)
+        from integration import quality_gate
+        return quality_gate.pass_ok(review,body_sha256,project,chapter)
+    except Exception:
+        return False
+
+
 def review_eligible(review,body_sha256,project=None,chapter=None):
     if not isinstance(review,dict):return False
-    if review.get("success") is True and review.get("review_decision")=="pass" and review.get("needs_revision",False) is False:return True
+    if review.get("success") is True and review.get("review_decision")=="pass" and review.get("needs_revision",False) is False:
+        return _quality_pass_ok(review,body_sha256,project,chapter)
     if review.get('review_decision')=='waived_by_author_rule':
         from integration.editorial_release import valid
         auth=review.get('author_rule_authorization',{})

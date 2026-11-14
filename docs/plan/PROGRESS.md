@@ -188,3 +188,36 @@ M02：在 `integration/costs.py`、`fallback_budget.py` 与现有调用入口上
 ### 下一步
 
 M03：把质量判断收敛成单一入口——`quality_score`（六维加权）+ `quality_gate`（85/70 门槛），`review_passed` 改为兼容包装器，报告绑定正文/约定/配置版本，正文变化即过期；章节页最小入口 + 代理白名单同步 + 后端测试入 CI。
+
+---
+
+## M03 质量门禁（2026-11-14）
+
+### 完成内容
+
+- **`quality_score.py`**：六维（设定自洽 15 / 情节推进 20 / 人物塑造 15 / 文笔 15 / 对话 15 / 文风 20），总门槛 85、单项 70，可在 `review_quality` 里改；`source` 字段写明这是「AI 内部启发式」，不是客观标准。模型只给分项/问题/证据，**总分由程序加权算**。
+- **不造分**：缺维度记 `missing`、越界分记 `score_invalid`、真正不适用的维度放 `not_applicable` 并从权重中剔除；没分项时 `total=None`，绝不按 0 分算。
+- **`quality_gate.py`**：唯一判断入口。有依据的 Critical/High 直接阻断并列出受限维度；无依据的怀疑只标 `unverified`，不阻断；分项缺失 → `quality_pass=None`（证据不足≠通过）；模型结论与分项冲突时按否决处理。
+- **旧入口收敛**：`writer_runner.review_passed()` 变成包装器（旧语义 + 门禁不得明确否决）；`publication_safety.review_eligible()` 的通过分支改为委托 `quality_gate.pass_ok()`，发布队列因此无法绕过新规则。作者豁免与 E 授权仍是独立授权对象，不伪装成质量通过。
+- **报告绑定与过期**：`.webnovel/quality_reports/{章:04d}-{report_id}.json` 记录正文哈希、约定哈希、审查配置哈希与完整 review；正文变化 → `body_changed`，约定变化 → `contract_changed`，仅门槛/权重变化 → `config_changed`（只重算，不重调模型）。
+- **D 输出结构化**：审查提示改为要求一个 JSON（`conclusion` + 六维分数 + issues 含 evidence），同时保留文本回退解析；`_extract_review_decision` 优先采信明确结论，不再被 issues 里的"建议补强"字样误判为需修改。
+- **最小入口**：新增只读 `GET /api/projects/{id}/chapters/{n}/quality`（读路径，无需写白名单），章节弹窗显示质量徽标、总分、主要问题、受限范围与过期原因。
+
+### 检查（离线，固定响应，0 次模型调用）
+
+- `test_quality.py` 23 项：默认权重/门槛、自定义权重归一、非法配置、加权总分、不适用维度、JSON 提取、纯文本兼容、越界分、正常通过、85 边界、单项 70 边界、Critical+证据阻断、无证据不阻断、缺维度证据不足、旧文本回执不造分、模型结论冲突、发布门禁兼容、`review_passed` 包装、报告绑定与三种过期、只读视图。
+- `test_quality_api.py` 3 项：正常读取（总分 90、状态有效）、正文改动后 `body_changed`、无报告返回 `no_report`、非法章号拒绝。
+- 集成 149 项、manager 58 项、`npm test` 47 项全过；CI 增加 budget/quality 两个离线步骤。
+
+### M03 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成（`quality_score.py`、`quality_gate.py` 新增；`writer_runner.py`、`publication_safety.py`、`skill_executor.py`、`manager/app.py`、`client.js`、CI 修改；测试 26 项）|
+| 真实模型验证 | 未做（D 的真实 JSON 输出留给 M09，上限 6 次请求）|
+| GitHub 推送 | 本地提交；推送随 0.3.0-alpha.1 节点 |
+| Release | 0.3.0-alpha.1：本地就绪后按节点发布，预发行标注 |
+
+### 下一步
+
+M04：文风学习（样本 → 可复现的文风指南），并把学习结果纳入创作约定哈希，避免改学习库却不触发报告过期。

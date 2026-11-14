@@ -820,6 +820,13 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             raise HTTPException(409 if items else 404, "章节重复，请检查正文文件" if items else "未找到章节")
         return {"content": items[0][3], "title": items[0][2], "id": chapter}
 
+    @app.get("/api/projects/{identity}/chapters/{chapter}/quality")
+    def chapter_quality(identity: str, chapter: int):
+        """最小质量入口：结论、总分、主要问题、受限范围、过期原因。只读，不调用模型。"""
+        if chapter <= 0: raise ValueError("章节号无效")
+        from integration import quality_gate
+        return quality_gate.public_report(Path(project(identity)["path"]), chapter)
+
     @app.post("/api/projects/{identity}/chapters/{chapter}/review")
     def review_existing(identity: str, chapter: int):
         item = project(identity)

@@ -152,9 +152,9 @@ def atomic_json(path: Path, data: Any) -> None:
 
 
 def review_passed(review: Any) -> bool:
-    return (isinstance(review, dict) and review.get("success") is True
-            and review.get("review_decision") == "pass"
-            and review.get("needs_revision", False) is False)
+    """兼容包装器：质量判断唯一入口是 quality_gate，这里只做旧签名的转发。"""
+    from . import quality_gate
+    return quality_gate.review_passed(review)
 
 
 def reviewed_chapters(project_root: Path) -> Dict[int, Dict[str, Any]]:
@@ -342,8 +342,16 @@ async def _read_stream_result(event_stream: Any) -> Dict[str, Any]:
 
 def _record_review_attempt(project,chapter,content,review):
     """Keep D evidence even if E vetoes the current draft; never grants approval."""
+    from . import quality_gate
+    if isinstance(review,dict) and 'quality_gate' not in review:
+        review=dict(review); review['quality_gate']=quality_gate.judge(review)
     path=Path(project)/'.webnovel'/'review_attempts'/f'{chapter:04d}-{uuid.uuid4().hex}.json'
-    atomic_json(path,{'chapter_id':chapter,'reviewed_at':now_iso(),'body_sha256':body_digest(content),'review':review})
+    digest=body_digest(content)
+    atomic_json(path,{'chapter_id':chapter,'reviewed_at':now_iso(),'body_sha256':digest,'review':review})
+    try:
+        quality_gate.save_report(project,chapter,review,body_sha256=digest)
+    except Exception:
+        pass  # 报告留档失败不阻断既有回执写入；过期状态由 no_report 表达
 
 
 def _safe_error(exc):

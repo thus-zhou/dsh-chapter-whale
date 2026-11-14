@@ -4565,6 +4565,15 @@ class SkillExecutor:
         if "[ERROR]" in text or "[错误]" in text:
             return "unknown"
 
+        # 结构化审查：模型给出的 conclusion/verdict 优先；issue 里的建议文字不否决明确结论。
+        try:
+            from integration import quality_score as _quality_score
+            parsed = _quality_score.extract(text)
+            if parsed.get("format") == "json" and parsed.get("verdict") in ("pass", "needs_revision"):
+                return parsed["verdict"]
+        except Exception:
+            pass
+
         # 阻断意见优先，避免混合结论或“无冲突，但需修改”被通过词放行。
         if re.search(r"结论\s*[:：]\s*需修改|是否(?:需要)?修改\s*[:：]\s*是", text):
             return "needs_revision"
@@ -4820,19 +4829,16 @@ class SkillExecutor:
         user_content += f"【{content_label}】\n{content_for_review}\n\n"
         
         user_content += """
-请严格按以下固定格式输出，不能省略第一行结论：
-结论：需修改
-或
-结论：无需修改
-
-然后继续写：
-原因：一句话说明为什么需要/不需要修改。
-意见：如果“需修改”，列 1-3 条最关键修改点；如果“无需修改”，写“无”。
+请只输出一个 JSON 对象（不要代码块以外的解释），字段固定：
+{"conclusion":"结论：无需修改 或 结论：需修改","verdict":"pass 或 needs_revision","scores":{"设定自洽":0-100,"情节推进":0-100,"人物塑造":0-100,"文笔":0-100,"对话":0-100,"文风":0-100},"not_applicable":["确实无法判断的维度名"],"issues":[{"dimension":"维度名","severity":"critical|high|advisory","issue":"问题","evidence":"依据（引用原文/作者约定/设定/大纲）","advice":"怎么改"}],"summary":"一句话原因"}
 
 要求：
-1. 总字数 300 字以内。
-2. 不要输出 JSON，不要写多余前言。
-3. “结论”只能二选一：需修改 / 无需修改。
+1. conclusion 只能是“结论：无需修改”或“结论：需修改”，必须出现。
+2. 只能依据本轮给出的正文、作者确认约定、设定与大纲判断；没有依据的怀疑把 evidence 留空，severity 用 advisory。
+3. critical/high 必须给出可核验依据（哪一段原文、哪条约定、哪份设定）；给不出就降为 advisory。
+4. 真正无法判断的维度放进 not_applicable，不要随便打分；能给分的维度都要给分。
+5. 大纲与前章冲突只作为规划建议，不要求改写已发布前章。
+6. 总长度 600 字以内（issues 除外）。
 """
 
         system_prompt += "\n" + self.creative_guidance + "\n" + self._shared_memory("D",chapter_id,chapter_outline+"\n"+str(content or "")[:4000])
@@ -4874,12 +4880,20 @@ class SkillExecutor:
              
              self._debug(f"[REVIEW DEBUG] 审查结果 ({len(result_str)}字): {result_str[:200]}")
              
-             return {
+             review = {
                  "success": True,
                  "raw_review": result_str,
                  "review_decision": review_decision,
                  "needs_revision": needs_revision,
              }
+             try:
+                 from integration import quality_gate, quality_score
+                 review["quality"] = quality_score.extract(result_str)
+                 review["quality_gate"] = quality_gate.judge(review)
+             except Exception as e:
+                 # 评分解析失败不影响既有审查结论；门禁会把缺失如实记为“证据不足”。
+                 self._debug(f"[REVIEW DEBUG] 质量评分解析失败: {e}")
+             return review
 
         except Exception as e:
              from integration.failure_info import details

@@ -3514,12 +3514,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function ChapterModal(props) {
           const [data, setData] = React.useState(null);
+          const [quality, setQuality] = React.useState(null);
           const [loading, setLoading] = React.useState(false);
 
           React.useEffect(() => {
             if (!props.open || !props.projectId || !props.chapter) return undefined;
             let alive = true;
             setLoading(true);
+            setQuality(null);
             api(`/projects/${props.projectId}/chapters/${props.chapter}`)
               .then((value) => {
                 if (alive) setData(value);
@@ -3530,11 +3532,44 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               .finally(() => {
                 if (alive) setLoading(false);
               });
+            api(`/projects/${props.projectId}/chapters/${props.chapter}/quality`)
+              .then((value) => {
+                if (alive) setQuality(value);
+              })
+              .catch(() => {
+                if (alive) setQuality(null);
+              });
             return () => {
               alive = false;
             };
           }, [props.open, props.projectId, props.chapter]);
 
+          const report = quality && quality.report;
+          const status = (quality && quality.status) || {};
+          const qualityTone = report
+            ? report.quality_pass === true
+              ? 'ok'
+              : report.quality_pass === false
+                ? 'err'
+                : 'warn'
+            : 'mute';
+          const qualityLabel = report
+            ? report.quality_pass === true
+              ? '质量通过'
+              : report.quality_pass === false
+                ? '质量未通过'
+                : '证据不足'
+            : '暂无质量报告';
+          const staleText =
+            status.stale_reason === 'body_changed'
+              ? '正文已变化，报告过期'
+              : status.stale_reason === 'contract_changed'
+                ? '创作约定已变化，报告过期'
+                : status.stale_reason === 'config_changed'
+                  ? '审查门槛已变化，只需重算'
+                  : status.stale_reason === 'no_report'
+                    ? ''
+                    : '';
           return e(Modal, {
             open: props.open,
             title: data ? `第 ${data.id} 章 · ${data.title || ''}` : `第 ${props.chapter} 章`,
@@ -3550,7 +3585,34 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       { className: 'nh-row', style: { gap: 10, marginBottom: 10 } },
                       e(Badge, { tone: 'mute' }, `${num(data.words)} 字`),
                       data.reviewed ? e(Badge, { tone: 'ok' }, '已审查') : e(Badge, { tone: 'warn' }, '未审查'),
+                      e(Badge, { tone: qualityTone }, qualityLabel),
+                      report && report.total != null
+                        ? e(Badge, { tone: 'mute' }, `总分 ${report.total}`)
+                        : null,
                     ),
+                    staleText
+                      ? e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, staleText)
+                      : null,
+                    report && report.failures && report.failures.length
+                      ? e(
+                          'div',
+                          { style: { marginBottom: 8 } },
+                          e('div', { className: 'nh-muted' }, '主要问题'),
+                          ...report.failures.slice(0, 5).map((item, index) =>
+                            e('div', { key: index }, `· ${item}`),
+                          ),
+                        )
+                      : null,
+                    report && report.restricted && report.restricted.length
+                      ? e(
+                          'div',
+                          { className: 'nh-muted', style: { marginBottom: 8 } },
+                          `受限范围：${report.restricted.join('、')}`,
+                        )
+                      : null,
+                    report && report.summary
+                      ? e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, report.summary)
+                      : null,
                     e('pre', { className: 'nh-pre', style: { maxHeight: '56vh' } }, data.content || '(正文为空)'),
                   )
                 : e(Empty, null, '读取失败'),
