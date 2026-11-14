@@ -291,7 +291,7 @@
     },
     "M15": {
       "status": "completed",
-      "commit": "PENDING_M15",
+      "commit": "c251241",
       "checks": [
         "integration 255 OK（新增 test_longform.py 11 项）/ manager 82 OK / npm 53 pass",
         "20 章回放夹具：认知边界、关系去重、伏笔证据、未来隐藏、历史修改影响、恢复",
@@ -340,11 +340,11 @@
     },
     "0.4.0": {
       "local_ready": true,
-      "checks": "integration 255 / manager 82 / npm 53; manifest rebuilt; check-release --local ok",
-      "github": "PENDING",
+      "checks": "integration 255 / manager 82 / npm 53; manifest 3398 files buildId 27dda896; check-release --local ok",
+      "github": "tag v0.4.0 + release 304839826 bytes sha 9855365e (stable)",
       "npm": "not_requested",
-      "real_model_validation": "10/10 requests, cost 0 CNY, D JSON verified; chapter 2 reviewed: no"
+      "real_model_validation": "10/10 requests, cost 0 CNY, D JSON verified; chapter 2 composed as two scenes but not reviewed"
     }
   },
-  "updated_at": "2026-11-14T18:50:00+08:00"
+  "updated_at": "2026-11-14T19:02:00+08:00"
 }
