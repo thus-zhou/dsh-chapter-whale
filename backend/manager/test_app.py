@@ -9,14 +9,26 @@ from fastapi.testclient import TestClient
 from manager import app as module
 
 
+def fake_pair():
+    """跨平台替身：CI 的 Linux runner 没有 DPAPI，用对称翻转模拟受保护存储。"""
+    key = b"novel"
+
+    def flip(raw):
+        return bytes(byte ^ key[index % len(key)] for index, byte in enumerate(raw))
+
+    return flip, flip
+
+
 class ManagerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="novel-manager-test-")
         self.root = Path(self.temp.name)
         self.patches = [patch.object(module, "DATA", self.root),
-                        patch.object(module, "AI_PATH", self.root / "ai.json")]
+                        patch.object(module, "AI_PATH", self.root / "ai.json"),
+                        patch.object(module.secret_store, "codec", lambda: fake_pair())]
         for item in self.patches:
             item.start()
+        module._AI_MIGRATION_TRIED = False
         self.app = module.create_app(self.root / "manager.db", start_dispatcher=False)
         self.client = TestClient(self.app)
         self.headers = {"X-Novel-Helper": "1"}
