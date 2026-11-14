@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
-from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state
+from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
@@ -386,6 +386,18 @@ class CharacterCorrectionInput(BaseModel):
     field: str = Field(pattern="^(identity|goal|motive|limits|voice|history)$")
     value: str = Field(min_length=1, max_length=2000)
     reason: str = Field(default="", max_length=400)
+
+
+class ForeshadowInput(BaseModel):
+    revision: int = Field(ge=0)
+    state: str = Field(pattern="^(planned|planted|developing|resolved|paused|cancelled)$")
+    chapter: int = Field(default=0, ge=0, le=100000)
+    event: str = Field(default="", max_length=200)
+    quote: str = Field(default="", max_length=800)
+    sha256: str = Field(default="", max_length=64)
+    expected: str = Field(default="", max_length=400)
+    note: str = Field(default="", max_length=400)
+    author: bool = False
 
 
 class AccountInput(BaseModel):
@@ -848,6 +860,24 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/characters")
     def characters(identity: str,chapter: int=0):
         return character_state.view(Path(project(identity)["path"]),chapter)
+
+    @app.get("/api/projects/{identity}/continuity")
+    def continuity_view(identity: str,chapter: int=0):
+        return continuity.view(Path(project(identity)["path"]),chapter)
+
+    @app.post("/api/projects/{identity}/foreshadow/{item}/transition")
+    def foreshadow_transition(identity: str,item: str,data: ForeshadowInput):
+        return continuity.transition(Path(project(identity)["path"]),item,data.revision,data.state,
+                                     chapter=data.chapter,event=data.event,quote=data.quote,sha256=data.sha256,
+                                     expected=data.expected,note=data.note,author=data.author)
+
+    @app.post("/api/projects/{identity}/continuity/index")
+    def continuity_index(identity: str):
+        return continuity.build_index(Path(project(identity)["path"]))
+
+    @app.post("/api/projects/{identity}/continuity/rebuild")
+    def continuity_rebuild(identity: str,chapter: int=0):
+        return continuity.rebuild(Path(project(identity)["path"]),chapter or None)
 
     @app.post("/api/projects/{identity}/characters")
     def add_character(identity: str,data: CharacterInput):

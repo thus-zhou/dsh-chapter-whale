@@ -122,7 +122,7 @@ def validate_item(item):
         raise ValueError("记忆状态无效")
     if not re.fullmatch(r"[a-f0-9]{32}", str(item.get("id", ""))):
         raise ValueError("记忆编号无效")
-    if item.get("clue_state", "") not in {"", "planned", "planted", "resolved"}:
+    if item.get("clue_state", "") not in {"", "planned", "planted", "developing", "resolved", "cancelled", "paused"}:
         raise ValueError("伏笔状态无效")
     if type(item.get("updated_revision",0)) is not int or item.get("updated_revision",0)<0:
         raise ValueError("记忆版本无效")
@@ -339,7 +339,9 @@ def freshness(project, item, cache):
 def public(project, doc=None):
     doc = read(project) if doc is None else doc
     cache = {}
-    items = [{**record(x), "freshness": freshness(project, x, cache)} for x in doc["items"]]
+    items = [{**record(x), "expected": x.get("expected", ""), "actual": x.get("actual") or {},
+              "transitions": list(x.get("transitions") or []),
+              "freshness": freshness(project, x, cache)} for x in doc["items"]]
     receipts=writer.strict_json(Path(project)/".webnovel/writer_receipts.json",{})
     pending=[]
     if isinstance(receipts,dict):

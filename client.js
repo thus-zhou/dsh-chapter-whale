@@ -2370,6 +2370,37 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           );
           const [personDraft, setPersonDraft] = React.useState(null);
           const [correcting, setCorrecting] = React.useState(null);
+          const [foreshadowDraft, setForeshadowDraft] = React.useState(null);
+          const continuity = usePoll(
+            () => (project ? api(`/projects/${project.id}/continuity`) : Promise.resolve({ foreshadows: [], conflicts: [], impact: {} })),
+            [project && project.id],
+            POLL_MS,
+          );
+
+          const saveForeshadow = async (draft) => {
+            setBusy(true);
+            try {
+              await api(`/projects/${project.id}/foreshadow/${draft.id}/transition`, {
+                method: 'POST',
+                body: {
+                  revision: (memory.data && memory.data.revision) || 0,
+                  state: draft.state,
+                  chapter: Number(draft.chapter) || 0,
+                  quote: draft.quote || '',
+                  event: draft.event || '',
+                  note: draft.note || '',
+                },
+              });
+              toast.push('伏笔状态已更新', 'ok');
+              setForeshadowDraft(null);
+              memory.reload(true);
+              continuity.reload(true);
+            } catch (error) {
+              toast.push(`更新失败：${error.message}`, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
 
           const savePerson = async (draft) => {
             setBusy(true);
@@ -2663,6 +2694,104 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     ),
               ),
             ),
+            e(
+              'div',
+              { style: { marginTop: 'var(--nh-gap)' } },
+              e(
+                Card,
+                {
+                  title: '伏笔与冲突',
+                  hint: '计划埋设不等于已写入正文；状态前进需要原文依据',
+                },
+                ((continuity.data && continuity.data.foreshadows) || []).length === 0
+                  ? e(Empty, null, '还没有伏笔记录。在记忆里新建“伏笔”条目后，可以在这里推进状态。')
+                  : e(
+                      'div',
+                      { className: 'nh-col', style: { gap: 0 } },
+                      ((continuity.data && continuity.data.foreshadows) || []).map((row) =>
+                        e(
+                          'div',
+                          { key: row.id, style: { padding: '10px 0', borderBottom: '1px solid var(--nh-border-soft)' } },
+                          e(
+                            'div',
+                            { className: 'nh-row', style: { gap: 8 } },
+                            e('span', { style: { fontSize: 12, fontWeight: 500 } }, row.title),
+                            e(
+                              Badge,
+                              { tone: row.state === 'resolved' ? 'ok' : row.state === 'cancelled' ? 'mute' : row.overdue ? 'err' : 'accent' },
+                              row.state_label,
+                            ),
+                            row.due_chapter ? e(Badge, { tone: row.overdue ? 'err' : 'mute' }, `计划第${row.due_chapter}章`) : null,
+                            row.actual && row.actual.chapter ? e(Badge, { tone: 'mute' }, `实际第${row.actual.chapter}章`) : null,
+                            e('span', { className: 'nh-spacer' }),
+                            e(Button, {
+                              size: 'sm',
+                              kind: 'ghost',
+                              onClick: () => setForeshadowDraft({ id: row.id, title: row.title, state: row.state, chapter: row.actual && row.actual.chapter ? row.actual.chapter : 0, quote: row.actual && row.actual.quote ? row.actual.quote : '', event: '', note: '' }),
+                            }, '变更状态'),
+                          ),
+                          row.transitions && row.transitions.length
+                            ? e(
+                                'div',
+                                { className: 'nh-dim2 nh-wrap', style: { fontSize: 12, marginTop: 4 } },
+                                row.transitions.map((step) => `第${step.chapter}章 ${step.state_label}${step.event ? `（${step.event}）` : ''}`).join(' → '),
+                              )
+                            : e('div', { className: 'nh-dim2', style: { fontSize: 12, marginTop: 4 } }, '仍是计划，尚未标记写入正文'),
+                        ),
+                      ),
+                    ),
+                ((continuity.data && continuity.data.conflicts) || []).length
+                  ? e(
+                      'div',
+                      { style: { marginTop: 10, fontSize: 12, lineHeight: 1.7 } },
+                      e('div', { style: { fontWeight: 500, marginBottom: 4 } }, '冲突提示'),
+                      (continuity.data.conflicts || []).map((row) =>
+                        e('div', { key: `${row.kind}-${row.item}`, className: 'nh-dim2' }, `· ${row.title}：${row.message}`),
+                      ),
+                    )
+                  : null,
+                continuity.data && continuity.data.impact && continuity.data.impact.affected
+                  ? e('div', { className: 'nh-dim2', style: { fontSize: 12, marginTop: 8 } },
+                      `已知受影响章节 ${continuity.data.impact.affected} 个；${continuity.data.impact.unknown}`)
+                  : null,
+              ),
+            ),
+            e(Modal, {
+              open: Boolean(foreshadowDraft),
+              title: foreshadowDraft ? `伏笔：${foreshadowDraft.title}` : '伏笔状态',
+              onClose: () => setForeshadowDraft(null),
+              children: foreshadowDraft
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 12 } },
+                    e(
+                      Field,
+                      { label: '新状态' },
+                      e(Select, {
+                        value: foreshadowDraft.state,
+                        onChange: (value) => setForeshadowDraft({ ...foreshadowDraft, state: value }),
+                        options: [
+                          { value: 'planned', label: '计划' },
+                          { value: 'planted', label: '已埋设（需原文依据）' },
+                          { value: 'developing', label: '推进中（需原文依据）' },
+                          { value: 'resolved', label: '已回收（需原文依据）' },
+                          { value: 'paused', label: '作者暂缓' },
+                          { value: 'cancelled', label: '作者取消（需说明）' },
+                        ],
+                      }),
+                    ),
+                    e(Field, { label: '依据章节' }, e(TextInput, { value: String(foreshadowDraft.chapter || ''), onChange: (value) => setForeshadowDraft({ ...foreshadowDraft, chapter: value }) })),
+                    e(Field, { label: '原文依据（逐字引用该章）' }, e(TextInput, { value: foreshadowDraft.quote, onChange: (value) => setForeshadowDraft({ ...foreshadowDraft, quote: value }) })),
+                    e(Field, { label: '事件（可留空）' }, e(TextInput, { value: foreshadowDraft.event, onChange: (value) => setForeshadowDraft({ ...foreshadowDraft, event: value }) })),
+                    e(Field, { label: '说明／取消原因（可留空）' }, e(TextInput, { value: foreshadowDraft.note, onChange: (value) => setForeshadowDraft({ ...foreshadowDraft, note: value }) })),
+                    e(
+                      'div',
+                      { className: 'nh-row', style: { gap: 8, justifyContent: 'flex-end' } },
+                      e(Button, { kind: 'primary', disabled: busy, onClick: () => saveForeshadow(foreshadowDraft) }, '保存状态'),
+                    ),
+                  )
+                : null,
+            }),
             e(Modal, {
               open: Boolean(personDraft),
               title: '新增人物',
