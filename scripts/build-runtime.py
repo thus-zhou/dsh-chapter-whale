@@ -52,7 +52,7 @@ def main():
             if path.is_file() and '__pycache__' not in path.parts and '.links' not in path.parts and path.name != '.npmignore':
                 files[path.relative_to(ROOT).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     build_id = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
-    manifest = {'version': '0.2.0-rc.1', 'platform': 'win32-x64', 'python': '3.13.17',
+    manifest = {'version': '0.3.0-alpha.1', 'platform': 'win32-x64', 'python': '3.13.17',
                 'pythonSource': PYTHON_URL, 'pythonSha256': digest, 'buildId': build_id,
                 'files': files, 'distributionStatus': 'prerelease-tested-without-live-publish'}
     (ROOT/'runtime-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
