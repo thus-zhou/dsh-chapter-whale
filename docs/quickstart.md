@@ -25,7 +25,7 @@ npm 包首次启动会自动下载约 278 MB 的 Python 与浏览器运行环境
 若希望下载包含全部环境的包，在插件管理中添加以下 GitHub 地址，或先下载为本地文件再安装：
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.0-alpha.1/dsh-chapter-whale-0.4.0-alpha.1.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.0/dsh-chapter-whale-0.4.0.tgz
 ```
 
 完整包约 278 MB（265 MiB），包含 Python、写作后端和浏览器，不需要单独安装开发环境。两种安装方式使用同一套独立工作区。
@@ -200,4 +200,4 @@ http://127.0.0.1:18765
 
 ---
 
-[下载完整发行包](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.0-alpha.1) · [返回项目首页](../README.md)
+[下载完整发行包](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.0) · [返回项目首页](../README.md)
