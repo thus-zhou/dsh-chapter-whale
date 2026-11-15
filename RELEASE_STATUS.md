@@ -4,7 +4,7 @@
 
 Node 64 项通过；实际 DSH 独立环境加载并通过测试适配器连接探测。后端和固定 0.4.2 运行时不变，真实模型调用和平台发布均为 0。详细结果见 [0.5.0 验收](docs/retest-0.5.0.md)。
 
-发行包与公开下载结果在完成后补记。
+GitHub Latest、npm `latest` 与自定义市场索引均为 0.5.0。GitHub 和 npm 公开下载包均为 16,754,442 字节，SHA-256 `93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb`，与最终验收包一致。源码 CI 与线上发行包 Windows 首次启动检查通过。[社区市场更新 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)已同步版本和展示资料，待维护者合并。按用户要求不更新个人本机插件。
 
 ## 0.4.4 界面与 DSH 模型接入修复
 

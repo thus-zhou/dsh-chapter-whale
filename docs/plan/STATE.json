@@ -10,8 +10,9 @@
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
   "current_module": "M15",
   "authorization": {
-    "github_push_and_release": "granted 2026-11-14/15: repair second independent retest findings and synchronize GitHub plus latest plugin market; final patch release 0.4.3",
-    "npm_publish": "granted 2026-11-15: user explicitly requests latest plugin market synchronization and completes npm login",
+    "github_push_and_release": "granted 2026-11-15: apply approved UI design; update GitHub, version and demonstration screenshots; release 0.5.0",
+    "npm_publish": "granted 2026-11-15: synchronize npm and plugin market; user completed publish verification",
+    "personal_plugin_update": "cancelled by user 2026-11-15; synchronize GitHub, npm and markets only",
     "real_model_budget": {
       "max_requests": 0,
       "max_tokens": null,
@@ -361,9 +362,31 @@
       "real_model_validation": "partial; previous gaps remain",
       "npm_sha256": "296aa57686977921666f5b062cfe4ca7b52872df4a942bf3f32c505f62fddb58",
       "acceptance_record": "docs/retest-0.4.3.md"
+    },
+    "0.5.0": {
+      "local_ready": true,
+      "checks": "Node 64 pass; DSH 0.2.2-rc.1 isolated native UI and fixture adapter probe; appearance persistence, reduced motion and 760px layout; final package empty-workspace first start passed",
+      "github": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0",
+      "npm": "published; latest=0.5.0; public registry tarball byte-identical to tested package and GitHub asset",
+      "runtime_version": "0.4.2",
+      "runtime_buildId": "79a1db4ee1f940169ef80b58c7b3a4f6317947939caf8955575f85c70bef0e0f",
+      "npm_sha256": "93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb",
+      "bytes": 16754442,
+      "source_ci": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723834223",
+      "installer_ci": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723929446",
+      "custom_market_version": "0.5.0",
+      "community_market_pr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398",
+      "community_market_state": "open",
+      "screenshot_count": 9,
+      "personal_install_updated": false,
+      "real_model_requests": 0,
+      "real_publications": 0,
+      "real_model_validation": "Existing M09/M15 gaps remain; this is a UI release.",
+      "acceptance_record": "docs/retest-0.5.0.md",
+      "verified_at": "2026-11-15T23:25:00+08:00"
     }
   },
-  "updated_at": "2026-11-15T09:50:58.126053+08:00",
+  "updated_at": "2026-11-15T23:25:00+08:00",
   "second_retest": {
     "date": "2026-11-15",
     "issues": [

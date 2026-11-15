@@ -17,4 +17,11 @@
 - 测试作品正文、记忆和人物从本地管理 API 读取；没有真实模型调用或真实平台发布。
 - 后端、Python 与 Chromium 内容未变，继续复用固定 0.4.2 运行时及摘要；不把本次界面检查表述为重新验收真实写作和发布质量。
 
-发布包、公开下载与 CI 的最终结果在发布后补记。
+## 发行与公开下载
+
+- [GitHub 0.5.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0) 已公开并标记为 Latest；npm `latest` 为 `0.5.0`，自定义市场索引同步。
+- 最终安装包在全新工作区通过运行时下载响应校验、解包、全部后端文件校验、空数据启动和写作服务导入。发布后分别从 GitHub 与 npm 下载，均为 16,754,442 字节，SHA-256 均为 `93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb`，与验收包一致。
+- [源码检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723834223)及[实际发行包 Windows 首次启动](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723929446)均通过；后者使用线上 GitHub 归档完成下载和启动。
+- 九张新版演示图已进入 README、上手指南、截图文档和市场资料；工作台图与截图文档的公开地址返回 HTTP 200。
+- [社区市场更新 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)已改为 0.5.0，仍待维护者合并。
+- 按用户最新要求，不更新个人本机插件。上述 DSH 加载与截图均在独立测试环境完成。

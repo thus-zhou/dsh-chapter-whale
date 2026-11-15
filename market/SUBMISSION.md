@@ -1,13 +1,14 @@
 # 插件市场投稿与收录记录
 
-更新日期：2026-11-15。当前插件版本为 0.4.3，固定运行时版本为 0.4.2。两者按同一 buildId 和归档摘要核对。
+更新日期：2026-11-15。当前插件版本为 0.5.0，固定运行时版本为 0.4.2。两者按同一 buildId 和归档摘要核对。
 
 本轮状态：
 
-- GitHub 0.4.3 已发布；自定义市场索引已更新到 0.4.3。
-- npm 的公开页面与 latest 均为 0.4.3，实际下载归档与本地验收包逐字节一致。
-- 社区目录已合并此前的 [0.4.2 更新 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347)，[0.4.3 更新 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)已提交，合并以维护者处理为准。
-- [实际发行包 Windows 首次启动检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43663933218)通过。当前轻量包通过完整运行时下载、校验、启动与写作引擎导入；实际 DSH 独立 profile 的安装与面板记录对应 0.4.2 完整环境基线。
+- [GitHub 0.5.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0) 已标记为 Latest；自定义市场索引同步到 0.5.0。
+- npm `latest` 为 0.5.0；公开下载包与 GitHub 资产、本地验收包一致：16,754,442 字节，SHA-256 `93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb`。
+- 社区目录已合并此前的 [0.4.2 更新 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347)，[更新 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)现已改为 0.5.0，并附新版演示图入口，仍待维护者合并。
+- [实际发行包 Windows 首次启动检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723929446)和[源码检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723834223)通过。当前轻量包完成线上运行时下载、校验、启动与写作引擎导入；0.5.0 原生界面另在 DSH 0.2.2-rc.1 独立环境验证。
+- README、上手指南及[演示图文档](../docs/screenshots.md)已替换为九张新版界面图，市场资料引用同一套图。按用户要求不更新个人本机插件。
 
 以下表格保留首次投稿的历史记录，不代表已重新核对所有第三方市场的当前缓存。
 
