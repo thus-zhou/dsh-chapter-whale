@@ -1,6 +1,15 @@
 # 插件市场投稿与收录记录
 
-更新日期：2026-11-11。npm 包已公开发布，下载内容与本地验收包一致，并通过 DSH 0.2.2-rc.1 的独立 profile 安装验证。
+更新日期：2026-11-15。当前插件版本为 0.4.3，固定运行时版本为 0.4.2。两者按同一 buildId 和归档摘要核对。
+
+本轮状态：
+
+- GitHub 0.4.3 已发布；自定义市场索引已更新到 0.4.3。
+- npm 的公开页面与 latest 均为 0.4.3，实际下载归档与本地验收包逐字节一致。
+- 社区目录已合并此前的 [0.4.2 更新 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347)，[0.4.3 更新 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)已提交，合并以维护者处理为准。
+- [实际发行包 Windows 首次启动检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43663933218)通过。当前轻量包通过完整运行时下载、校验、启动与写作引擎导入；实际 DSH 独立 profile 的安装与面板记录对应 0.4.2 完整环境基线。
+
+以下表格保留首次投稿的历史记录，不代表已重新核对所有第三方市场的当前缓存。
 
 - npm：https://www.npmjs.com/package/dsh-chapter-whale
 - GitHub 完整包：https://github.com/thus-zhou/dsh-chapter-whale/releases/latest
@@ -10,8 +19,8 @@
 
 | 市场 / 目录 | 状态 | 入口 |
 | --- | --- | --- |
-| awesome-dsh-plugin / dshmarket | 已投稿，待审核 | [申请或市场](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316) |
-| losebird DSH Plugin Market | 已投稿，待审核 | [申请或市场](https://github.com/losebird/dsh-plugin-market/pull/90) |
+| awesome-dsh-plugin / dshmarket | 首次申请已合并；新版本见上方记录 | [申请或市场](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316) |
+| losebird DSH Plugin Market | 历史申请已关闭；当前收录状态待核对 | [申请或市场](https://github.com/losebird/dsh-plugin-market/pull/90) |
 | Open Plugin Market / dshopen.org | 已投稿，待审核 | [申请或市场](https://github.com/polang233/dsh-plugin-index/issues/430) |
 | DSH Plugin Hub / dsh-plugin.org | 已投稿，待审核 | [申请或市场](https://github.com/dshplugin/dsh-plugin-hub/issues/738) |
 | 2BingLing DSH Market / dsh.market | 已在公开目录中核对到条目 | [申请或市场](https://github.com/2BingLing/dsh-market/issues/373) |

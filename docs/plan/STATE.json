@@ -10,7 +10,7 @@
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
   "current_module": "M15",
   "authorization": {
-    "github_push_and_release": "granted 2026-11-14/15: user requests repairs from second independent retest and GitHub synchronization; patch release 0.4.1 included",
+    "github_push_and_release": "granted 2026-11-14/15: repair second independent retest findings and synchronize GitHub plus latest plugin market; final patch release 0.4.3",
     "npm_publish": "granted 2026-11-15: user explicitly requests latest plugin market synchronization and completes npm login",
     "real_model_budget": {
       "max_requests": 0,
@@ -182,7 +182,7 @@
       ]
     },
     "M09": {
-      "status": "partial",
+      "status": "implemented_validation_partial",
       "commit": null,
       "checks": [
         "offline: npm test 52 pass / 0 fail; integration 198 OK; manager 70 OK (320 total)",
@@ -197,7 +197,8 @@
         "Real D review JSON output (six dimensions) and C->D re-review: needs +2 requests beyond the 6-request M09 cap (pipeline research x3 and automatic C polish consumed the budget)",
         "Real browser click-through of report -> revision -> accept -> restore (only API-level tests were run)",
         "Interactive accept/restore on real model output"
-      ]
+      ],
+      "validation_note": "Real two-chapter, whole-chapter scene review, cross-chapter effect and missing style-learning evidence remain incomplete; no new model requests this repair round."
     },
     "M10": {
       "status": "completed",
@@ -290,7 +291,7 @@
       ]
     },
     "M15": {
-      "status": "in_progress",
+      "status": "implemented_validation_partial",
       "commit": "708a83e",
       "checks": [
         "integration 255 OK（新增 test_longform.py 11 项）/ manager 82 OK / npm 53 pass",
@@ -309,7 +310,8 @@
         "第二章整章审查与发布资格（预算用尽，未做）",
         "浏览器桌面与 390px 手工验收（开发版前端随插件加载，未安装到个人环境）",
         "是否发布 0.4.1 补丁版：0.4.0 已在 CI 失败状态下发布，需所有者决定新节点"
-      ]
+      ],
+      "validation_note": "Real two-chapter, whole-chapter scene review, cross-chapter effect and missing style-learning evidence remain incomplete; no new model requests this repair round."
     }
   },
   "releases": {
@@ -347,9 +349,21 @@
       "github": "tag v0.4.0 + release 304839826 bytes sha 9855365e (stable)；发布时 CI 后端作业失败，按方案不应作为稳定交付依据；修复代码在 main（bc0a16b..1c61b90）但未发布新补丁版",
       "npm": "not_requested",
       "real_model_validation": "10/10 requests (plus 2 ledger-only diagnostic rows), cost 0 CNY; D JSON verified; chapter 2 composed as two scenes but never整章审查; 独立评估判不通过，F01—F08 已修复，缺新预算复验"
+    },
+    "0.4.3": {
+      "local_ready": true,
+      "checks": "integration 277, manager 83, Node 56; actual published-package Windows first-start CI success",
+      "github": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.3",
+      "npm": "published; latest=0.4.3; registry tarball byte-identical to tested package",
+      "runtime_version": "0.4.2",
+      "runtime_buildId": "79a1db4ee1f940169ef80b58c7b3a4f6317947939caf8955575f85c70bef0e0f",
+      "real_model_requests": 0,
+      "real_model_validation": "partial; previous gaps remain",
+      "npm_sha256": "296aa57686977921666f5b062cfe4ca7b52872df4a942bf3f32c505f62fddb58",
+      "acceptance_record": "docs/retest-0.4.3.md"
     }
   },
-  "updated_at": "2026-11-15T00:11:04.365620+08:00",
+  "updated_at": "2026-11-15T09:50:58.126053+08:00",
   "second_retest": {
     "date": "2026-11-15",
     "issues": [
@@ -368,7 +382,8 @@
     },
     "real_model_requests": 0,
     "real_model_validation": "partial; missing two-chapter, whole-chapter scene review and style-learning evidence remains pending",
-    "distribution": "0.4.3 installer-only compatibility patch reuses verified 0.4.2 runtime build 79a1db4e; published-package Windows validation pending",
-    "additional_fix": "deterministic unique report instances; node-tar UTF-8 archive extraction instead of system bsdtar"
+    "distribution": "GitHub Latest, npm latest and custom market 0.4.3 verified; npm registry tarball byte-identical to tested artifact; actual Windows published-package first-start CI passed",
+    "additional_fix": "deterministic unique report instances; node-tar UTF-8 archive extraction instead of system bsdtar",
+    "installer_ci": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43663933218"
   }
 }

@@ -1,12 +1,15 @@
 {
-  "checkedAt": "2026-11-11T11:19:12.241305+00:00",
+  "checkedAt": "2026-11-15T09:50:58.113094+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
-    "version": "0.4.0",
+    "version": "0.4.3",
     "tag": "latest",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
     "registryDownloadVerified": true,
-    "isolatedDshInstallVerified": true
+    "isolatedDshInstallVerified": false,
+    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43663933218",
+    "runtimeBaseline": "0.4.2 complete environment verified in actual DSH 0.2.2-rc.1 isolated profile",
+    "sha256": "296aa57686977921666f5b062cfe4ca7b52872df4a942bf3f32c505f62fddb58"
   },
   "markets": [
     {
@@ -54,5 +57,11 @@
       "method": "npm-keywords-and-github-topics",
       "evidence": "https://LivXue.github.io/dsh-plugin-shop/v1/plugins.be78fec193c373928f8323157279b66a9ab8e057b0186dcbbb422c00b5c35590.json"
     }
-  ]
+  ],
+  "currentUpdate": {
+    "version": "0.4.3",
+    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.3",
+    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398",
+    "catalogState": "open"
+  }
 }

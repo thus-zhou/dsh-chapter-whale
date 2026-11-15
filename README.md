@@ -127,7 +127,7 @@ npm pack dsh-chapter-whale@latest
 
 然后把生成的 `.tgz` 文件交给 DSH 插件管理安装。`npm pack` 只下载插件包，首次启动仍需要下载运行环境。
 
-**希望一次下载完整环境**：使用下方 GitHub 完整发行包。
+**通过 GitHub 安装最新版**：使用下方 0.4.3 插件包，首次启动会下载固定运行时。
 
 在 DSH 插件管理中添加下方地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
@@ -135,7 +135,7 @@ npm pack dsh-chapter-whale@latest
 https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.3/dsh-chapter-whale-0.4.3.tgz
 ```
 
-完整包约 **278 MB（265 MiB）**，包含独立 Python、写作后端和 Chromium，无需自己安装 Python、下载后端或填写项目目录。
+0.4.3 插件包约 **9.4 MB**。后端、Python 和 Chromium 与 0.4.2 相同，首次启动下载并校验约 **279.7 MB** 的固定运行时；已有相同运行时的工作目录可直接复用。希望预先下载完整环境，可使用 [0.4.2 完整包](https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.2/dsh-chapter-whale-0.4.2.tgz)，再更新到 0.4.3 安装器。
 
 <details>
 <summary>使用命令行安装</summary>
@@ -144,7 +144,7 @@ https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.3/dsh-chap
 dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.3/dsh-chapter-whale-0.4.3.tgz
 ```
 
-这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；源码安装的首次启动会自动下载并校验同版本环境。
+这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；首次启动按固定 buildId 和摘要核对运行时。插件版本与运行时版本分别记录。
 
 </details>
 
@@ -208,7 +208,7 @@ http://127.0.0.1:18765
 
 - [从安装到自动连载](docs/quickstart.md)：模型、厂商登录、番茄账号、任务和自动调度。
 - [七张实机截图](docs/screenshots.md)：各页面的用途及脱敏说明。
-- [当前版本验证记录](RELEASE_STATUS.md)：47 项插件测试、148 项后端测试、全新安装与独立 DSH 加载验证。
+- [当前版本验证记录](RELEASE_STATUS.md)：56 项插件检查、277 项后端集成及 83 项管理端检查；另有实际发行包的 Windows 首次启动验证。
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
