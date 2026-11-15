@@ -1,0 +1,7 @@
+- insert:
+    - id: cw-host-fixture
+      name: cw-host-fixture
+- id: agent-default-model
+  config:
+    provider: cw-fixture
+    model: writer

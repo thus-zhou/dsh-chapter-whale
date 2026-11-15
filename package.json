@@ -1,6 +1,6 @@
 {
   "name": "dsh-chapter-whale",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "private": false,
   "description": "码章鲸：DSH 全自动小说写作与番茄发布，支持自定义日更任务、无人值守运行、部分免费模型与厂商账号登录。ChapterWhale: scheduled, unattended novel writing and Fanqie publishing for Windows x64.",
   "type": "module",
@@ -54,6 +54,7 @@
     "LICENSE",
     "package.json",
     "managed-runtime.mjs",
+    "dsh-model-bridge.mjs",
     "backend/",
     "runtime-manifest.json",
     "THIRD_PARTY_NOTICES.md",
@@ -93,7 +94,7 @@
     "@deepseek-ai/cordis": "~4.1.0"
   },
   "scripts": {
-    "test": "node --test test/client.test.mjs test/gate.test.mjs test/manifest.test.mjs test/market.test.mjs test/stop.test.mjs test/distribution.test.mjs",
+    "test": "node --test test/*.test.mjs",
     "prepublishOnly": "node scripts/check-release.mjs"
   },
   "dsh": {

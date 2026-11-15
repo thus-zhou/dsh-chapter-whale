@@ -33,6 +33,7 @@ import {
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { managedRoot, runtimeAvailable, prepareManaged, managedEnvironment } from './managed-runtime.mjs';
+import { DshModelBridge } from './dsh-model-bridge.mjs';
 
 const PLUGIN_ID = 'dsh-chapter-whale';
 const ROUTE = '/novel-helper';
@@ -749,7 +750,11 @@ export function createHandler(config, token) {
     if (isService) {
       if (method === 'POST') {
         const result = await ensureStarted(config);
-        sendJson(response, 200, { ok: Boolean(result.running), ...redactService(result) });
+        if (result.running && config.hostModels) {
+          try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
+          catch { /* The AI page exposes a retry without blocking the writing library. */ }
+        }
+        sendJson(response, 200, { ok: Boolean(result.running), ...redactService(result), port: config.port });
         return;
       }
       if (method !== 'GET' && method !== 'HEAD') {
@@ -799,6 +804,19 @@ export function createHandler(config, token) {
       return;
     }
 
+    if (suffix === '/api/ai/host-models' && ['GET', 'POST'].includes(method)) {
+      try {
+        const result = config.hostModels
+          ? await config.hostModels.sync((...args) => requestUpstream(config, ...args), method === 'POST')
+          : { available: false, models: [], errors: [], detail: 'DSH 模型服务未启用' };
+        sendJson(response, 200, result);
+      } catch (error) { sendJson(response, 502, { detail: error.message }); }
+      return;
+    }
+    if (method === 'GET' && ['/api/ai/providers', '/api/overview'].includes(suffix) && config.hostModels) {
+      try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
+      catch { /* Manual providers remain accessible when the host catalog is unavailable. */ }
+    }
     if (SAFE_METHODS.has(method)) {
       if (!allowsRead(segments)) {
         sendJson(response, 404, { detail: `未代理的路径：${suffix}` });
@@ -830,7 +848,7 @@ function installRoutes(ctx, config, token) {
     disposers.push(
       server.register({ kind: 'prefix', path: ROUTE, handler: createHandler(config, token) }),
     );
-    ctx.effect(
+    scoped.effect(
       () => () => {
         for (const dispose of disposers) {
           try {
@@ -917,12 +935,9 @@ function assertToolPath(path, method) {
 
 function makeTool(ctx, config) {
   return {
-    name: 'novel_helper',
+    name: 'chapter_whale',
     description:
-      '读取或操作本机「小说助手」应用（127.0.0.1:8765，经插件白名单代理）。'
-      + 'action=status 查看服务与总览；action=get 读取只读 API 路径；'
-      + 'action=post 提交写操作，必须同时传 confirm=true。'
-      + '写操作会真实影响写作/发布流程。',
+      '码章鲸：查看作品、章节和任务。action=status 查看总览，get 读取 API，post 提交经用户确认的操作（confirm=true）。',
     parameters: {
       type: 'object',
       properties: {
@@ -1022,9 +1037,9 @@ async function requestApproval(ctx, exec, path) {
   try {
     const outcome = await approval.request({
       agent: exec?.agent,
-      toolName: 'novel_helper',
+      toolName: 'chapter_whale',
       callId: exec?.callId,
-      reason: `novel_helper 写操作：${path}`,
+      reason: `码章鲸：${path}`,
       signal: exec?.signal,
     });
     return { allowed: outcome === 'allowed-once', outcome, reason: outcome };
@@ -1038,6 +1053,14 @@ async function requestApproval(ctx, exec, path) {
 export function apply(ctx, config = {}) {
   const resolved = resolveConfig(config);
   const token = randomBytes(24).toString('base64url');
+  ctx.inject(['llm'], (scoped) => {
+    const bridge = new DshModelBridge(scoped);
+    resolved.hostModels = bridge;
+    scoped.effect(() => () => {
+      if (resolved.hostModels === bridge) delete resolved.hostModels;
+      bridge.close();
+    }, 'chapter-whale: host models');
+  });
   installRoutes(ctx, resolved, token);
   ctx.effect(() => {
     const dispose = ctx.tools.register(makeTool(ctx, resolved));

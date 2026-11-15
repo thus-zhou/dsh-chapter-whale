@@ -8,9 +8,9 @@
 
 Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 首个公开版本
 
-**安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载完整 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：建作品、配模型，需要发布时再登录番茄作家后台。
+**安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载插件 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：创建作品，使用 DSH 已登录模型开始写作，需要发布时再登录番茄。
 
-首次启动会在 `%LOCALAPPDATA%\ChapterWhale\workspace` 建独立工作区并准备运行时，约占 400MB 磁盘。npm 包首次启动自动下载并校验约 278 MB 的固定版本环境；GitHub 完整包已包含环境。作品与账号数据留在独立工作区，卸载插件不会删除。完整包摘要见发布页的 `SHA256SUMS.txt`。仅支持 Windows x64。
+首次启动会在 `%LOCALAPPDATA%\ChapterWhale\workspace` 建独立工作区，自动下载并校验约 280 MB 的固定环境；已有相同运行时会直接复用。作品与账号数据留在独立工作区，卸载插件不会删除。安装包摘要见发布页。仅支持 Windows x64。
 
 ![码章鲸：全自动写作与发布、可自定义任务、部分免费模型与厂商账号登录](assets/chapter-whale-overview.png)
 
@@ -62,7 +62,13 @@ flowchart LR
 
 *实机记录：截图时任务已经结束并停用，保留当时的真实状态。新建任务和自动调度开关位于随包提供的完整管理页，具体步骤见[上手指南](docs/quickstart.md#4-创建自己的日更任务)。*
 
-## 已接入部分免费模型，也支持部分厂商账号登录
+## 直接使用 DSH 已登录的模型
+
+打开码章鲸后，自动接入 DSH 中已登录或已配置的模型，并在尚未配置创作模型时使用 DSH 当前模型。无需重新填写账号密钥。在「AI 设置」中可切换通用模型、分别设置 A–E 分工；更换 DSH 登录后点击「使用 DSH 当前模型」刷新。
+
+DSH 的登录凭据由宿主处理。写作时保持 DSH 运行，模型计费与额度沿用对应账号规则。已保存的独立接口和模型绑定会保留。
+
+## 免费额度与其他厂商渠道
 
 已有可用的厂商账号，可以通过支持的渠道授权，再把可用模型用于写作任务；已有 API 服务，也可以直接配置 OpenAI 兼容接口。
 

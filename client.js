@@ -221,10 +221,10 @@
 .nh-btn:active:not(:disabled){transform:translateY(1px);}
 .nh-btn:disabled{opacity:.42;cursor:not-allowed;}
 .nh-btn[data-kind="primary"]{
-  background:var(--nh-accent);border-color:var(--nh-accent);color:#fff;font-weight:500;
+  background:#4d91ff;border-color:#4d91ff;color:#06101f;font-weight:600;
 }
 .nh-btn[data-kind="primary"]:hover:not(:disabled){
-  filter:brightness(1.1);color:#fff;
+  background:#70a7ff;border-color:#70a7ff;color:#06101f;
 }
 .nh-btn[data-kind="danger"]{color:var(--nh-err);border-color:color-mix(in srgb,var(--nh-err) 42%,transparent);}
 .nh-btn[data-kind="danger"]:hover:not(:disabled){background:color-mix(in srgb,var(--nh-err) 14%,transparent);color:var(--nh-err);border-color:var(--nh-err);}
@@ -436,7 +436,10 @@
 }
 .nh-segbtn:last-child{border-right:0;}
 .nh-segbtn:hover{background:var(--nh-hover);color:var(--nh-ink2);}
-.nh-segbtn[data-active="true"]{background:var(--nh-accent);color:#fff;}
+.nh-segbtn[data-active="true"]{background:#4d91ff;color:#06101f;}
+.nh-role-grid{display:grid;grid-template-columns:44px minmax(100px,1fr) minmax(120px,1.4fr) 100px 78px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--nh-border-soft);}
+.nh-select option{background:#101a2c;color:#eef4ff;}
+@media(max-width:950px){.nh-role-grid{grid-template-columns:44px minmax(100px,1fr) minmax(120px,1fr);}.nh-role-grid>.nh-select:nth-last-child(2){grid-column:2;}}
 
 /* ================================================================ live work */
 
@@ -1488,19 +1491,19 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             e('div', { className: 'nh-hero' },
               e('span', { className: 'nh-herotag' }, 'CHAPTERWHALE / 码章鲸'),
               e('h2', { className: 'nh-herotitle' }, '从一个想法，写到下一章。'),
-              e('p', { className: 'nh-herosub' }, '建作品、接模型，就能开始写作。需要发布时，再登录你自己的番茄作家账号。作品与登录状态保存在这台电脑。')),
+              e('p', { className: 'nh-herosub' }, '创建作品，开始写作；登录番茄后即可发布。')),
             message ? e('p', { role: 'status', className: 'nh-pre' }, message) : null,
-            e(Card, { title: '01 / 创建你的小说', hint: '无需选择文件夹' },
+            e(Card, { title: '01 / 创建你的小说' },
               e('div', { className: 'nh-formgrid' },
                 e(Field, { label: '书名' }, e(TextInput, { value: title, onChange: setTitle, placeholder: '给新故事起个名字' })),
                 e(Field, { label: '题材' }, e(TextInput, { value: genre, onChange: setGenre, placeholder: '玄幻、都市、悬疑……' }))),
               e(Field, { label: '故事想法或已有大纲' }, e('textarea', { className: 'nh-input', rows: 5, value: outline, placeholder: '主角是谁，想得到什么，又会遇到什么阻碍？', onChange: (event) => setOutline(event.target.value) })),
               e(Button, { kind: 'primary', busy, disabled: !title.trim(), onClick: () => run(async () => {
                 const project = await api('/projects/create', { method: 'POST', body: { title, genre, outline } });
-                setTitle(''); setMessage('作品已创建。接好模型后，进入大纲与规划，再生成章节。'); props.selectProject(project.id);
+                setTitle(''); setMessage('作品已创建，可进入大纲与规划。'); props.selectProject(project.id);
               }) }, '创建作品')),
             e(Card, { title: '02 / 连接写作模型', hint: props.overview.ai && props.overview.ai.configured ? '已配置' : '待配置' },
-              e('p', null, '支持 OpenAI 兼容接口。填写你自己的模型地址与密钥，可分别安排规划、初稿、润色和审查模型。调用模型可能产生费用。'),
+              e('p', null, '自动使用 DSH 已登录的模型。在 AI 设置中可切换模型，或分别设置 A–E 分工。'),
               e(Button, { onClick: () => props.navigate('ai') }, '打开 AI 设置')),
             e(Card, { title: '03 / 登录番茄，准备发布', hint: '写作时可跳过' },
               e('p', null, '登录会打开本机浏览器。请自行扫码；进入作家后台后，回这里完成登录。发布前需在番茄创建对应作品。'),
@@ -2740,7 +2743,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 Card,
                 {
                   title: '人物档案',
-                  hint: `${((people.data && people.data.persons) || []).length} 人 · 同名或别名不会自动合并`,
+                  hint: `${((people.data && people.data.persons) || []).length} 人`,
                   actions: e(
                     Button,
                     { kind: 'primary', size: 'sm', icon: 'plus', onClick: () => setPersonDraft({ name: '', aliases: '', identity: '' }) },
@@ -2748,7 +2751,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   ),
                 },
                 ((people.data && people.data.persons) || []).length === 0
-                  ? e(Empty, null, '还没有人物档案。新增后会记录身份、目标、关系与“谁在第几章得知了什么”。')
+                  ? e(Empty, null, '还没有人物档案')
                   : e(
                       'div',
                       { className: 'nh-col', style: { gap: 0 } },
@@ -2800,7 +2803,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 Card,
                 {
                   title: '伏笔与冲突',
-                  hint: '计划埋设不等于已写入正文；状态前进需要原文依据',
+                  hint: '追踪铺垫、回收与原文依据',
                 },
                 ((continuity.data && continuity.data.foreshadows) || []).length === 0
                   ? e(Empty, null, '还没有伏笔记录。在记忆里新建“伏笔”条目后，可以在这里推进状态。')
@@ -3244,6 +3247,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const toast = useToast();
           const [tab, setTab] = React.useState('roles');
           const providers = usePoll(() => api('/ai/providers'), [], 0);
+          const hostModels = usePoll(() => api('/ai/host-models'), [], 0);
           const [busy, setBusy] = React.useState({});
           const [draft, setDraft] = React.useState(null);
 
@@ -3254,6 +3258,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 multi_model: Boolean(providers.data.multi_model),
                 polish_mode: providers.data.polish_mode || 'key',
                 review_policy: providers.data.review_policy || 'strict',
+                default_binding: { reasoning_effort: 'auto', ...(providers.data.default_binding || {}) },
                 roles: Object.fromEntries(
                   ['A', 'B', 'C', 'D', 'E'].map((key) => [
                     key,
@@ -3261,6 +3266,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       provider_id: (roles[key] && roles[key].provider_id) || '',
                       model_id: (roles[key] && roles[key].model_id) || '',
                       reasoning_effort: (roles[key] && roles[key].reasoning_effort) || 'auto',
+                      fallbacks: (roles[key] && roles[key].fallbacks) || [],
                     },
                   ]),
                 ),
@@ -3273,18 +3279,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const saveRoles = async () => {
             setBusy((current) => ({ ...current, saveRoles: true }));
             try {
-              await api('/ai/roles', {
+              await api('/ai/bindings', {
                 method: 'PUT',
                 body: {
                   multi_model: draft.multi_model,
                   polish_mode: draft.polish_mode,
                   review_policy: draft.review_policy,
-                  roles: Object.fromEntries(
-                    Object.entries(draft.roles).map(([key, value]) => [
-                      key,
-                      { base_url: '', model: value.model_id, api_key: null },
-                    ]),
-                  ),
+                  default_binding: draft.default_binding,
+                  roles: draft.roles,
                 },
               });
               toast.push('角色配置已保存', 'ok');
@@ -3300,8 +3302,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const testRole = async (role) => {
             setBusy((current) => ({ ...current, ['test' + role]: true }));
             try {
-              const result = await api(`/ai/roles/${role}/test`, { method: 'POST' });
-              toast.push(`${role} 测试通过：${(result && result.model) || 'OK'}`, 'ok');
+              const own = role === 'default' ? draft.default_binding : draft.roles[role];
+              const binding = own.provider_id ? own : { ...draft.default_binding, reasoning_effort: own.reasoning_effort || draft.default_binding.reasoning_effort };
+              const provider = providerList.find((p) => p.id === binding.provider_id);
+              const tested = { provider_id: binding.provider_id, model_id: binding.model_id, reasoning_effort: binding.reasoning_effort || 'auto' };
+              const result = await api(`/ai/roles/${role}/test`, { method: 'POST', body: { binding: tested, provider_revision: provider && provider.revision } });
+              toast.push(`${role === 'default' ? '通用模型' : role} 测试通过：${(result && result.model_id) || 'OK'}`, 'ok');
+              providers.reload(true);
             } catch (error) {
               toast.push(`${role} 测试失败：${error.message}`, 'err');
             } finally {
@@ -3326,6 +3333,21 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           };
 
           const roleChecks = (providers.data && providers.data.role_checks) || {};
+          const setBinding = (role, value) => setDraft((current) => role === 'default'
+            ? { ...current, default_binding: { ...current.default_binding, ...value } }
+            : { ...current, roles: { ...current.roles, [role]: { ...current.roles[role], ...value } } });
+          const refreshHost = async () => {
+            setBusy((current) => ({ ...current, host: true }));
+            try {
+              const result = await api('/ai/host-models', { method: 'POST', body: {} });
+              if (!result.available || !result.models.length) throw new Error(result.detail || '请先在 DSH 中登录或配置模型');
+              const model = result.models.find((m) => m.id === result.default_model) || result.models[0];
+              setBinding('default', { provider_id: result.provider_id, model_id: model.id, reasoning_effort: 'auto' });
+              providers.reload(true); hostModels.reload(true);
+              toast.push('已选择 DSH 当前模型，点击保存即可使用', 'ok');
+            } catch (error) { toast.push(error.message, 'err'); }
+            finally { setBusy((current) => ({ ...current, host: false })); }
+          };
 
           return e(
             'div',
@@ -3334,7 +3356,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               'div',
               { className: 'nh-tabs' },
               [
-                ['roles', 'A–E 角色'],
+                ['roles', '模型与角色'],
                 ['providers', '供应商'],
                 ['checks', '连接检查'],
               ].map((pair) =>
@@ -3352,14 +3374,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               ),
             ),
 
-            (() => {
-              const info = (props.overview && props.overview.ai && props.overview.ai.credential_store) || null;
-              if (!info) return null;
-              const protectedMode = info.mode === 'dpapi';
-              return e(Badge, { tone: protectedMode ? 'ok' : 'warn' },
-                protectedMode ? '密钥：系统凭据保护' : '密钥：仅本用户可读的配置文件');
-            })(),
-
             tab === 'roles'
               ? e(
                   'div',
@@ -3367,7 +3381,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   e(
                     Card,
                     {
-                      title: '角色绑定',
+                      title: '创作模型',
                       hint: 'A 规划 · B 初稿 · C 润色 · D 审查 · E 执行',
                       actions: e(Button, { kind: 'primary', size: 'sm', icon: 'save', busy: busy.saveRoles, onClick: saveRoles }, '保存'),
                     },
@@ -3375,6 +3389,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       ? e(
                           'div',
                           { className: 'nh-col', style: { gap: 14 } },
+                          e('div', { className: 'nh-row', style: { gap: 10, flexWrap: 'wrap' } },
+                            e(Button, { size: 'sm', busy: busy.host, onClick: refreshHost }, '使用 DSH 当前模型'),
+                            e('span', { className: 'nh-k' }, hostModels.error ? hostModels.error.message : hostModels.data && hostModels.data.available
+                              ? `DSH 已连接 · ${hostModels.data.models.length} 个模型` : '在 DSH 中登录后刷新模型'),
+                          ),
+                          e('label', { className: 'nh-row', style: { gap: 8 } },
+                            e('input', { type: 'checkbox', checked: draft.multi_model, onChange: (event) => setDraft({ ...draft, multi_model: event.target.checked }) }),
+                            '分别设置 A–E 模型',
+                          ),
                           e(
                             'div',
                             { className: 'nh-formgrid' },
@@ -3398,63 +3421,54 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                 value: draft.review_policy,
                                 onChange: (value) => setDraft({ ...draft, review_policy: value }),
                                 options: [
-                                  { value: 'strict', label: '严格：D 必须通过' },
+                                  { value: 'strict', label: 'D 审查通过' },
                                   { value: 'e_decides', label: 'E 决策' },
                                 ],
                               }),
                             ),
                           ),
                           e('div', { className: 'nh-sep' }),
-                          ['A', 'B', 'C', 'D', 'E'].map((role) =>
-                            e(
+                          ['default', ...(draft.multi_model ? ['A', 'B', 'C', 'D', 'E'] : [])].map((role) => {
+                            const binding = role === 'default' ? draft.default_binding : draft.roles[role];
+                            const provider = providerList.find((p) => p.id === binding.provider_id);
+                            const catalog = (provider && provider.models) || [];
+                            const hostCatalog = (hostModels.data && hostModels.data.models) || [];
+                            return e(
                               'div',
                               {
                                 key: role,
-                                style: {
-                                  display: 'grid',
-                                  gridTemplateColumns: '44px 1fr 1.4fr 110px 78px',
-                                  gap: 10,
-                                  alignItems: 'center',
-                                  padding: '7px 0',
-                                  borderBottom: '1px solid var(--nh-border-soft)',
-                                },
+                                className: 'nh-role-grid',
                               },
-                              e('span', { className: 'nh-mono', style: { fontSize: 13, fontWeight: 600, color: 'var(--nh-accent)' } }, role),
+                              e('span', { className: 'nh-mono', style: { fontSize: 13, fontWeight: 600, color: 'var(--nh-accent)' } }, role === 'default' ? '通用' : role),
                               e(Select, {
-                                value: draft.roles[role].provider_id,
-                                onChange: (value) =>
-                                  setDraft({
-                                    ...draft,
-                                    roles: { ...draft.roles, [role]: { ...draft.roles[role], provider_id: value } },
-                                  }),
-                                options: providerList.map((provider) => ({ value: provider.id, label: provider.name })),
+                                value: binding.provider_id,
+                                onChange: (value) => {
+                                  const selected = providerList.find((p) => p.id === value);
+                                  setBinding(role, { provider_id: value, model_id: selected && selected.models && selected.models[0] || '', fallbacks: [] });
+                                },
+                                options: [{ value: '', label: role === 'default' ? '选择供应商' : '使用通用模型' }, ...providerList.filter((p) => p.enabled).map((p) => ({ value: p.id, label: p.name }))],
                               }),
-                              e(TextInput, {
-                                value: draft.roles[role].model_id,
-                                onChange: (value) =>
-                                  setDraft({
-                                    ...draft,
-                                    roles: { ...draft.roles, [role]: { ...draft.roles[role], model_id: value } },
-                                  }),
+                              e(catalog.length ? Select : TextInput, {
+                                value: binding.model_id,
+                                placeholder: binding.provider_id ? '模型 ID' : '使用通用模型',
+                                onChange: (value) => setBinding(role, { model_id: value }),
+                                options: [...new Set([binding.model_id, ...catalog].filter(Boolean))].map((id) => ({ value: id, label: (hostCatalog.find((m) => m.id === id) || {}).name || id })),
                               }),
                               e(Select, {
-                                value: draft.roles[role].reasoning_effort,
-                                onChange: (value) =>
-                                  setDraft({
-                                    ...draft,
-                                    roles: { ...draft.roles, [role]: { ...draft.roles[role], reasoning_effort: value } },
-                                  }),
+                                value: binding.reasoning_effort || 'auto',
+                                onChange: (value) => setBinding(role, { reasoning_effort: value }),
                                 options: [
                                   { value: 'auto', label: 'auto' },
                                   { value: 'off', label: 'off' },
                                   { value: 'low', label: 'low' },
                                   { value: 'medium', label: 'medium' },
                                   { value: 'high', label: 'high' },
+                                  { value: 'max', label: 'max' },
                                 ],
                               }),
                               e(Button, { size: 'sm', busy: busy['test' + role], onClick: () => testRole(role) }, '测试'),
-                            ),
-                          ),
+                            );
+                          }),
                         )
                       : e('div', null, e(Skeleton, {}), e(Skeleton, {})),
                   ),
@@ -3483,8 +3497,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             { className: 'nh-row', style: { gap: 9 } },
                             e('span', { style: { fontSize: 13, fontWeight: 500 } }, provider.name),
                             e(Badge, { tone: provider.enabled ? 'ok' : 'mute' }, provider.enabled ? '启用' : '停用'),
-                            e(Badge, { tone: 'mute' }, provider.protocol),
-                            provider.has_key ? e(Badge, { tone: 'accent' }, '有密钥') : e(Badge, { tone: 'warn' }, '无密钥'),
+                            e(Badge, { tone: 'mute' }, provider.id === (hostModels.data && hostModels.data.provider_id) ? '宿主连接' : provider.protocol),
+                            provider.has_key ? e(Badge, { tone: 'accent' }, '已连接') : e(Badge, { tone: 'warn' }, '待配置'),
                             e('span', { className: 'nh-spacer' }),
                             e('span', { className: 'nh-k' }, `${(provider.models || []).length} 模型`),
                             e(
@@ -3496,7 +3510,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           e(
                             'div',
                             { className: 'nh-k nh-wrap', style: { marginTop: 5 } },
-                            provider.base_url,
+                            provider.id === (hostModels.data && hostModels.data.provider_id) ? '复用 DSH 登录状态' : provider.base_url,
                           ),
                           provider.last_check
                             ? e(
@@ -3520,7 +3534,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     Card,
                     {
                       title: '连接检查',
-                      hint: '仅验证短请求能力',
+                      hint: '短请求测试',
                       actions: e(
                         Button,
                         {
@@ -3530,8 +3544,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           onClick: async () => {
                             setBusy((current) => ({ ...current, allTests: true }));
                             try {
-                              const result = await api('/ai/roles/test', { method: 'POST' });
-                              toast.push('全部角色测试完成', 'ok');
+                              for (const role of ['A', 'B', 'C', 'D', 'E']) await testRole(role);
                               providers.reload(true);
                             } catch (error) {
                               toast.push(`测试失败：${error.message}`, 'err');
@@ -4790,7 +4803,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       className: 'nh-dot',
                       'data-state': service.state.running ? 'ok' : 'err',
                     }),
-                    service.state.running ? `在线 · ${service.state.port || 8765}` : '离线',
+                    service.state.running ? `在线 · ${service.state.port || 18765}` : '离线',
                   ),
                   e(Segmented, {
                     value: density,

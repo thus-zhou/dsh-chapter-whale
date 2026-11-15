@@ -263,7 +263,12 @@ test('_service 不回显 rootDir / python / entry', async () => {
 test('首装不需要 rootDir：使用独立工作区和内置解释器', async () => {
   // A fresh install has no rootDir at all: the plugin must stay loaded and say
   // what to fill in, rather than throwing during apply().
+  const previousLocal = process.env.LOCALAPPDATA;
+  process.env.LOCALAPPDATA = mkdtempSync(join(tmpdir(), 'chapter-whale-first-start-'));
   const unconfigured = resolveConfig({ port: 1 });
+  rmSync(process.env.LOCALAPPDATA, { recursive: true, force: true });
+  if (previousLocal === undefined) delete process.env.LOCALAPPDATA;
+  else process.env.LOCALAPPDATA = previousLocal;
   assert.equal(unconfigured.entryExists, false);
   assert.equal(unconfigured.configuredRoot, false);
   assert.equal(unconfigured.managed, true);
@@ -294,7 +299,7 @@ test('首装不需要 rootDir：使用独立工作区和内置解释器', async 
 
 test('工具：写操作缺 confirm 直接失败，且发生在任何网络请求之前', async () => {
   const tool = __internals.makeTool({ get: () => undefined }, config);
-  assert.equal(tool.name, 'novel_helper');
+  assert.equal(tool.name, 'chapter_whale');
   assert.deepEqual(tool.parameters.required, ['action']);
   assert.equal(tool.parameters.additionalProperties, false);
 
