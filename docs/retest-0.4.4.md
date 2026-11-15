@@ -21,3 +21,10 @@
 - 本轮真实模型调用 0，真实章节发布 0。具体厂商账号的额度、生成质量和番茄发布效果未在本轮重新验收。
 
 0.4.4 改动位于插件宿主和客户端，后端及 Python/Chromium 未变，复用 0.4.2 的固定环境归档及摘要。GitHub 和 npm 提供同一份插件安装包。
+
+## 发布后核验
+
+- [GitHub v0.4.4](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.4) 已标记 Latest；[npm latest](https://www.npmjs.com/package/dsh-chapter-whale) 为 0.4.4。
+- 从两处公开下载后与验证包逐字节一致：9,439,487 字节，SHA-256 `54d6c345a9252d61d61cdaa474e12799764c31182595ab2bc96bfb147f0ff428`。
+- [源码跨平台检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43669840643)、[标签检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43670005389)、[线上实际安装包启动检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43670005819) 全部通过。
+- 自有市场公开索引已核验为 0.4.4；[社区市场更新申请 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398) 已更新到该版本，收录等待维护者合并。
