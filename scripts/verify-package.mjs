@@ -8,12 +8,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'node:http';
+import { extractPackage } from '../managed-runtime.mjs';
 
 const [archiveArg, downloadArg, outputArg] = process.argv.slice(2);
 assert.ok(archiveArg, 'Usage: node scripts/verify-package.mjs package.tgz [download.tgz|-] [result.json]');
 const execute = promisify(execFile);
 const isolated = await mkdtemp(join(tmpdir(), 'cw-package-'));
-await execute('tar', ['-xzf', resolve(archiveArg), '-C', isolated], { windowsHide: true });
+await extractPackage(resolve(archiveArg), isolated);
 const root = join(isolated, 'package');
 await execute(process.execPath,
   [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'),
@@ -43,7 +44,8 @@ if (downloadArg && downloadArg !== '-') {
     return realFetch(url, options);
   };
 }
-const result = { archive: resolve(archiveArg), version: manifest.version, buildId: manifest.buildId,
+const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const result = { archive: resolve(archiveArg), version: pkg.version, runtimeVersion: manifest.version, buildId: manifest.buildId,
   workspace, source: downloadArg && downloadArg !== '-' ? 'exact-local-release-bytes' : 'bundled-or-live', checks: [] };
 const handler = createHandler(config, 'isolated-package-check');
 const server = createServer(handler);

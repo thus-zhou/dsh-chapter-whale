@@ -1,6 +1,6 @@
 {
   "name": "dsh-chapter-whale",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": false,
   "description": "码章鲸：DSH 全自动小说写作与番茄发布，支持自定义日更任务、无人值守运行、部分免费模型与厂商账号登录。ChapterWhale: scheduled, unattended novel writing and Fanqie publishing for Windows x64.",
   "type": "module",
@@ -74,7 +74,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.3"
+    "@deepseek-ai/schemastery": "^3.18.3",
+    "tar": "7.5.23"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.1.0",

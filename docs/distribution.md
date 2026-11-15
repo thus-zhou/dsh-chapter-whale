@@ -68,6 +68,11 @@
 
 ## 组装完整发行包
 
+仅安装器发生变化时，可以复用内容完全一致、buildId 相同的既有运行时资产。
+例如插件 0.4.3 使用运行时 0.4.2；`runtime-manifest.json` 与 `runtime-download.json`
+继续描述同一运行时，不为对齐插件版本而伪造 buildId 或旧包摘要。安装器使用 node-tar 解码 UTF-8
+文件名，避免不同 Windows 系统 tar 版本对中文文件名的转换差异。
+
 ```
 python scripts/build-runtime.py --manifest-only # 复用本地环境，重建当前清单
 python scripts/build-runtime.py          # 需要重新准备依赖时使用

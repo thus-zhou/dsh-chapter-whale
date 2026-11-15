@@ -3,8 +3,7 @@ import { existsSync, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { t as listTar, x as extractTar } from 'tar';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +37,29 @@ export function validateTarListing(text) {
     }
   }
   return lines.length;
+}
+
+export function validateArchiveEntry(path, type) {
+  if (!['File', 'Directory'].includes(type)) throw new Error('发行包包含链接或特殊文件，未解包。');
+  if ((path !== 'package' && !path.startsWith('package/')) || path.includes('\\')
+      || path.includes(':') || path.includes('\0') || path.split('/').includes('..')) {
+    throw new Error('发行包路径异常，未解包。');
+  }
+}
+
+export async function extractPackage(archive, destination) {
+  let entries = 0;
+  const invalid = [];
+  await listTar({ file: archive, strict: true, onReadEntry(entry) {
+    entries += 1;
+    try { validateArchiveEntry(entry.path, entry.type); } catch (error) { invalid.push(error); }
+  } });
+  if (invalid.length) throw invalid[0];
+  if (!entries) throw new Error('发行包目录为空，未解包。');
+  // node-tar reads UTF-8 paths directly, including on Windows systems whose
+  // bundled bsdtar cannot convert Chinese filenames to the ANSI code page.
+  await extractTar({ file: archive, cwd: destination, strict: true, preservePaths: false });
+  return { entries };
 }
 
 export async function verifyInstalled(rootDir, manifest, names) {
@@ -84,11 +106,7 @@ export async function downloadRuntime(workspace, manifest) {
     hash.update(chunk); done(null, chunk);
   } }), createWriteStream(archive, { flags: 'wx' }));
   if (bytes !== spec.bytes || hash.digest('hex') !== spec.sha256) throw new Error('运行环境校验失败，未执行下载的文件。请重试安装。');
-  const execute = promisify(execFile);
-  const options = { windowsHide: true, maxBuffer: 8 * 1024 * 1024 };
-  const { stdout } = await execute('tar.exe', ['-tvzf', archive], options);
-  validateTarListing(stdout);
-  await execute('tar.exe', ['-xzf', archive, '-C', staging], options);
+  await extractPackage(archive, staging);
   const payload = join(staging, 'package');
   const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
   if (actual.buildId !== manifest.buildId || !existsSync(join(payload, 'runtime', 'python', 'python.exe'))) throw new Error('发行包版本不匹配。');

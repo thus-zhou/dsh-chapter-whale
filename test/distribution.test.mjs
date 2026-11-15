@@ -4,16 +4,40 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validateTarListing, verifyInstalled, AUTO_UPDATE_ENABLED, updateAvailable } from '../managed-runtime.mjs';
+import { c as createTar } from 'tar';
+import { validateTarListing, validateArchiveEntry, extractPackage, verifyInstalled, AUTO_UPDATE_ENABLED, updateAvailable } from '../managed-runtime.mjs';
 
 test('lightweight download descriptor matches the current runtime and version', async () => {
   const read = async name => JSON.parse(await readFile(new URL('../' + name, import.meta.url), 'utf8'));
   const [pkg, manifest, spec] = await Promise.all(['package.json', 'runtime-manifest.json', 'runtime-download.json'].map(read));
-  assert.equal(manifest.version, pkg.version);
+  // A plugin-only installer patch reuses the identical pinned backend runtime.
   assert.equal(spec.buildId, manifest.buildId);
   assert.match(spec.sha256, /^[a-f0-9]{64}$/);
   assert.ok(Number.isSafeInteger(spec.bytes) && spec.bytes > 0 && spec.bytes <= 512 * 1024 * 1024);
-  assert.equal(spec.url, `https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v${pkg.version}/dsh-chapter-whale-${pkg.version}.tgz`);
+  assert.equal(spec.url, `https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v${manifest.version}/dsh-chapter-whale-${manifest.version}.tgz`);
+});
+
+test('archive entries reject traversal, alternate streams and links before extraction', () => {
+  for (const path of ['package/../outside', '/package/a', 'package/a:b', 'package\\a']) {
+    assert.throws(() => validateArchiveEntry(path, 'File'), /路径异常/);
+  }
+  assert.throws(() => validateArchiveEntry('package/link', 'SymbolicLink'), /链接或特殊文件/);
+  assert.throws(() => validateArchiveEntry('package/link', 'Link'), /链接或特殊文件/);
+});
+
+test('actual UTF-8 archive round trip preserves Chinese directory and file names', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cw-unicode-'));
+  try {
+    await mkdir(join(root, 'package', '中文目录'), { recursive: true });
+    await writeFile(join(root, 'package', '中文目录', '场景.md'), '中文正文', 'utf8');
+    const archive = join(root, 'unicode.tgz');
+    await createTar({ cwd: root, file: archive, gzip: true, portable: true }, ['package']);
+    const output = join(root, 'unpacked');
+    await mkdir(output);
+    const result = await extractPackage(archive, output);
+    assert.ok(result.entries >= 3);
+    assert.equal(await readFile(join(output, 'package', '中文目录', '场景.md'), 'utf8'), '中文正文');
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('accepts a normal package listing', () => {
