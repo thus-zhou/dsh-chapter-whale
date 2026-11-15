@@ -25,10 +25,10 @@ npm 包首次启动会自动下载约 278 MB 的 Python 与浏览器运行环境
 也可从 GitHub 下载与 npm 相同的插件包，在 DSH 插件管理中添加该文件：
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.4/dsh-chapter-whale-0.4.4.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.5.0/dsh-chapter-whale-0.5.0.tgz
 ```
 
-两种安装方式均在首次启动时准备运行环境，不需要单独安装 Python 或浏览器。0.4.4 复用经过摘要校验的 0.4.2 后端运行时，已有相同环境时不会重复下载。
+两种安装方式均在首次启动时准备运行环境，不需要单独安装 Python 或浏览器。0.5.0 复用经过摘要校验的 0.4.2 后端运行时，已有相同环境时不会重复下载。
 
 ### 从 npm 下载文件与后续更新
 
@@ -133,7 +133,7 @@ DSH 已登录或已配置模型时，码章鲸会自动接入；首次使用会�
 
 时间、章数和字数是任务参数；实际章节内容与发布结果可在运行后查看。先从较小的更新量开始，便于确认自己的模型和账号能完整跑通。
 
-![日更任务实机配置](../assets/screenshots/01-automation.png)
+![日更任务实机配置](../assets/screenshots/01-automation.jpg)
 
 ### 两个开关都要打开
 

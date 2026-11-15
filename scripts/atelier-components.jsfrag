@@ -1,0 +1,71 @@
+        const APPEARANCE_KEY = 'chapter-whale-appearance-v1';
+        const APPEARANCE_DEFAULTS = { palette: 'gemini', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'sans', opacity: 86, blur: 14 };
+        const AppearanceContext = React.createContext(APPEARANCE_DEFAULTS);
+        function readAppearance() {
+          const result = { ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) };
+          try {
+            const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || '{}');
+            const options = { palette: ['gemini', 'ocean'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
+            for (const [key, allowed] of Object.entries(options)) if (allowed.includes(saved[key])) result[key] = saved[key];
+            if (typeof saved.reduced === 'boolean') result.reduced = saved.reduced;
+            for (const [key, low, high] of [['opacity', 75, 96], ['blur', 0, 18]]) if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+          } catch {}
+          return result;
+        }
+        function hostAppearance() {
+          return document.body.hasAttribute('data-ds-dark-theme') || document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        }
+        function AppearancePanel({ open, onClose, value, onChange }) {
+          const choose = (key, options) => e('div', { className: 'cw-segmented' }, options.map(([id, label]) => e('button', {
+            key: id, type: 'button', className: value[key] === id ? 'selected' : '', 'aria-pressed': value[key] === id,
+            onClick: () => onChange({ ...value, [key]: id }),
+          }, label)));
+          const section = (title, content) => e('section', { className: 'cw-setting-section', key: title }, e('div', { className: 'cw-setting-title' }, e('h3', null, title)), content);
+          return e(Modal, { open, onClose, title: '外观与动效', className: 'cw-appearance-modal' },
+            e('div', { className: 'cw-appearance' },
+              section('配色', choose('palette', [['gemini', '蓝紫 · Gemini'], ['ocean', '海洋 · Ocean']])),
+              section('明暗主题', choose('theme', [['auto', '跟随 DSH'], ['dark', '深色'], ['light', '浅色']])),
+              section('炫彩程度', choose('fx', [['1', '轻彩'], ['2', '绚彩'], ['3', '幻彩']])),
+              section('动效强度', e(React.Fragment, null,
+                choose('motion', [['off', '静止'], ['soft', '轻柔'], ['strong', '舒展']]),
+                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
+              section('信息密度', choose('density', [['compact', '紧凑'], ['comfortable', '舒适']])),
+              section('阅读字体', choose('readerFont', [['sans', '黑体'], ['serif', '宋体']])),
+              ...[['opacity', '内容遮罩', 75, 96, '%'], ['blur', '背景模糊', 0, 18, ' px']].map(([key, label, min, max, unit]) => section(label,
+                e('label', { className: 'cw-range-label' }, e('span', null, `${value[key]}${unit}`), e('input', { type: 'range', 'aria-label': label, min, max, value: value[key], onChange: event => onChange({ ...value, [key]: Number(event.target.value) }) })))),
+              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } }, e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'), e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+        }
+        function AiPresence({ active, tone }) {
+          return e('div', { className: 'cw-ai-presence', 'aria-hidden': 'true', 'data-active': active, 'data-tone': tone },
+            e('i', { className: 'cw-ai-core' }), ...[0, 1, 2].map(id => e('i', { key: id, className: 'cw-ai-ribbon' })), e('i', { className: 'cw-ai-star' }));
+        }
+        function chapterStage(job) {
+          if (!job) return { index: -1, complete: false, active: false };
+          const cycle = job.cycle || {};
+          const request = (job.runtime || {}).last_request || {};
+          const complete = ['success', 'published_complete'].includes(cycle.status);
+          const active = ['running', 'continuing', 'publishing'].includes(cycle.status);
+          const roleIndex = ['A', 'B', 'C', 'D', 'E'].indexOf(request.role);
+          const stageIndex = ({ planning: 0, research: 0, draft: 1, polish: 2, review: 3, authorization: 4, publication: 4, memory: 4, entities: 4, continuity: 3 })[request.stage];
+          const publishing = /publish|reconciliation|verified/.test(cycle.stage || '');
+          const current = Number(cycle.current_chapter) || 0;
+          const belongs = current > 0 && Number(request.chapter) === current;
+          const index = complete || publishing ? 4 : belongs ? (roleIndex >= 0 ? roleIndex : stageIndex ?? (active ? 1 : -1)) : active ? 1 : -1;
+          return { index, complete, active: active && !/retry_wait|blocked|failed/.test(cycle.stage || '') };
+        }
+        function matchesProject(job, project) {
+          if (!job || !project) return false;
+          const normalize = path => String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+          return String(job.project_id || '') === String(project.id) || Boolean(job.project && project.path && normalize(job.project) === normalize(project.path));
+        }
+        function chapterMetrics(data, last) {
+          const rows = (data && data.recent) || [];
+          const completed = rows.filter(row => row.status === 'success' && Number(row.elapsed_ms) > 0 && Number(row.output_tokens) > 0);
+          const newest = completed[0];
+          const summary = data && data.summary;
+          const amount = Number(summary && summary.cost_cny);
+          const price = amount > 0 && amount < 0.01 ? `¥${amount.toFixed(4).replace(/0+$/, '')}` : money(amount);
+          return { cost: summary && summary.complete === true ? `${summary.estimated_calls ? '约 ' : ''}${price}` : '—',
+            speed: newest ? `${(Number(newest.output_tokens) / (Number(newest.elapsed_ms) / 1000)).toFixed(1)} Token/s` : '—',
+            model: last && last.model || (rows[0] && rows[0].model) || '', role: last && last.role || '' };
+        }

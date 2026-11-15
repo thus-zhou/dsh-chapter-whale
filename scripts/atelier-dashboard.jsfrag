@@ -1,0 +1,65 @@
+        function DashboardPage(props) {
+          const { overview } = props;
+          const project = (overview.projects || [])[0] || null;
+          const job = props.job || (overview.jobs || []).find(item => matchesProject(item, project)) || null;
+          const work = workHeadline(job), cycle = job && job.cycle || {}, stage = chapterStage(job);
+          const costs = usePoll(() => project ? api(`/costs?project_id=${encodeURIComponent(project.id)}`) : Promise.resolve(null), [project && project.id], POLL_MS);
+          const chapters = usePoll(() => project ? api(`/projects/${project.id}/chapters`) : Promise.resolve({ chapters: [] }), [project && project.id], LIVE_POLL_MS);
+          const rows = [...((chapters.data && chapters.data.chapters) || [])].sort((a, b) => Number(b.id) - Number(a.id));
+          const chapter = work.chapter || (rows[0] && rows[0].id) || 0;
+          const current = rows.find(row => Number(row.id) === Number(chapter));
+          const body = usePoll(() => project && current ? api(`/projects/${project.id}/chapters/${chapter}`) : Promise.resolve(null), [project && project.id, chapter, Boolean(current)], LIVE_POLL_MS);
+          const chapterCosts = usePoll(() => project && chapter ? api(`/costs?project_id=${encodeURIComponent(project.id)}&chapter=${chapter}`).then(value => ({ ...value, chapter })) : Promise.resolve(null), [project && project.id, chapter], LIVE_POLL_MS);
+          const flow = usePoll(() => project ? api(`/projects/${project.id}/workflow`) : Promise.resolve(null), [project && project.id], POLL_MS);
+          const flowSteps = flow.data && flow.data.steps || [], next = flowSteps.find(step => !step.done);
+          const ledger = chapterCosts.data && Number(chapterCosts.data.chapter) === Number(chapter) ? chapterCosts.data : null;
+          const savedBody = body.data && Number(body.data.id) === Number(chapter) ? body.data : null;
+          const baselines = costs.data ? { ...costs.data, recent: (costs.data.recent || []).filter(row => Number(row.chapter) !== Number(chapter) && row.status === 'success') } : null;
+          const timing = chapterTiming(ledger, chapter, baselines), metrics = chapterMetrics(ledger, (job && job.runtime || {}).last_request);
+          const target = job ? work.target || 100 : Number(project && project.target_chapters) || 0, count = Number(project && project.chapters) || 0, ratio = target ? Math.min(1, count / target) : 0;
+          const goal = target ? `${count} / ${target} 章` : `${count} 章已保存`;
+          const words = savedBody ? Number(savedBody.words) : current ? Number(current.words) : null;
+          const wordTarget = Number(job && (job.effective_quota || {}).word_count || job && job.word_count || props.studio.wordCount) || 3500;
+          const eta = stage.active && timing.known && timing.estimateMs > timing.elapsedMs ? `预计还需 ${fmtDuration(timing.estimateMs - timing.elapsedMs)}` : stage.active ? '当前阶段进行中' : work.tag;
+          const recordedMs = ((ledger && ledger.recent) || []).reduce((total, row) => total + Math.max(0, Number(row.elapsed_ms) || 0), 0);
+          const paragraphText = savedBody && savedBody.content || '';
+          const paragraphs = paragraphText.split(/\n+/).map(text => text.trim()).filter(Boolean).slice(0, 12);
+          const primaryPage = work.tone === 'err' ? 'jobs' : !overview.ai?.configured ? 'ai' : next && next.id !== 'writing' && next.id !== 'results' ? next.action.page : 'chapters';
+          const primaryLabel = work.tone === 'err' ? '处理任务' : stage.active ? '查看任务' : !overview.ai?.configured ? '连接模型' : next && next.id !== 'writing' && next.id !== 'results' ? next.action.label : '开始创作';
+          const queue = overview.queue || {};
+          return e('div', { className: 'nh-page cw-dashboard', 'data-running': stage.active, 'data-tone': work.tone },
+            e('div', { className: 'cw-page-heading' }, e('h1', null, '工作台'), e(Button, { icon: 'plus', onClick: () => props.navigate('chapters') }, '开始创作')),
+            e('section', { className: 'cw-overall-progress', 'aria-label': '全书进度' },
+              e('div', { className: 'cw-overall-meta' }, e('div', null, e('strong', null, job && job.name || project && project.title || '创作空间'), e('span', { className: 'cw-live-pill' }, e('i'), work.tag)),
+                e('span', null, goal)),
+              target ? e('div', { className: 'cw-progress-track', role: 'progressbar', 'aria-label': '全书已完成章节', 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': Math.min(count, target) }, e('div', { className: 'cw-progress-fill', style: { width: `${ratio * 100}%` } })) : null,
+              e('div', { className: 'cw-overall-foot' }, e('span', null, work.stageLabel || '准备下一章'), e('span', null, eta))),
+            e('div', { className: 'cw-primary-grid' },
+              e('section', { className: 'cw-creation-card cw-glass-card' },
+                e(AiPresence, { active: stage.active, tone: work.tone }),
+                e('div', { className: 'cw-card-topline' }, e('span', { className: 'cw-section-kicker' }, chapter ? `第 ${chapter} 章` : '当前任务'), e('div', { className: 'cw-card-top-actions' }, e('span', { className: 'cw-engine-pill' }, stage.index >= 0 ? `${'ABCDE'[stage.index]} · ${['规划', '初稿', '润色', '审查', '交付'][stage.index]}` : work.tag), e(Button, { kind: 'primary', onClick: () => props.navigate(stage.active ? 'jobs' : primaryPage) }, primaryLabel))),
+                e('h2', null, current && current.title || project && project.title || '准备开始创作'),
+                e('div', { className: 'cw-model-pill' }, e(Icon, { name: 'spark', size: 13 }), metrics.model ? `${metrics.role ? metrics.role + ' · ' : ''}${metrics.model}` : '按已保存的模型配置运行'),
+                e('div', { className: 'cw-word-progress' }, e('div', null, e('span', { className: 'cw-word-value' }, words === null ? '—' : num(words)), e('span', { className: 'cw-word-target' }, `/ ${num(wordTarget)} 字 · 已保存`)),
+                  e('div', { className: 'cw-progress-track cw-chapter-track' }, e('div', { className: 'cw-progress-fill', style: { width: words === null ? '0%' : `${Math.min(100, words / wordTarget * 100)}%` } }))),
+                e('div', { className: 'cw-live-metrics' }, ...[['用时', stage.active && timing.elapsedMs ? fmtDuration(timing.elapsedMs) : recordedMs ? fmtDuration(recordedMs) : '—'], ['最近输出速度', metrics.speed], ['本章费用', metrics.cost]].map(([label, value]) => e('div', { key: label }, e('span', null, label), e('strong', null, value)))),
+                e('div', { className: 'cw-hero-actions' }, e(Button, { kind: 'ghost', onClick: () => props.navigate('jobs') }, '任务详情'), e('span', { className: 'cw-saved-status' }, work.tone === 'err' ? work.subtitle : stage.active && !current ? '正文保存后显示' : current ? '正文已保存' : '等待创作'))),
+              e('section', { className: 'cw-manuscript-card cw-glass-card', 'aria-label': '正文预览' },
+                e('div', { className: 'cw-card-title' }, e('h3', null, '正文'), e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '专注阅读')),
+                e('div', { className: 'cw-manuscript' }, current ? e(React.Fragment, null, e('h4', null, current.title || `第 ${chapter} 章`), body.error ? e('p', null, '正文读取失败，请刷新重试。') : !savedBody ? e(Skeleton, { height: 90 }) : paragraphs.map((text, index) => e('p', { key: index }, text))) : e('div', { className: 'cw-reader-empty' }, e(AiPresence, { active: stage.active, tone: work.tone }), e('p', null, stage.active ? '本章正在创作' : '下一章，从这里开始'), e('span', null, stage.active ? '保存后可阅读正文' : '完成规划后即可开始写作'))),
+                e('div', { className: 'cw-manuscript-footer' }, e('span', null, current ? `${num(words || 0)} 字 · 已保存` : '暂无正文'), e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '阅读本章')))),
+            e('section', { className: 'cw-pipeline-card cw-glass-card', 'aria-label': '本章 A–E 流程' },
+              e('div', { className: 'cw-pipeline', style: { '--flow-progress': `${stage.complete ? 100 : Math.max(0, stage.index) * 25}%` } },
+                e('div', { className: 'cw-flow-rail', 'aria-hidden': true }, e('span', { className: 'cw-flow-fill' }), e('i', { className: 'cw-flow-front' })),
+                ...['规划', '初稿', '润色', '审查', '交付'].map((label, index) => e('button', { key: label, type: 'button', className: `cw-stage${stage.complete || index < stage.index ? ' done' : index === stage.index ? ' current' : ''}`, 'aria-current': !stage.complete && index === stage.index ? 'step' : undefined, onClick: () => props.navigate(['outline', 'chapters', 'chapters', 'chapters', 'publish'][index]) }, e('span', { className: 'cw-stage-node' }, stage.complete || index < stage.index ? e(Icon, { name: 'check', size: 12 }) : 'ABCDE'[index]), e('span', { className: 'cw-stage-copy' }, e('strong', null, label)), e('span', { className: 'cw-stage-state' }, index === stage.index ? stage.active ? '进行中' : stage.complete ? '已完成' : work.tag : ''))))),
+            work.tone === 'err' ? e('div', { className: 'nh-alertblock', style: { marginTop: 18 } }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
+            e('div', { className: 'cw-secondary-grid' },
+              e('section', { className: 'cw-chapters-card cw-glass-card' }, e('div', { className: 'cw-card-title' }, e('h3', null, '最近章节'), e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate('chapters') }, '全部章节')),
+                chapters.error ? e(Empty, null, '章节读取失败，请刷新重试') : !rows.length ? e(Empty, null, '还没有章节') : rows.slice(0, 3).map(row => e('button', { key: row.id, className: 'cw-chapter-row', type: 'button', onClick: () => props.onOpenChapter(row.id) }, e('span', { className: 'cw-chapter-index' }, row.id), e('span', { className: 'cw-chapter-row-title' }, row.title || `第 ${row.id} 章`, e('small', null, `${num(row.words)} 字`)), e('span', { className: 'cw-row-status' }, row.reviewed ? '已审查' : '待审查')))),
+              e('section', { className: 'cw-next-card cw-glass-card' }, e('div', { className: 'cw-card-title' }, e('h3', null, '下一步'), e(Icon, { name: 'clock', size: 15 })),
+                e('div', { className: 'cw-next-task-time' }, job && job.enabled ? e(React.Fragment, null, e('strong', null, (job.daily_times || [job.daily_time]).filter(Boolean).join(' / ') || '—'), e('span', null, job.timezone || '任务计划时区')) : e('strong', { style: { fontSize: 21 } }, next ? next.title : '继续你的故事')),
+                e('p', null, next ? next.blocked_reason || next.detail : job ? `${job.name || '日更任务'} · ${job.enabled ? '已启用' : '已停用'}` : '配置日更计划，安排下一次创作'),
+                e('div', { className: 'cw-schedule-tags' }, e('span', null, `${num(queue.queued || 0)} 章待发`), e('span', null, `${num(queue.published || 0)} 章已核验`)),
+                e('div', { className: 'cw-book-goal' }, e('div', null, e('span', null, '全书进度'), e('strong', null, goal)), target ? e('div', { className: 'cw-progress-track' }, e('div', { className: 'cw-progress-fill', style: { width: `${ratio * 100}%` } })) : null),
+                e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate(next ? next.action.page : 'jobs') }, next ? next.action.label : '管理日更任务'))));
+        }

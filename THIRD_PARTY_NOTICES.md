@@ -11,6 +11,7 @@
 | Python | PSF License，随官方发行保留 LICENSE.txt | 下载来源和 SHA-256 见 runtime-manifest.json |
 | Chromium / Playwright / Python 依赖 | 各自许可 | 保留发行包和 dist-info 中的许可证，不删除相关文本 |
 | node-tar 7.5.23 | BlueOak-1.0.0 | 安装器用于 UTF-8 归档读取；按 npm 依赖安装并保留其包内许可证，来源 https://github.com/isaacs/node-tar |
+| Manrope、Noto Sans SC、Noto Serif SC | SIL Open Font License 1.1 | 用于新版界面；保留 assets/fonts/ 下的版权许可。按常用简体字符及界面文本制作子集、转换为 WOFF2 并更名，来源见该目录 README |
 
 权利与联系处理：如发现来源、许可或权利问题，请通过仓库 Issue 联系维护者；维护者将核实并处理。此说明不替代任何组件的许可证。
 

@@ -1,18 +1,25 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**设好任务，让小说自己写下去、发出去。**
+**0.5.0：新的创作工作台、玻璃界面与 A–E 实时流程。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，也可以接入部分免费模型，通过支持的厂商账号渠道完成授权。
 
 **[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 首个公开版本
+Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 0.5.0
 
 **安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载插件 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：创建作品，使用 DSH 已登录模型开始写作，需要发布时再登录番茄。
 
 首次启动会在 `%LOCALAPPDATA%\ChapterWhale\workspace` 建独立工作区，自动下载并校验约 280 MB 的固定环境；已有相同运行时会直接复用。作品与账号数据留在独立工作区，卸载插件不会删除。安装包摘要见发布页。仅支持 Windows x64。
 
-![码章鲸：全自动写作与发布、可自定义任务、部分免费模型与厂商账号登录](assets/chapter-whale-overview.png)
+![码章鲸：全自动写作与发布、可自定义任务、部分免费模型与厂商账号登录](assets/screenshots/02-dashboard.jpg)
+
+## 0.5.0 界面更新
+
+- 深浅主题跟随 DSH；蓝紫与海洋两套配色，三档炫彩与动效。
+- 通透面板、悬浮工具栏和新的中文字体；正文可切换黑体、宋体。
+- 工作台集中显示当前任务、已保存正文、A–E 阶段与最近章节。
+- 外观、信息密度和减少动画设置自动保存在本机。
 
 ## 把每天要做的更新，交给一个任务
 
@@ -58,9 +65,9 @@ flowchart LR
 | 修订轮数 | 自动审查后允许继续修改的次数 |
 | 启用、暂停、立即执行与恢复 | 自己控制自动任务的运行节奏 |
 
-![日更任务的时间、章数、字数与执行控制](assets/screenshots/01-automation.png)
+![日更任务的时间、章数、字数与执行控制](assets/screenshots/01-automation.jpg)
 
-*实机记录：截图时任务已经结束并停用，保留当时的真实状态。新建任务和自动调度开关位于随包提供的完整管理页，具体步骤见[上手指南](docs/quickstart.md#4-创建自己的日更任务)。*
+*0.5.0 独立测试环境，使用示例作品与停用的演示任务；自动调度关闭。*
 
 ## 直接使用 DSH 已登录的模型
 
@@ -78,9 +85,9 @@ DSH 的登录凭据由宿主处理。写作时保持 DSH 运行，模型计费�
 - **按需轮换**：免费渠道池支持选入模型和授权作品，按配置尝试可用连接。
 - **付费备选自行决定**：需要时再配置自己的备选模型与费用策略。
 
-![部分免费模型与厂商账号渠道的实机页面](assets/screenshots/03-free-channels.png)
+![部分免费模型与厂商账号渠道的实机页面](assets/screenshots/03-free-channels.jpg)
 
-画面展示 CodeArts、WorkBuddy、Qoder、TRAE 等渠道入口。实际支持的登录方式、可用模型、额度和授权要求，以对应渠道的当前返回为准。完整管理页的「AI 设置 → 免费额度接入」提供渠道服务与授权操作；侧栏「免费渠道」用于查看状态。
+画面展示可用渠道目录与未登录状态。实际支持的登录方式、可用模型、额度和授权要求，以对应渠道的当前返回为准。完整管理页的「AI 设置 → 免费额度接入」提供渠道服务与授权操作；侧栏「免费渠道」用于查看状态。
 
 ## 自动运行，也能看清每一步
 
@@ -88,13 +95,13 @@ DSH 的登录凭据由宿主处理。写作时保持 DSH 运行，模型计费�
 
 当前任务是否在运行、正在推进哪一章、批次是否结束、队列里还有多少内容，都能集中查看。已核验发布、未确认和归档待核会分别显示。
 
-![工作台中的作品进度、队列与任务结束状态](assets/screenshots/02-dashboard.png)
+![工作台中的作品进度、队列与任务结束状态](assets/screenshots/02-dashboard.jpg)
 
 ### 作品与章节：自动产出的内容仍然可以查看和调整
 
 按章查看标题、字数与审查状态。需要时打开正文、重新审查或润色，把对内容的控制留在自己手里。
 
-![章节列表中的字数、审查状态与操作入口](assets/screenshots/04-chapters.png)
+![章节列表中的字数、审查状态与操作入口](assets/screenshots/04-chapters.jpg)
 
 ### 连载记忆：让后续写作带着已有设定往前走
 
@@ -102,14 +109,14 @@ DSH 的登录凭据由宿主处理。写作时保持 DSH 运行，模型计费�
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/05-memory.png" alt="长篇共享记忆中的设定、事实与偏好"><br>随章节积累的长篇记忆</td>
-    <td width="50%"><img src="assets/screenshots/06-creative-brief.png" alt="题材、受众、人物和文风的创作约定"><br>让自动写作遵循你的创作约定</td>
+    <td width="50%"><img src="assets/screenshots/05-memory.jpg" alt="长篇共享记忆中的设定、事实与偏好"><br>随章节积累的长篇记忆</td>
+    <td width="50%"><img src="assets/screenshots/06-creative-brief.jpg" alt="题材、受众、人物和文风的创作约定"><br>让自动写作遵循你的创作约定</td>
   </tr>
 </table>
 
-模型分工、审查策略、成本统计和操作历史也保留在工作台中，需要时再进一步调整。[查看七张完整实机图 →](docs/screenshots.md)
+模型分工、审查策略、成本统计和操作历史也保留在工作台中，需要时再进一步调整。[查看新版完整界面 →](docs/screenshots.md)
 
-> 图片来自作者提供的个人使用环境，已裁剪并以不透明区域遮盖作品信息、账号情况、本机路径及个人配置。未使用 AI 重绘界面或更改任务状态。部分画面沿用旧名称「小说助手」；背景是用户的个性化环境，公开版名称为「码章鲸」，界面随 DSH 主题显示。图中规模和数量是当时的项目记录。
+> 图片来自 0.5.0 正式插件在独立 DSH 环境中的界面，采用示例作品、演示任务与测试模型。任务快照与用量为界面演示数据，没有调用真实模型、登录发布账号或发布章节。
 
 ## 安装后，按这四步开始
 
@@ -133,21 +140,21 @@ npm pack dsh-chapter-whale@latest
 
 然后把生成的 `.tgz` 文件交给 DSH 插件管理安装。`npm pack` 只下载插件包，首次启动仍需要下载运行环境。
 
-**通过 GitHub 安装最新版**：使用下方 0.4.3 插件包，首次启动会下载固定运行时。
+**通过 GitHub 安装最新版**：使用下方 0.5.0 插件包，首次启动会下载固定运行时。
 
 在 DSH 插件管理中添加下方地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.3/dsh-chapter-whale-0.4.3.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.5.0/dsh-chapter-whale-0.5.0.tgz
 ```
 
-0.4.3 插件包约 **9.4 MB**。后端、Python 和 Chromium 与 0.4.2 相同，首次启动下载并校验约 **279.7 MB** 的固定运行时；已有相同运行时的工作目录可直接复用。希望预先下载完整环境，可使用 [0.4.2 完整包](https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.2/dsh-chapter-whale-0.4.2.tgz)，再更新到 0.4.3 安装器。
+0.5.0 插件包约 **约 16 MB**。后端、Python 和 Chromium 与 0.4.2 相同，首次启动下载并校验约 **279.7 MB** 的固定运行时；已有相同运行时的工作目录可直接复用。希望预先下载完整环境，可使用 [0.4.2 完整包](https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.2/dsh-chapter-whale-0.4.2.tgz)，再更新到 0.5.0 安装器。
 
 <details>
 <summary>使用命令行安装</summary>
 
 ```powershell
-dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.3/dsh-chapter-whale-0.4.3.tgz
+dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.5.0/dsh-chapter-whale-0.5.0.tgz
 ```
 
 这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；首次启动按固定 buildId 和摘要核对运行时。插件版本与运行时版本分别记录。
@@ -218,6 +225,6 @@ http://127.0.0.1:18765
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前发行版本为 `0.4.3`（0.3.0 预发行）。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+包名为 `dsh-chapter-whale`，当前发行版本为 `0.5.0`。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-**[下载码章鲸，设置你的第一项自动更新任务 →](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.4.3)**
+**[下载码章鲸，设置你的第一项自动更新任务 →](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0)**

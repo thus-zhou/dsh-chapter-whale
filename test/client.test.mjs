@@ -110,6 +110,46 @@ test('模块加载器拿到的 id 正确，且加载期不抛错', () => {
   assert.equal(typeof loaded.factory, 'function');
 });
 
+function atelierHelpers() {
+  const chainable = new Proxy(function () {}, { get: (_target, key) => key === 'then' ? undefined : chainable, apply: () => chainable, construct: () => chainable });
+  return loadBundle().factory(() => new Proxy({}, { get: () => chainable })).__internals;
+}
+
+test('A–E 轨道只采用当前章节的请求，不继承前一章的审查阶段', () => {
+  const { chapterStage } = atelierHelpers();
+  const stage = (chapter, role, requestChapter = chapter) => chapterStage({ cycle: { status: 'running', current_chapter: chapter, stage: 'local_generation' }, runtime: { last_request: { chapter: requestChapter, role } } });
+  assert.equal(stage(3, 'A').index, 0);
+  assert.equal(stage(3, 'C').index, 2);
+  assert.equal(stage(3, 'D').index, 3);
+  assert.equal(stage(3, 'D', 2).index, 1);
+  assert.equal(chapterStage(null).index, -1);
+  const success = chapterStage({ cycle: { status: 'success' } });
+  assert.equal(success.index, 4);
+  assert.equal(success.complete, true);
+  assert.equal(success.active, false);
+});
+
+test('切换作品后只匹配所选作品的日更任务', () => {
+  const { matchesProject } = atelierHelpers();
+  const project = { id: 'book-b', path: 'O:\\books\\B' };
+  assert.equal(matchesProject({ project: 'O:/books/B/' }, project), true);
+  assert.equal(matchesProject({ project_id: 'book-b' }, project), true);
+  assert.equal(matchesProject({ project: 'O:/books/A' }, project), false);
+  assert.equal(matchesProject(null, project), false);
+});
+
+test('未定价费用与缺失速度不伪装成零；速度使用记录中的 Token 和耗时', () => {
+  const { chapterMetrics } = atelierHelpers();
+  assert.equal(chapterMetrics(null, null).cost, '—');
+  assert.equal(chapterMetrics({ summary: { complete: false, cost_cny: '0' } }, null).cost, '—');
+  assert.equal(chapterMetrics({ recent: [{ status: 'pending', output_tokens: 100, elapsed_ms: 1000 }] }, null).speed, '—');
+  const recorded = chapterMetrics({ summary: { complete: true, cost_cny: '0.12' }, recent: [{ status: 'success', output_tokens: 120, elapsed_ms: 2000 }] }, { role: 'B', model: 'writer' });
+  assert.equal(recorded.speed, '60.0 Token/s');
+  assert.equal(recorded.model, 'writer');
+  assert.equal(recorded.role, 'B');
+  assert.notEqual(recorded.cost, '—');
+});
+
 test('factory 返回 name/inject/apply', () => {
   const loaded = loadBundle();
   const chainable = new Proxy(function () {}, {

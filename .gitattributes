@@ -4,3 +4,4 @@
 *.png binary
 *.jpg binary
 *.svg text
+assets/fonts/*-OFL.txt whitespace=-blank-at-eol
