@@ -252,6 +252,7 @@ class StartupOrderTests(unittest.TestCase):
             item.stop()
         self.temp.cleanup()
 
+    @unittest.skipUnless(WINDOWS, 'Windows DPAPI 凭据保护仅在 Windows 可用')
     def test_codec_preflight_fails_before_icacls_node_or_any_write(self):
         broken = self.root / '注入失败 codec.py'
         broken.write_text('raise SystemExit(1)\n', encoding='utf-8')

@@ -5,7 +5,7 @@
   "pythonSha256": "0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8",
   "distributionStatus": "tested-without-live-publish",
   "version": "0.7.0",
-  "buildId": "04e29797f2e80aab87bcf2767460ae663b814d9a096c896140f78f47a1dbf1c7",
+  "buildId": "64ac73751d4c525b13d5830e9d09617315a1c424106f63f2b6f19fc25be5fa55",
   "files": {
     "backend/manager/__init__.py": "25bf932079fe1bfd101f94cec4ee47c279847dce466f19d01b9d407122945697",
     "backend/manager/ai_tools.py": "f7f2167248276bec76075bf2df52b13ac6a5d30a1ef260e781a78d004a93064a",
@@ -35,7 +35,7 @@
     "backend/manager/worker.py": "57a77b15e5ab18a570150abbbd8840814c52222dd38ff710aec9623575b0dbc2",
     "backend/integration/__init__.py": "54aae0fa40442aad3a4f49030371d9e708d5ad6d84f858f470cc7e4aafb95219",
     "backend/integration/bridge.py": "12799f93888024914278c60b93c45bb7311f738e542210ac03e49cc3946a9b34",
-    "backend/integration/browser_target.py": "81b7a8b53d0e8e7584a174481c5743af37394faa407fbb56bcc0ebad7cfef5a2",
+    "backend/integration/browser_target.py": "65353645ba18dd43aa065331465d4e98e531444c3e323b120a2a94982075fc03",
     "backend/integration/chapter_versions.py": "5041647320ac209dca60d38f08ee40830ecbd7293bdd151b34c33e08d9a4e57b",
     "backend/integration/character_state.py": "68d954ba224e6dd6f8631326948c376809615e87006fa283d2f81a4cf13e80ed",
     "backend/integration/context_budget.py": "8139284e813fa846b00939b72140c2e1a68518213166a8d3ea5c186d34f7dd92",

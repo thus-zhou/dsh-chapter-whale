@@ -1385,6 +1385,6 @@ GitHub Latest、npm latest 与自定义市场索引均为 0.5.0。社区市场�
   - `npm test`：**101 pass / 0 fail**（含 `client.test.mjs`、`gate.test.mjs`、`p04-bridge.test.mjs`、`market.test.mjs`、`manifest.test.mjs`、`managed-runtime.test.mjs`、`release-check.test.mjs`）
   - `backend/integration`：**707 OK（skipped=4）**；`backend/manager`：**151 OK**
   - 本地回环代理 E2E 冒烟（`index.js` + `manager/app.py`，`start_dispatcher=False`，真实模型 = 0，外部写入 = 0）：**9/9 阶段全通**（含 `platform_scheduled`、`schedule`、`entities`/`precheck`/`retrieval`/`evidence/impact`、`readers`、`browser` 只读、七猫写入拒绝 `writes=0`、`runs`/`notifications`、`422 invalid_request` 错误体透传）
-  - `runtime-manifest.json`：**3418 文件**，`buildId`: `04e29797f2e80aab87bcf2767460ae663b814d9a096c896140f78f47a1dbf1c7`
+  - `runtime-manifest.json`：**3418 文件**，`buildId`: `64ac73751d4c525b13d5830e9d09617315a1c424106f63f2b6f19fc25be5fa55`
   - 候选产物：`pack-bundle.py`、`npm pack`、四份 Linux/macOS 服务归档（`--verify` 全通）、`check-release.mjs --local` 与 `verify-package.mjs` 结果/哈希统一记于 `.v070/candidate/HASHES.txt`
   - **仍未验证项**：真实番茄/七猫网页与账号、真实模型调用（预算=0）、真实 Linux ARM64 与 Apple Silicon/Intel 物理机、连续升级两次与回退（T22）、真实外网 Webhook、npm/GitHub 正式发布

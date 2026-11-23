@@ -140,7 +140,7 @@ test('P01 代码来源恒为本包 backend，内置 runtime 时运行环境同�
   await rm(pkg.root, { recursive: true, force: true });
 });
 
-test('P01 轻量包内置 runtime 时安装成功并写入候选标记', async () => {
+test('P01 轻量包内置 runtime 时安装成功并写入候选标记', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage({ bundled: true });
   const mod = await loadModule(pkg.root);
   const workspace = await freshDir('ws');
@@ -163,7 +163,7 @@ test('P01 轻量包内置 runtime 时安装成功并写入候选标记', async (
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 下载替身夹带旧 backend 时绝不复用，安装后后端仍是本包代码', async () => {
+test('P01 下载替身夹带旧 backend 时绝不复用，安装后后端仍是本包代码', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage({ bundled: false, code: Object.fromEntries(
     Object.entries(CODE).map(([key, value]) => [key, value])) });
   const payload = await makePayload({ backendMarker: OLD_MARKER });
@@ -188,7 +188,7 @@ test('P01 下载替身夹带旧 backend 时绝不复用，安装后后端仍是�
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 下载字节与清单不符时明确拒绝且不写发行标记', async () => {
+test('P01 下载字节与清单不符时明确拒绝且不写发行标记', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage({ bundled: false });
   const payload = await makePayload();
   await writeDownloadSpec(pkg.root, payload, { sha256: 'f'.repeat(64) });
@@ -206,7 +206,7 @@ test('P01 下载字节与清单不符时明确拒绝且不写发行标记', asyn
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 下载包 buildId 与代码清单不一致时拒绝安装', async () => {
+test('P01 下载包 buildId 与代码清单不一致时拒绝安装', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage({ bundled: false, buildId: 'cand-a' });
   const payload = await makePayload({ buildId: 'cand-a' });
   // 下载描述与代码清单一致，但包内 runtime-manifest.json 是另一个候选
@@ -234,7 +234,7 @@ test('P01 下载包 buildId 与代码清单不一致时拒绝安装', async () =
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 缺少后端源码时明确失败，不回退到下载包后端', async () => {
+test('P01 缺少后端源码时明确失败，不回退到下载包后端', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage({ bundled: false });
   await rm(join(pkg.root, 'backend', 'manager'), { recursive: true, force: true });
   const mod = await loadModule(pkg.root);
@@ -246,7 +246,7 @@ test('P01 缺少后端源码时明确失败，不回退到下载包后端', asyn
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 两个安装者并发时后到者被安装锁拒绝', async () => {
+test('P01 两个安装者并发时后到者被安装锁拒绝', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage();
   const mod = await loadModule(pkg.root);
   const workspace = await freshDir('ws');
@@ -256,7 +256,7 @@ test('P01 两个安装者并发时后到者被安装锁拒绝', async () => {
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 升级清理只删旧清单管理的代码文件，作者数据与凭据保持原样', async () => {
+test('P01 升级清理只删旧清单管理的代码文件，作者数据与凭据保持原样', { skip: process.platform !== 'win32' }, async () => {
   const stale = { ...CODE, 'integration/legacy_module.py': 'LEGACY\n' };
   const v1 = await makePackage({ buildId: 'cand-v1', code: stale });
   const mod1 = await loadModule(v1.root);
@@ -311,7 +311,7 @@ test('P01 staleCodeFiles 永不返回作者数据或跨界路径', async () => {
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('P01 已装候选再次启动时只做校验，不重复复制', async () => {
+test('P01 已装候选再次启动时只做校验，不重复复制', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage();
   const mod = await loadModule(pkg.root);
   const workspace = await freshDir('ws');

@@ -10,7 +10,7 @@
 
 - **目标版本**：`0.7.0`（将 `0.5.0` 之后在 `feat/v0.7.0` 合拢的排期缓冲、连续性与预检、读者反馈、常驻存稿服务包、单目标浏览器试点、多平台能力契约，以及 DSH 前后端联调统一收敛为一版 PR）。
 - **组合分发许可**：`GPL-3.0-only`（见 `package.json`、`LICENSES/GPL-3.0.txt`、`THIRD_PARTY_NOTICES.md`、`docs/license-decision.md` 方案 A）。
-- **清单摘要（`buildId`）**：`04e29797f2e80aab87bcf2767460ae663b814d9a096c896140f78f47a1dbf1c7`（`runtime-manifest.json`，共 `3418` 个受管文件）。
+- **清单摘要（`buildId`）**：`64ac73751d4c525b13d5830e9d09617315a1c424106f63f2b6f19fc25be5fa55`（`runtime-manifest.json`，共 `3418` 个受管文件）。
 
 ---
 

@@ -124,6 +124,8 @@ def _check_profile(profile: Path, project) -> Path:
     用户打包或同步稿件时一起泄出去。这里要求它是 `.webnovel/browser` 的后代。
     """
     resolved = Path(os.path.abspath(str(profile)))
+    if _is_link(resolved):
+        raise BrowserTargetError("profile 不能是符号链接或目录联接")
     if project is not None:
         root = Path(os.path.abspath(str(project)))
         if not _within(resolved, root):
@@ -132,8 +134,6 @@ def _check_profile(profile: Path, project) -> Path:
         if resolved == root or resolved == state or not _within(resolved, state):
             raise BrowserTargetError(
                 "profile 必须是作品浏览器状态目录下的子路径（不能是作品根或稿件目录）")
-    if _is_link(resolved):
-        raise BrowserTargetError("profile 不能是符号链接或目录联接")
     return resolved
 
 
