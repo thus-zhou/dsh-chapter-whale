@@ -74,7 +74,7 @@ class Workdir:
 class ResolverTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='ofm-interp-')
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def tearDown(self):
         self.temp.cleanup()
@@ -239,7 +239,7 @@ class CredentialRoundTripTests(unittest.TestCase):
 class StartupOrderTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='ofm-start-')
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.patches = [patch.object(ofm_runtime, 'DATA', self.root),
             patch.object(ofm_runtime, 'HOME', self.root / 'ofm-home'),
             patch.object(ofm_runtime, 'CONTROL', self.root / 'ofm-control.json'),

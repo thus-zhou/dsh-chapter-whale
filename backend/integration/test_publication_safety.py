@@ -84,7 +84,7 @@ class PublicationTest(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.queue = self.root / "chapters" / "测试书"
         self.queue.mkdir(parents=True)
         self.source = self.queue / "001 第1章 初见.txt"
@@ -314,7 +314,7 @@ class PublicationTest(unittest.TestCase):
 class BridgePublicationTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.enterContext(patch.dict(os.environ, {"NOVEL_HELPER_AI_CONFIG": str(self.root / "offline-ai.json")}))
         self.project = self.root / "project"
         (self.project / "正文").mkdir(parents=True)
