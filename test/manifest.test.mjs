@@ -73,7 +73,8 @@ test('bundle 平台声明：win32 放行，其他平台是硬拦截', { skip }, 
 test('manifest 具备发布所需的元数据', () => {
   assert.equal(typeof manifest.private, 'boolean');
   assert.equal(manifest.type, 'module');
-  assert.equal(manifest.license, 'SEE LICENSE IN THIRD_PARTY_NOTICES.md');
+  assert.equal(manifest.license, 'GPL-3.0-only');
+  assert.ok(manifest.files.includes('LICENSES/'), '发行包必须包含许可全文目录');
   assert.ok(existsSync(join(root, 'LICENSE')), '缺少 LICENSE 文件');
   assert.match(manifest.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   assert.ok(manifest.icon, '缺少顶层 icon');

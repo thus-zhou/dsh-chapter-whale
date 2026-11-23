@@ -671,3 +671,720 @@ M09：0.3 集成与稳定发布 —— 版本串到 0.3.0、完整隔离检查�
 Node 64 项通过；DSH 0.2.2-rc.1 独立环境完成原生界面加载、测试适配器探测、主题与字体保存、减少动画及 760px 布局验证。后端和固定 0.4.2 运行时未变。源码 CI、线上发行包 Windows 首次启动检查通过；GitHub/npm 下载归档均与验收包一致，详见 [0.5.0 验收](../retest-0.5.0.md)。
 
 GitHub Latest、npm latest 与自定义市场索引均为 0.5.0。社区市场更新 #15398 已提交 0.5.0 资料，待维护者合并。用户明确取消本机插件更新，未更改个人安装。真实模型请求和真实章节发布均为 0，既有真实写作验收缺口保留。
+
+## 0.6.0 放心日更（2026-11-16，候选完成/待真机验收）
+
+本段是 0.6.0 的唯一交接记录。执行包：`design/码章鲸_按版本执行包_2026-11-16/01_v0.6.0_放心日更.md`。
+
+### 实际版本与起点
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `0.6.0`（`package.json:3`、`market/index.json`、`market/losebird-entry.json` 同步）|
+| 起点 | `v0.5.0` / HEAD `4f218c0e88fcab890b3ca52ac8a7a139a95459a8` |
+| 产出提交 | 无（按仓库规则不自动 commit；全部改动留在工作树）|
+| 工作树 | 修改约 40 个文件，新增 `backend/integration/{draft_delivery,run_report,run_description,notification_hooks,notifications}.py` 及 6 个测试文件、`LICENSES/`、`docs/license-*.md` |
+| 数据目录 | 测试数据 `.v060/testdata`、构建 `.v060/build`、证据 `.v060/evidence`、候选 `.v060/candidate`（均在 `O:\小说助手\release\` 下）|
+
+### 正常入口与回退点
+
+- 正常入口：DSH 插件启动 → `index.js` `prepareManaged()`（代码只取本包 `backend/`，运行时取内置或校验后的下载包）→ 管理服务 `backend/manager/app.py`（默认 `127.0.0.1:8765`）。
+- 迁移：`publication_mode` 缺字段＝`publish_now`（旧任务语义不变）；旧 PUT 不降级；`scheduler.json` 无 `schema_version` 迁移按字段补默认值。
+- 回退点：旧运行记录与旧任务可直接被 0.5.0 读取（新增字段只在 0.6 侧写入）；安装工作区保留 `.chapter-whale-release.json` 上一候选的 `buildId`，回退只需重装 0.5.0 完整包。
+- 已安装候选位置：`.v060/candidate/bundle/dsh-chapter-whale-runtime-win32-x64-0.6.0.tgz`（打包产物在 `.tmp/bundle/` 与候选目录副本）。
+
+### 测试命令与结果（Windows NT 10.0.22631 / Node v24.18.0 / Python 3.13.5）
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `npm ci --ignore-scripts --no-audit --no-fund` | 0 | 依赖安装完成 |
+| `npm test` | 0 | 98 项：93 通过 / 0 失败 / 5 跳过（跳过的 2 项为宿主 checkout、3 项为 DSH 安装探测；含安装器、发行清单、模型桥、客户端；`distribution` 的 buildId 断言在候选包重写后通过）|
+| `python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend` | 0 | 375 项通过，1 项跳过 |
+| `python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend` | 0 | 87 项通过 |
+| `python scripts/build-runtime.py --manifest-only` | 0 | 3403 个文件，buildId `35b5788f92c997cdd95c7417ebf2c84e93f00e6b2ab892d29dea0e8e2e733167`（第二轮：清单/`.pth`/锁文件强制 LF 后重建） |
+| `node scripts/check-release.mjs --local` | 0 | 3403 个文件与清单一致；清单自身含 CRLF 会被同一命令拒绝 |
+| `python scripts/pack-bundle.py` | 0 | 完整包 287,139,998 字节，SHA-256 `bf477c81cc887ca97d44b1cecb12214bede8106a396149c0a44e3e7a452d58ee` |
+| `npm pack --ignore-scripts --pack-destination .v060/candidate` | 0 | 轻量包 16,856,016 字节，SHA-256 `243023959b7ffca8109771e3104a981d4e9e2416faf4228c083a68eca052e2a9` |
+| `node scripts/verify-package.mjs <完整包> - verify-full.json` | 0 | `success:true`，`downloads:0`（内置运行时，空作品/空账号/调度关闭）|
+| `node scripts/verify-package.mjs <轻量包> <完整包> verify-light.json` | 0 | `success:true`，`downloads:1`（用完整包真实字节模拟下载，实际安装后后端摘要与清单一致）|
+| 回归（清单 LF 修正、测试隔离修正后重跑） | 0 | npm 98 项 93 通过 / integration 375 通过 1 跳过 / manager 87 通过；跑完全套后 `backend/integration_data` 不再生成 |
+
+跳过项：`backend/integration` 的 1 项跳过为既有的 Windows 平台分支（非本版新增）。证据目录：`.v060/evidence`（P02 清单差异 `manifest-diff.mjs`、A05 演练 `a05/a05-evidence.json`）。
+
+### 完成到哪一步（源码 / 真实宿主 / 模型 / 平台 / 通知 / 发行）
+
+| 维度 | 状态 |
+| --- | --- |
+| 源码实现 | P01–P06、A01–A04 已实现并有测试；A02 前端已接入，但下列后端字段仍缺（见“未完成”）|
+| 真实 DSH 宿主 | 未验证：本机未找到可用 DSH 安装，`npm test` 的 host checkout 用例跳过；P04 的“重启后仅用 `chapter_whale` 工具生成”未执行 |
+| 真实模型 | 0 次请求。A05 用替身执行器（`FakeExecutor`）跑通两章生成、审查、修订、记忆与费用“未知”显示 |
+| 平台写入 | 0 次。只存稿路径把 `stage_project/run_publish/sync_manifest/validate_queue_origin` 全部替换为断言，测试与演练均证明零调用；未做任何真实发布或回读 |
+| 通知 | 仅假 opener：本地事件、incident 折叠、发件箱重试/退避/未知均有用例；未连真实 HTTPS 收件端 |
+| 发行 | 只生成候选完整包与轻量包；npm 发布、GitHub Release、市场分发均未放行（许可路线 A 要求 + 真机条件未满足）|
+
+### 已知缺口与下一步
+
+1. **A02 后端字段**：单章详情不返回 `revision_rounds`；`JobInput` 无任务级模型/预算字段，日更表单只能显示“沿用全局资源策略”；`/api/free-model` 无显式 `login.start`（二维码/链接靠 `account.create`+`login.poll` 推断）；`/api/settings` 只有 `scheduler_enabled`。前端已按“未知”降级，不冒充已知值。
+2. **P04 真机**：宿主关闭旧桥→新建桥→不开侧栏→仅 Agent 调生成，需在真实 DSH 内复验。
+3. **A05 真机**：真实模型两章完整生成/审查/修订、费用与耗时、旧书导入与前文改写后续写，均待有预算后执行。
+4. **A04 真机**：真实收件端 200/429/超时与“送达未知”人工核对。
+5. **许可**：路线 A 文档已交付，发布前仍需所有者确认 `docs/license-decision.md` 的放行矩阵；`LICENSES/GPL-3.0.txt` 已随包。
+
+阻断结论：以上第 1–4 项未完成前，本版登记为“**候选完成/待真机验收**”，不得写“整版已交付”，也不得推送 GitHub、发布 npm 或更新市场。
+
+## 0.6.1 平台排期缓冲（2026-11-21，候选完成/待真机验收）
+
+设计输入：`design\码章鲸_按版本执行包_2026-11-16\02_v0.6.1_番茄排期缓冲.md`（只做 B01/B02）。
+
+### 实际版本与起点
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `0.6.1`（`package.json`、`runtime-manifest.json` 同步） |
+| 基线 | 0.6.0 工作树（HEAD `4f218c0` + 未提交的 0.6.0 实现），本机 Python 3.13.5 / Node v24.18.0 |
+| 新增文件 | `backend/integration/platform_schedule.py`、`schedule_buffer.py`、`platform_adapters.py`、`scheduled_delivery.py`、`test_schedule_buffer.py`、`test_scheduled_delivery.py`、`backend/manager/test_schedule_api.py` |
+| 修改文件 | `backend/integration/scheduler.py`、`draft_delivery.py`、`backend/manager/app.py`、`test_draft_delivery.py`、`package.json`、`runtime-manifest.json`、`runtime-download.json`、`CHANGELOG.md`、`README.md`、`RELEASE_STATUS.md`、`docs/plan/PROGRESS.md`、`docs/plan/STATE.json` |
+
+### 实现要点（审计后定稿）
+
+1. **识别与解析分离**：`platform_schedule.read_snapshot` 只吃行数组，归一状态（`local_pending/plain_draft/scheduled/in_review/published/returned/unknown`）；负向文案（失败/未成功/驳回/退回/取消）优先于正向词，多正向命中一律 `unknown`；行内 `book_id` 不被任务参数覆盖，与期望作品/账号不符即 `needs_review`；完全重复行去重，同章多状态或多时刻进 `conflicts`，待核对与冲突都不计入“已排期”。
+2. **能力记录**：`platform_capabilities.json` 按 `(platform, account, book)` 存七项事实（可读/可排/可确认/可回读正文/提前量/在排总量/每日上限）；`can_auto_schedule` 要求四项布尔为真、提前量 ≥0、两个上限 >0（0 = 无容量），否则降级为只读清单 + 本地存稿候选。
+3. **纯计算覆盖**：`schedule_buffer.plan` 不写盘；窗口从 `now + 提前量` 之后的第一个未来时段起按有效天数计（23:30 也算得进次晨 08:00），按章序、`keep_local`、平台每日上限与在排总量排档；稿不够就在缺口前截断，并给 `coverage.gap_at/until/gap_reason`。
+4. **先意图后写入**：幂等键 = `(job, platform, account, book, chapter, version_sha256)`，不含计划时刻，改期只更新同一条；`plan` 接收台账并排除已占用章，`apply_plan` 把在途/待对账意图放进白名单不误取消；`_submit_planned` 提交前重读回执哈希（变了标 `stale`），`planned_at<=now` 标 `expired` 不提交，提前量内标 `too_soon` 推迟，台账有 `needs_review` 时整轮不写。
+5. **不越权**：默认零生产适配器；本版不发起任何真实平台写入，`reconcile` 在无适配器时返回 409 `adapter_unavailable`；适配器结果三分（无适配器阻塞 / 明确拒绝失败 / 未知转待对账并停轮）。
+6. **投影不谎报**：`scheduler.remote_state` 对排期任务只认本轮 `cycle.remote_state`，不再从 `last_status=="success"` 推断 `published`；job summary、运行记录与通知口径一致。
+7. **接口**：`GET /api/jobs/{id}/schedule`、`GET /schedule/review` 与 `preview/capability/apply/stop/resume/reconcile/resolve`；`apply` 用单调 `revision`（`expected_revision`，兼容 `expected_updated_at`）做乐观锁（409 `stale_buffer`），非排期任务 409 `not_scheduled_job`，坏设置 400 `invalid_settings`，能力未证实 409 `capability_unknown` 但保存设置，`update_job` 拒绝 400 `update_rejected`；`reconcile` 可直接吃作者粘贴的只读清单，无适配器也能对账；`resolve` 给 `needs_review/failed/stale` 两种处置；错误统一 `{"code", "message"}`。
+8. **绑定与兼容**：非 draft 任务纳入 `(platform, account, book)` 唯一绑定（同平台账号书籍只能一个排期任务）；旧 `PUT` 不带 `schedule_buffer/publication_mode/platform/account/timezone/daily_time(s)` 时保留原值。
+
+### 测试命令与结果（Windows 11 10.0.22631 / Node v24.18.0 / Python 3.13.5）
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `npm test` | 0 | 98 项通过 / 0 失败 / 0 跳过 |
+| `python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend` | 0 | 427 项通过，1 项跳过（0.6.0 为 375；新增 52 + 11） |
+| `python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend` | 0 | 100 项通过（0.6.0 为 87；新增 13） |
+| `python scripts/build-runtime.py` | 0 | 3407 个文件；buildId 见 `.v061/candidate/HASHES.txt`（写在包内会导致固定点漂移） |
+| `python scripts/pack-bundle.py` | 0 | `dsh-chapter-whale-runtime-win32-x64-0.6.1.tgz`（字节/哈希见 `.v061/candidate/HASHES.txt`） |
+| `node scripts/check-release.mjs --local` | 0 | 清单一致（3407 文件） |
+| `node scripts/verify-package.mjs <完整包> -` | 0 | `success:true`，`downloads:0` |
+| `node scripts/verify-package.mjs <轻量包> <完整包>` | 0 | `success:true`，`downloads:1` |
+| `npm pack --ignore-scripts --pack-destination .v061/candidate` | 0 | `dsh-chapter-whale-0.6.1.tgz`（1212 文件，哈希见 `HASHES.txt`） |
+
+说明：本文件与 `RELEASE_STATUS.md` 都在候选包里，写死哈希会让下一次打包的哈希立刻不同（固定点问题），所以最终数值记录在包外 `.v061/candidate/HASHES.txt`。
+
+打包注意：`backend/integration_data/`（测试留下的 `scheduler.json.lock`）会让 `check-release --local` 报「后端包混入本地状态」，打包前必须删掉该目录。
+
+### 第一轮独立审计与修复（2026-11-21）
+
+首轮候选完成后由另一名审计者独立复算代码路径，报告 5 个 P0、9 个 P1、11 个 P2 与文档不一致若干。逐条处理结果：
+
+| 审计项 | 原问题 | 处理 |
+| --- | --- | --- |
+| P0-1 | 本地存稿成功即显示“已发布” | `scheduler.remote_state` 排期分支只认 `cycle.remote_state`，其余返回 `not_submitted` |
+| P0-2 | 跨天重排重复提交同一章 | 幂等键去时刻；`plan(intents=...)` 排除已占用；`apply_plan` 保留在途白名单；同章单在途 |
+| P0-3 | 过期意图照发 | `expired` 不提交、`too_soon` 推迟，补单测 |
+| P0-4 | 适配器未确认被当没写而重试 | `AdapterUnavailable/AdapterRejected/AdapterResultUnknown` 三类，未知即停轮待对账 |
+| P0-5 | 回读身份自证 | 行内作品/账号不被覆盖，不符即 `needs_review`，分组含平台/账号/作品，对账要求正文 sha |
+| P1-1 | 「定时发布失败」判成已排期 | 负向词优先 → `returned` |
+| P1-2 | 五项身份缺正文 | 新增 `can_confirm_body` 与 `content_sha256` 比对，取不到即不记已核验 |
+| P1-3 | 缺行把已核验降级 | `complete=false` 时缺行不作否定，终态不因缺行降级 |
+| P1-4 | 60 秒容差 | 收到 1 秒 |
+| P1-5 | 23:30 不排次晨 | 窗口按未来时段 + 有效天数 |
+| P1-6 | 0 值/上限语义 | 0 = 无容量；两个上限必须 >0；提前量参与选档与提交校验 |
+| P1-7 | 旧 PUT 重置 platform | 不在 `model_fields_set` 的键一律 pop |
+| P1-8 | 两个排期任务同书 | `(platform, account, book)` 唯一绑定扩展到非 draft 任务 |
+| P1-9 | 通知口径相反 | 排期结论写回 `cycle`，`status` 只表示本地生成，`schedule_status` 表示排期 |
+| P2-1/P2-2 | apply 不校验模式、用旧 job 算计划 | 非排期任务 409 `not_scheduled_job`；更新后重读 job 再算 |
+| P2-3 | 错误体两套形状 | 全部改 `JSONResponse({"code","message"})` |
+| P2-5 | 秒级乐观锁 | store 增加单调 `revision`，`expected_updated_at` 对 revision 和 updated_at 双校验 |
+| P2-6 | 关补货仍覆盖 plan | `enabled=false` 只存设置不动 plan |
+| P2-9 | `_patch_record` 写入边界 | 限定 `RUNS_ROOT` 下绝对路径，捕 `OSError/TypeError/ValueError` |
+| P2-10 | 重复行/缺 ID 行 | 完全重复行去重，缺 `chapter_id` 行进 `needs_review` 不参与冲突 |
+| P3 | 未使用形参、注释与代码相反、测试盲区 | `_finish` 用上 `verification`；注释改正；补跨午夜/过期/能力 0 值/stop 后再 step/旧 PUT 非 fanqie 用例 |
+
+未采纳：P2-7 `stop_after_gap` 语义、P2-8 `note_manual_change` 接线（需要在真实采集面上判断“平台侧被手工改动”，本版无适配器，先留函数与单测，等真实采集面接入再挂路由）。
+
+### 第二轮独立审计与修复（2026-11-21）
+
+同一名审计者复算修复后的代码，确认第一轮 2 项 P0 闭合并新报 2 个 P0、4 个 P1 与若干 P2/P3。处理结果：
+
+| 审计项 | 原问题 | 处理 |
+| --- | --- | --- |
+| P0-1 | `published` 分支跳过身份校验，平台返回已发即记账 | 同样校验正文 sha256 与计划时刻；不符转 `needs_review`，无正文身份时写 `body_verified=false` 但保留在已发数（平台已发是事实） |
+| P0-2 | 计划变空时在途意图被标 `cancelled`，同 key 永久排不上 | `apply_plan` 增加 `cancelled` 复活分支，重排时重置为 `planned` 并清尝试次数 |
+| P1-1 | 逐章提交只改内存，循环结束才落盘 | 每成功一章立即 `save_store`；两处“结果未知”停批前也落盘 |
+| P1-2 | `in_flight` 不含 `scheduled_verified`，可超在排上限 | 新增 `PLATFORM_STATES=("submitted","scheduled_verified")` 作为平台占额口径，覆盖汇总另计本地 `planned` |
+| P1-3 | `plan(remote=…)` 是死参数 | 传入 `last_reconcile.rows`，排除平台已有计划的章 |
+| P1-4 | `needs_review` 无出口，排期永久停写 | 新增 `GET /schedule/review` 与 `POST /schedule/resolve`（`cancelled`/`planned`） |
+| P2-1 | 同章换版本后双意图泄漏容量 | `plan` 增 `occupied_chapters`：同章另一版本在途即阻塞并保留该章 |
+| P2-2 | `cycle.remote_state` 跨轮粘滞 | 每轮开始重置为 `not_attempted` |
+| P2-3 | 排期成功文案仍写“仅本机，未发布” | 按模式分流为“本地已审定，排期待平台回读确认” |
+| P2-4 | 空 `expected_updated_at` 绕过版本校验 | 改用单调 `revision`；空串视为未申领租约 |
+| P2-5 | `update_job` 的 `ValueError` 直接 500 | 映射 400 `update_rejected` |
+| P3-1/P3-3 | 无适配器时 `reconcile` 恒 409；`已排期` 文案未入词表 | 接受作者粘贴清单；词表补「已排期/已预约/排期中/已安排发布」 |
+| P3-2 | `timezone_assumed` 靠字符串猜时区 | 改为解析后判 `tzinfo is None` |
+
+文档问题（已改）：`RELEASE_STATUS.md` 的 T06/T07/T11 引用了不存在的测试名，已换成真实用例名；`CHANGELOG.md` 三句结论过强，已限定为“重算与建单时”“已取消可复活”等实际行为。
+
+### 完成到哪一步（四类状态）
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 已完成：识别/能力/计划/意图/执行器/接口/兼容/绑定八块，默认零平台写入；两轮独立审计的 P0 全部闭合 |
+| 真实模型验证 | 未做：本机无可用模型，执行器测试用替身生成；`real_model_budget.max_requests=0` |
+| GitHub 推送 | 未做：用户未要求 commit/push |
+| Release | 只到候选包：完整包与轻量包均通过 `verify-package`，npm/GitHub/市场未放行 |
+
+### 已知缺口与下一步
+
+1. **T22 升级回退**：0.6.0 候选包本机已不存在，无法构造两个真实版本连续升级两次；下次发行前需保留上一版包再演练。
+2. **T26/T27 真机**：跨午夜/跨月、提前量、时区边界有单测，真实时钟回拨与两执行者并发未实测。
+3. **真实平台**：B01 的采集面（登录、页面/接口读取）仍未接入，`can_read_schedule/can_confirm_body` 只能手工确认；本版按设计“不能区分时只交只读清单与本地存稿候选”。
+4. **界面**：本版只做后端与接口，侧栏没有排期缓冲的编辑面板；`GET /schedule` 已给出 `settings/capability/preview/state` 供前端直接渲染。
+5. **`note_manual_change` 未接线**：函数与单测就位，但手工取消/改期/替稿的检测依赖真实采集面，等适配器接入后挂到 reconcile 结果上。
+
+## 0.7.0 长篇连续性与文风（2026-11-21，候选完成/待真机验收）
+
+设计输入：`design\码章鲸_按版本执行包_2026-11-16\03_v0.7.0_长篇连续性与文风.md`（只做 C01–C04）。
+
+### 实际版本与起点
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `0.7.0`（`package.json`、`runtime-manifest.json` 同步） |
+| 基线 | 0.6.1 候选工作树（本机 Python 3.13.5 / Node v24.18.0） |
+| 新增文件 | `backend/integration/entity_state.py`、`invalidation.py`、`evidence_usage.py`、`retrieval_plan.py`、`style_rules.py`、`backend/integration/test_entity_state.py`、`test_invalidation.py`、`test_evidence_usage.py`、`test_retrieval_plan.py`、`test_style_rules.py`、`backend/manager/test_continuity_api.py` |
+| 修改文件 | `backend/integration/revision_plan.py`、`version_history.py`、`revision_workflow.py`、`quality_gate.py`、`memory_library.py`、`backend/manager/app.py`、`package.json`、`runtime-manifest.json`、`CHANGELOG.md`、`README.md`、`RELEASE_STATUS.md`、`docs/plan/PROGRESS.md`、`docs/plan/STATE.json`、`market/*.json` |
+
+### 实现要点
+
+1. **C01 实体状态**：`.webnovel/entities.json` 存物品与事件；`holder_at` 严格取「本章之前」的记录，写本章时不能拿本章结果自证；同章多候选返回 `same_chapter_order_unknown` 而不是按写入顺序猜；事件带实体/属性/前后值/生效章界/知情主体/来源章 sha256 与引文/发现方式；闪回用 `story_time` 独立折算；`scope="narrator"` 不入角色已知；跨作品同名不合并（按作品目录隔离，同名只走检索入口）。
+2. **C01 统一失效**：`invalidation.invalidate(chapters, reason, source, actor, op_id)` 是唯一入口，按 `op_id` 幂等，写 `.webnovel/invalidation_log.json` 并触发 `continuity.rebuild`；`revision_plan.accept` 与 `version_history.restore` 已接线，生成/导入/人工改走同一函数；日志保留最近 200 条，`pending/summary/affected_facts` 供界面读。
+3. **C02 证据使用**：`evidence_usage` 以 jsonl 记「送了哪些证据、哪些没送、为什么」；`log_supply` 同章+阶段+版本去重；`record_use` 的 `confirmed` 只接受 `actor="author"`（模型自述只能是 `candidate`）；`locate_use` 先逐字定位、再按二元组重合给候选、最后才 `missing`，不用旧字符偏移；`reverse_index` 完全从日志折叠，可重建；`metrics(fixture)` 报精确率/召回率/漏定位/干扰项。
+4. **C03 检索进规划**：`retrieval_plan.plan` 固定六段顺序（作品→有效来源/版本→章界→认知/视角→BM25 排序→预算），`bm25` 的 idf 用 document frequency；`sanitize_query` 先脱敏人名；每次规划可落 trace（送入证据、未选原因、耗时、磁盘），`report` 聚合；索引按 `(模型, 分块)` 隔离，`switch_index` 用 `os.replace` 原子替换并保留上一版，`search` 在索引损坏时回落 `text_fallback`；默认不启用向量模型。
+5. **C04 文风规则**：`style_rules.RULES` 每条带 ID/类别/条件/适用范围/来源日期/正反例/严重度/忽略范围；本地检测重复小结、解释性收尾、同义反复、同质对白；平台规则 `advisory=True` 只提醒；`revision_workflow.revise` 在建议里附本地定位（只改位置不动情节），`quality_gate.judge` 新增并列 `local_style` 段但不参与 `quality_pass`；忽略词表按作品存 `.webnovel/style_ignore.json`；`metrics` 只报每百段提示数与采纳/忽略/误报计数，附「不宣称文风指标下降」。
+6. **上下文小块**：`memory_library.context` 仅有实体记录时追加「物品与事件」小块（`entity_state.holder_rows`），并支持 `trace=` 写供证日志；实体文本走独立小预算，不挤掉伏笔与人物限制。
+7. **接口**：`GET /api/projects/{id}/entities`、`/precheck`、`/retrieval`、`/evidence/impact`，`PUT /precheck/ignore`、`POST /precheck/action`；全部只读或只改本地设定，不写正文、不触发平台写入；错误沿用 `{"code", "message"}`。
+8. **不越界**：本版不接读者数据、不做 Linux/其他平台、不默认捆绑向量模型；平台类规则不参与过审判定，也不宣称「AI 味下降」。
+
+### 测试命令与结果（Windows 11 10.0.22631 / Node v24.18.0 / Python 3.13.5）
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `npm test` | 0 | 98 项通过 / 0 失败 / 0 跳过 |
+| `python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend` | 0 | 489 项通过，1 项跳过（0.6.1 为 427；新增 13 + 7 + 18 + 13 + 11） |
+| `python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend` | 0 | 107 项通过（0.6.1 为 100；新增 10） |
+| `python scripts/build-runtime.py` | 0 | 3412 个文件；buildId 见 `.v070/candidate/HASHES.txt` |
+| `python scripts/pack-bundle.py` | 0 | `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`（字节/哈希见 `HASHES.txt`） |
+| `node scripts/check-release.mjs --local` | 0 | 清单一致（3412 文件） |
+| `node scripts/verify-package.mjs <完整包> -` | 0 | `success:true`，`downloads:0` |
+| `node scripts/verify-package.mjs <轻量包> <完整包>` | 0 | `success:true`，`downloads:1` |
+| `npm pack --ignore-scripts --pack-destination .v070/candidate` | 0 | `dsh-chapter-whale-0.7.0.tgz`（哈希见 `HASHES.txt`） |
+
+打包注意：`backend/integration_data/`（测试遗留锁文件）会让 `check-release --local` 报「后端包混入本地状态」，打包前必须删掉。
+
+### 完成到哪一步（四类状态）
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 已完成：五个模块 + 四处接线 + 六个接口 + 六套测试；不新增平台写入 |
+| 真实模型验证 | 未做：本机无可用模型，`real_model_budget.max_requests=0` |
+| GitHub 推送 | 未做：用户未要求 commit/push |
+| Release | 只到候选包：两个包本机 verify 通过；npm/GitHub/市场未发布 |
+
+### 已知缺口与下一步
+
+1. **T22 升级回退**：本机没有 0.6.1 完整包副本，无法构造「连续升级两次 + 回退」真实演练。
+2. **真实长篇**：100 章以上真实作品未跑，当前只有 `test_longform.py` 合成夹具；`entity_state`/`evidence_usage` 在 500 章量级未压测。
+3. **向量检索**：`retrieval_plan` 只实现 BM25 与文本回落，本地嵌入模型未接（设计允许默认关闭）。
+4. **界面**：只读接口已就绪，侧栏尚无实体/预检/检索面板。
+5. **C02.4 的「已排期/已发章只给只读影响清单」**：`/evidence/impact` 已返回只读清单，但尚未与 0.6.1 的排期状态联动过滤。
+
+## 0.8.0 读者反馈与可撤销建议（2026-11-21，候选完成/待真机验收）
+
+设计输入：`design\码章鲸_按版本执行包_2026-11-16\04_v0.8.0_读者反馈与可撤销建议.md`（只做 D01/D02）。
+
+### 实际版本与起点
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `0.8.0`（`package.json`、`runtime-manifest.json`、`market/*.json` 同步） |
+| 起点 | 0.7.0 候选工作树（本机 Windows 11 / Python 3.13.5 / Node v24.18.0） |
+| 运行时 | 3415 文件，buildId `7c88f7b8ca8a097e7ea82ab406dfa753868cbb7ac63fa4b7d65f90fd13e68242`（审计修复后重打） |
+
+### 实现要点
+
+1. `reader_metrics.py`：四项指标字段字典（官方名、粒度、单位、分母、分母可见性、窗口、时区、来源、口径版本）；「章节跳出率」列为平台未提供，出现即拒绝，不本地臆造。
+2. 导入分两步：`preview` 逐行给有效/重复/修订/拒绝原因，把待确认计划暂存到 `.webnovel/reader_previews/` 并返回 30 分钟有效的 token，不写观测；`commit` 凭 token 取回计划、校验存储摘要后在事务里落地，预览后数据变了就拒绝旧 token，缺 token 一律 400；存在拒绝行时整批不写，只有显式 `allow_partial` 才写入有效行并记 `partial`。
+3. 每条读数固定存平台/作品/章/指标/窗口起止/观测时刻/值/单位/分母/来源/口径版本/批次；稳定键只看「哪一次观测」，同键改值或改分母都是「修订」并保完整快照（≤20 版）；`DELETE /readers/batches/{id}` 按批次撤销，新增行删除、修订行整条回退（值/分母/单位一起回退）；`0` 是真实读数，分母未知留空不填零。
+4. 读图可回源：点带批次、口径版本与成熟度（发布不足 7 天标 `new`），图下固定列「分母未知/含新章/样本不足」等局限；非法指标返回 400 而不是 500。
+5. 评论只当数据：去标签、压空白、截 200 字；命中控制指令话术的整条原文丢弃并标记（指纹按原文算，避免多条被标记的评论撞成一条），不执行也不转述进提示；聚类跳过被标记项；每次导入自动生成批次号。
+6. `observation.py`：观察卡记作品/章节/指标变化/窗口/分母/脱敏评论/备选解释/到期；生命周期为候选→采纳→指定章段生效→到期或撤销；大纲差异只读并有 `GET /readers/observations/{id}/outline`。
+7. 注入闸门：只有「已采纳 + 本章在范围内 + 未到期 + 属于当前作品」才进 `revision_workflow` 的修订建议、`quality_gate` 的并列 `reader_advice` 与 `memory_library.context` 的上下文块；候选/忽略/撤销/到期一律零注入；提醒块受剩余上下文预算约束，超出即截断并记入 `restricted`。
+8. 新增接口：`GET /readers/dictionary`、`POST /readers/preview`、`POST /readers/import`、`DELETE /readers/batches/{id}`、`GET /readers/series`、`GET|POST /readers/comments`、`POST|GET /readers/observations`、`POST /readers/observations/expire`、`GET /readers/observations/{id}`、`GET /readers/observations/{id}/outline`、`POST /readers/observations/{id}/action`；读接口不写盘（到期只按 `now` 纯计算过滤，落库要显式 `expire`），全部不改正文、不触发平台写入。
+
+### 测试
+
+| 套件 | 结果 |
+| --- | --- |
+| `npm test` | 98 pass / 0 fail |
+| `backend/integration` | 553 tests OK（skipped=1） |
+| `backend/manager` | 124 tests OK |
+| 新增 | `test_reader_metrics.py` 23、`test_observation.py` 17、`test_reader_api.py` 17 |
+
+### 第一轮独立审计与修复（audit-080）
+
+只读审计结论「有阻断」。修复项：撤销导入补 `DELETE /readers/batches/{id}`（P0-1）；修订历史改存完整快照，回退不再丢分母（P0-2）；token 服务端暂存并绑定存储摘要（P1-1）；拒绝行默认整批不写（P1-2）；稳定键不含分母、比较含分母，分母修正成修订（P1-3）；观察卡与注入按 `work_id` 隔离（P1-4）；`/readers/series` 非法指标 400（P1-5）；读路径不写盘，新增 `POST /readers/observations/expire`（P1-6）；提醒块纳入预算核算（P2-1）；评论自动批次、`skipped` 先物化（P2-3）；被标记评论指纹按原文（P2-4）；作品级指标非数字章号报错（P2-5）；大纲差异补接口（P3）。
+
+### 完成到哪一步（四类状态）
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 已完成：字典/预览/提交/回源/撤销/观察卡/注入闸门/接口八块；未采纳零注入有按真实提示文本的断言 |
+| 真实模型验证 | 未做：`real_model_budget.max_requests=0`，本版不需要模型调用 |
+| GitHub 推送 | 未做：用户未要求 commit/push |
+| Release | 只到候选包：完整包与轻量包均通过 `verify-package`，npm/GitHub/市场未发布 |
+
+### 已知缺口与下一步
+
+1. **真实平台 CSV**：只按设计文档的 11 列解析，平台实际列名与编码未核；后续接真实导出时先跑一次预览对表。
+2. **T22 升级回退**：本机没有上一版已发布包，无法演练「连续升级两次并回退」；下次发版前保留上一版包。
+3. **T24 安装包**：两包 verify 通过，但没在干净安装目录做真实安装与首次启动。
+4. **界面**：只有接口，没有读者数据页与观察卡列表页。
+5. **评论聚类**：只按关键词主题，未接平台原生分类。
+6. **与排期/发布未联动**：采纳提醒只作用于生成与修订提示，不影响排期计划。
+
+## 0.9.0 Linux x64 常驻存稿（2026-11-21，候选完成/待真机验收）
+
+设计输入：`design\码章鲸_按版本执行包_2026-11-16\05_v0.9.0_Linux_x64常驻存稿.md`（只做 E01）。
+
+### 实际版本与起点
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `0.9.0`（`package.json`、`runtime-download.json`、`market/*.json` 同步） |
+| 起点 | 0.8.0 候选工作树（本机 Windows 11 / Python 3.13.5 / Node v24.18.0） |
+| 运行时 | 3415 文件（审计后），buildId 见 `.v090/candidate/HASHES.txt` |
+| Linux 归档 | 1177 文件，`dsh-chapter-whale-service-linux-amd64-0.9.0.tar.gz` |
+
+### 实现要点
+
+1. `resident_service.py`：`start/health/inventory/status/backup/restore/checkpoint` 子命令，独立于 DSH 宿主运行。
+2. 单实例靠文件锁：第二个进程拿不到锁以退出码 2 停下，只写 stderr（不覆盖正在工作实例的检查点），绝不重复写章；pid 只用于展示，陈旧 pid 不算存活。
+3. 能力盘点 11 项，标 supported/replaced/disabled 并给原因：账号凭据在 Linux 按「重新配置」，浏览器/DSH 桥/OFM/免费服务首版关闭。
+4. 启动先验卷：写探针确认可写（只读卷 `read_only`、`ENOSPC` 记 `low_space`）、剩余空间低于 256 MB 记 `low_space`；不可用时写 `refused` 检查点并退出码 4（状态写入失败也只降级诊断，不再 traceback）。
+5. 配置 `ready` 要求 `version==2`、`settings.auto_schedule is true`、任务字段完整且作品目录存在；`empty`/`broken` 都不认领，只写心跳与检查点，服务不崩。
+6. `SIGTERM`/`SIGINT` 只置位：主循环在任务边界停认领，进程内守护线程在 `--shutdown-seconds`（默认 25）后写 `state=stopping` 并强制退出；`_wait` 分片等待，不会被 PEP475 睡满整段。
+7. 只补缺步：启动先 `recover_pending` 补齐未完成提交；`scheduler.retryable()` 跨时段放行上次 `running`/`failed`/`needs_revision`，同一时段不重复烧钱；`claimed/skipped/failed/blocked` 按 `run_once` 返回状态分项。
+8. `health` 分进程/协调器/配置/卷四段并给 `ok`/`reasons`，`health` 子命令按 `ok` 返回 0/1，探活不读模型配置。
+9. 备份白名单递归 `works/**`（正文+回执/版本）、`integration_data/**`（含 runs）、`logs/**`，跳过服务自身状态与旧备份；SQLite 走 `wal_checkpoint(TRUNCATE)` + `backup()`；`restore` 先取服务锁、校验备份根、`os.replace` 原子落盘并清 `-wal/-shm`。
+10. `--root` 同时管住 `scheduler.SCHEDULER_PATH`/`RUNS_ROOT`（结束后还原），配置与任务不会一个读新卷一个读默认路径。
+11. 部署与打包：`deploy/linux/` 给 Dockerfile（非 root 10001、`/data` 唯一可写卷、`PYTHONUTF8`/`LANG`、`HEALTHCHECK`、`STOPSIGNAL SIGTERM`、不声明 `EXPOSE`）、compose（只读根、cap_drop ALL、no-new-privileges）、systemd 单元与运维 README（卷类型只支持本地块设备）；`scripts/build-linux-service.py` 出确定性归档（mtime/uid/gid 归零、gzip mtime 0、严格后缀遇 CRLF 即失败、文档进包时统一转 LF）。
+
+### 测试
+
+| 套件 | 结果 |
+| --- | --- |
+| `npm test` | 98 pass / 0 fail |
+| `backend/integration` | 582 tests OK（skipped=1） |
+| `backend/manager` | 124 tests OK |
+| 本版新增 | `test_resident_service.py` 36 项、`test_scheduler_recovery.py` 9 项（跨进程单实例、只读卷与磁盘满、配置自检、限时退出兜底、备份含正文与回执、还原取锁与根校验、health 退出码、跨时段重试） |
+
+### 第一轮独立审计与修复（audit-090）
+
+| 编号 | 原问题 | 修复 |
+| --- | --- | --- |
+| P0-1 | `due_jobs` 永久跳过 running/failed/needs_revision，失败即静默停更 | `retryable(job, slot)` 跨时段放行并标 `recovering`；启动 `recover_pending` |
+| P0-2 | `shutdown_seconds` 只进检查点，没有计时器 | 守护线程计时后写 `stopping` 并 `os._exit(0)` |
+| P0-3 | 备份不含正文/回执/runs/日志，还原不能重建 | 白名单递归备份 + 逐文件 sha256 manifest；还原取锁、原子落盘、清 WAL |
+| P0-4 | 验收表引用 4 个不存在的测试名，README 与实现不符 | 验收表改实跑用例名；README 重写 `/config`、限时、退出码、卷类型、备份范围 |
+| P1-1/P1-2 | 只读卷/磁盘满在写检查点时崩成 exit 1，且 ENOSPC 被误判只读 | 状态写入统一 `_safe()`；探针按 errno 区分 |
+| P1-3 | `restore` 不认锁、非原子、不清 WAL、不校验根 | 取 `file_lock`、`os.replace`、删 `-wal/-shm`、根不符需显式允许 |
+| P1-4 | 备份把旧备份再打包 | 递归跳过服务状态目录 |
+| P1-5 | `health` 恒 exit 0 | 按 `ok` 返回 0/1 |
+| P1-6 | `claimed` 把 busy/blocked 都算认领 | 按状态分项累计 |
+| P1-7 | 双实例只在 flock 卷上成立且未声明 | README 明确只支持本地块设备 |
+| P2-2 | `--root` 不管调度 | `run()` 注入 scheduler 路径并在结束时还原 |
+
+### 完成到哪一步（四类状态）
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 已完成：服务循环/单实例/自检/限时退出/只补缺步/备份还原/部署文件/确定性归档 |
+| 真实模型验证 | 未做：`real_model_budget.max_requests=0`，本版按设计只跑本地存稿 |
+| GitHub 推送 | 未做：用户未要求 commit/push |
+| Release | 只到候选：Windows 两包 `verify-package` 通过，Linux 归档产出 sha256；未发布 |
+
+### 已知缺口与下一步
+
+1. **无真实 Linux 实机**：systemd 单元与 compose 只做静态检查，未实际启动；T19/T35 未验证，镜像 digest 与 `systemd-analyze verify` 未进 CI。
+2. **T22 升级回退**：备份已含正文/回执/runs，但本机没有上一版已发布包，无法演练连续升级两次并回退。
+3. **T24 安装包**：两包 verify 通过，未在干净安装目录真实安装并首启。
+4. **凭据迁移**：Linux 上要求重新配置账号，未做加密凭据的跨平台迁移。
+5. **首版关闭的能力**：浏览器登录、DSH 桥、OFM、免费模型服务在 Linux 上均 disabled，需后续版本逐项评估。
+
+## 0.9.1 Linux ARM64 目标平台（2026-11-21，候选完成/待实机验收）
+
+| 项 | 值 |
+| --- | --- |
+| 起点 | 0.9.0 Linux amd64 常驻存稿（已交付候选） |
+| 交付版本 | 0.9.1（package.json / market / README 同步） |
+| 本版范围 | 只扩 `linux/arm64` 目标：构建、校验、文档口径；不接浏览器发表、不承诺 DSH 桌面宿主 |
+| 运行时 | 3416 文件（清单随 `platform_support.py` 增加而变化），buildId 见 `.v091/candidate/HASHES.txt` |
+| Linux 归档 | `dsh-chapter-whale-service-linux-amd64-0.9.1.tar.gz` 与 `-arm64-` 两份，字节/哈希见同一文件 |
+
+### 实现要点
+
+1. `platform_support.py`：`normalize_arch()` 只认 `x86_64/amd64/x64` 与 `aarch64/arm64`，其余返回空串，绝不猜架构；`target_for_arch()` 做反查。
+2. `check_target()` 只在「Linux + 同架构」时 `ok=True`；跨架构写 `host_arch_mismatch:amd64!=arm64`，非 Linux 写 `host_not_linux:windows`，未知机器名写 `unknown_arch:...`，供文档与界面把该格标成「待实机」。
+3. `verify_manifest()` / `verify_archive()` 三处一致：清单 `platform`、`arch` 与归档文件名必须互相对上；读 tar 成员本身，改名绕过、混入 `.exe/.dll/.pyd/.dylib/.msi/.bat/.ps1`、严格后缀含 CRLF、清单缺失或重复都判失败。
+4. `build-linux-service.py --arch amd64|arm64`：归档名与 `linux-service-manifest-<arch>.json` 带架构，`--verify` 直接调用上面的归档校验；确定性归档参数不变。
+5. 常驻服务新增 `platform` 子命令，输出能力矩阵（每格 `container` 平台、Python 下限、`verified_here`、原因）；`inventory` 仍只描述本机能力。
+6. Dockerfile 说明改为 buildx 按目标平台构建；base image 仍按 tag 拉取（离线自行同步 digest），arm64 产物以真实 aarch64 主机验收为准。
+7. 运维 README 增「构建产物与架构」段：两种归档名、两条构建命令、`--verify` 命令、buildx 命令，以及「跨架构构建不写已验证」的口径。
+
+### 测试命令与结果（Windows 11 10.0.22631 / Node v24.18.0 / Python 3.13.5）
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `npm test` | 0 | 98 项通过 / 0 失败 / 0 跳过 |
+| `python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend` | 0 | 598 项通过，1 项跳过（0.9.0 为 582；新增 `test_platform_support.py` 16 项） |
+| `python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend` | 0 | 124 项通过 |
+| `python scripts/build-linux-service.py --arch amd64` / `--arch arm64` | 0 | 两份归档 + 各自 `.sha256` + `linux-service-manifest-<arch>.json` |
+| `python scripts/build-linux-service.py --arch arm64 --verify <归档>` | 0 | `ok: true`，无 `problems` |
+| `node scripts/check-release.mjs --local` / `verify-package.mjs` | 0 | 清单一致；两包 `success:true`（downloads 0 / 1） |
+
+### 完成到哪一步（四类状态）
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 已完成：架构归一、主机匹配、清单/归档校验、双架构构建入口、`platform` 子命令、部署文档 |
+| 真实模型验证 | 未做：本版不触模型，`real_model_budget.max_requests=0` |
+| GitHub 推送 | 未做：用户未要求 commit/push |
+| Release | 只到候选：双架构归档 + Windows 两包 verify 通过；未发布 |
+
+### 已知缺口与下一步
+
+1. **无真实 aarch64 主机**：arm64 归档只完成构建与静态校验，`verified_here` 在本机为 `false`；T20 的 arm64 格仍写「待实机」。
+2. **容器镜像未构建**：buildx 命令已写入 README，但本机未执行 `docker buildx build --platform linux/arm64`，镜像 digest 未记录。
+3. **T22 升级回退**：仍缺上一版已发布包，无法演练连续升级两次并回退。
+4. **T19/T35**：amd64 与 arm64 都未在真实 systemd 主机上启动，动态守护只做了单元测试与子进程用例。
+5. **跨架构迁移**：同一份 `/data` 在 amd64 与 arm64 之间搬运未实测；文档只声明「数据格式一致、凭据需重配」。
+
+---
+
+## 0.9.2 macOS ARM64 本地存稿（2026-11-22，候选完成/待实机验收）
+
+**实际版本与起点**
+
+| 项 | 值 |
+|---|---|
+| 版本 | 0.9.2（`package.json` / `market/*.json` / `README` 同步） |
+| 起点 | 0.9.1 的 Linux 双架构目标与 0.9.0 的服务契约 |
+| 本版新增 | `deploy/macos/`（plist + run.command + README）、`scripts/build-macos-service.py`、`platform_support` 的 `macos-arm64` 格、`test_macos_deploy.py` |
+| 平台写入 | 零（无浏览器、无登录、无发布调用） |
+
+**实现要点**
+
+1. `platform_support.TARGETS` 增 `macos-arm64`（`system="darwin"`、`launcher="launchd"`、`container=""`）；`check_target()` 改为按目标自带 `system` 比对，非 Darwin 返回 `host_system_mismatch:*`。
+2. `matrix()` 每格给出 `target/arch/system/container/launcher/python/verified_here/reason/note`；同一次运行最多一格 `verified_here=True`（测试断言）。
+3. `verify_archive()` 增 macos 专属拒绝：ELF 头 → `elf_binary`，`.so/.so.1/.a` → `linux_object`；仍保留 Windows 二进制、CRLF、清单计数与 platform/arch/文件名一致性检查。
+4. `scripts/build-macos-service.py` 独立入口：固定 `macos-arm64`，内嵌无时间戳 `service-build.json`（确定性 gzip/tar），产出归档、`.sha256`、`macos-service-manifest.json`，`--verify` 复用 `verify_archive`。
+5. `deploy/macos/com.chapterwhale.service.plist`：`launchctl bootstrap` 安装，`RunAtLoad`、`KeepAlive.SuccessfulExit=false`、`ThrottleInterval=30`、`ExitTimeOut=40`、日志写数据卷 `logs/`。
+6. `deploy/macos/run.command`：`set -eu`、路径全引号、缺安装目录 64 / 缺数据卷 65 / 不可写 66，`exec` 前导出 `PYTHONPATH`/`PYTHONUTF8`。
+7. `deploy/macos/README.md` 写明：只支持本地盘（NAS/SMB 锁不可靠）、APFS 默认大小写不敏感、浏览器与登录是「未开放」格、凭据在目标机重配且不迁移 DPAPI 密文、实机证据缺失前保持「待实机」。
+8. `resident_service platform` 子命令输出三格矩阵，macOS 行在本机（Windows/Linux）恒为未验证，不冒充实机。
+
+**测试结果**
+
+| 检查 | 结果 |
+|---|---|
+| `npm test` | 98 pass / 0 fail |
+| integration 全量 | 612 tests OK（skipped=1） |
+| manager 全量 | 124 tests OK |
+| `test_macos_deploy.py` | 13 tests OK |
+| `test_platform_support.py` | 17 tests OK（含 macOS 三格矩阵） |
+| macOS 归档 `--verify` | `{"ok": true, "problems": []}` |
+| Windows 清单 | 3416 files（buildId 见 `.v092/candidate/HASHES.txt`） |
+| 安装包自检 | 两包 `success:true`（downloads 0 / 1） |
+
+**四类状态**
+
+| 类别 | 状态 |
+|---|---|
+| 代码实现 | 完成（服务契约复用，macOS 目标、归档、启动配置、文档齐备） |
+| 真实模型验证 | 未做（本版不产生真实付费调用） |
+| GitHub 推送 | 未做（本轮不 commit/push） |
+| Release | 未发布（候选包在 `.v092/candidate/`，需实机验收） |
+
+**已知缺口**
+
+1. 无真实 Apple Silicon：安装/启动/健康/停止/断电/磁盘满/只读卷全部为离线校验与脚本审阅。
+2. `launchctl` 的 `ExitTimeOut` 与进程内 25 秒兜底的先后顺序未实测。
+3. T22（升级两次 + 回退）与 T19（卸载重装挂旧卷）未在 macOS 上演练。
+4. 代码签名与公证未做（本版只发 tar.gz 与脚本，不发 `.app`）。
+5. 跨架构迁移只在文档写明步骤，未实测。
+
+**下一步**
+
+等 `audit-092` 报告并按报告修；随后 0.9.3（macOS Intel）、0.9.4（单目标浏览器与登录）、0.10.0（第二发布平台）。
+
+## 0.9.3 macOS Intel 目标与归档内容校验（2026-11-22，候选完成/待实机验收）
+
+| 项 | 值 |
+| --- | --- |
+| 起点 | 0.9.2（macOS ARM64 候选） |
+| 交付版本 | 0.9.3（package.json / market / README 同步） |
+| 运行时清单 | 3416 个文件，buildId 见 `.v093/candidate/HASHES.txt` |
+| 服务归档 | Linux amd64/arm64 各 1178 载荷、macOS arm64/amd64 各 1175 载荷 |
+| 本轮测试 | integration 622（skipped=1）、manager 124、`npm test` 98 pass |
+
+**实现要点**
+
+1. `platform_support.TARGETS` 增 `macos-amd64`，矩阵四格；`matrix()` 把 `host_matches` 与 `verified_here` 拆开，后者只由真实运行写回，当前恒 `False`。
+2. `check_target` 对 Rosetta 下的 x86_64 解释器报 `rosetta_translation:not_native`，Intel 格不会因 macOS 跑通而被标成已验证。
+3. `verify_archive` 改为校验内容：按构建口径重算载荷摘要（`payload_digest_mismatch`）、比对 `files` 计数（`file_count_mismatch`）、`files` 必须为整数（`manifest_field_type:files`）、必填字段缺失即失败、清单只认归档根（`manifest_not_at_root`）、同名成员重复即失败（`duplicate_member`）。
+4. 归档成员安全：符号链接/硬链接报 `link_member`，`..` 与绝对路径报 `unsafe_path`，损坏归档返回 `archive_unreadable` 而不是抛异常。
+5. ELF 架构：Linux 目标校验 `e_machine`（amd64 `0x3E`、arm64 `0xB7`）；macOS 目标继续拒 ELF 与 `.so/.so.1/.a`。
+6. 构建卫生：两个构建脚本排除历史归档与 `.sha256`，并拒绝 `--out` 落在收集范围；`--verify` 的退出码跟随 `ok`（失败即非 0），并与 `.sha256`、外部 `*-service-manifest-<arch>.json` 三方比对。
+7. 大小写不敏感卷：`chapter_versions.chapter_path` 按后缀小写列出正文，并在「同一名字只差大小写」时抛 `case_conflict`，避免在 APFS 上静默覆盖作者原稿。
+8. macOS 部署：`plist` 显式给 `PATH`（launchd 不继承登录 shell PATH），`run.command` 用 `${@+"$@"}` 兼容 bash 3.2，README 补 `command -v python3`、`id -gn`、`mkdir -p` 与「构建脚本不在 npm 包内」。
+9. 平台写入仍为零：无浏览器、无登录、无发布接口调用。
+
+**测试**
+
+| 套件 | 数量 | 结果 |
+| --- | --- | --- |
+| integration | 622（skipped=1） | OK |
+| manager | 124 | OK |
+| `test_platform_support.py` | 27 | OK |
+| `test_macos_deploy.py` | 15 | OK |
+| `npm test` | 98 | 98 pass / 0 fail |
+
+**审计与修复**
+
+| 来源 | 问题 | 处理 |
+| --- | --- | --- |
+| audit-091 P1-1 | `verify_archive` 不校验载荷摘要 | 已改：摘要 + 文件数 + 字段类型 |
+| audit-091 P1-2/P1-3 | 清单可躲子目录、重复成员被覆盖 | 已改：根目录约束 + `duplicate_member` |
+| audit-091 P1-4 | `--verify` 只信 `--arch`、不读 sidecar | 已改：三方比对 + 退出码 |
+| audit-091 P1-5 | `--out` 可自我打包 | 已改：收集排除 + 路径断言 |
+| audit-092 P0-1 | HASHES 与归档不符、归档不在候选目录 | 已改：六份产物同目录，HASHES 由脚本按字节重算 |
+| audit-092 P1-1 | `--verify` 恒返回 0 | 已改：`raise SystemExit(0 if ok else 1)` |
+| audit-092 P1-2 | README 大小写承诺与实现相反 | 已改：实现抛 `case_conflict`，README 同步 |
+| audit-092 P1-3 | plist 解释器在干净 Mac 上不可用 | 已改：显式 `PATH` + README 核对步骤 |
+| audit-092 P1-4 | symlink/硬链接/路径穿越绕过 | 已改：`link_member` / `unsafe_path` |
+| audit-092 P1-5 | 文档测试数字失准 | 已改：27 / 15 / 622 按实跑写 |
+
+**四类状态**
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成（0.9.3 全部条目落地并有测试） |
+| 真实模型验证 | 未做（本轮仍不产生真实付费调用） |
+| GitHub 推送 | 未做（未 commit、未 push） |
+| Release | 候选（`.v093/candidate/` 六份产物 + HASHES + verify 回执） |
+
+**已知缺口**
+
+1. 无 Apple Silicon 与 Intel Mac 实机，macOS 两格的运行验收为 0。
+2. 无 aarch64 主机，Linux arm64 仍只是构建与校验。
+3. T22 升级两次并回退未验证（缺上一版已发布安装包）。
+4. 浏览器、登录、发布写入仍未开放，不能按版本号推断为已接入。
+5. 构建脚本只校验归档自身一致性，未与工作树逐文件比对（同源证明靠 buildId 与 manifest）。
+
+## 0.9.4 单目标浏览器与登录试点（2026-11-22，候选完成/待实机与真实登录验收）
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | 0.9.4（package.json / market / README / STATE 一致） |
+| 起点 | 0.9.3 候选（四格支持矩阵 + 归档内容校验） |
+| 运行时清单 | 见 `.v094/candidate/HASHES.txt`（文件数与 buildId 以该文件为准） |
+| 测试 | `npm test` 98 pass；integration 658 OK（skipped=3）；manager 135 OK；浏览器专测 24 + 11 |
+
+> 复审（audit-095）后：`test_browser_target.py` 33 项（skipped=2）、`test_browser_api.py` 15 项；0.10.0 完成时 integration 合计 700 项（含 0.10.0 新增用例），manager 148 项。
+
+### 完成内容
+
+1. `backend/integration/browser_target.py`：唯一 target 八项必填（OS/架构/原生或容器/浏览器与版本/驱动/凭据/平台/范围），publish 另需授权依据；`os`/`arch`/`runtime`/`scope` 走枚举、版本号按形状校验、driver 限字符集；读盘后重新校验。
+2. profile 受管：`ensure_profile`/`status`/`launch` 统一用 target 里的路径，越界、符号链接与 Windows 目录联接都拒绝；POSIX 上 0700；登录、journal、账本、target 都按作品隔离。
+3. 登录只认证据：`valid`/`expired` 只能由适配器回读写入，客户端只能报 unknown/needs_human/cancelled；`valid` 的证据必须是页面摘要；取消/超时写终态。
+4. 启动分类：缺二进制/驱动、权限不足、等待扫码分别报原因；适配器未确认 `started` 不算启动；无适配器直接拒绝。
+5. 只读核验：逐项比对平台、作品 ID、章号与正文摘要（64 位十六进制），不适配给具体待处理项；`writes` 取适配器回报，>0 判待处理；journal 记只读证据。
+6. 真实投递：授权只认 target 上保存的记录；幂等账本独立于 journal（只增不裁），同章同摘要 `duplicate`，改稿换摘要才新建；`needs_human`/`aborted`/`unknown` 留终态，`POST /browser/publish/reconcile` 清账后可重投。
+7. journal 改 JSONL 只追加 + 进程锁 + 文件与目录 fsync：两进程各 30 条不丢，200 条裁剪不影响幂等。
+8. 八列能力矩阵 + `evidence`：`schedule` 无替身为 pending，`browser_login`/`readonly` 只认适配器写入的 valid。
+9. 十个接口：status/target(GET,PUT)/launch/stop/health/login/readonly/publish/publish-reconcile/capabilities；浏览器路由错误体统一 `{"code","message"}`；读接口不写盘。
+
+### 测试结果
+
+| 套件 | 结果 |
+| --- | --- |
+| `npm test` | 98 pass / 0 fail |
+| integration 全量 | 658 tests OK（skipped=3） |
+| manager 全量 | 135 tests OK |
+| `integration.test_browser_target` | 33 tests OK（2 skipped：符号链接、POSIX 权限位；audit-095 后） |
+| `manager.test_browser_api` | 15 tests OK（audit-095 后） |
+
+### 第一轮独立审计与修复（audit-094）
+
+| 编号 | 原问题 | 修复 |
+| --- | --- | --- |
+| P0-1 | 只读核验只判非空 + 章号，另一本书/另一平台/假摘要也 verified | 逐项比对 platform/book_id/chapter_id/正文摘要 |
+| P0-2 | 同章可投递两次（journal 裁剪 + 授权自证） | 独立幂等账本；授权只认 target 记录 |
+| P0-3 | journal 读-改-写无锁，丢条目 | JSONL 只追加 + 进程锁 + fsync |
+| P0-4 | profile 可被 junction 绕过、target.profile 被忽略 | 最终路径判越界与 reparse point；统一用 target 值 |
+| P0-5 | 登录 valid 可由一次 HTTP 自证 | 仅适配器可写 valid/expired |
+| P1-1 | 八列矩阵无证据 | `capability_evidence()`；simulated 需适配器写入 |
+| P1-2 | 错误体不统一、多处 500 | 统一 `{"code","message"}`；stop/health/capabilities 加保护 |
+| P1-3 | 非数值 chapter_id 500 | 转 `needs_review` |
+| P1-4 | needs_human 后永久 duplicate | 终态 + reconcile 清账 |
+| P1-5 | `writes` 硬编码 0 | 取适配器回报 |
+| P2-1/2/6/7 | 字段任意字符串、读盘不复校验、headless 零覆盖、空 stop 写盘 | 枚举与形状校验、读后复校验、query 参数用例、空态直接返回 |
+
+### 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成（target/profile/登录/只读/投递闸门/矩阵/接口） |
+| 真实模型验证 | 未涉及（本版不调用模型） |
+| GitHub 推送 | 未推送（用户未要求） |
+| Release | 候选产物已生成，未发布 |
+
+### 已知缺口
+
+1. 真实 Chromium/驱动与真实扫码登录未执行；`verified_here` 仍恒 False。
+2. 真实只读核验与真实单章投递未执行（需书面授权）。
+3. 0.9.3 → 0.9.4 升级两次与回退未演练（缺上一版安装包）。
+4. Linux/macOS 归档与 systemd/launchd 安装未在对应实机复验。
+5. 浏览器被占锁、页面结构变化、同名不同平台书等真实异常路径只有离线替身覆盖。
+
+## 0.10.0 平台能力契约与单个第二平台（2026-11-22，候选完成/待真实账号与格式核对）
+
+### 实际版本与起点
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `package.json` 0.10.0（上一交付 0.9.4） |
+| 起点 | 工作树 HEAD `4f218c0` + 0.6.1–0.9.4 未提交改动 |
+| 本版新增模块 | `backend/integration/publishing.py` |
+| 本版新增测试 | `backend/integration/test_publishing.py`（40，skipped=1）、`backend/manager/test_publish_api.py`（12） |
+| 运行时文件 | 见 `.v0100/candidate/HASHES.txt`（文件数与 buildId） |
+
+### 实现要点
+
+1. **能力契约**：`CAPABILITIES` 写番茄与七猫两项，字段 `can_export`/`can_draft`/`can_schedule`/`can_verify_body`/`can_submit` 为三态；`capabilities()` 推导 `publishable`，只有四项**均为** `True` 且 `can_submit is True` 才为真，`None` 一律按不可发布。
+2. **target_platform 与命名空间**：`set_target_platform` 写 `.webnovel/publish/targets.json`；`namespace()` 生成 `<platform>/<账号-短hash>/<平台作品ID>` 目录，缺账号或平台作品 ID 直接抛错（不再回落占位名，避免两本书互相覆盖）。
+3. **旧记录显式迁移**：`migrate_legacy` 只允许 `platform=fanqie`，按 `(类型, 章号, 摘要)` 去重，先写台账（`copying`）再复制并回写 `copied/verified`，写 `migration.json`；缺身份、目标冲突或文件不可读返回 `needs_review` 并保留原位。
+4. **第一层导出**：`format_chapter` 规范化标题（补「第N章」前缀并校验章号一致）、段落与字数（`chars` 去标题与标点）并算摘要；`export_chapter` 先过越界校验再 `mkdir`，写章节文件与 `manifest.json`，旧摘要压进 `versions`，坏清单重建并标 `corrupt`，返回 `uploaded: False`。
+5. **第二层只读登记**：`bind_book` 区分 `manual`/`readonly_probe`，人工登记停在 `registered`；`readonly_probe` 必须带匹配的 `probe_evidence`（平台/作品 ID/观测章号）才 `verified`。
+6. **第三层获准单章**：`submit_chapter` 依次校验能力、适配器、只读绑定、服务端授权；任一步缺失返回 `refused`/`unavailable` 且 `writes: 0`，不调用适配器；七猫即使注册适配器也恒 `refused`。
+7. **幂等与未知**：意图先写 `<namespace>/intents/<key>.json`（键含平台/账号/作品/章/`body_sha256`），同章同摘要再投 `duplicate`；异常或未确认 → `unknown` + `writes_attempted: 1`；回执摘要不符 → `mismatch` + `writes_confirmed: 0`；`unknown`/`mismatch` 只对账不重发（`allow_duplicate` 不可绕过）；成功记 `accepted`/`echoed_sha256`/`body_matches`/`writes_confirmed`。
+8. **对账与授权**：`reconcile` 限 `intent|unknown|mismatch → accepted|abandoned`，`abandoned` 终态，`note` 与 `evidence` 必填；`authorize` 再授权把旧记录置 `active=false` + `revoked_at`，保留依据。
+9. **接口**：九个 `/publish/*` 路由；错误体统一 `{"code","message"}`（422、HTTPException、未捕获异常 500 `internal_error`、413 `payload_too_large`）；`status` 遍历两平台只读，严格读取账本，坏 JSON/非对象计入 `corrupt_ledgers`。
+10. **文档与版本**：`package.json`/`market/index.json`（`plugins[0].versions[]` 单对象）/`market/losebird-entry.json`/`README.md`/`docs/plan/STATE.json`（`current_module=M24`，`releases["0.10.0"]` 记候选与实测计数）同步 0.10.0；`CHANGELOG.md` 新增 0.10.0 段。
+
+### 测试结果
+
+| 套件 | 命令 | 结果 |
+| --- | --- | --- |
+| Node | `npm test` | 98 pass / 0 fail |
+| 集成 | `python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend` | 707 tests OK（skipped=4） |
+| 管理端 | 同命令指向 `backend/manager` | 151 tests OK |
+| 平台契约 | `python -B -X utf8 -m unittest discover -s backend/integration -p "test_publishing.py" -t backend` | 40 OK（skipped=1） |
+| 平台接口 | `python -B -X utf8 -m unittest discover -s backend/manager -p "test_publish_api.py" -t backend` | 12 OK |
+
+### 四类状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 代码实现 | 完成（`publishing.py` + 九个接口 + 测试） |
+| 真实模型验证 | 不适用（本版无模型调用路径改动） |
+| 真实平台验证 | 未开始：无七猫账号/格式核对，无本版番茄复验；平台写入 0 |
+| GitHub 推送 / Release | 未执行（本轮未授权新的公开发行） |
+| 安装包 | 两包 `verify-package` 通过；未在全新目录走最短用户路径 |
+
+### 第二轮独立审计与修复（audit-101）
+
+| 编号 | 原问题 | 处理 |
+| --- | --- | --- |
+| P1-A | `corrupt_ledgers` 恒 0：`_read` 从不抛错，坏账本静默消失 | `_read(strict=True)` 抛 `PublishError`；坏 JSON/非对象/空对象都计数；补两条用例 |
+| P1-B | 无 `Exception` 兜底，413 仍是 `{"detail"}` | 全局异常处理器 → 500 `internal_error`；`runtime_health` 413 改 `payload_too_large`；补两条 API 用例 |
+| P1-C | 迁移崩溃后 `copying` 条目被当作已迁移，该章永久不复制 | `seen` 只认 `copied+verified`；`copying` 按目标摘要复核后补记；补恢复用例 |
+| P2-D | `STATE.json` 无 0.10.0 | 补 `releases["0.10.0"]`（清单/计数/两包摘要/候选未发布） |
+| P2-E | `.v0100/verify-*.json` 是旧构建的陈旧回执 | 删除；回执统一在 `.v0100/candidate/`，HASHES 给相对路径 |
+| P2-F | 回执无法自证字节 | `verify-package.mjs` 增 `archiveBytes`/`archiveSha256`，重跑对齐 |
+| P2-G | 文档把未修写成已修 | 先改代码，再按实测回填 RELEASE_STATUS 与本文件 |
+| P3-H | `allow_duplicate` 是死参数 | 删除；`unknown`/`mismatch` 只能对账 |
+| P3-I | body 上限按字符计，与字节口径不符 | `field_validator` 按 UTF-8 字节 ≤ 1 MiB 校验 |
+| 测试 | `conflicts`、`probe_evidence` 章号不足、`mkdir` 顺序、坏账本、`status` 写入零覆盖 | 新增 `Audit101RegressionTest` 7 项（含目标字节不变、413 码值、`copying` 但目标缺失需重写） |
+
+### 第一轮独立审计与修复（audit-100）
+
+| 编号 | 原问题 | 处理 |
+| --- | --- | --- |
+| P0-1 | 候选包与源码/清单三方不一致，`check-release --local` 失败 | 冻结源码后串行执行「回归 → 清单 → 两包 → 四归档 → verify」，产物与源码一次对齐 |
+| P0-2 | 审计窗口内仓库被持续编辑，测试基线不稳 | 本轮先改完再跑全量，随后再重建清单，避免边改边打 |
+| P0-3 | 缺账号/作品 ID 时两本书导出互相覆盖 | `namespace()` 缺身份抛错；目录带账号短 hash；导出先越界校验再落盘 |
+| P0-4 | 回执正文不符仍记「已确认写入」 | 新增 `mismatch`，`writes_confirmed=0`，只允许带证据对账 |
+| P1-1 | 迁移可跨平台污染 | 迁移源只允许 `fanqie`，其它平台 `needs_review` |
+| P1-2 | 迁移非原子，失败无台账 | 每文件先记 `copying` 再复制，回写 `copied/verified` |
+| P1-3 | 目标已存在时静默覆盖 | 摘要不同 → `conflicts` + `needs_review` |
+| P1-4 | `reconcile` 无状态机、无证据 | 限定转移表，`abandoned` 终态，`note`/`evidence` 必填 |
+| P1-5 | 授权替换删除历史 | 旧记录 `active=false` + `revoked_at`，保留依据 |
+| P1-6 | `status` 只看目标平台 | 遍历 `PLATFORMS` 汇总 |
+| P1-7 | `readonly_probe` 可自报 `verified` | 需匹配 `probe_evidence`，否则只记 `registered` |
+| P1-8 | 错误体混 `{"detail"}` 与 `{"code","message"}` | 全局 422 / HTTPException / 未捕获异常统一 `{"code","message"}` |
+| P1-9 | 坏形状清单触发 500 | 类型校验后重建并标 `corrupt`；`status` 计 `corrupt_ledgers` |
+| P2 | 中文章号双前缀、字数口径、1 MB 上限不可达、越界晚于 mkdir、`allow_duplicate` 强制重发 | 章号一致性校验、`chars` 去标题标点、API 上限按 UTF-8 字节 ≤ 1 MiB、先校验后 `mkdir`、`unknown`/`mismatch` 不再可绕过 |
+| 测试 | 账号隔离、跨平台账本键、授权隔离三处变异未红 | 新增 `test_accounts_get_separate_namespaces`、`test_ledger_key_separates_platform`、`test_authorizing_one_book_keeps_the_other`、`test_corrupt_manifest_is_replaced_not_fatal`、`test_over_long_body_is_refused_before_writing` |
+
+### 已知缺口
+
+1. 七猫没有任何官方提交方式证据，`can_submit: False`；导出格式只按通用纯文本核对。
+2. 旧队列迁移只覆盖「身份齐全且唯一」的路径；同名、缺身份的历史文件保留原位，未做批量人工核对流程。
+3. 第三层真实提交依赖 0.9.4 的浏览器适配器，本版未重跑真实投递链路。
+4. T22 升级两次与回退、T24 全新目录最短路径、T10 真实双账号隔离均未演练。
+5. 四份服务归档与 Windows 包只做到离线构建与 `--verify`，无新增实机证据。
+
+### 下一步
+
+- 拿到七猫账号与后台格式说明后：核对导出格式 → 只读绑定稳定作品 ID → 在明确授权下单章试点一次，并记录脱敏回执。
+- 若真实提交仍无稳定回执，保持「只交导出」结论，不把七猫写进支持矩阵。
+
+## 0.6.1–0.10.0 收口（2026-11-22）
+
+九个版本全部做到「候选完成」，每一版都经过至少一轮独立只读复审，并按复审报告修完 P0/P1 后再重打包。全部版本**未 commit、未 push、未发布**；真实平台、真实模型、真实设备与真实安装目录的验证仍然留白，逐版列在对应的「尚未完成的真机条件」里。
+
+| 版本 | 主题 | 关键交付 | 本版收尾时测试 | 独立复审 |
+| --- | --- | --- | --- | --- |
+| 0.6.1 | 番茄排期缓冲 | 排期识别与能力证实、纯计算覆盖、意图台账与对账、`platform_scheduled` 全贯通 | 98 / 422 / 97 | audit-061、audit-061b（两轮 P0 全闭合） |
+| 0.7.0 | 长篇连续性与文风 | `entity_state`（物品归属与认知按章折算）、统一失效入口、证据使用日志与反向索引、BM25 优先的可控检索、带规则 ID 的可撤销文风建议 | 98 / 489 / 107 | audit-070（C01–C04 覆盖度与生产者缺口） |
+| 0.8.0 | 读者反馈与可撤销建议 | 指标字典与两步导入、分母未知不填零、观察卡生命周期、三条注入路径同一闸门 | 98 / 553 / 124 | audit-080（token 绑定、整批拒、批次撤销、作品隔离、只读 GET） |
+| 0.9.0 | Linux x64 常驻存稿 | 独立服务与容器/systemd、单实例、只补缺步、SIGTERM 限时退出、备份还原与 health | 98 / 582 / 124 | audit-090（`due_jobs` 跨时段重试、看门狗、备份白名单、配置自检） |
+| 0.9.1 | Linux ARM64 | 架构归一、主机匹配、归档校验（摘要/文件数/清单位置/重复成员/ELF 架构/链接与越界）、双架构构建 | 98 / 598 / 124 | audit-091（校验面与可复现性） |
+| 0.9.2 | macOS ARM64 | LaunchAgent、`run.command`、macOS 归档校验（拒 ELF 与 `.so`）、能力矩阵 | 98 / 612 / 124 | audit-092（plist PATH、大小写冲突、候选产物缺失） |
+| 0.9.3 | macOS Intel | 四格平台矩阵、Rosetta 识别、`host_matches`/`verified_here` 拆分、ELF `e_machine` 校验 | 98 / 622 / 124 | audit-093（外部锚点、sidecar 必需、`chapter_path` 性能） |
+| 0.9.4 | 单目标浏览器与登录 | 唯一 target、受管 profile（拒 junction/越界）、登录只认适配器证据、只读逐项核验零写入、投递先落账本 + replace 语义 | 98 / 658 / 135 | audit-094、audit-095（账本越界、账号与摘要比对、并发抢占、错误体统一） |
+| 0.10.0 | 平台契约与第二平台 | 两平台能力矩阵（七猫手动上传）、命名空间按账号隔离、导出与台账、只读绑定与授权历史、提交四关与对账状态机、迁移台账 | 98 / 707 / 151 | audit-100、audit-101、audit-102（三方一致、命名空间覆盖、回执诚实性、413 单一码值） |
+
+产物位置：每版 `<版本目录>/candidate/`（`.v061`、`.v070`、`.v080`、`.v090`、`.v091`、`.v092`、`.v093`、`.v094`、`.v0100`）下有安装包、服务归档、外部清单与 `HASHES.txt`；包内文档不写死自身哈希，一律以 `HASHES.txt` 为准。
+
+复核入口（本机 Windows 11 / Python 3.13.5 / Node v24.18.0 已实跑）：`npm test`、两套 `unittest discover`、`node scripts/check-release.mjs --local`、`node scripts/verify-package.mjs`（两个包）、`python scripts/build-linux-service.py --arch <a> --verify <归档>`、`python scripts/build-macos-service.py --arch <a> --verify <归档>`。
+
+仍待真实环境验证的共性条件：真实番茄/七猫账号与页面结构；真实模型调用（本轮真实模型预算为 0）；真实 Linux ARM64 与 Apple Silicon/Intel 机器；真实安装目录下的升级两次与回退演练；真实 webhook 与通知；`npm` 正式发布。任何一条未满足时，对应支持格只能写「模拟/待验」，不能写成已支持。
+## 0.7.0 统一收口与 PR 交付（2026-11-23）
+
+- **目标与收敛决定**：按用户确认将 0.6.1 → 0.10.0 阶段积攒的改动统一收敛为一个 `0.7.0` 版本并在分支 `feat/v0.7.0` 提交面向 `main` 的 GitHub PR（**不合并、不发包、不提交第三方市场**）。
+- **DSH 插件前后端补全与缺陷修复**：
+  - `index.js`：补全 29 条非 GET 后端写路由至 `WRITE_ROUTES`；修复 `makeTool()` 解析统一 `{"code", "message"}` 错误体；`test/gate.test.mjs` 新增对 `backend/manager/*.py` 路由表的防漂移自动化比对。
+  - `client.js`：新增 `apiErrorMessage()` 修复 `api()` 错误读取；扩展 `PUBLICATION_LABELS` 与 `ScheduleCard` 支持并保留 `draft_only / publish_now / platform_scheduled`、账号与平台字段；新增 `ScheduleBufferPanel`、`RunsNotificationsPanel`、升级 `JobsPage`（多任务、配置/排期/运行子页、修复 `draft` 切换与保存清空字段问题）；扩展 `PublishPage`、`MemoryPage`、独立侧栏 `ReadersPage` 与 `ChapterModal`「预检」标签。
+  - 许可证统一确认 `GPL-3.0-only`（`package.json`、`package-lock.json`、`LICENSES/`、`THIRD_PARTY_NOTICES.md`、`market/losebird-entry.json`）。
+  - 仓库外评估报告写入 `O:\小说助手\design\xingyue-borrowed\EVALUATION_for_chapter_whale.md`（`0.7.0` 暂不合入）。
+- **本轮验证快照（本机实跑）**：
+  - `npm test`：**101 pass / 0 fail**（含 `client.test.mjs`、`gate.test.mjs`、`p04-bridge.test.mjs`、`market.test.mjs`、`manifest.test.mjs`、`managed-runtime.test.mjs`、`release-check.test.mjs`）
+  - `backend/integration`：**707 OK（skipped=4）**；`backend/manager`：**151 OK**
+  - 本地回环代理 E2E 冒烟（`index.js` + `manager/app.py`，`start_dispatcher=False`，真实模型 = 0，外部写入 = 0）：**9/9 阶段全通**（含 `platform_scheduled`、`schedule`、`entities`/`precheck`/`retrieval`/`evidence/impact`、`readers`、`browser` 只读、七猫写入拒绝 `writes=0`、`runs`/`notifications`、`422 invalid_request` 错误体透传）
+  - `runtime-manifest.json`：**3418 文件**，`buildId`: `04e29797f2e80aab87bcf2767460ae663b814d9a096c896140f78f47a1dbf1c7`
+  - 候选产物：`pack-bundle.py`、`npm pack`、四份 Linux/macOS 服务归档（`--verify` 全通）、`check-release.mjs --local` 与 `verify-package.mjs` 结果/哈希统一记于 `.v070/candidate/HASHES.txt`
+  - **仍未验证项**：真实番茄/七猫网页与账号、真实模型调用（预算=0）、真实 Linux ARM64 与 Apple Silicon/Intel 物理机、连续升级两次与回退（T22）、真实外网 Webhook、npm/GitHub 正式发布

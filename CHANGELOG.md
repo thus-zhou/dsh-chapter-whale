@@ -1,3 +1,15 @@
+## [0.7.0] — 2026-11-23
+
+> 本版统一收敛 `0.5.0` 之后的功能演进与 DSH 前后端联调成果，作为 `feat/v0.7.0` PR 候选交付；真实模型调用、真实番茄/七猫网页写入、物理 Linux/macOS 实机与外网 Webhook 在本轮均未实测，所有新增边界已在代码与文档中明确标为「候选 / 只读 / 待实机」。
+
+- **许可证与代码运行时分离**：确立 `GPL-3.0-only` 组合分发边界（`package.json`、`LICENSES/`、`THIRD_PARTY_NOTICES.md`、`docs/license-decision.md`）；插件随包携带 `backend/` 源码并与下载运行时分离，升级只替换清单内代码；`check-release.mjs` 强制全仓文本 LF 与分发字节校验；凭据与守护进程升级为工作区运行描述加单实例健康核对。
+- **DSH 插件桥与全量原生面板**：补全 `index.js` `WRITE_ROUTES` 全部 29 条非 GET 写路由白名单，新增 `backend/manager/*.py` 与白名单的防漂移测试；修复 `index.js` `makeTool()` 与 `client.js` `api()` 对后端统一 `{"code", "message"}` 错误体的解析；修复 `ScheduleCard` / `JobsPage` 对 `publication_mode`、`platform`、`account`、`schedule_buffer` 的保存与切换覆盖缺陷；在 `PublishPage`、`JobsPage`、`MemoryPage`、`ChapterModal`（新增「预检」标签）与独立侧栏「读者反馈」页（`ReadersPage`）全量接入 `0.7.0` 接口。
+- **模型桥与费用/流式可靠性**：派发前同步宿主模型；按 DISJOINT 用量契约兼容多提供方不重复累计缓存；流式响应 16 MiB 有界缓冲、首块与总时限、断开/超时/截断只产出单一明确终态。
+- **日更运行、排期缓冲与通知台账**：`publication_mode` 支持 `draft_only`、`publish_now` 与候选 `platform_scheduled`；新增 `schedule_buffer` 状态机、平台能力观测记录（`platform_capabilities.json`）、幂等排期意图、人工对账 `reconcile` 与待确认处置 `resolve`；新增只读运行投影 `/jobs/{id}/runs` 与 `/notifications*` Webhook 发件箱控制。
+- **长篇连续性、记忆失效与风格预检**：新增实体状态台账（人物/物品/事件随章节版本与覆盖状态派生）、引用失效与上下文预算/检索过滤链、影响面反查（`/entities`、`/retrieval`、`/evidence/impact`）；新增提示性风格规则表与逐作品忽略词表（`/precheck`、`PUT /precheck/ignore`、`POST /precheck/action`），不改动原文且不参与阻断质量通过判定。
+- **读者反馈与可撤销观察卡**：新增手工指标 CSV 预览/导入/按批次撤销（`DELETE /readers/batches/{batch_id}`）与脱敏评论聚类；生成默认处于候选态的调整观察卡，显式采纳带章节数/有效期并支持一键撤销与单章重排预览，不自动注入默认写作提示词。
+- **常驻服务包、单目标浏览器试点与多平台契约**：新增 `linux/{amd64,arm64}`（Docker/systemd）与 `macos/{arm64,amd64}`（LaunchAgent 原生进程）常驻存稿服务打包脚本及防错架构校验（已本机构建校验，物理机待实机）；新增单目标浏览器登录/探测试点及 `publishing.py` 平台能力契约，七猫仅开放本地导出与只读绑定，受保护写入默认拒绝。
+
 ## [0.5.0] — 2026-11-15
 
 - 接入确认后的玻璃界面：两套配色、深浅主题、三档炫彩和动效、减少动画、舒适与紧凑密度，设置保存在本机。

@@ -46,27 +46,29 @@
 
 | 文件 | 作用 | 现状 |
 | --- | --- | --- |
-| `LICENSE` | 本仓库自身许可 | MIT（Copyright (c) 2026 novel-helper contributors） |
-| `backend/webnovel-writer/LICENSE` | 上游写作器许可 | GPL v3 全文（35 KB），随包分发 |
+| `LICENSE` | 本仓库自有代码许可 | MIT（Copyright (c) 2026 novel-helper contributors） |
+| `LICENSES/` | 发行包内许可全文与索引 | `GPL-3.0.txt`、`MIT-chapter-whale.txt`、`MIT-our-free-model.txt`、`README.md`，随包分发 |
+| `backend/webnovel-writer/LICENSE` | 上游写作器许可 | GPL-3.0-only 全文（35 KB），随包分发 |
 | `backend/webnovel-writer/README.md` | 上游说明 | 声明 GPL v3 与上游仓库地址 |
 | `THIRD_PARTY_NOTICES.md` | 第三方组件汇总 | 覆盖写作器、发布适配、Our Free Model、Python、Chromium/Playwright 与依赖 |
 | `backend/vendor/**/LICENSE` | 第三方随包许可 | 各目录保留 |
 
-`npm pack` 实测包含上述全部许可文本（`LICENSE`、`THIRD_PARTY_NOTICES.md`、写作器与 vendor 的 LICENSE），未删除任何随包许可文件。
+发行包整体许可为 `GPL-3.0-only`（`package.json` 的 `license` 字段），自有代码同时以 MIT 提供；判定与依据见 `docs/license-decision.md`。`npm pack` 实测包含上述全部许可文本（`LICENSE`、`LICENSES/`、`THIRD_PARTY_NOTICES.md`、写作器与 vendor 的 LICENSE），未删除任何随包许可文件。
 
-## 6. 需要项目所有者决定的许可问题
+## 6. 许可问题：已定与未定
 
-以下问题涉及权利判断，不自行更改全项目许可证，也不作未经核实的法律结论：
+0.6.0 起按路线 A 定案，细节见 `docs/license-decision.md` 与 `docs/license-inventory.md`：
 
-1. **根 `LICENSE` 是 MIT，而发行内容包含 GPL v3 的 `backend/webnovel-writer`。** 当前做法是保留上游许可与完整源码。是否需要在 README/发行说明里明确「整体发行包含 GPL v3 组件，MIT 仅适用于本项目自有代码」？
-2. **GPL v3 组件的「对应源码」提供方式**：目前随包给了 `backend/webnovel-writer/` 全量源码与 GPL 全文。是否还需要在 Release 页提供单独源码归档链接，或声明源码获取方式（书面要约）？
-3. **`backend/vendor/our-free-model-source` 的来源与许可**：现有记录为「依据维护者确认的来源说明」，是否要补充上游仓库 URL 与版本号，便于第三方核实？
-4. **发布适配组件（`fanqie_auto_publish`）** 标注为「AI 辅助开发，不附加个人署名」。是否需要补一个明确的版权行（例如「Copyright (c) 2026 novel-helper contributors, MIT」）？
-5. **市场条目的许可字段**（`market/catalog-entry.yml`、`index.json`）应与第 1 条结论保持一致；确定后统一更新。
+1. **已定**：发行包整体按 GPL-3.0-only 声明（`package.json` 的 `license`、`market/losebird-entry.json`），自有代码的 MIT 通过 `LICENSES/MIT-chapter-whale.txt` 与 README「许可证与第三方组件」一节说明；`THIRD_PARTY_NOTICES.md` 文首写明组合分发范围。
+2. **已定**：对应源码随包提供全量 `backend/webnovel-writer/` 与可复现的重建命令（见 `LICENSES/README.md`、`docs/license-decision.md` §9），不再依赖 Release 页单独归档。
+3. **未定**：`backend/vendor/our-free-model-source` 的上游仓库 URL 与版本号仍只有维护者说明，需补书面来源后才能对外声称已核实。
+4. **未定**：`fanqie_auto_publish` 的版权行（是否补「Copyright (c) 2026 novel-helper contributors」）。
+5. **已定**：市场条目许可字段统一为 `GPL-3.0-only`，与第 1 条一致。
 
-在这些问题有结论前，发行包按现状发布：不删除任何许可文本，不更改 `LICENSE`，不声称「许可已全部核实」。
+在 3、4 有结论前，发行仍按现状：不删除任何许可文本，不声称「许可已全部核实」。
 
-## 组装完整发行包
+## 7. 组装完整发行包
+
 
 仅安装器发生变化时，可以复用内容完全一致、buildId 相同的既有运行时资产。
 例如插件 0.4.3 使用运行时 0.4.2；`runtime-manifest.json` 与 `runtime-download.json`

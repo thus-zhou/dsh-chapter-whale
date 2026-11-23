@@ -2,6 +2,7 @@
 // Optional second tarball supplies the exact download body before publication.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -45,7 +46,10 @@ if (downloadArg && downloadArg !== '-') {
   };
 }
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const archiveBytes = await readFile(resolve(archiveArg));
 const result = { archive: resolve(archiveArg), version: pkg.version, runtimeVersion: manifest.version, buildId: manifest.buildId,
+  archiveBytes: archiveBytes.length,
+  archiveSha256: createHash('sha256').update(archiveBytes).digest('hex'),
   workspace, source: downloadArg && downloadArg !== '-' ? 'exact-local-release-bytes' : 'bundled-or-live', checks: [] };
 const handler = createHandler(config, 'isolated-package-check');
 const server = createServer(handler);

@@ -60,13 +60,18 @@ def stage(root, stage_dir):
     names = [str(path.relative_to(stage_dir)) for path in stage_dir.rglob("*") if path.is_file()]
     bad = unwanted(names)
     if bad:
-        raise SystemExit("暂存目录含不应发布的内容：\n" + "\n".join(sorted(bad)[:20]))
+        raise SystemExit("暂存目录含不应发布的内容：\n" + "\n".join(sorted(bad)))
     return data, len(files)
+
+
+def bundle_name(version):
+    """完整包名带上运行环境与架构：同一版本号的轻量包与完整包不能撞名。"""
+    return f"dsh-chapter-whale-runtime-win32-x64-{version}.tgz"
 
 
 def build(keep_stage=False):
     version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
-    target = TMP / f"dsh-chapter-whale-{version}.tgz"
+    target = TMP / bundle_name(version)
     if TMP.is_symlink() or ROOT.resolve() not in TMP.resolve().parents:
         raise SystemExit("暂存目录必须位于当前发行工作区")
     if TMP.exists():
@@ -83,7 +88,8 @@ def build(keep_stage=False):
         tar.extractall(stage_dir, filter="data")
     packs[0].unlink()
     data, copied = stage(ROOT, stage_dir)
-    subprocess.run(["node", str(stage_dir / "package/scripts/check-release.mjs"), "--local"], check=True)
+    subprocess.run(["node", str(stage_dir / "package/scripts/check-release.mjs"), "--local",
+                    "--root", str(stage_dir / "package")], check=True)
     with tarfile.open(target, "w:gz", compresslevel=6) as tar:
         tar.add(stage_dir / "package", arcname="package")
     blob = target.read_bytes()
@@ -97,6 +103,8 @@ def build(keep_stage=False):
     spec = {"url": f"https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v{version}/{target.name}",
             "bytes": len(blob), "sha256": digest, "buildId": data.get("buildId")}
     (ROOT / "runtime-download.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8", newline="\n")
+    # 下载描述现在必须由真实包字节决定：重新校验一次，避免 URL/bytes/sha 与本次产物脱节。
+    subprocess.run(["node", str(ROOT / "scripts/check-release.mjs"), "--local"], check=True)
     if not keep_stage:
         shutil.rmtree(stage_dir, ignore_errors=True)
     print(json.dumps(result, ensure_ascii=False), flush=True)

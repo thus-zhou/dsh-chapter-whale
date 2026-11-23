@@ -8,7 +8,7 @@
   "repository": "https://github.com/thus-zhou/dsh-chapter-whale",
   "branch": "main",
   "base_commit": "78d09ec547515511b10cc6a9e1ee07d4116d17e0",
-  "current_module": "M15",
+  "current_module": "M24",
   "authorization": {
     "github_push_and_release": "granted 2026-11-15: apply approved UI design; update GitHub, version and demonstration screenshots; release 0.5.0",
     "npm_publish": "granted 2026-11-15: synchronize npm and plugin market; user completed publish verification",
@@ -313,6 +313,38 @@
         "是否发布 0.4.1 补丁版：0.4.0 已在 CI 失败状态下发布，需所有者决定新节点"
       ],
       "validation_note": "Real two-chapter, whole-chapter scene review, cross-chapter effect and missing style-learning evidence remain incomplete; no new model requests this repair round."
+    },
+    "M16": {
+      "status": "candidate_complete_pending_live",
+      "version": "0.6.0",
+      "commit": null,
+      "base_commit": "4f218c0e88fcab890b3ca52ac8a7a139a95459a8",
+      "checks": [
+        "npm test -> 93 pass / 0 fail / 5 skipped",
+        "python -m unittest discover -s backend/integration -p test_*.py -t backend -> 375 pass / 1 skipped",
+        "python -m unittest discover -s backend/manager -p test_*.py -t backend -> 87 pass",
+        "python scripts/build-runtime.py --manifest-only -> 3403 files, buildId 35b5788f92c997cdd95c7417ebf2c84e93f00e6b2ab892d29dea0e8e2e733167",
+        "node scripts/check-release.mjs --local -> 0 (manifest, generated .pth and lock are LF-only)",
+        "python scripts/pack-bundle.py -> 287139998 bytes sha256 bf477c81cc887ca97d44b1cecb12214bede8106a396149c0a44e3e7a452d58ee",
+        "npm pack light -> 16856016 bytes sha256 243023959b7ffca8109771e3104a981d4e9e2416faf4228c083a68eca052e2a9",
+        "verify-package full -> success, downloads 0; light with full bytes -> success, downloads 1",
+        "A05 stand-in two-chapter draft_only run -> 2 chapters saved/reviewed, platform calls 0",
+        "full suites leave no backend/integration_data (test isolation patched)"
+      ],
+      "real_requests": 0,
+      "platform_writes": 0,
+      "notification_live_sends": 0,
+      "remaining": [
+        "A02 backend fields: chapter revision_rounds, job-level model/budget, free-model login.start, settings details",
+        "P04 real DSH host restart then chapter_whale tool generation",
+        "A05 real model two-chapter run with budget, costs and timing",
+        "A04 live webhook endpoint 200/429/timeout verification",
+        "license route A owner sign-off before npm/GitHub/market release",
+        "upgrade twice from a 0.5.0 data copy and rehearse rollback (T22)",
+        "Ubuntu CI run of check-release --local (T30)",
+        "installed-directory drill for P03 fake credential, P05 custom port, watchdog stop/restore (T31/T35)"
+      ],
+      "release_gate": "no git push, no npm publish, no market update until the remaining items are verified"
     }
   },
   "releases": {
@@ -384,9 +416,48 @@
       "real_model_validation": "Existing M09/M15 gaps remain; this is a UI release.",
       "acceptance_record": "docs/retest-0.5.0.md",
       "verified_at": "2026-11-15T23:25:00+08:00"
+    },
+    "0.10.0": {
+      "local_ready": true,
+      "checks": "candidate 2026-11-22 (after audit-100, audit-101 and audit-102 fixes): npm test 98 pass; integration 707 pass (skipped=4); manager 151 pass; publishing 40 pass (skipped=1); publish API 12 pass; release manifest 3419 files / buildId b1ae5ac3a24e3fdadf054834e5b87b62a1da68a4441d71ee1f619ce28f1ee4a5; check-release --local passed (including market metadata); package and service-archive bytes/sha256 are recorded outside the package in .v0100/candidate/HASHES.txt (package docs never embed their own hashes); platform writes 0",
+      "github": "not published this round",
+      "npm": "not published this round",
+      "real_model_validation": "pending (no real model / real platform calls in this round)",
+      "platform_writes": 0,
+      "status": "candidate; three audit rounds closed, real-machine and real-platform checks still pending"
+    },
+    "0.7.0": {
+      "status": "candidate_pr",
+      "note": "Consolidated 0.6.1-0.10.0 candidate work, GPL-3.0-only metadata, DSH proxy write routes & full UI wiring into feat/v0.7.0 PR.",
+      "consolidated_from": [
+        "0.6.1",
+        "0.7.0",
+        "0.8.0",
+        "0.9.0",
+        "0.9.1",
+        "0.9.2",
+        "0.9.3",
+        "0.9.4",
+        "0.10.0"
+      ],
+      "build_id": "04e29797f2e80aab87bcf2767460ae663b814d9a096c896140f78f47a1dbf1c7",
+      "manifest_files": 3418,
+      "checks": {
+        "npm_test": "101 pass / 0 fail",
+        "integration_tests": "707 OK (skipped=4)",
+        "manager_tests": "151 OK",
+        "local_proxy_e2e_smoke": "9/9 passed (real_model_budget=0, platform_writes=0)",
+        "service_archives_verified": [
+          "linux-amd64",
+          "linux-arm64",
+          "macos-arm64",
+          "macos-amd64"
+        ],
+        "hashes_file": ".v070/candidate/HASHES.txt"
+      }
     }
   },
-  "updated_at": "2026-11-15T23:25:00+08:00",
+  "updated_at": "2026-11-23T10:02:00+08:00",
   "second_retest": {
     "date": "2026-11-15",
     "issues": [
