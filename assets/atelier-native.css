@@ -106,6 +106,67 @@
 @keyframes cw-complete-pulse{0%{transform:scale(.6);opacity:.3}50%{transform:scale(1.4);opacity:1}100%{transform:scale(1);opacity:1}}
 .nh-root[data-ui="atelier"] .nh-role-grid{gap:12px;padding:14px 0;border-color:var(--line)}
 .nh-root[data-ui="atelier"] .nh-btn:focus-visible,.nh-root[data-ui="atelier"] .nh-input:focus-visible,.nh-root[data-ui="atelier"] .nh-select:focus-visible{outline:2px solid var(--a);outline-offset:3px}
+/* A02 开书到日更：流程步骤、状态芯片、正文摘要、日更表单与免费渠道 */
+.nh-root[data-ui="atelier"] .nh-flow{display:flex;flex-direction:column;gap:var(--nh-gap)}
+.nh-root[data-ui="atelier"] .nh-step{display:flex;gap:10px;align-items:flex-start}
+.nh-root[data-ui="atelier"] .nh-step>section{flex:1 1 auto;min-width:0}
+.nh-root[data-ui="atelier"] .nh-stepno{flex:0 0 24px;width:24px;height:24px;margin-top:12px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--nh-accent);border:1px solid var(--nh-border);background:var(--nh-surface2)}
+.nh-root[data-ui="atelier"] .nh-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.nh-root[data-ui="atelier"] .nh-chipmeta{font-size:11px;color:var(--nh-ink3)}
+.nh-root[data-ui="atelier"] .nh-chipbtn{font:inherit;font-size:12px;color:var(--nh-ink2);background:var(--nh-surface2);border:1px solid var(--nh-border-soft);border-radius:8px;padding:5px 10px;cursor:pointer;min-height:30px}
+.nh-root[data-ui="atelier"] .nh-chipbtn:hover{background:var(--nh-hover)}
+.nh-root[data-ui="atelier"] .nh-chipbtn[data-active="true"]{color:var(--nh-accent);border-color:var(--nh-accent)}
+.nh-root[data-ui="atelier"] .nh-chipbtn[data-active="true"]:focus-visible{outline:2px solid var(--nh-accent);outline-offset:2px}
+.nh-root[data-ui="atelier"] .nh-kv{display:flex;flex-direction:column;gap:6px}
+.nh-root[data-ui="atelier"] .nh-kvrow{display:flex;gap:10px;justify-content:space-between;align-items:baseline;font-size:12px}
+.nh-root[data-ui="atelier"] .nh-kvval{color:var(--nh-ink2);text-align:right;overflow-wrap:anywhere;min-width:0}
+.nh-root[data-ui="atelier"] .nh-note{font-size:12px;line-height:1.7;color:var(--nh-ink2);background:var(--nh-surface2);border:1px solid var(--nh-border-soft);border-radius:8px;padding:8px 10px}
+.nh-root[data-ui="atelier"] .nh-note[data-tone="warn"]{color:var(--nh-warn);border-color:var(--nh-warn)}
+.nh-root[data-ui="atelier"] .nh-note[data-tone="ok"]{color:var(--nh-ok);border-color:var(--nh-ok)}
+.nh-root[data-ui="atelier"] .nh-inline-err{font-size:12px;line-height:1.7;color:var(--nh-err);border:1px solid var(--nh-err);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}
+.nh-root[data-ui="atelier"] .nh-panel{display:flex;flex-direction:column;gap:8px;border:1px solid var(--nh-border-soft);border-radius:9px;padding:10px 12px;background:var(--nh-surface)}
+.nh-root[data-ui="atelier"] .nh-timegrid{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.nh-root[data-ui="atelier"] .nh-timerow{display:flex;gap:6px;align-items:center}
+.nh-root[data-ui="atelier"] .nh-timerow .nh-input{width:118px}
+.nh-root[data-ui="atelier"] .nh-excerpt{font-family:"Whale Body","Microsoft YaHei UI",sans-serif;font-size:13px;line-height:1.85;color:var(--nh-ink);background:var(--nh-surface2);border:1px solid var(--nh-border-soft);border-radius:9px;padding:10px 12px;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.nh-root[data-ui="atelier"] [data-reader-font="serif"] .nh-excerpt{font-family:"Whale Editorial","SimSun",serif}
+.nh-root[data-ui="atelier"] .nh-issues{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:1.7;color:var(--nh-ink2)}
+.nh-root[data-ui="atelier"] .nh-catalog{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+.nh-root[data-ui="atelier"] .nh-poolrow{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border-bottom:1px dashed var(--nh-border-soft);padding-bottom:6px}
+.nh-root[data-ui="atelier"] .nh-rolepick{display:flex;gap:4px;flex-wrap:wrap}
+.nh-root[data-ui="atelier"] .nh-tagbtn{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--nh-ink2);border:1px solid var(--nh-border-soft);border-radius:7px;padding:2px 6px;cursor:pointer;min-height:24px}
+.nh-root[data-ui="atelier"] .nh-tagbtn:focus-within{outline:2px solid var(--nh-accent);outline-offset:2px}
+.nh-root[data-ui="atelier"] .nh-loginbox{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--nh-border-soft);border-radius:9px;padding:10px 12px}
+.nh-root[data-ui="atelier"] .nh-qr{width:150px;height:150px;padding:6px;background:#fff;border-radius:8px;object-fit:contain}
+.nh-root[data-ui="atelier"] .nh-link{font-size:12px;color:var(--nh-accent);text-decoration:underline}
+.nh-root[data-ui="atelier"] .nh-link:focus-visible{outline:2px solid var(--nh-accent);outline-offset:3px}
+
+@media(max-width:850px){
+.nh-root[data-ui="atelier"] .nh-step{gap:6px}
+.nh-root[data-ui="atelier"] .nh-stepno{margin-top:10px}
+.nh-root[data-ui="atelier"] .nh-kvrow{gap:6px}
+.nh-root[data-ui="atelier"] .nh-excerpt{max-height:220px}
+}
+@media(max-width:520px){
+.nh-root[data-ui="atelier"] .nh-step{gap:4px}
+.nh-root[data-ui="atelier"] .nh-stepno{display:none}
+.nh-root[data-ui="atelier"] .nh-kvrow{flex-direction:column;align-items:flex-start;gap:2px}
+.nh-root[data-ui="atelier"] .nh-kvval{text-align:left}
+.nh-root[data-ui="atelier"] .nh-timegrid{width:100%}
+.nh-root[data-ui="atelier"] .nh-timerow{width:100%}
+.nh-root[data-ui="atelier"] .nh-timerow .nh-input{width:100%;flex:1 1 auto}
+.nh-root[data-ui="atelier"] .nh-excerpt{max-height:190px;padding:9px 10px}
+.nh-root[data-ui="atelier"] .nh-panel{padding:8px 9px}
+.nh-root[data-ui="atelier"] .nh-qr{width:120px;height:120px}
+}
+
 @media(max-width:1100px){.nh-root[data-ui="atelier"] .nh-body{flex-direction:row}.nh-root[data-ui="atelier"] .nh-nav{width:62px;flex:0 0 62px;padding:20px 8px}.nh-root[data-ui="atelier"] .nh-navgroup{display:block;margin-bottom:14px}.nh-root[data-ui="atelier"] .nh-navlabel,.nh-root[data-ui="atelier"] .nh-navitem>span{display:none}.nh-root[data-ui="atelier"] .nh-navitem{width:100%;padding:11px;justify-content:center;min-height:39px}.nh-root[data-ui="atelier"] .nh-page{padding:18px 12px 24px}.nh-root[data-ui="atelier"] .nh-body{gap:8px}.nh-root[data-ui="atelier"] .cw-primary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nh-root[data-ui="atelier"] .cw-creation-card,.nh-root[data-ui="atelier"] .cw-manuscript-card{height:335px;padding-inline:20px}.nh-root[data-ui="atelier"] .cw-live-metrics strong{font-size:14px}.nh-root[data-ui="atelier"] .cw-creation-card h2{font-size:24px}.nh-root[data-ui="atelier"] .nh-head>.nh-select{max-width:28vw}.nh-root[data-ui="atelier"] .cw-section-kicker{font-size:11px}.nh-root[data-ui="atelier"] .cw-engine-pill{font-size:9px}.nh-root[data-ui="atelier"] .cw-card-top-actions{gap:7px}.nh-root[data-ui="atelier"] .cw-card-top-actions .nh-btn{padding-inline:8px;font-size:10px}}
 @media(max-width:850px){.nh-root[data-ui="atelier"] .cw-primary-grid,.nh-root[data-ui="atelier"] .cw-secondary-grid{grid-template-columns:1fr}.nh-root[data-ui="atelier"] .cw-manuscript-card{height:350px}.nh-root[data-ui="atelier"] .nh-head>.nh-sub{display:none}.nh-root[data-ui="atelier"] .nh-head>.nh-row{gap:4px!important}.nh-root[data-ui="atelier"] .nh-live{display:none}.nh-root[data-ui="atelier"] .nh-formgrid{grid-template-columns:1fr!important}.nh-root[data-ui="atelier"] .nh-grid{grid-template-columns:1fr!important}.nh-root[data-ui="atelier"] .nh-role-grid{grid-template-columns:1fr 1fr}.nh-root[data-ui="atelier"] .nh-modal-mask{padding:14px}.nh-root[data-ui="atelier"] .nh-modal{max-width:calc(100vw - 28px);max-height:calc(100vh - 28px)}}
 @media(max-width:520px){.nh-root[data-ui="atelier"]{padding:6px}.nh-root[data-ui="atelier"] .nh-head{padding:6px 9px 10px;gap:9px}.nh-root[data-ui="atelier"] .nh-head h1{font-size:20px}.nh-root[data-ui="atelier"] .nh-head>.nh-select{max-width:calc(100% - 100px)}.nh-root[data-ui="atelier"] .nh-head>.nh-row{width:100%;justify-content:flex-end}.nh-root[data-ui="atelier"] .nh-body{gap:3px}.nh-root[data-ui="atelier"] .nh-nav{width:47px;flex-basis:47px;padding:16px 4px;border-radius:15px}.nh-root[data-ui="atelier"] .nh-navitem{padding:9px;min-height:34px}.nh-root[data-ui="atelier"] .nh-page{padding:15px 7px 24px}.nh-root[data-ui="atelier"] .nh-main{padding:0}.nh-root[data-ui="atelier"] .nh-statusbar{padding-inline:10px}.nh-root[data-ui="atelier"] .nh-sbmeta{display:none}.nh-root[data-ui="atelier"] .cw-page-heading h1{font-size:25px}.nh-root[data-ui="atelier"] .cw-creation-card{padding-inline:17px}.nh-root[data-ui="atelier"] .cw-card-top-actions .nh-btn{font-size:9px}.nh-root[data-ui="atelier"] .cw-model-pill{font-size:10px}.nh-root[data-ui="atelier"] .cw-live-metrics{gap:9px}.nh-root[data-ui="atelier"] .cw-live-metrics strong{font-size:13px}.nh-root[data-ui="atelier"] .nh-cardhead,.nh-root[data-ui="atelier"] .nh-cardbody{padding:16px}.nh-root[data-ui="atelier"] .nh-modal{height:auto;max-height:calc(100vh - 28px);border-radius:20px}.nh-root[data-ui="atelier"] .nh-modal>.nh-cardbody{max-height:calc(100vh - 125px)}.nh-root[data-ui="atelier"] .cw-route-heading{padding-left:10px}.nh-root[data-ui="atelier"] .nh-stats{grid-template-columns:1fr 1fr}.nh-root[data-ui="atelier"] .nh-stat{padding:14px}.nh-root[data-ui="atelier"] .nh-table{font-size:11px}.nh-root[data-ui="atelier"] .nh-hero{padding:22px}.nh-root[data-ui="atelier"] .nh-herotitle{font-size:26px}}
+
+/* A02 布局工具：正文区域的横排/竖排与确认行（不影响 .nh-head>.nh-row 胶囊） */
+.nh-root[data-ui="atelier"] .nh-main .nh-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.nh-root[data-ui="atelier"] .nh-main .nh-col{display:flex;flex-direction:column;gap:12px}
+.nh-root[data-ui="atelier"] .nh-ack{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}
+.nh-root[data-ui="atelier"] .nh-ack input{accent-color:var(--nh-accent)}
+.nh-root[data-ui="atelier"] .nh-ack input:focus-visible{outline:2px solid var(--nh-accent);outline-offset:2px}

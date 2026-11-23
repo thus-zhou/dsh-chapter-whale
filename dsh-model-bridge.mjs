@@ -8,14 +8,76 @@ const json = (res, status, value) => {
   res.end(JSON.stringify(value));
 };
 
+/**
+ * P04 bounds. A response is buffered until its terminal frame is known, so every
+ * retained string is charged to one counter measured in **UTF-16 code units**
+ * (`String.prototype.length`, not bytes): each text delta, each reasoning delta,
+ * and every tool call's name + argument delta. The counter only grows, so it equals
+ * the resident text at all times; 16 Mi code units ≈ 32 MiB of UTF-8 payload in the
+ * worst case (2 bytes per unit). Crossing the cap aborts the provider call and the
+ * buffered draft is discarded — never written as a chapter.
+ */
+const MAX_RESPONSE_CHARS = 16 * 1024 * 1024;
+/** No delta at all for this long means the provider is wedged: abort. Covers prepareCall. */
+const FIRST_CHUNK_MS = 120_000;
+/** Hard wall clock for the whole call (prepareCall + stream iteration + terminal write). */
+const TOTAL_MS = 900_000;
+const HEARTBEAT_MS = 10_000;
+/** After the terminal frame, how long trailing usage chunks are still honoured (ms). */
+const TRAILING_USAGE_MS = 2_000;
+
+const positive = (value, fallback) => (Number.isFinite(value) && value > 0 ? Math.trunc(value) : fallback);
+
+/**
+ * Host contract (dsh-llm `src/types.ts` `TokenUsage`, lines 174-196 of the asar bundle):
+ * "Counts are DISJOINT: `inputTokens` is uncached input only; cached input is reported
+ * separately as `cacheReadTokens`/`cacheWriteTokens` (billed input = sum of the three)."
+ * `totalTokens` is optional and "adapters omit it when unavailable or inconsistent".
+ *
+ * So the OpenAI-shaped view must ADD the cache components exactly once, and
+ * `cached_tokens` is a subset of `prompt_tokens` (OpenAI semantics). Missing optional
+ * components stay absent instead of being invented as 0; invalid (NaN/Infinity/negative)
+ * numbers are dropped rather than serialized as null.
+ */
+const count = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : undefined);
+
+function contractUsage(usage) {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const input = count(usage.inputTokens);
+  const output = count(usage.outputTokens);
+  const cacheRead = count(usage.cacheReadTokens);
+  const cacheWrite = count(usage.cacheWriteTokens);
+  const total = count(usage.totalTokens);
+  if (input === undefined && output === undefined) return undefined;
+  const value = {};
+  if (input !== undefined) value.prompt_tokens = input + (cacheRead || 0) + (cacheWrite || 0);
+  if (output !== undefined) value.completion_tokens = output;
+  if (total !== undefined) value.total_tokens = total;
+  if (cacheRead !== undefined || cacheWrite !== undefined) {
+    value.prompt_tokens_details = { cached_tokens: cacheRead || 0 };
+    if (cacheWrite !== undefined) value.prompt_tokens_details.cache_write_tokens = cacheWrite;
+  }
+  value.x_usage = { source: input === undefined || output === undefined ? 'partial' : 'reported', input_excludes_cache: true };
+  return value;
+}
+
 /** Credentials remain inside the owning DSH adapter. This token only gates loopback. */
 export class DshModelBridge {
-  constructor(ctx) {
+  constructor(ctx, options = {}) {
     this.ctx = ctx;
     this.catalog = new Map();
     this.errors = [];
     this.token = randomBytes(32).toString('base64url');
     this.calls = new Set();
+    /** Injectable so tests can prove bounds/timeouts without waiting minutes. */
+    this.limits = {
+      maxChars: positive(options.maxChars, MAX_RESPONSE_CHARS),
+      firstChunkMs: positive(options.firstChunkMs, FIRST_CHUNK_MS),
+      totalMs: positive(options.totalMs, TOTAL_MS),
+      heartbeatMs: positive(options.heartbeatMs, HEARTBEAT_MS),
+    };
+    /** Live heartbeat handle; null whenever no stream is waiting (tests assert this). */
+    this.heartbeat = null;
     this.server = createServer((req, res) => this.handle(req, res));
     this.ready = new Promise((resolve, reject) => {
       this.server.once('error', reject);
@@ -118,9 +180,38 @@ export class DshModelBridge {
     }
     if (req.method !== 'POST' || req.url !== `${PREFIX}/chat/completions`) return json(res, 404, { error: { message: '未知接口' } });
     const controller = new AbortController();
+    const limits = this.limits;
     this.calls.add(controller);
-    res.once('close', () => { if (!res.writableEnded) controller.abort(); });
-    let timer;
+    /** First abort reason wins; it outranks whatever the provider reports afterwards. */
+    let stopReason = null;
+    const stop = (reason) => {
+      if (stopReason) return;
+      stopReason = reason;
+      controller.abort();
+    };
+    // A closed client must stop generation: otherwise a discarded chapter burns tokens
+    // to completion with nobody to receive it.
+    res.once('close', () => { if (!res.writableEnded) stop('client_closed'); });
+    let heartbeat = null;
+    let firstChunk = null;
+    let deadline = null;
+    let terminal = false;
+    const clearTimers = () => {
+      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
+      this.heartbeat = null;
+      if (firstChunk) { clearTimeout(firstChunk); firstChunk = null; }
+      if (deadline) { clearTimeout(deadline); deadline = null; }
+    };
+    /** Exactly one terminal SSE frame per response: payload + [DONE], heartbeat stopped. */
+    const terminate = (payload) => {
+      if (terminal) return false;
+      terminal = true;
+      clearTimers();
+      if (res.writableEnded || res.destroyed) return false;
+      res.write(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`);
+      res.end();
+      return true;
+    };
     try {
       let bytes = 0;
       const chunks = [];
@@ -157,53 +248,108 @@ export class DshModelBridge {
           : body.model === this.defaultModel && this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
       };
       const { provider, model, temperature, maxTokens, reasoningEffort } = options;
+      // The wall clock starts before prepareCall: a wedged provider handshake must not hang the tool.
+      deadline = setTimeout(() => stop('generation_timeout'), limits.totalMs);
+      deadline.unref?.();
       const prepared = await this.ctx.llm.prepareCall({ provider, model,
         ...(temperature === undefined ? {} : { temperature }),
         ...(maxTokens === undefined ? {} : { maxTokens }),
         ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       }, controller.signal);
-      let content = '', reasoning = '', finish, usage, outputSize = 0;
+      let content = '', reasoning = '', finish, usage, finishedAt = 0;
+      /** Single counter over every retained string; see MAX_RESPONSE_CHARS for unit and semantics. */
+      let buffered = 0;
+      let sawChunk = false;
       const toolCalls = new Map();
+      const retain = (text) => {
+        if (!text) return;
+        buffered += text.length;
+        if (buffered > limits.maxChars) {
+          stop('response_too_large');
+          throw new Error('response-too-large');
+        }
+      };
       // Buffer one response so a terminal auth/provider failure never becomes a saved partial chapter.
       if (body.stream) {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-        timer = setInterval(() => res.write(': working\n\n'), 10000);
+        heartbeat = setInterval(() => {
+          if (!res.writableEnded && !res.destroyed) res.write(': working\n\n');
+        }, limits.heartbeatMs);
+        this.heartbeat = heartbeat;
+        heartbeat.unref?.();
       }
+      firstChunk = setTimeout(() => stop('first_chunk_timeout'), limits.firstChunkMs);
+      firstChunk.unref?.();
       for await (const chunk of prepared.stream({ ...options, ...prepared.config })) {
-        outputSize += (chunk.text || chunk.argumentsDelta || '').length;
-        if (chunk.type === 'text-delta') content += chunk.text;
-        else if (chunk.type === 'reasoning-delta') reasoning += chunk.text;
-        else if (chunk.type === 'usage') usage = chunk.usage;
-        else if (chunk.type === 'finish') finish = chunk.reason;
+        // OpenAI's `stream_options.include_usage` puts the token counts in a chunk that
+        // arrives *after* the finish_reason, so a terminal must not close the door on
+        // usage — only on body text. Past the grace window the stream is simply cut.
+        if (finish) {
+          if (Date.now() - finishedAt > TRAILING_USAGE_MS) break;
+          if (chunk.type === 'usage') usage = chunk.usage || usage;
+          continue;
+        }
+        if (!sawChunk) {
+          sawChunk = true;
+          clearTimeout(firstChunk);
+          firstChunk = null;
+        }
+        if (chunk.type === 'text-delta') { retain(chunk.text); content += chunk.text; }
+        else if (chunk.type === 'reasoning-delta') { retain(chunk.text); reasoning += chunk.text; }
+        else if (chunk.type === 'usage') usage = chunk.usage || usage;
+        else if (chunk.type === 'finish') { finish = chunk.reason; finishedAt = Date.now(); }
         else if (chunk.type === 'tool-call-delta') {
+          retain(chunk.name);
+          retain(chunk.argumentsDelta);
           const call = toolCalls.get(chunk.index) || { id: chunk.id, type: 'function', function: { name: '', arguments: '' } };
           if (chunk.name) call.function.name = chunk.name;
           call.function.arguments += chunk.argumentsDelta || '';
           toolCalls.set(chunk.index, call);
         }
-        if (outputSize > 16 * 1024 * 1024) { controller.abort(); throw new Error('response-too-large'); }
       }
+      // An abort the provider swallowed must still fail instead of committing a stub.
+      if (stopReason) throw new Error(stopReason);
       if (!finish || !['stop', 'max-tokens', 'tool-calls'].includes(finish.kind) || (!content.trim() && !toolCalls.size)) {
         throw Object.assign(new Error('model-failed'), { failure: finish?.failure });
       }
-      const openUsage = usage && {
-        prompt_tokens: usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0),
-        completion_tokens: usage.outputTokens, total_tokens: usage.totalTokens,
-        prompt_tokens_details: { cached_tokens: usage.cacheReadTokens || 0 },
-      };
-      const choice = { index: 0, finish_reason: finish.kind === 'max-tokens' ? 'length' : finish.kind === 'tool-calls' ? 'tool_calls' : 'stop' };
+      // A max-tokens cut keeps the draft for diagnostics, but the frame says `length`:
+      // callers must not treat it as a finished, review-ready chapter.
+      const truncated = finish.kind === 'max-tokens';
+      const usageFrame = contractUsage(usage);
+      const choice = { index: 0, finish_reason: truncated ? 'length' : finish.kind === 'tool-calls' ? 'tool_calls' : 'stop' };
       const tool_calls = toolCalls.size ? [...toolCalls.values()] : undefined;
+      const diagnostic = { truncated, finish: finish.kind, buffered_chars: buffered };
       if (body.stream) {
-        res.write(`data: ${JSON.stringify({ choices: [{ ...choice, delta: { content, reasoning_content: reasoning, tool_calls } }], usage: openUsage })}\n\ndata: [DONE]\n\n`);
-        res.end();
-      } else json(res, 200, { model: body.model, choices: [{ ...choice, message: { role: 'assistant', content, reasoning_content: reasoning, tool_calls } }], usage: openUsage });
+        terminate({ choices: [{ ...choice, delta: { content, reasoning_content: reasoning, tool_calls } }],
+          ...(usageFrame ? { usage: usageFrame } : {}), x_chapter_whale: diagnostic });
+      } else {
+        json(res, 200, { model: body.model,
+          choices: [{ ...choice, message: { role: 'assistant', content, reasoning_content: reasoning, tool_calls } }],
+          ...(usageFrame ? { usage: usageFrame } : {}), x_chapter_whale: diagnostic });
+      }
     } catch (error) {
-      const status = Number.isInteger(error.failure?.status) && error.failure.status >= 400 && error.failure.status <= 599 ? error.failure.status : 502;
-      const failure = { error: { message: 'DSH 模型调用失败，请检查宿主中的登录状态和模型设置', status, code: 'DSH_MODEL_FAILED' } };
+      const reason = stopReason;
+      const code = reason === 'first_chunk_timeout' ? 'DSH_MODEL_FIRST_CHUNK_TIMEOUT'
+        : reason === 'generation_timeout' ? 'DSH_MODEL_TIMEOUT'
+        : reason === 'response_too_large' ? 'DSH_MODEL_TOO_LARGE'
+        : reason === 'client_closed' ? 'DSH_MODEL_ABORTED'
+        : 'DSH_MODEL_FAILED';
+      const status = reason === 'first_chunk_timeout' || reason === 'generation_timeout' ? 504
+        : reason === 'response_too_large' ? 413
+        : reason === 'client_closed' ? 499
+        : Number.isInteger(error.failure?.status) && error.failure.status >= 400 && error.failure.status <= 599 ? error.failure.status : 502;
+      const message = reason === 'first_chunk_timeout' ? `DSH 模型首块响应超时（${limits.firstChunkMs} 毫秒）`
+        : reason === 'generation_timeout' ? `DSH 模型生成超时（${limits.totalMs} 毫秒）`
+        : reason === 'response_too_large' ? `DSH 模型响应超过缓冲上限（${limits.maxChars} 字符）`
+        : reason === 'client_closed' ? '客户端已断开，本次生成已中止'
+        : 'DSH 模型调用失败，请检查宿主中的登录状态和模型设置';
+      // A disconnected client cannot receive a frame; never fake a success either.
+      if (reason === 'client_closed' || res.destroyed) return;
+      const failure = { error: { message, status, code } };
       if (!res.headersSent) json(res, status, failure);
-      else { res.write(`data: ${JSON.stringify(failure)}\n\ndata: [DONE]\n\n`); res.end(); }
+      else terminate(failure);
     } finally {
-      clearInterval(timer);
+      clearTimers();
       this.calls.delete(controller);
     }
   }

@@ -9,7 +9,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -217,6 +218,73 @@ test('写白名单里的具体路径确实通过，未列出的不行', () => {
   assert.equal(allowsMutation('DELETE', ['api', 'projects', 'demo', 'samples', 'abc']), false, '未列出的写法不放行');
   assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'creative', 'chat']), false, 'GET 不能当写操作');
   assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'creative', 'chat', 'extra']), false);
+
+  // 0.7.0 收口补齐的五大模块写路由
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'preview']), true);
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'capability']), true);
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'apply']), true);
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'stop']), true);
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'resume']), true);
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'resolve']), true);
+  assert.equal(allowsMutation('POST', ['api', 'jobs', 'j1', 'schedule', 'reconcile']), true);
+  assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'precheck', 'ignore']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'precheck', 'action']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'readers', 'preview']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'readers', 'import']), true);
+  assert.equal(allowsMutation('DELETE', ['api', 'projects', 'demo', 'readers', 'batches', 'b1']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'readers', 'comments']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'readers', 'observations']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'readers', 'observations', 'expire']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'readers', 'observations', 'c1', 'action']), true);
+  assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'browser', 'target']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'browser', 'launch']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'browser', 'stop']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'browser', 'login']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'browser', 'readonly']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'browser', 'publish']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'browser', 'publish', 'reconcile']), true);
+  assert.equal(allowsMutation('PUT', ['api', 'projects', 'demo', 'publish', 'target']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'publish', 'export']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'publish', 'bind']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'publish', 'authorize']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'publish', 'submit']), true);
+  assert.equal(allowsMutation('POST', ['api', 'projects', 'demo', 'publish', 'reconcile']), true);
+
+  // 对应只读 GET 与未授权方法必须被写白名单拒绝
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'entities']), false);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'precheck']), false);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'retrieval']), false);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'evidence', 'impact']), false);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'readers', 'dictionary']), false);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'browser', 'status']), false);
+  assert.equal(allowsMutation('GET', ['api', 'projects', 'demo', 'publish', 'status']), false);
+  assert.equal(allowsMutation('GET', ['api', 'jobs', 'j1', 'schedule']), false);
+  assert.equal(allowsMutation('DELETE', ['api', 'projects', 'demo', 'publish', 'target']), false);
+});
+
+test('防漂移：backend/manager 每一条非 GET /api 写路由都在 WRITE_ROUTES 白名单中', () => {
+  const { allowsMutation } = __internals;
+  const managerDir = join(root, 'backend', 'manager');
+  const files = readdirSync(managerDir).filter((name) => name.endsWith('.py') && !name.startsWith('test_'));
+  const discovered = [];
+  for (const name of files) {
+    const source = readFileSync(join(managerDir, name), 'utf8');
+    for (const match of source.matchAll(/@(?:app|router)\.(post|put|patch|delete)\(\s*["'](\/api\/[^"']+)["']/g)) {
+      const method = match[1].toUpperCase();
+      const routePath = match[2];
+      discovered.push({ name, method, routePath });
+      const segments = routePath
+        .split('/')
+        .filter(Boolean)
+        .map((segment) => (segment.startsWith('{') && segment.endsWith('}') ? 'sample-id' : segment));
+      assert.equal(
+        allowsMutation(method, segments),
+        true,
+        `backend/manager/${name} 中的写路由 ${method} ${routePath} 未加入 index.js WRITE_ROUTES`,
+      );
+    }
+  }
+  assert.ok(discovered.length >= 70, `解析到的写路由数量异常（${discovered.length}）`);
 });
 
 test('读操作不覆盖 /api/_service（它有自己的分支）', () => {
@@ -334,5 +402,20 @@ test('工具：没有审批服务时不能用 confirm 自行放行写操作', as
   await assert.rejects(
     () => tool.execute({ action: 'post', path: '/api/projects/demo/creative/chat', body: {}, confirm: true }, {}),
     /写操作未获批准/,
+  );
+});
+
+test('工具：兼容后端统一 {"code","message"} 错误体', async (t) => {
+  const server = createServer((_req, res) => {
+    res.writeHead(409, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ code: 'capability_unknown', message: '平台排期能力未证实' }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(() => resolve())));
+  const toolConfig = resolveConfig({ rootDir: fixture, port: server.address().port });
+  const tool = __internals.makeTool({ get: (name) => (name === 'approval' ? { request: async () => 'allowed-once' } : undefined) }, toolConfig);
+  await assert.rejects(
+    () => tool.execute({ action: 'post', path: '/api/jobs/j1/schedule/apply', body: {}, confirm: true }, {}),
+    /409 平台排期能力未证实/,
   );
 });

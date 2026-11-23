@@ -301,3 +301,75 @@ test('样式表随 effect 一起回收（审计 F24）', () => {
   for (const dispose of disposers) dispose();
   assert.equal(children.length, 0, 'dispose 后必须从 head 摘掉，否则热重载会留下死样式');
 });
+
+test('0.7.0 错误解析、读者反馈导航与后端路由面板全覆盖', async () => {
+  const { default: assertMod } = await import('node:assert/strict');
+  const fsMod = await import('node:fs');
+  const pathMod = await import('node:path');
+  const vmMod = await import('node:vm');
+  const src = fsMod.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  let factoryFn = null;
+  const ctx = {
+    window: {
+      __ModuleLoader__: {
+        load(spec) {
+          factoryFn = spec.factory;
+        },
+      },
+    },
+    document: { createElement: () => ({}) },
+    Intl: globalThis.Intl,
+    console,
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    AbortController,
+    fetch: async () => ({ ok: true, status: 200, text: async () => '{}' }),
+  };
+  vmMod.runInNewContext(src, ctx);
+  assertMod.ok(typeof factoryFn === 'function', 'module factory registered');
+  const exported = factoryFn((name) => {
+    if (name === 'react') {
+      return {
+        Fragment: 'Fragment',
+        createContext: (v) => ({ Provider: () => null, Consumer: () => null, _default: v }),
+        createElement: () => null,
+        useContext: (c) => (c ? c._default : undefined),
+        useState: (v) => [typeof v === 'function' ? v() : v, () => {}],
+        useEffect: () => {},
+        useRef: (v) => ({ current: v }),
+        useMemo: (fn) => fn(),
+        useCallback: (fn) => fn,
+      };
+    }
+    return {};
+  });
+  const internals = exported.__internals || {};
+  assertMod.equal(typeof internals.apiErrorMessage, 'function', 'apiErrorMessage exposed on __internals');
+  assertMod.equal(internals.apiErrorMessage({ detail: '详情错误' }, 400), '详情错误');
+  assertMod.equal(internals.apiErrorMessage({ code: 'invalid_request', message: '参数非法' }, 422), '参数非法');
+  assertMod.equal(internals.apiErrorMessage({ code: 'stale_buffer' }, 409), 'stale_buffer');
+  assertMod.equal(internals.apiErrorMessage(null, 502), 'HTTP 502');
+
+  assertMod.ok(Array.isArray(internals.NAV), 'NAV exposed on __internals');
+  const flatNav = internals.NAV.flatMap((g) => g.items || []).map((i) => i.id);
+  assertMod.ok(flatNav.includes('readers'), 'NAV includes readers');
+  assertMod.ok(src.includes("'nav.readers'"), 'DICTIONARY includes nav.readers');
+
+  for (const snippet of [
+    '/schedule',
+    '/precheck',
+    '/entities',
+    '/retrieval',
+    '/evidence/impact',
+    '/readers/preview',
+    '/readers/observations',
+    '/browser/target',
+    '/publish/platforms',
+    '/publish/export',
+    '/notifications',
+  ]) {
+    assertMod.ok(src.includes(snippet), `client.js includes route ${snippet}`);
+  }
+});

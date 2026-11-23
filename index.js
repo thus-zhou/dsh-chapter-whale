@@ -32,7 +32,8 @@ import {
 } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import { managedRoot, runtimeAvailable, prepareManaged, managedEnvironment } from './managed-runtime.mjs';
+import { managedRoot, runtimeAvailable, prepareManaged, managedEnvironment,
+  readRunDescription, compareRunDescription, writeRunDescription } from './managed-runtime.mjs';
 import { DshModelBridge } from './dsh-model-bridge.mjs';
 
 const PLUGIN_ID = 'dsh-chapter-whale';
@@ -240,6 +241,28 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/chapters/:chapter/revision/accept',
   'POST /api/projects/:identity/chapters/:chapter/revision/reject',
   'POST /api/projects/:identity/chapters/:chapter/restore',
+  'PUT /api/projects/:identity/precheck/ignore',
+  'POST /api/projects/:identity/precheck/action',
+  'POST /api/projects/:identity/readers/preview',
+  'POST /api/projects/:identity/readers/import',
+  'DELETE /api/projects/:identity/readers/batches/:batch',
+  'POST /api/projects/:identity/readers/comments',
+  'POST /api/projects/:identity/readers/observations',
+  'POST /api/projects/:identity/readers/observations/expire',
+  'POST /api/projects/:identity/readers/observations/:card/action',
+  'PUT /api/projects/:identity/browser/target',
+  'POST /api/projects/:identity/browser/launch',
+  'POST /api/projects/:identity/browser/stop',
+  'POST /api/projects/:identity/browser/login',
+  'POST /api/projects/:identity/browser/readonly',
+  'POST /api/projects/:identity/browser/publish',
+  'POST /api/projects/:identity/browser/publish/reconcile',
+  'PUT /api/projects/:identity/publish/target',
+  'POST /api/projects/:identity/publish/export',
+  'POST /api/projects/:identity/publish/bind',
+  'POST /api/projects/:identity/publish/authorize',
+  'POST /api/projects/:identity/publish/submit',
+  'POST /api/projects/:identity/publish/reconcile',
   'PUT /api/projects/:identity/outline',
   'POST /api/projects/:identity/generate',
   'POST /api/projects/:identity/stage',
@@ -251,6 +274,19 @@ const WRITE_ROUTES = [
   'POST /api/jobs/:identity/run',
   'POST /api/jobs/:identity/recover',
   'POST /api/jobs/:identity/approve',
+  'POST /api/jobs/:identity/schedule/preview',
+  'POST /api/jobs/:identity/schedule/capability',
+  'POST /api/jobs/:identity/schedule/apply',
+  'POST /api/jobs/:identity/schedule/stop',
+  'POST /api/jobs/:identity/schedule/resume',
+  'POST /api/jobs/:identity/schedule/resolve',
+  'POST /api/jobs/:identity/schedule/reconcile',
+  'POST /api/jobs/:identity/notifications/resolve',
+  'POST /api/notifications/recipients',
+  'POST /api/notifications/recipients/:recipient/test',
+  'DELETE /api/notifications/recipients/:recipient',
+  'POST /api/notifications/outbox/:row/requeue',
+  'POST /api/notifications/outbox/:row/resolve',
   'POST /api/operations/:identity/cancel',
   'PUT /api/ai',
   'PUT /api/ai/roles',
@@ -424,7 +460,16 @@ async function probe(config, signal) {
       return { running: false, httpStatus: response.status, error: hint, unconfigured: Boolean(hint), hint };
     }
     const body = await response.json();
-    return { running: body?.service === 'novel-helper-manager', health: body, hint };
+    const running = body?.service === 'novel-helper-manager';
+    if (running) {
+      // 只认本工作区的实例：同端口上别的项目、别的发布服务都不是“我们的管理器”。
+      const verdict = compareRunDescription(readRunDescription(config.rootDir), body, config.rootDir, config.port);
+      if (!verdict.ok) {
+        return { running: false, foreign: true, kind: verdict.kind, health: body,
+          error: verdict.message, hint };
+      }
+    }
+    return { running, health: body, hint };
   } catch (error) {
     return {
       running: false,
@@ -532,7 +577,16 @@ async function ensureStarted(config, signal) {
         };
       }
       const state = await probe(config, signal);
-      if (state.running) return { started: true, pid: child.pid, ...state };
+      if (state.running) {
+        // 只有确认健康且属于本工作区后，才声明“插件持有这个实例”。
+        let description = null;
+        try {
+          description = writeRunDescription(config, state.health || {}, { mode: 'dsh_managed', owner: 'plugin' });
+        } catch (error) {
+          return { started: true, pid: child.pid, descriptionError: String(error?.message || error), ...state };
+        }
+        return { started: true, pid: child.pid, description, ...state };
+      }
       if (child.exitCode !== null) break;
     }
     if (signal?.aborted) return { started: false, aborted: true, pid: child.pid };
@@ -1013,18 +1067,54 @@ function makeTool(ctx, config) {
         if (!approval.allowed) throw new Error(`写操作未获批准：${approval.reason || approval.outcome}`);
       }
 
+      // P04: the bridge provider lives on a loopback port + random token that only
+      // exist after the host adapter was synced. A write that generates must therefore
+      // point the host at the live port/token *before* it is dispatched; a stale port
+      // would answer 401 and burn the chapter. Reads (action=status, GET) stay free.
+      if (modelTriggeringPath(method, path)) {
+        const models = config.hostModels;
+        if (models && typeof models.sync === 'function') {
+          try {
+            // Reuses DshModelBridge.sync (it already coalesces concurrent callers).
+            await models.sync((...call) => requestUpstream(config, ...call));
+          } catch (error) {
+            const detail = String(error?.message || error);
+            // Independent reason: the agent must report a synced-host problem, not a
+            // backend 4xx/5xx, and must not retry against the old endpoint.
+            return { ok: false, error: `模型桥同步失败：${detail}`, reason_code: 'bridge_sync_failed' };
+          }
+        }
+      }
+
       const { response, parsed } = await requestUpstream(config, method, path, args?.body, signal);
       if (!response.ok) {
-        const detail = parsed && typeof parsed === 'object' && parsed.detail
-          ? parsed.detail
+        const detail = parsed && typeof parsed === 'object'
+          ? (parsed.detail || parsed.message || (parsed.code ? String(parsed.code) : ''))
           : typeof parsed === 'string'
             ? parsed.slice(0, 800)
-            : '请求失败';
-        throw new Error(`${response.status} ${detail}`);
+            : '';
+        throw new Error(`${response.status} ${detail || '请求失败'}`);
       }
       return { ok: true, status: response.status, data: parsed };
     },
   };
+}
+
+/**
+ * P04: does this allowed call need the host's model route refreshed before dispatch?
+ *
+ * Every non-GET call that passed `assertToolPath` is a user-approved write, and any
+ * write can start model work (generate, stage, plan, polish/review/revision, batch
+ * resume, creative chat/expand, sample learn, style-profile/memory/continuity rebuild,
+ * job create/update/run/recover/approve, ai/role tests). Syncing is a cheap config PUT
+ * with a 60s cache upstream, so writes sync and reads never do: `action=status`, GET
+ * overviews and any other read must not trigger a paid model call or rebind an
+ * independent provider.
+ */
+function modelTriggeringPath(method, path) {
+  const verb = String(method || '').toUpperCase();
+  if (verb === 'GET' || verb === 'HEAD') return false;
+  return String(path || '').startsWith('/api/');
 }
 
 /**

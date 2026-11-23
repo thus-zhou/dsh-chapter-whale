@@ -14,7 +14,7 @@ test('lightweight download descriptor matches the current runtime and version', 
   assert.equal(spec.buildId, manifest.buildId);
   assert.match(spec.sha256, /^[a-f0-9]{64}$/);
   assert.ok(Number.isSafeInteger(spec.bytes) && spec.bytes > 0 && spec.bytes <= 512 * 1024 * 1024);
-  assert.equal(spec.url, `https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v${manifest.version}/dsh-chapter-whale-${manifest.version}.tgz`);
+  assert.equal(spec.url, `https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v${manifest.version}/dsh-chapter-whale-runtime-win32-x64-${manifest.version}.tgz`);
 });
 
 test('archive entries reject traversal, alternate streams and links before extraction', () => {
