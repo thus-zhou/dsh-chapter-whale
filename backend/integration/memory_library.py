@@ -122,7 +122,7 @@ def validate_item(item):
         raise ValueError("记忆分类无效")
     _text(item.get("title"), 120)
     _text(item.get("content"), 2000)
-    if item.get("status") not in {"active", "conflict", "archived", "superseded"} or type(item.get("pinned")) is not bool:
+    if item.get("status") not in {"active", "conflict", "archived", "superseded", "needs_review"} or type(item.get("pinned")) is not bool:
         raise ValueError("记忆状态无效")
     if not re.fullmatch(r"[a-f0-9]{32}", str(item.get("id", ""))):
         raise ValueError("记忆编号无效")
@@ -386,7 +386,7 @@ def context_budget_default():
         return 12000
 
 
-def context(project, role="B", chapter=1, query="", doc=None, budget=None, names=None):
+def context(project, role="B", chapter=1, query="", doc=None, budget=None, names=None, trace=None):
     budget = context_budget_default() if budget is None else budget
     if type(budget) is not int or budget < 0:
         raise ValueError("上下文预算必须是非负整数")
@@ -481,15 +481,69 @@ def context(project, role="B", chapter=1, query="", doc=None, budget=None, names
                          "sha256": item["source"].get("sha256", "")},
               "valid_from": record(item)["valid_from"], "valid_to": record(item)["valid_to"]}
              for _, item in selected if item["id"] in ids]
-    return {"revision": doc["revision"], "role": role, "chapter": chapter, "ids": ids,
-            "facts": facts, "characters": people,
-            "omitted": omitted + omitted_future + omitted_expired + omitted_stale,
-            "omitted_breakdown": {"budget": omitted, "future": omitted_future,
-                                  "expired": omitted_expired, "stale": omitted_stale},
-            "restricted": [{"reason": "future", "count": omitted_future},
-                           {"reason": "expired", "count": omitted_expired},
-                           {"reason": "stale", "count": omitted_stale}],
-            "text": "\n".join(lines) if (selected or people) else ""}
+    result = {"revision": doc["revision"], "role": role, "chapter": chapter, "ids": ids,
+              "facts": facts, "characters": people,
+              "omitted": omitted + omitted_future + omitted_expired + omitted_stale,
+              "omitted_breakdown": {"budget": omitted, "future": omitted_future,
+                                    "expired": omitted_expired, "stale": omitted_stale},
+              "restricted": [{"reason": "future", "count": omitted_future},
+                             {"reason": "expired", "count": omitted_expired},
+                             {"reason": "stale", "count": omitted_stale}],
+              "text": "\n".join(lines) if (selected or people) else ""}
+    extra = 0
+    entity = entity_block(project, chapter)
+    if entity:
+        # 实体小块也吃预算：超出剩余额度就截断并记入 restricted，不挤占后面的采纳提醒。
+        cap = max(0, budget - used - len(notice) - 1)
+        if len(entity) > cap:
+            clipped = entity[:max(0, cap)].rstrip()
+            result["restricted"].append({"reason": "entity_state", "chars": len(entity) - len(clipped)})
+            entity = (clipped + "\n（物品与事件因上下文预算被截断）") if clipped else ""
+        if entity:
+            result["entity_text"] = entity
+            result["text"] = (result["text"] + "\n" + entity).strip() if result["text"] else entity
+            extra = len(entity) + 1
+    advice = reader_advice_block(project, chapter)
+    if advice:
+        # 采纳提醒也算上下文：超出剩余预算就截断并记入 restricted，不静默挤占后续拼装。
+        cap = max(0, budget - used - extra - len(notice) - 1)
+        if len(advice) > cap:
+            clipped = advice[:max(0, cap)].rstrip()
+            result["restricted"].append({"reason": "reader_advice", "chars": len(advice) - len(clipped)})
+            advice = (clipped + "\n（采纳提醒因上下文预算被截断）") if clipped else ""
+        if advice:
+            result["reader_advice"] = advice
+            result["text"] = (result["text"] + "\n" + advice).strip() if result["text"] else advice
+    if trace is not None:
+        from . import evidence_usage
+        dropped = omitted + omitted_future + omitted_expired + omitted_stale
+        result["trace"] = evidence_usage.log_supply(
+            project, chapter=chapter, stage=str(trace.get("stage") or role),
+            version_sha=str(trace.get("version_sha") or ""), evidence_ids=ids,
+            omitted=[{"id": "", "reason": f"未选 {dropped} 条（预算/未来/过期/失效）"}],
+            op_id=str(trace.get("op_id") or ""))
+    return result
+
+
+def entity_block(project, chapter):
+    """物品与事件块：只在有记录时出现，走独立小预算，不挤占伏笔和人物限制。"""
+    try:
+        from . import entity_state
+        rows = entity_state.holder_rows(project, chapter)
+    except (ValueError, OSError):
+        return ""
+    if not rows:
+        return ""
+    return "物品与事件：\n" + "\n".join(rows[:20])
+
+
+def reader_advice_block(project, chapter):
+    """只有作者已采纳且在本章范围内生效的读者反馈才进来；其余一律空。"""
+    try:
+        from . import observation
+        return observation.reminder_block(project, chapter, work_id=observation.current_work_id(project))
+    except (ValueError, OSError):
+        return ""
 
 
 @costs.attributed("memory",project="project",chapter="chapter",role="D")

@@ -205,6 +205,9 @@ def restore(project, chapter: int, version_id: str, *, op_id: Optional[str] = No
 
     after = chapter_versions.current_version(project, chapter)
     report = quality_gate.status(project, chapter, config=config)
+    from . import invalidation
+    impact = invalidation.invalidate(project, chapters=[chapter], reason="version_restored",
+                                     source=f"version:{str(version_id)[:12]}", actor="author", op_id=identifier)
     return {
         "status": "restored",
         "chapter_id": int(chapter),
@@ -213,6 +216,8 @@ def restore(project, chapter: int, version_id: str, *, op_id: Optional[str] = No
         "sha256": (after or {}).get("sha256"),
         "backup_version_id": (snapshot or before or {}).get("sha256"),
         "report_status": report,
+        "invalidated": impact.get("marked", []),
+        "index_rebuilt": bool(impact.get("rebuilt")),
         "commit": result,
     }
 

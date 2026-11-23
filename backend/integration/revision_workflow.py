@@ -46,7 +46,16 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
         if need_edit or failures or too_short:
             if attempts>=editorial.MAX_CORRECTIONS:raise RuntimeError('本章累计编辑纠偏已达上限；保留修订检查点，未提交')
             suggestions=base+'\n'+editorial.canonical_context(project,chapter)
+            from . import style_rules
+            local=style_rules.check(rewritten,scope='revision',project=project,
+                                    ignore_terms=style_rules.ignore_terms(project))
+            if local['findings']:
+                hints='；'.join(f"{row['rule_id']}：{row['suggestion']}" for row in local['findings'][:6])
+                suggestions+=f'\n本地文风定位（只改这些位置，勿改动情节）：{hints}'
             if failures:suggestions+='\n程序可复核错误：'+'；'.join(failures)
+            from . import observation
+            reminder=observation.reminder_block(project,chapter,work_id=observation.current_work_id(project))
+            if reminder:suggestions+='\n'+reminder
             if too_short:suggestions+=f'\n当前正文仅{body_chars(rewritten,chapter)}字，必须补足有效内容。'
             if state.get('review'):suggestions+='\n'+editorial.revision_guidance(history,state['review'])
             mode=('targeted_fix' if state.get('review',{}).get('review_decision')=='needs_revision'
