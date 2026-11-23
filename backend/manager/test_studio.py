@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from manager import app as module
-from integration import studio, writer_runner as writer, model_roles as roles, bridge, memory_library
+from integration import studio, writer_runner as writer, model_roles as roles, bridge, memory_library, scheduler
 
 PASS={"success":True,"review_decision":"pass","needs_revision":False}
 
@@ -67,6 +67,10 @@ class StudioTests(unittest.TestCase):
         self.ai_path=self.root/"ai.json";writer.atomic_json(self.ai_path,self.config)
         self.enterContext(patch.dict("os.environ",{"NOVEL_HELPER_AI_CONFIG":str(self.ai_path)}))
         self.enterContext(patch.object(module,"DATA",self.root));self.enterContext(patch.object(module,"AI_PATH",self.ai_path))
+        # 调度器默认把 scheduler.json/runtime 落在仓库 backend/ 下；测试必须隔离，否则会写出本地状态目录。
+        self.enterContext(patch.object(scheduler,"SCHEDULER_PATH",self.root/"scheduler.json"))
+        self.enterContext(patch.object(scheduler,"RUNS_ROOT",self.root/"runs"))
+        self.enterContext(patch.object(bridge,"RUNTIME_ROOT",self.root/"runtime"))
         self.application=module.create_app(self.root/"db.sqlite",start_dispatcher=False)
         self.client=TestClient(self.application);self.addCleanup(self.client.close)
         self.identity=self.application.state.store.register(self.project);self.headers={"X-Novel-Helper":"1"}

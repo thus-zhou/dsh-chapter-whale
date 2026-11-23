@@ -836,6 +836,15 @@ async def _generate_chapter_locked(
     finally:
         temporary.unlink(missing_ok=True)
     _save_progress(project_root, selected_chapter)
+    # 重新生成正文同样让「依据旧正文的事实」失效：生成、导入、人工改共用一个入口。
+    try:
+        from . import invalidation
+        invalidation.invalidate(
+            project_root, chapters=[selected_chapter], reason="chapter_generated",
+            source=f"generate:{selected_chapter}",
+            op_id=f"generate-{selected_chapter}-{receipt.get('sha256', '')[:12]}")
+    except (ValueError, OSError, RuntimeError):
+        pass
     candidates = _commit_review_candidates(project_root, selected_chapter, content, generated["review"], _writer_locked=True)
     receipt["candidates"] = candidates
     receipts[str(selected_chapter)] = receipt

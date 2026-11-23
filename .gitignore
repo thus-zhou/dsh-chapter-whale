@@ -10,3 +10,6 @@ backend/books/
 backend/integration_data/
 backend/playwright-browsers/
 .env
+.v0*/
+test/release-cache/
+test/ws-*/

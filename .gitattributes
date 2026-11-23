@@ -1,7 +1,54 @@
-# Keep source line endings as authored: the panel bundle is shipped verbatim, and a
-# CRLF rewrite would make `npm pack` contents differ between machines.
+# 分发字节必须与平台无关：源码与文本固定 LF（无论 core.autocrlf 设置），
+# 二进制按原样保存，绝不做换行符“规范化”。清单哈希覆盖的就是这里的字节。
 * text=auto eol=lf
-*.png binary
-*.jpg binary
-*.svg text
+
+*.py    text eol=lf
+*.pyi   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.rst   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.cfg   text eol=lf
+*.ini   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.svg   text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.zip   binary
+*.gz    binary
+*.tgz   binary
+*.exe   binary
+*.dll   binary
+*.pyd   binary
+*.so    binary
+*.dylib binary
+*.pdf   binary
+*.pyc   binary
+*.bin   binary
+*.dat   binary
+*.sqlite binary
+*.db    binary
+
 assets/fonts/*-OFL.txt whitespace=-blank-at-eol
