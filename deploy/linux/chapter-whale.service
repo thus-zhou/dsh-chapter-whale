@@ -1,0 +1,50 @@
+[Unit]
+Description=码章鲸常驻存稿服务（Linux amd64）
+Documentation=file:///opt/chapter-whale/deploy/linux/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=10001
+Group=10001
+Environment=NOVEL_HELPER_ROOT=/srv/chapter-whale
+Environment=PYTHONPATH=/opt/chapter-whale/backend
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=TZ=Asia/Shanghai
+WorkingDirectory=/opt/chapter-whale
+ExecStart=/usr/bin/python3 -B -X utf8 -m integration.resident_service start --interval 30
+# SIGTERM：停认领 → 当前章写完 → 写检查点 → 退出；40 秒后仍未退出说明卡在写稿，需要人工核对。
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=40
+Restart=on-failure
+RestartSec=15
+
+# 唯一可写目录是数据卷；配置只读；其余文件系统只读。
+StateDirectory=chapter-whale
+ReadWritePaths=/srv/chapter-whale
+ReadOnlyPaths=/opt/chapter-whale /etc/chapter-whale
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+UMask=0027
+
+# 日志：journalctl -u chapter-whale -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=chapter-whale
+
+[Install]
+WantedBy=multi-user.target

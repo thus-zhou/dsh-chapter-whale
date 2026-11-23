@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.chapterwhale.service</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>-B</string>
+    <string>-X</string>
+    <string>utf8</string>
+    <string>-m</string>
+    <string>integration.resident_service</string>
+    <string>start</string>
+    <string>--root</string>
+    <string>/Users/Shared/chapter-whale</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/opt/chapter-whale/backend</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>/opt/chapter-whale/backend</string>
+    <key>PYTHONUTF8</key>
+    <string>1</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+    <!-- launchd 不继承登录 shell 的 PATH；不显式给出就会命中 /usr/bin/python3（3.9 或 CLT 桩）。 -->
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>ExitTimeOut</key>
+  <integer>40</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/Shared/chapter-whale/logs/launchd.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/Shared/chapter-whale/logs/launchd.err.log</string>
+</dict>
+</plist>
