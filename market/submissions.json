@@ -1,28 +1,29 @@
 {
-  "checkedAt": "2026-11-24T21:23:26+08:00",
+  "checkedAt": "2026-11-25T07:46:20+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
-    "version": "0.7.2",
+    "version": "0.7.3",
     "tag": "latest",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
     "registryDownloadVerified": true,
     "provenanceVerified": true,
     "isolatedDshInstallVerified": false,
-    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607",
-    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212",
-    "runtimeBaseline": "0.7.2 cross-platform plugin (code buildId f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3; Windows x64 reuses v0.7.0 runtime b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f; macOS darwin auto-venv verified on macos-latest arm64)",
+    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511406123",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511334800",
+    "runtimeBaseline": "0.7.3 cross-platform plugin (code buildId 5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46; Windows x64 reuses v0.7.0 runtime b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f; macOS darwin auto-venv verified on macos-latest arm64)",
     "isolatedDshNativeLoadVerified": true,
-    "shasum": "d4f6005cd6db3e8fd8235bfbd4b422f3e4607366",
-    "sha256": "53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b",
-    "bytes": 12459335,
-    "checkedAt": "2026-11-24T21:23:26+08:00"
+    "shasum": "40a9b8c3626ffd46842c4229072b5e06b712bfa0",
+    "sha256": "07801973764488ac33f76f5d3c210cb2239786a696610ce51b7bc911d8f6aa52",
+    "bytes": 12465536,
+    "checkedAt": "2026-11-25T07:46:20+08:00",
+    "publishCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45512631920"
   },
   "markets": [
     {
       "market": "awesome-dsh-plugin / dshmarket",
       "status": "submitted",
       "url": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316",
-      "latestUpdatePr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
+      "latestUpdatePr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18605",
       "method": "catalog-pr"
     },
     {
@@ -66,25 +67,28 @@
     }
   ],
   "currentUpdate": {
-    "version": "0.7.2",
-    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.2",
-    "buildId": "f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3",
+    "version": "0.7.3",
+    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.3",
+    "buildId": "5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46",
     "runtimeAssetBuildId": "b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f",
-    "pluginAssetBytes": 12459335,
-    "pluginAssetSha1": "d4f6005cd6db3e8fd8235bfbd4b422f3e4607366",
-    "pluginAssetSha256": "53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b",
+    "pluginAssetBytes": 12465536,
+    "pluginAssetSha1": "40a9b8c3626ffd46842c4229072b5e06b712bfa0",
+    "pluginAssetSha256": "07801973764488ac33f76f5d3c210cb2239786a696610ce51b7bc911d8f6aa52",
     "windowsRuntimeRelease": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0",
     "windowsRuntimeBytes": 282727542,
     "windowsRuntimeSha256": "bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d",
-    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607",
-    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212",
-    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
+    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511406123",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511334800",
+    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18605",
     "catalogState": "open",
     "npmStatus": "published",
-    "checkedAt": "2026-11-24T21:23:26+08:00",
+    "checkedAt": "2026-11-25T07:46:20+08:00",
     "screenshots": "https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
     "screenshotCount": 9,
     "personalInstallUpdated": false,
-    "personalInstallNote": "User desktop profile (0.5.0) kept untouched; GitHub v0.7.2 Release, npm latest 0.7.2 (with SLSA provenance), Windows+macOS CI, README/docs and market entries synced."
+    "personalInstallNote": "User desktop profile kept untouched; GitHub v0.7.3 Release, npm latest 0.7.3 (with SLSA provenance), Windows+macOS CI, README/CHANGELOG/RELEASE_STATUS and market entries synced.",
+    "sha256SumsBytes": 94,
+    "sha256SumsSha256": "8067dcac9243aec9d4428b9baa0c28baa07df9c706c3300c7531c7a491b0f30f",
+    "npmPublishCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45512631920"
   }
 }

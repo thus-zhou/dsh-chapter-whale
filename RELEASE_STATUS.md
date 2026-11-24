@@ -1,8 +1,8 @@
 # 码章鲸 0.7.3 验证记录
 
-本轮完成全量代码审计与多处阻塞及高危缺陷修复（启停与重启恢复、单模型存稿、排期与恢复、本地代理绕过、前后端界面契约与错误处理）。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Release v0.7.3](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.3) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
+本轮完成全量代码审计与多处阻塞及高危缺陷修复（启停与重启恢复、单模型存稿、排期与恢复、本地代理绕过、前后端界面契约与错误处理）。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Release v0.7.3](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.3) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准（npm `latest = 0.7.3` 已通过 SLSA provenance 与公开下载字节校验：`12,465,536` 字节，SHA-256 `07801973764488ac33f76f5d3c210cb2239786a696610ce51b7bc911d8f6aa52`，与 GitHub 发行包完全一致）。
 
-Windows 轻量包从 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 归档取用固定的 Python 和浏览器运行时（`runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`），始终安装 `v0.7.3` 包内后端代码（`buildId=5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46`）。macOS 首启基于 Python 3.11+ 自动创建隔离 `.venv`。
+Windows 轻量包从 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 归档取用固定的 Python 和浏览器运行时（`runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`），始终安装 `v0.7.3` 包内后端代码（`buildId=5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46`）。macOS 首启基于 Python 3.11+ 自动创建隔离 `.venv`。`0.7.3` 平台安装与多环境校验均已通过：[Distribution first start #45511406123](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511406123)（`windows-install` + `macos-install`）、[Source checks #45511334800](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511334800) 与 [Publish verified release to npm #45512631920](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45512631920)。
 
 本轮发布前执行了 Node 测试、100 项后端定向回归测试和托管运行环境完整性校验。真实番茄网页发布与既有 DSH 桌面个人工作区原地升级仍待验证。
 
