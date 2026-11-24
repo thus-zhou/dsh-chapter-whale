@@ -163,22 +163,80 @@ def body_dir(project) -> Path:
 
 
 def chapter_path(project, chapter: int) -> Optional[Path]:
-    """按章号找现有正文；多个同名章号视为冲突，不猜。"""
+    """按章号找现有正文；多个同名章号视为冲突，不猜。
+
+    大小写不敏感卷（APFS 默认）上 `*.MD` 不会被 `glob("*.md")` 列出，
+    所以这里按后缀小写过滤并单独检测「同一名字只差大小写」的冲突——
+    否则会在同一 inode 上新建第二个文件，静默覆盖作者原稿。
+    """
     folder = body_dir(project)
     if not folder.is_dir():
         return None
+    wanted = int(chapter)
     found = []
-    for path in folder.glob("*.md"):
-        parsed = parse_chapter_name(path.name)
-        if parsed and parsed[0] == int(chapter):
-            found.append(path)
+    seen = {}
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            name = entry.name
+            if not name.lower().endswith(".md"):
+                continue
+            try:
+                if not entry.is_file():
+                    continue
+            except OSError:
+                continue
+            parsed = parse_chapter_name(name)
+            if not parsed or parsed[0] != wanted:
+                continue
+            found.append(Path(entry.path))
+            key = unicodedata.normalize("NFC", name).casefold()
+            if key in seen and seen[key] != name:
+                # 只有「同一章号、名字只差大小写」才算冲突；`ﬁ`/`é` 这类
+                # casefold/NFC 等价的无关文件不应拖累别的章。
+                raise VersionConflict("case_conflict")
+            seen[key] = name
     if len(found) > 1:
         raise VersionConflict("duplicate_chapter_files")
     return found[0] if found else None
 
 
-def _chapter_title(project, chapter: int) -> str:
-    path = chapter_path(project, chapter)
+def chapter_map(project) -> Dict[int, Path]:
+    """一次枚举正文目录，返回 {章号: 路径}。
+
+    批量场景（如 `adopt_legacy`）必须用它：逐章调 `chapter_path` 是 O(N²)，
+    300 章项目会从毫秒退化到几十秒，升级看起来像卡死。
+    """
+    folder = body_dir(project)
+    if not folder.is_dir():
+        return {}
+    mapping: Dict[int, Path] = {}
+    seen = {}
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            name = entry.name
+            if not name.lower().endswith(".md"):
+                continue
+            try:
+                if not entry.is_file():
+                    continue
+            except OSError:
+                continue
+            parsed = parse_chapter_name(name)
+            if not parsed:
+                continue
+            number, _title = parsed
+            key = unicodedata.normalize("NFC", name).casefold()
+            if key in seen and seen[key] != name:
+                raise VersionConflict("case_conflict")
+            seen[key] = name
+            if number in mapping:
+                raise VersionConflict("duplicate_chapter_files")
+            mapping[number] = Path(entry.path)
+    return mapping
+
+
+def _chapter_title(project, chapter: int, path: Optional[Path] = None) -> str:
+    path = path or chapter_path(project, chapter)
     if path is None:
         return ""
     parsed = parse_chapter_name(path.name)
@@ -421,8 +479,19 @@ def write_chapter(project, chapter: int, content: str, *, op_id: Optional[str] =
                               base_sha256=expected_sha256, run_id=run_id,
                               attempt_id=attempt_id, note=note, title=title,
                               op_id=op_id)
-    return commit_candidate(project, chapter, document["candidate_id"], op_id=op_id,
-                            expected_sha256=expected_sha256, title=title, allow_new=allow_new)
+    result = commit_candidate(project, chapter, document["candidate_id"], op_id=op_id,
+                              expected_sha256=expected_sha256, title=title, allow_new=allow_new)
+    if str(result.get("status") or "") == "committed":
+        # 正文一旦换了版本，依据旧正文的事实就不再成立：走统一失效入口，不各写一套。
+        try:
+            from . import invalidation
+            digest = str(result.get("content_sha256") or result.get("sha256") or expected_sha256 or "")[:12]
+            result["invalidation"] = invalidation.invalidate(
+                project, chapters=[chapter], reason="chapter_edited",
+                source=f"versions:write_chapter:{digest}", op_id=f"write-{chapter}-{digest}")
+        except (ValueError, OSError, RuntimeError) as exc:
+            result["invalidation"] = {"status": "skipped", "error": str(exc)[:200]}
+    return result
 
 
 def recover_pending(project) -> List[Dict[str, Any]]:
@@ -629,19 +698,15 @@ def prune_adopted(project, chapter: Optional[int] = None) -> Dict[str, Any]:
 def adopt_legacy(project, chapter: Optional[int] = None) -> List[Dict[str, Any]]:
     """把磁盘上的现有正文登记为版本（只读，不修改 .md）。幂等。"""
     index = load_index(project)
+    mapping = chapter_map(project)
     chapters: Iterable[int]
     if chapter is not None:
         chapters = [int(chapter)]
     else:
-        numbers = set()
-        for path in body_dir(project).glob("*.md"):
-            parsed = parse_chapter_name(path.name)
-            if parsed:
-                numbers.add(parsed[0])
-        chapters = sorted(numbers)
+        chapters = sorted(mapping)
     added: List[Dict[str, Any]] = []
     for number in chapters:
-        path = chapter_path(project, number)
+        path = mapping.get(int(number))
         if path is None:
             continue
         data = path.read_bytes()
@@ -654,7 +719,8 @@ def adopt_legacy(project, chapter: Optional[int] = None) -> List[Dict[str, Any]]
         _store_object(project, data)
         meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)), size=len(data),
                                  source="legacy-adopted", op_id=None, run_id=None, attempt_id=None,
-                                 parent=entry.get("current"), title=_chapter_title(project, number),
+                                 parent=entry.get("current"),
+                                 title=_chapter_title(project, number, path),
                                  note="adopted from 正文 without changing the file")
         entry["current"] = sha
         added.append(meta)

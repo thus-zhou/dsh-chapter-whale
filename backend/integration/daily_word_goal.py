@@ -6,12 +6,39 @@ from . import bridge, writer_runner as writer
 from fanqie_auto_publish.publication_safety import valid_receipt
 
 
+def _draft_progress(job, day, result):
+    """只存稿任务的进度按本地审查回执统计；没有任何平台证据也会照实累计。"""
+    project = Path(job['project'])
+    from integration.length_policy import body_chars
+    for chapter, receipt in sorted(writer.reviewed_chapters(project).items()):
+        try:
+            reviewed = datetime.fromisoformat(str(receipt.get('reviewed_at')))
+            if reviewed.tzinfo is None:
+                continue
+        except (ValueError, TypeError):
+            continue
+        if reviewed.astimezone(ZoneInfo(job['timezone'])).date().isoformat() != day:
+            continue
+        try:
+            text = Path(str(receipt.get('destination'))).read_text(encoding='utf-8-sig')
+            words = int(body_chars(text, chapter))
+        except (OSError, UnicodeDecodeError, ValueError, TypeError):
+            result['unknown_word_counts'].append(chapter)
+            continue
+        result['counted_chapters'].append(chapter)
+        result['confirmed_words'] += max(0, words)
+    result['source'] = 'local_review_receipts'
+    return result
+
+
 def progress(job, day):
     target = job.get('daily_word_goals', {}).get(day, 0)
     result = {'date': day, 'target': target, 'confirmed_words': 0,
               'counted_chapters': [], 'unknown_word_counts': []}
     if not target:
         return result
+    if str(job.get('publication_mode') or '') == 'draft_only':
+        return _draft_progress(job, day, result)
     snapshot = bridge.read_json(bridge.COMBINED_ROOT / 'integration_data' /
                                 'real_acceptance' / 'all-published-platform.json', {})
     snapshots = {}

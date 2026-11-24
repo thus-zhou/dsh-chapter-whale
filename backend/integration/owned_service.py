@@ -14,14 +14,20 @@ def restart_stale_coordinator(root,state,now=None):
     pid=value.get('pid');started=value.get('started_at');checked=value.get('checked_at')
     if type(pid) is not int or pid<=0 or not started or not checked:return False
     current=now or datetime.now(timezone.utc)
-    if (current-datetime.fromisoformat(checked)).total_seconds()<90:return False
+    try:
+        started_at=datetime.fromisoformat(started)
+        checked_at=datetime.fromisoformat(checked)
+    except (TypeError, ValueError):
+        # 描述损坏或来自旧版本：只读跳过，绝不据此停止任何进程。
+        return False
+    if (current-checked_at).total_seconds()<90:return False
     # The held scheduler lock proves there is no current chapter owner. If a
     # worker exists we do nothing, regardless of a stale coordinator heartbeat.
     try:
         with writer_runner.file_lock(bridge.RUNTIME_ROOT/'scheduler-execution.lock'):
             script=Path(root).resolve()/'integration/serial_service.py'
             expected=str(script).replace("'","''")
-            timestamp=datetime.fromisoformat(started).astimezone(timezone.utc).isoformat()
+            timestamp=started_at.astimezone(timezone.utc).isoformat()
             code=f"""$ErrorActionPreference='Stop'
 $taskPid={pid}
 $taskProcess=Get-Process -Id $taskPid

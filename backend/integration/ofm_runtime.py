@@ -1,12 +1,31 @@
-"""Own independent OFM process, private data, bounded server-side management."""
+"""托管独立免费渠道（OFM）进程、私有数据目录与受限的管理接口。
+
+凭据编解码子进程的解释器契约（P03：确定性、可校验、不依赖 PATH 命中顺序）：
+
+1. 运行进程自身 ``sys.executable``：非空、绝对路径、存在、是文件、可执行且能真正跑起来时
+   直接采用。托管模式下它就是 Node 复制出来的 ``<工作区>/.venv/Scripts/python.exe``，
+   与父进程同一 Windows 用户、同一 DPAPI 作用域，因此能解开旧密文。
+2. 显式配置 ``NOVEL_HELPER_PYTHON``：只在第 1 条不可用（宿主嵌入解释器为空或无效）时
+   才采用；一旦设置就必须校验通过，校验失败直接报错、不静默回退，避免换错用户作用域。
+3. 托管/构建包路径 ``<工作区>/.venv/Scripts/python.exe``：Node 把发行包 ``runtime/python``
+   复制到这里（即 ``config.python`` 的落点），宿主解释器不可用时用它兜底。
+4. 以上都不可用：抛中文可操作错误（说明缺什么、下一步做什么）；全程不硬编码盘符，
+   也不裸用 ``"python"`` 依赖 PATH 顺序。
+
+``ensure_started()`` 在拉起 Node 服务之前先跑 ``credential_runtime()``：解释器与
+``credential_codec.py`` 必须完成一次当前用户 DPAPI 的加解密往返。失败时 Node 侧凭据仓库
+根本拿不到控制权，旧密文保持原样——Node 的保存路径同样是“先加密成功，才原子落盘”。
+"""
 import json
 import hashlib
 import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
+from typing import List, Optional, Tuple
 from urllib.parse import urlsplit
 from urllib.error import HTTPError
 from urllib.request import Request,build_opener,ProxyHandler
@@ -19,6 +38,105 @@ HOME=DATA/'ofm-home'
 INFO=DATA/'ofm-service.json'
 CONTROL=DATA/'ofm-control.json'
 SOURCE_REVISION='25151bab43ff28bfc0eef5a3dbec4443ecc6d2f2'
+# 解释器契约用到的常量：只在这里写一次，避免调用点各处拼路径。
+HELPER_PYTHON_ENV='NOVEL_HELPER_PYTHON'
+HELPER_CODEC_ENV='NOVEL_HELPER_CREDENTIAL_CODEC'
+# Node 托管模式把发行包 runtime/python 复制到 <工作区>/.venv/Scripts，裸 Windows 布局。
+MANAGED_PYTHON=Path('.venv')/'Scripts'/'python.exe'
+# 编解码脚本与本模块同目录；开发模式（<repo>/backend/integration）和托管模式
+# （<工作区>/integration）都必定成立，不依赖 NOVEL_HELPER_ROOT 是否已设置。
+CODEC_SCRIPT=Path(__file__).resolve().parent/'credential_codec.py'
+_NO_WINDOW=getattr(subprocess,'CREATE_NO_WINDOW',0)
+_VERSION_PROBE='import sys;sys.stdout.write(str(sys.version_info[0]))'
+
+
+def _validate_helper_python(value:object, source:str, timeout:float=15.0) -> Path:
+    """校验候选解释器：绝对路径、存在、是文件、可执行，且真的能作为 Python 3 跑起来。
+
+    失败一律抛中文 ``ValueError``，消息里带来源与路径，便于直接照着修。
+    """
+    text='' if value is None else str(value).strip()
+    if not text:raise ValueError(f'{source}不可用：路径为空')
+    try:candidate=Path(text).expanduser()
+    except (OSError,ValueError) as error:raise ValueError(f'{source}不可用：路径无法解析') from error
+    if not candidate.is_absolute():raise ValueError(f'{source}不可用：{candidate} 不是绝对路径')
+    candidate=candidate.resolve()
+    if not candidate.exists():raise ValueError(f'{source}不可用：{candidate} 不存在')
+    if not candidate.is_file():raise ValueError(f'{source}不可用：{candidate} 不是文件')
+    if os.name=='nt' and candidate.suffix.lower()!='.exe':raise ValueError(f'{source}不可用：{candidate} 不是 Windows 可执行文件（需要 python.exe）')
+    if not os.access(candidate,os.X_OK):raise ValueError(f'{source}不可用：{candidate} 不可执行')
+    try:
+        probe=subprocess.run([str(candidate),'-B','-X','utf8','-c',_VERSION_PROBE],stdin=subprocess.DEVNULL,
+            capture_output=True,timeout=timeout,creationflags=_NO_WINDOW)
+    except (OSError,subprocess.SubprocessError) as error:
+        raise ValueError(f'{source}不可用：{candidate} 无法运行（{error.__class__.__name__}）') from error
+    if probe.returncode!=0 or probe.stdout.strip()!=b'3':
+        raise ValueError(f'{source}不可用：{candidate} 无法作为 Python 3 运行（退出码 {probe.returncode}）')
+    return candidate
+
+
+def resolve_helper_python(self_python:Optional[object]=None, configured:Optional[object]=None,
+        bundled:Optional[object]=None, root:Optional[object]=None) -> Path:
+    """按模块 docstring 的三条优先级选出凭据编解码子进程的解释器。
+
+    ``self_python``/``configured``/``bundled`` 允许测试注入；默认分别取
+    ``sys.executable``、``os.environ[HELPER_PYTHON_ENV]``、``<root>/.venv/Scripts/python.exe``。
+    """
+    if self_python is None:self_python=sys.executable
+    if configured is None:configured=os.environ.get(HELPER_PYTHON_ENV,'')
+    if bundled is None:bundled=str(Path(root or ROOT)/MANAGED_PYTHON)
+    reasons:List[str]=[]
+    try:
+        return _validate_helper_python(self_python,'运行进程自身（sys.executable）')
+    except ValueError as error:
+        reasons.append(str(error))
+    # 显式配置只在自身解释器不可用时才看；一旦设置就必须可用，不做静默回退。
+    if configured is not None and str(configured).strip():
+        return _validate_helper_python(configured,f'显式配置 {HELPER_PYTHON_ENV}')
+    try:
+        return _validate_helper_python(bundled,'托管发行包解释器')
+    except ValueError as error:
+        reasons.append(str(error))
+    raise ValueError('未找到可用的 Python 解释器：'+'；'.join(reasons)
+        +f'。请重新安装完整发行包，或在设置里指定 python 路径（{HELPER_PYTHON_ENV} 指向 python.exe 的绝对路径，'
+        +f'托管默认位置 {Path(root or ROOT)/MANAGED_PYTHON}）。')
+
+
+def verify_credential_codec(python:object, codec:object=CODEC_SCRIPT, timeout:float=20.0) -> Path:
+    """确认解释器 + 编解码脚本可用：子进程里跑一次当前用户 DPAPI 加解密往返。
+
+    子进程不换用户名、不换令牌、不注入其它环境，因此与父进程是同一个 Windows 用户、
+    同一个 DPAPI 作用域；只有它返回 ``ok`` 才允许 Node 侧凭据仓库开始读写。
+    """
+    interpreter=Path(str(python)).resolve()
+    script=Path(str(codec)).resolve()
+    if not interpreter.is_file():raise ValueError(f'凭据编解码组件不可用：解释器 {interpreter} 不存在或不是文件，旧凭据未被改动；请重新安装完整发行包')
+    if not script.is_file():raise ValueError(f'凭据编解码组件不可用：{script} 不存在，旧凭据未被改动；请重新安装完整发行包')
+    try:
+        probe=subprocess.run([str(interpreter),'-B','-X','utf8',str(script),'probe'],input=b'',
+            capture_output=True,timeout=timeout,creationflags=_NO_WINDOW)
+    except (OSError,subprocess.SubprocessError) as error:
+        raise ValueError(f'凭据编解码组件无法启动：{error.__class__.__name__}，旧凭据未被改动；请重新安装完整发行包') from error
+    if probe.returncode!=0 or probe.stdout.strip()!=b'ok':
+        detail=probe.stderr.decode('utf-8','replace').strip().replace('\n',' ')[:200] or f'退出码 {probe.returncode}'
+        raise ValueError(f'凭据编解码组件不可用：{detail}，旧凭据未被改动；请确认当前 Windows 账号能访问用户配置目录，或重新安装完整发行包')
+    return script
+
+
+def credential_runtime(root:Optional[object]=None) -> Tuple[Path,Path]:
+    """返回已经验证过的 (解释器, 编解码脚本)；任一环节不可用都抛中文错误。"""
+    python=resolve_helper_python(root=root)
+    return python,verify_credential_codec(python,CODEC_SCRIPT)
+
+
+def verify_credential_store(path:object) -> Optional[Path]:
+    """已有独立凭据文件必须是 DPAPI 信封；格式不对时宁可不启动，也不让新仓库覆盖旧值。"""
+    target=Path(str(path))
+    if not target.exists():return None
+    doc=strict(target)
+    if doc.get('schema')!='novel-helper.dpapi.v1' or not isinstance(doc.get('protected'),str) or not doc.get('protected'):
+        raise ValueError(f'独立凭据文件不是 DPAPI 格式（{target.name}），未启动服务，也未改动旧凭据；请先备份该文件后重试')
+    return target
 
 
 def verify_source():
@@ -81,6 +199,9 @@ def ensure_started(start=False):
         except (OSError,ValueError,subprocess.SubprocessError):pass
         HOME.mkdir(parents=True,exist_ok=True)
         if os.name!='nt':raise ValueError('本版本凭据保护要求Windows DPAPI')
+        # 先把解释器与编解码组件验证通过：Node 侧凭据仓库在构造时解密、保存时先加密后落盘，
+        # 这里的失败发生在任何写入之前，旧密文因此不会被清零或降级成明文。
+        python,codec=credential_runtime()
         # New independent directory only. Do not touch the user's dsh directory.
         if HOME.resolve()!=HOME.absolute() or HOME.is_symlink():raise ValueError('凭据目录不可为链接')
         user=os.environ.get('USERNAME')
@@ -89,14 +210,15 @@ def ensure_started(start=False):
         # Fail before the upstream JsonStore can replace a damaged file.
         for name in ('settings.json','stats.json','catalog.json','availability.json','channel-credentials.json'):
             if (HOME/name).exists():strict(HOME/name)
+        verify_credential_store(HOME/'channel-credentials.json')
         node=shutil.which('node')
         if not node:raise ValueError('未找到Node.js运行环境')
         verify_source()
         env=os.environ.copy()
         for key in list(env):
             if key.startswith('DSH_') or key.startswith('OFM_'):env.pop(key,None)
-        env.update(NOVEL_HELPER_CREDENTIAL_CODEC=str(ROOT/'integration/credential_codec.py'),
-            NOVEL_HELPER_PYTHON=str(ROOT/'.venv/Scripts/python.exe'),NOVEL_HELPER_CHECKIN_OPT_IN='1')
+        env.update(NOVEL_HELPER_CREDENTIAL_CODEC=str(codec),NOVEL_HELPER_PYTHON=str(python),
+            NOVEL_HELPER_CHECKIN_OPT_IN='1')
         subprocess.Popen([node,str(ROOT/'integration/ofm_service.mjs')],cwd=str(ROOT),env=env,
             stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW)

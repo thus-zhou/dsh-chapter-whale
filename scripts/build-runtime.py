@@ -18,6 +18,34 @@ REQUIREMENTS = ['fastapi==0.141.1', 'uvicorn==0.53.0', 'pydantic==2.13.5', 'http
                 'python-multipart', 'aiofiles', 'pillow', 'requests']
 
 
+TEXT_SUFFIXES = ('.py', '.pyi', '.md', '.json', '.txt', '.css', '.html', '.js', '.mjs', '.cjs',
+                 '.yml', '.yaml', '.toml', '.cfg', '.ini', '.sh', '.bat', '.ps1', '.lua', '.xml',
+                 '.svg', '.csv', '.tsv', '.rst', '.po', '.pot', '.lock', '.gitignore', '.gitattributes')
+
+
+def check_line_endings(files):
+    """分发字节必须是 LF：清单哈希一旦覆盖 CRLF，autocrlf=true 的机器检出就会全部失配。"""
+    broken = []
+    for name in files:
+        path = ROOT / name
+        # runtime/ 是第三方 wheel 的原样分发字节，换行由上游决定；
+        # 这里只约束本仓库自己的源码文本，避免改写第三方文件后哈希失真。
+        if name.replace('\\', '/').startswith('runtime/'):
+            continue
+        if not path.name.lower().endswith(TEXT_SUFFIXES):
+            continue
+        data = path.read_bytes()
+        if b'\0' in data:
+            continue
+        if b'\r\n' in data:
+            broken.append(name)
+    if broken:
+        detail = '\n'.join(f'  {name}' for name in broken[:40])
+        more = '' if len(broken) <= 40 else f'\n  ……共 {len(broken)} 个文件'
+        raise ValueError('以下分发文本文件使用了 CRLF，必须先转换为 LF 再生成清单：\n'
+                         f'{detail}{more}')
+
+
 def write_manifest():
     runtime = ROOT / 'runtime'
     previous = json.loads((ROOT / 'runtime-manifest.json').read_text(encoding='utf-8'))
@@ -35,9 +63,11 @@ def write_manifest():
                 if path.is_symlink():
                     raise ValueError(f'发行目录不接受符号链接：{path}')
                 files[path.relative_to(ROOT).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    check_line_endings(files)
     previous.update(version=json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version'],
                     buildId=hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest(), files=files)
-    (ROOT / 'runtime-manifest.json').write_text(json.dumps(previous, indent=2) + '\n', encoding='utf-8')
+    (ROOT / 'runtime-manifest.json').write_text(json.dumps(previous, indent=2) + '\n',
+                                                 encoding='utf-8', newline='\n')
     print(json.dumps({'files': len(files), 'buildId': previous['buildId']}, ensure_ascii=False))
 
 
@@ -53,7 +83,8 @@ def main():
         raise ValueError('Python archive does not match the official release manifest')
     with zipfile.ZipFile(archive) as source:
         source.extractall(python)
-    (python / 'python313._pth').write_text('python313.zip\n.\nLib/site-packages\n../../backend\n', encoding='utf-8')
+    (python / 'python313._pth').write_text('python313.zip\n.\nLib/site-packages\n../../backend\n',
+                                            encoding='utf-8', newline='\n')
     packages = python / 'Lib/site-packages'
     report = runtime / 'pip-report.json'
     if not report.exists():
@@ -64,7 +95,7 @@ def main():
     dependencies = json.loads(report.read_text(encoding='utf-8'))['install']
     (ROOT / 'requirements-runtime.lock').write_text('\n'.join(
         f"{p['metadata']['name']}=={p['metadata']['version']} --hash=sha256:{p['download_info']['archive_info']['hashes']['sha256']}"
-        for p in dependencies) + '\n', encoding='utf-8')
+        for p in dependencies) + '\n', encoding='utf-8', newline='\n')
     # Browser binaries are installed by the pinned Playwright driver, never taken from a browser profile.
     browsers = runtime / 'browsers'
     if not list(browsers.glob('chromium-*')):
@@ -73,7 +104,8 @@ def main():
     manifest = {'platform': 'win32-x64', 'python': '3.13.17',
                 'pythonSource': PYTHON_URL, 'pythonSha256': digest,
                 'distributionStatus': 'tested-without-live-publish'}
-    (ROOT/'runtime-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
+    (ROOT/'runtime-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n',
+                                              encoding='utf-8', newline='\n')
     write_manifest()
 
 

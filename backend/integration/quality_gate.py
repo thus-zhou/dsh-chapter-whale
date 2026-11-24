@@ -31,8 +31,11 @@ def values(config=None):
     return score.settings(config)
 
 
-def judge(review, config=None):
-    """返回质量判断。quality_pass 为 True/False/None（None = 证据不足，不等于通过）。"""
+def judge(review, config=None, body=None, project=None):
+    """返回质量判断。quality_pass 为 True/False/None（None = 证据不足，不等于通过）。
+
+    `body` 给出时并入本地文风定位（local_style）：只作并列证据，不改变模型结论与门槛判定。
+    """
     parsed = (review or {}).get("quality") if isinstance(review, dict) else None
     computed = score.compute(parsed if parsed is not None else (review or {}).get("raw_review", ""), values(config))
     verdict = (review or {}).get("review_decision") if isinstance(review, dict) else None
@@ -62,6 +65,24 @@ def judge(review, config=None):
             passed = False
             reasons.append("model_verdict_conflict")
             failures.append("模型结论为需修改，但分项均在门槛之上")
+    local = {"count": 0, "rules": [], "advisory_only": [], "skipped": True}
+    if isinstance(body, str) and body.strip():
+        from . import style_rules
+        found = style_rules.check(body, scope="quality_gate", project=project,
+                                  ignore_terms=style_rules.ignore_terms(project) if project else ())
+        local = {"count": len(found["findings"]),
+                 "rules": sorted({row["rule_id"] for row in found["findings"]}),
+                 "advisory_only": found["advisory_only"], "skipped": False}
+    reader_advice = {"count": 0, "cards": [], "skipped": True}
+    if project is not None:
+        chapter = (review or {}).get("chapter") if isinstance(review, dict) else None
+        if isinstance(chapter, int) and chapter > 0:
+            from . import observation
+            cards = observation.active_cards(project, chapter, work_id=observation.current_work_id(project))
+            reader_advice = {"count": len(cards),
+                             "cards": [{"id": card.get("id"), "range": card.get("range"),
+                                        "metric": card.get("metric_label")} for card in cards],
+                             "skipped": False}
     return {
         "schema_version": SCHEMA,
         "quality_pass": passed,
@@ -74,6 +95,8 @@ def judge(review, config=None):
         "config_hash": computed["config_hash"],
         "thresholds": computed["thresholds"],
         "judged_at": _now(),
+        "local_style": local,
+        "reader_advice": reader_advice,
     }
 
 
@@ -244,6 +267,25 @@ def public_report(project, chapter, config=None):
             "issues": (computed.get("issues") or [])[:8],
             "summary": (computed.get("evidence") or "")[:600],
             "legacy_unscored": result.get("legacy_unscored"),
+            "local_style": _local_style(project, chapter),
         },
         "status": status(project, chapter, record, config=config),
     }
+
+
+def _local_style(project, chapter):
+    """面板读报告时顺带给出本地文风定位：只读，不写指标、不改判定。"""
+    try:
+        from . import style_rules
+        from .chapter_versions import chapter_path
+
+        path = chapter_path(project, chapter)
+        if not path or not Path(path).exists():
+            return {"count": 0, "rules": [], "advisory_only": [], "skipped": "no_body"}
+        text = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+        found = style_rules.check(text, scope="quality_report", project=project,
+                                  ignore_terms=style_rules.ignore_terms(project), record=False)
+        return {"count": len(found["findings"]), "rules": found["counts"],
+                "advisory_only": found["advisory_only"], "skipped": ""}
+    except (ValueError, OSError, RuntimeError) as error:
+        return {"count": 0, "rules": [], "advisory_only": [], "skipped": f"unavailable:{error}"}

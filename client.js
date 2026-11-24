@@ -50,15 +50,19 @@
             'panel.starting': '正在启动…',
             'panel.stop': '停止服务',
             'panel.stopping': '正在停止…',
+            'nav.group.start': '开始',
             'nav.group.overview': '总览',
             'nav.group.creation': '创作',
             'nav.group.publish': '发布',
             'nav.group.system': '系统',
+            'nav.flow': '开书到日更',
+            'nav.setup': '开始创作与账号',
             'nav.dashboard': '工作台',
             'nav.chapters': '作品与章节',
             'nav.memory': '共享记忆',
             'nav.brief': '创作约定',
             'nav.outline': '大纲与规划',
+            'nav.readers': '读者反馈',
             'nav.publish': '发布队列',
             'nav.jobs': '日更任务',
             'nav.ai': 'AI 设置',
@@ -74,15 +78,19 @@
             'panel.starting': 'Starting…',
             'panel.stop': 'Stop service',
             'panel.stopping': 'Stopping…',
+            'nav.group.start': 'Start',
             'nav.group.overview': 'Overview',
             'nav.group.creation': 'Writing',
             'nav.group.publish': 'Publishing',
             'nav.group.system': 'System',
+            'nav.flow': 'Start to daily',
+            'nav.setup': 'Setup & accounts',
             'nav.dashboard': 'Dashboard',
             'nav.chapters': 'Works & chapters',
             'nav.memory': 'Shared memory',
             'nav.brief': 'House rules',
             'nav.outline': 'Outline & plan',
+            'nav.readers': 'Reader feedback',
             'nav.publish': 'Publish queue',
             'nav.jobs': 'Daily jobs',
             'nav.ai': 'AI settings',
@@ -1221,11 +1229,16 @@
           "\"atelier\"][data-theme=\"light\"] .cw-ai-star{background:var(--a)}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon{border:0;background:conic-gradient(from 25deg,transparent 3%,var(--a) 28%,var(--b) 55%,var(--c) 72%,transparent 96%);mask:radial-gradient(closest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));box-shadow:none}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon:nth-child(2){background:conic-gradient(from 135deg,transparent,var(--c),var(--b),transparent)}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon:nth-child(3){background:conic-gradient(from 70deg,transparent,var(--a),var(--c),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"polish\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--b),var(--c),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"review\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--a),var(--mint),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"error\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--error),transparent);animation:none}\n.nh-root[data-ui=\"atelier\"]:is([data-status=\"idle\"],[data-status=\"success\"]) :is(.cw-ai-core,.cw-ai-ribbon,.cw-ai-star){animation:none}\n.nh-root[data-ui=\"atelier\"][data-paused=\"true\"] .cw-ai-presence{opacity:.35}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-weight:350}\n@media (min-width:851px) and (max-width:1080px){.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:318px;padding-top:21px;padding-bottom:17px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{margin-top:11px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{margin-top:18px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics{padding-top:12px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{top:119px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript{margin-top:13px}}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-manuscript-card{height:330px;padding:21px 24px 17px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] main{padding-top:18px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-page-heading{margin-bottom:18px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-word-progress{margin-top:15px}\n@media (min-width:1600px){.nh-root[data-ui=\"atelier\"]{--content-pad:42px;--sidebar-w:220px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{gap:22px;padding-inline:26px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:362px;padding-inline:33px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:16px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:32px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:29px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-size:40px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{right:35px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:18px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding-inline:16px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{font-size:14px;min-height:44px}}\n@media (max-width:1250px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:185px;--content-pad:23px;--gap:18px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding-inline:18px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding-inline:10px}\n.nh-root[data-ui=\"atelier\"] .cw-brand{padding-inline:7px}\n.nh-root[data-ui=\"atelier\"] .cw-brand>span{font-size:19px}\n.nh-root[data-ui=\"atelier\"] .cw-project-picker{padding-inline:8px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{padding-inline:10px;font-size:12px;gap:10px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{padding-inline:23px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:25px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:10px;padding-inline:9px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{right:17px;width:100px;height:100px;top:138px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-",
           "size:34px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card,.nh-root[data-ui=\"atelier\"] .cw-next-card{padding-inline:20px}}\n@media (max-width:1080px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:63px;--content-pad:24px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding:13px 14px 20px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding:23px 9px 15px;min-height:620px;align-items:center;gap:28px;border-radius:22px}\n.nh-root[data-ui=\"atelier\"] .cw-brand{padding:0}\n.nh-root[data-ui=\"atelier\"] .cw-brand>span,.nh-root[data-ui=\"atelier\"] .cw-project-picker,.nh-root[data-ui=\"atelier\"] .cw-nav-label,.nh-root[data-ui=\"atelier\"] .cw-nav-live,.nh-root[data-ui=\"atelier\"] .cw-nav-count,.nh-root[data-ui=\"atelier\"] .cw-appearance-entry>span{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar nav{width:100%;gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{font-size:0;gap:0;justify-content:center;padding:10px;min-height:41px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item .cw-icon{width:18px;height:18px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar-bottom{width:100%}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry{padding:10px}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry>.cw-icon{width:18px;height:18px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:26px}\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr)}\n.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}}\n@media (max-width:850px){.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:1fr}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card{height:332px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{width:116px;height:110px;right:40px;top:125px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{max-width:82%}\n.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:1fr}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-muted{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:27px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:18px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:12px}\n.nh-root[data-ui=\"atelier\"] .cw-next-card{padding-bottom:22px}\n.nh-root[data-ui=\"atelier\"] .cw-model-connected{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-top-actions{gap:0}\n.nh-root[data-ui=\"atelier\"] .cw-vertical-divider{display:none}}\n@media (max-width:520px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:52px;--content-pad:14px;--gap:15px;--radius:18px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding:10px 8px 16px;gap:0}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding:20px 6px 12px;top:10px;height:calc(100vh - 52px);border-radius:17px}\n.nh-root[data-ui=\"atelier\"] .cw-brand-whale{width:27px;height:24px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{padding:9px;min-height:37px;border-radius:10px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item .cw-icon{width:17px;height:17px}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry{padding:9px}\n.nh-root[data-ui=\"atelier\"] .cw-topbar{height:42px}\n.nh-root[data-ui=\"atelier\"] .cw-breadcrumbs{font-size:10px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-breadcrumbs .cw-icon{width:10px;height:10px}\n.nh-root[data-ui=\"atelier\"] .cw-floating-tools{padding:2px 4px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-floating-tools .cw-avatar{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-icon-button{width:27px;height:27px}\n.nh-root[data-ui=\"atelier\"] .cw-preview-bar{padding:0 12px;font-size:9px;gap:6px}\n.nh-root[data-ui=\"atelier\"] .cw-preview-separator,.nh-root[data-ui=\"atelier\"] .cw-preview-bar>span>.cw-muted,.nh-root[data-ui=\"atelier\"] .cw-host-toggle,.nh-root[data-ui=\"atelier\"] .cw-quiet-button>span{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-preview-actions{gap:9px}\n.nh-root",
           "[data-ui=\"atelier\"] .cw-preview-bar select{font-size:10px;max-width:85px}\n.nh-root[data-ui=\"atelier\"] .cw-scenario-control{gap:4px}\n.nh-root[data-ui=\"atelier\"] main{padding-top:18px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading{gap:10px;margin-bottom:22px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading .cw-button{min-height:33px;font-size:10px;padding:7px 11px;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading .cw-button .cw-icon{width:13px;height:13px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta{gap:7px;align-items:flex-start}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>div{flex-direction:column;align-items:flex-start;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>div>strong{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-text-button{gap:4px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-text-button strong{font-size:13px}\n.nh-root[data-ui=\"atelier\"] .cw-live-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot{flex-wrap:wrap;font-size:9px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot .cw-eta{width:100%;margin-left:0}\n.nh-root[data-ui=\"atelier\"] .cw-overall-progress{padding-bottom:17px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{padding:20px 18px 16px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card{height:333px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:25px;margin-top:15px}\n.nh-root[data-ui=\"atelier\"] .cw-card-topline{gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:6px}\n.nh-root[data-ui=\"atelier\"] .cw-section-kicker{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:9px;padding:5px 8px;min-height:29px;gap:4px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button .cw-icon{width:11px;height:11px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:10px;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill>.cw-muted{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-model-reasoning{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{max-width:100%;margin-top:25px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-size:34px}\n.nh-root[data-ui=\"atelier\"] .cw-word-target{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{width:90px;height:90px;right:15px;top:134px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics{gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:16px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4{font-size:17px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px;line-height:2}\n.nh-root[data-ui=\"atelier\"] .cw-pipeline-card{padding:18px 9px 11px;border-radius:16px;margin-top:15px}\n.nh-root[data-ui=\"atelier\"] .cw-stage{padding-inline:0;gap:7px;min-height:78px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-copy strong{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-state{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-node{height:25px;width:25px;font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-flow-rail{top:12px}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card,.nh-root[data-ui=\"atelier\"] .cw-next-card{padding:18px 16px}\n.nh-root[data-ui=\"atelier\"] .cw-card-tab{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-card-tabs{gap:15px}\n.nh-root[data-ui=\"atelier\"] .cw-subtle-badge{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row{gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index{font-size:10px;width:19px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status .cw-icon{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-settings-drawer{width:calc(100vw - 22px);inset:10px 11px;border-radius:22px}\n.nh-root[data-ui=\"atelier\"] .cw-drawer-heading{padding:20px}\n.nh-root[data-ui=\"atelier\"] .cw-drawer-content{padding-inline:20px}\n.nh-root[data-ui=\"atelier\"] .",
-          "reader-dialog{padding:24px!important}\n.nh-root[data-ui=\"atelier\"] #dialog-content h2{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-text p{font-size:16px!important}\n.nh-root[data-ui=\"atelier\"] .cw-toast{font-size:10px;padding:12px 14px;max-width:calc(100vw - 35px);white-space:normal}}\n.nh-root[data-ui=\"atelier\"]{\n --nh-base:transparent;--nh-surface:rgb(var(--surface)/.9);--nh-surface2:rgb(var(--card)/.94);\n --nh-border:var(--line-strong);--nh-border-soft:var(--line);--nh-ink:var(--ink);--nh-ink2:var(--ink2);--nh-ink3:var(--muted);\n --nh-accent:var(--a);--nh-cyan:var(--accent);--nh-hover:var(--selected);--nh-ok:var(--success);--nh-warn:var(--warning);--nh-err:var(--error);\n --nh-gap:20px;--nh-pad:23px;--nh-row:37px;--nh-fs:13px;\n background:radial-gradient(ellipse at 90% 0%,#28598530,transparent 65%),rgb(var(--surface)/.9);isolation:isolate;\n font-family:\"Whale Geometric\",\"Whale Text\",\"Microsoft YaHei UI\",sans-serif;color:var(--ink);line-height:1.65;font-size:13px;\n padding:12px 15px 15px;min-width:0;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"]{background:radial-gradient(ellipse at 85% 0%,#bad2f64a,transparent 60%),rgb(var(--surface)/.9)}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"]{--nh-gap:14px;--nh-pad:18px;--nh-row:33px;--nh-fs:12px}\n.nh-root[data-ui=\"atelier\"] .nh-head{padding:8px 17px 15px;gap:14px;background:transparent;border:0;min-height:57px;flex-wrap:wrap}\n.nh-root[data-ui=\"atelier\"] .nh-head h1{font-family:\"Whale Editorial\",serif;font-size:23px;font-weight:400;letter-spacing:.04em;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-head>.nh-select{width:220px;max-width:24vw;border-radius:11px;background:var(--tint);border-color:var(--line);font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-head>.nh-sub{font-size:11px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-head>.nh-row{padding:4px 8px;border:1px solid var(--line);border-radius:25px;background:linear-gradient(135deg,#ffffff08,transparent),rgb(var(--surface)/.6);box-shadow:inset 0 1px #ffffff0c;backdrop-filter:blur(8px);flex-wrap:wrap}\n.nh-root[data-ui=\"atelier\"] .nh-live{font-size:10px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-body{flex-direction:row;gap:18px;overflow:hidden;min-height:0}\n.nh-root[data-ui=\"atelier\"] .nh-nav{display:block;width:185px;flex:0 0 185px;margin:8px 0 0;padding:23px 12px 18px;border:1px solid var(--line);border-radius:23px;background:linear-gradient(135deg,#ffffff07,transparent),rgb(var(--surface)/.6);box-shadow:inset 0 1px #ffffff0b;backdrop-filter:blur(var(--blur));overflow-y:auto}\n.nh-root[data-ui=\"atelier\"] .nh-navgroup{margin-bottom:18px}\n.nh-root[data-ui=\"atelier\"] .nh-navlabel{display:block;font-size:10px;letter-spacing:.04em;font-weight:400;padding:0 10px 7px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-navitem{display:flex;width:100%;height:auto;min-height:40px;padding:9px 10px;font-size:12px;border-radius:11px;gap:10px;margin:3px 0;color:var(--ink2);white-space:normal;font-weight:400}\n.nh-root[data-ui=\"atelier\"] .nh-navitem svg{opacity:.8;flex-shrink:0;stroke-linecap:round}\n.nh-root[data-ui=\"atelier\"] .nh-navitem[data-active=\"true\"]{background:linear-gradient(130deg,#c9dfff10,transparent),var(--selected);border-color:var(--line);color:var(--ink);box-shadow:inset 0 1px #ffffff0c}\n.nh-root[data-ui=\"atelier\"] .nh-navitem[data-active=\"true\"]:before{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-main{display:block;flex:1;min-width:0;min-height:0;max-width:none;margin:0;align-self:stretch;padding:0 8px 0 0;background:transparent;overflow-y:auto;overflow-x:hidden}\n.nh-root[data-ui=\"atelier\"] .nh-page{padding:22px 22px 28px;max-width:1500px;margin:auto}\n.nh-root[data-ui=\"atelier\"] .nh-statusbar{background:transparent;border:0;min-height:27px;padding:0 18px 7px;color:var(--muted);font-size:10px;margin-bottom:6px}\n.nh-root[data-ui=\"atelier\"] .nh-sbfill,.nh-root[data-ui=\"atelier\"] .nh-sbline{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-sbmeta{font-size:10px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-sbtext{font-size:11px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .cw-route-headin",
-          "g{padding:20px 22px 0;margin:0 auto;max-width:1500px}\n.nh-root[data-ui=\"atelier\"] .nh-card,.nh-root[data-ui=\"atelier\"] .nh-stat,.nh-root[data-ui=\"atelier\"] .nh-hero{border:1px solid var(--line);border-radius:20px;background:linear-gradient(142deg,#ffffff07,transparent 62%),rgb(var(--card)/var(--glass-opacity));box-shadow:inset 0 1px #ffffff0c,0 12px 40px #0000000d;backdrop-filter:blur(var(--blur));overflow:hidden}\n.nh-root[data-ui=\"atelier\"] .nh-cardhead{padding:17px 22px;border-color:var(--line);gap:10px;flex-wrap:wrap;background:transparent}\n.nh-root[data-ui=\"atelier\"] .nh-cardbody{padding:20px 22px}\n.nh-root[data-ui=\"atelier\"] .nh-cardtitle{font-size:14px;font-weight:500;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-cardhint{font-size:11px;line-height:1.7;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-btn{font-family:inherit;border-radius:22px;border:1px solid var(--line-strong);background:linear-gradient(135deg,#ffffff09,transparent),var(--tint);color:var(--ink2);padding:8px 15px;font-size:12px;font-weight:400;min-height:36px;transition:background 450ms var(--ease),box-shadow 450ms var(--ease),transform 230ms var(--spring)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]{color:var(--button-ink);background:var(--button-bg);border-color:transparent;box-shadow:inset 0 1px #ffffff60,0 5px 16px #00000010}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"ghost\"]{border-color:transparent;background:transparent;box-shadow:none;color:var(--accent)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"danger\"]{color:var(--error);border-color:color-mix(in srgb,var(--error) 35%,transparent);background:color-mix(in srgb,var(--error) 7%,transparent)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-size=\"sm\"]{min-height:29px;padding:5px 11px;font-size:11px}\n.nh-root[data-ui=\"atelier\"] .nh-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px #00000012;background:var(--selected);color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled){background:var(--button-bg);color:var(--button-ink);box-shadow:0 3px 22px color-mix(in srgb,var(--a) 20%,transparent)}\n.nh-root[data-ui=\"atelier\"] .nh-btn:disabled{opacity:.4;cursor:default}\n.nh-root[data-ui=\"atelier\"] .nh-btn:active:not(:disabled){transform:scale(.97)}\n.nh-root[data-ui=\"atelier\"] .nh-input,.nh-root[data-ui=\"atelier\"] .nh-select{color:var(--ink);background:rgb(var(--surface)/.6);border:1px solid var(--line-strong);border-radius:10px;font-family:inherit;font-size:13px;min-height:37px;padding:8px 11px}\n.nh-root[data-ui=\"atelier\"] .nh-select option{color:var(--ink);background:rgb(var(--card))}\n.nh-root[data-ui=\"atelier\"] .nh-input::placeholder{color:var(--muted);opacity:.8}\n.nh-root[data-ui=\"atelier\"] textarea.nh-input{line-height:1.9;min-height:90px}\n.nh-root[data-ui=\"atelier\"] .nh-textarea{border:1px solid var(--line-strong);border-radius:11px;background:rgb(var(--surface)/.6);color:var(--ink);font-family:\"Whale Text\",\"Microsoft YaHei UI\",sans-serif;font-size:13px;line-height:1.9;padding:11px 13px;resize:vertical;min-height:76px}\n.nh-root[data-ui=\"atelier\"] .nh-field{gap:7px;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-fieldlabel{font-size:12px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-table{font-family:inherit;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-table th{background:var(--tint);font-size:11px;font-weight:500;color:var(--muted);padding:12px}\n.nh-root[data-ui=\"atelier\"] .nh-table td{border-color:var(--line);padding:12px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-stat{padding:18px 20px}\n.nh-root[data-ui=\"atelier\"] .nh-statvalue{font-family:\"Whale Geometric\",sans-serif;font-size:30px;font-weight:300;letter-spacing:-.03em;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-k,.nh-root[data-ui=\"atelier\"] .nh-statlabel{color:var(--muted);font-size:11px;font-weight:400;letter-spacing:.015em}\n.nh-root[data-ui=\"atelier\"] .nh-badge{font-weight:400;font-size:10px;border-radius:20px;padding:3px 8px;border-color:var(--line);background:var(--tint);color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-ton",
-          "e=\"ok\"]{color:var(--success);background:color-mix(in srgb,var(--success) 6%,transparent)}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"err\"]{color:var(--error)}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"warn\"]{color:var(--warning)}\n.nh-root[data-ui=\"atelier\"] .nh-seg{border:1px solid var(--line);border-radius:12px;background:var(--tint);padding:3px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .nh-seg button{border:0;border-radius:9px;color:var(--muted);font-size:12px;background:transparent;padding:7px 12px}\n.nh-root[data-ui=\"atelier\"] .nh-seg button[data-active=\"true\"]{background:var(--button-bg);color:var(--button-ink);box-shadow:none}\n.nh-root[data-ui=\"atelier\"] .nh-tabs{border-color:var(--line);gap:10px}\n.nh-root[data-ui=\"atelier\"] .nh-tab{border-radius:10px 10px 0 0;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-tab[data-active=\"true\"]{background:var(--selected);color:var(--ink);border-color:var(--a)}\n.nh-root[data-ui=\"atelier\"] .nh-pre{font-family:\"Whale Text\",\"Microsoft YaHei UI\",sans-serif;line-height:1.95;font-size:14px;color:var(--ink);background:rgb(var(--surface)/.55);border:1px solid var(--line);border-radius:13px;padding:16px;white-space:pre-wrap;overflow-wrap:anywhere}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-pre{font-family:\"Whale Editorial\",\"SimSun\",serif}\n.nh-root[data-ui=\"atelier\"] .nh-herotitle{font-family:\"Whale Editorial\",serif;font-size:30px;font-weight:400;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-hero{padding:30px}\n.nh-root[data-ui=\"atelier\"] .nh-hero:before,.nh-root[data-ui=\"atelier\"] .nh-hero:after{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-herosub{color:var(--ink2);font-size:13px;line-height:1.9}\n.nh-root[data-ui=\"atelier\"] .nh-herotag{font-size:10px;font-weight:400}\n.nh-root[data-ui=\"atelier\"] .nh-empty{padding:35px 18px;color:var(--muted);font-size:12px;border:1px dashed var(--line);border-radius:13px;background:transparent}\n.nh-root[data-ui=\"atelier\"] .nh-progress{height:4px;border:0;background:var(--line);border-radius:6px}\n.nh-root[data-ui=\"atelier\"] .nh-progressfill{background:linear-gradient(90deg,var(--a),var(--b),var(--c));border-radius:inherit}\n.nh-root[data-ui=\"atelier\"] .nh-scroll{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask{background:#02081280;backdrop-filter:blur(5px);padding:26px}\n.nh-root[data-ui=\"atelier\"] .nh-modal{width:850px;max-width:calc(100vw - 52px);max-height:calc(100vh - 52px);border:1px solid var(--line-strong);border-radius:24px;background:linear-gradient(135deg,#ffffff08,transparent),rgb(var(--surface)/.97);color:var(--ink);box-shadow:0 28px 90px #00000050;backdrop-filter:blur(var(--blur));outline:0}\n.nh-root[data-ui=\"atelier\"] .nh-modal>.nh-cardbody{overflow-y:auto;max-height:calc(100vh - 135px)}\n.nh-root[data-ui=\"atelier\"] .cw-appearance{max-width:570px;margin:0 auto}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask:has(.cw-appearance-modal){justify-content:flex-end;align-items:stretch;padding:12px}\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal{width:430px;height:100%;max-height:100%;max-width:calc(100vw - 24px)}\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal>.nh-cardbody{max-height:none;flex:1;min-height:0;overflow:auto}\n.nh-root[data-ui=\"atelier\"] .cw-range-label{display:grid;grid-template-columns:50px 1fr;gap:15px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty{height:100%;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;gap:8px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty .cw-ai-presence{position:relative;inset:auto;width:85px;height:75px;flex-shrink:0;z-index:0;opacity:.3}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty>p{font-family:\"Whale Editorial\",serif;font-size:18px;color:var(--ink2);margin:0}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty>span{font-size:11px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>span{font-size:12px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot>span:last-child{margin-left:auto}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-c",
-          "ard .nh-btn{font-size:10px;min-height:27px;padding:4px 8px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:16px;font-weight:400;font-family:\"Whale Geometric\",\"Whale Text\",sans-serif}\n.nh-root[data-ui=\"atelier\"] .cw-hero-actions .nh-btn{padding:0;font-size:11px;min-height:23px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .nh-btn{padding:5px 11px;min-height:31px;font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-saved-status{max-width:58%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card .nh-btn,.nh-root[data-ui=\"atelier\"] .cw-next-card .nh-btn{font-size:10px;padding:3px 0;min-height:23px}\n.nh-root[data-ui=\"atelier\"] .cw-next-task-time strong{font-size:25px;overflow-wrap:anywhere}\n.nh-root[data-ui=\"atelier\"] .cw-dashboard[data-running=\"false\"] :is(.cw-flow-fill,.cw-ai-ribbon,.cw-ai-core,.cw-ai-star){animation:none}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence[data-active=\"false\"]{opacity:.25}\n.nh-root[data-ui=\"atelier\"] .cw-dashboard[data-tone=\"err\"] .cw-engine-pill{color:var(--error)}\n.nh-root[data-ui=\"atelier\"] .cw-dashboard[data-tone=\"ok\"] .cw-ai-star{animation:cw-complete-pulse 900ms ease-out 1;background:var(--success)}\n@keyframes cw-complete-pulse{0%{transform:scale(.6);opacity:.3}50%{transform:scale(1.4);opacity:1}100%{transform:scale(1);opacity:1}}\n.nh-root[data-ui=\"atelier\"] .nh-role-grid{gap:12px;padding:14px 0;border-color:var(--line)}\n.nh-root[data-ui=\"atelier\"] .nh-btn:focus-visible,.nh-root[data-ui=\"atelier\"] .nh-input:focus-visible,.nh-root[data-ui=\"atelier\"] .nh-select:focus-visible{outline:2px solid var(--a);outline-offset:3px}\n@media(max-width:1100px){.nh-root[data-ui=\"atelier\"] .nh-body{flex-direction:row}.nh-root[data-ui=\"atelier\"] .nh-nav{width:62px;flex:0 0 62px;padding:20px 8px}.nh-root[data-ui=\"atelier\"] .nh-navgroup{display:block;margin-bottom:14px}.nh-root[data-ui=\"atelier\"] .nh-navlabel,.nh-root[data-ui=\"atelier\"] .nh-navitem>span{display:none}.nh-root[data-ui=\"atelier\"] .nh-navitem{width:100%;padding:11px;justify-content:center;min-height:39px}.nh-root[data-ui=\"atelier\"] .nh-page{padding:18px 12px 24px}.nh-root[data-ui=\"atelier\"] .nh-body{gap:8px}.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:335px;padding-inline:20px}.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:14px}.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:24px}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-select{max-width:28vw}.nh-root[data-ui=\"atelier\"] .cw-section-kicker{font-size:11px}.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:7px}.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .nh-btn{padding-inline:8px;font-size:10px}}\n@media(max-width:850px){.nh-root[data-ui=\"atelier\"] .cw-primary-grid,.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:1fr}.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-sub{display:none}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-row{gap:4px!important}.nh-root[data-ui=\"atelier\"] .nh-live{display:none}.nh-root[data-ui=\"atelier\"] .nh-formgrid{grid-template-columns:1fr!important}.nh-root[data-ui=\"atelier\"] .nh-grid{grid-template-columns:1fr!important}.nh-root[data-ui=\"atelier\"] .nh-role-grid{grid-template-columns:1fr 1fr}.nh-root[data-ui=\"atelier\"] .nh-modal-mask{padding:14px}.nh-root[data-ui=\"atelier\"] .nh-modal{max-width:calc(100vw - 28px);max-height:calc(100vh - 28px)}}\n@media(max-width:520px){.nh-root[data-ui=\"atelier\"]{padding:6px}.nh-root[data-ui=\"atelier\"] .nh-head{padding:6px 9px 10px;gap:9px}.nh-root[data-ui=\"atelier\"] .nh-head h1{font-size:20px}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-select{max-width:calc(100% - 100px)}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-row{width:100%;justify-content:flex-end}.nh-root[data-ui=\"atelier\"] .nh-body{gap:3px}.nh-root[data-ui=\"atelier\"] .nh-nav{width:47px;flex-basis:47px;padding:16px 4p",
-          "x;border-radius:15px}.nh-root[data-ui=\"atelier\"] .nh-navitem{padding:9px;min-height:34px}.nh-root[data-ui=\"atelier\"] .nh-page{padding:15px 7px 24px}.nh-root[data-ui=\"atelier\"] .nh-main{padding:0}.nh-root[data-ui=\"atelier\"] .nh-statusbar{padding-inline:10px}.nh-root[data-ui=\"atelier\"] .nh-sbmeta{display:none}.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:25px}.nh-root[data-ui=\"atelier\"] .cw-creation-card{padding-inline:17px}.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .nh-btn{font-size:9px}.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:10px}.nh-root[data-ui=\"atelier\"] .cw-live-metrics{gap:9px}.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:13px}.nh-root[data-ui=\"atelier\"] .nh-cardhead,.nh-root[data-ui=\"atelier\"] .nh-cardbody{padding:16px}.nh-root[data-ui=\"atelier\"] .nh-modal{height:auto;max-height:calc(100vh - 28px);border-radius:20px}.nh-root[data-ui=\"atelier\"] .nh-modal>.nh-cardbody{max-height:calc(100vh - 125px)}.nh-root[data-ui=\"atelier\"] .cw-route-heading{padding-left:10px}.nh-root[data-ui=\"atelier\"] .nh-stats{grid-template-columns:1fr 1fr}.nh-root[data-ui=\"atelier\"] .nh-stat{padding:14px}.nh-root[data-ui=\"atelier\"] .nh-table{font-size:11px}.nh-root[data-ui=\"atelier\"] .nh-hero{padding:22px}.nh-root[data-ui=\"atelier\"] .nh-herotitle{font-size:26px}}\n"
+          "reader-dialog{padding:24px!important}\n.nh-root[data-ui=\"atelier\"] #dialog-content h2{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-text p{font-size:16px!important}\n.nh-root[data-ui=\"atelier\"] .cw-toast{font-size:10px;padding:12px 14px;max-width:calc(100vw - 35px);white-space:normal}}\n/* ==========================================================================\n   码章鲸 Chapter Whale · DSH Plugin UI v5\n   Optical Liquid Glass × Gemini Fluid Aurora × Craft Editorial × Trident\n   ========================================================================== */\n\n.nh-root[data-ui=\"atelier\"] {\n  --nh-mono: ui-monospace, \"Cascadia Code\", \"JetBrains Mono\", Consolas, monospace;\n  --font-display: \"Whale Geometric\", \"Whale Text\", \"Microsoft YaHei UI\", system-ui, sans-serif;\n  --font-body: \"Whale Text\", \"Whale Geometric\", \"Microsoft YaHei UI\", sans-serif;\n  --font-serif: \"Whale Editorial\", \"Source Han Serif SC\", \"Noto Serif SC\", Georgia, serif;\n\n  /* Default v5 optical material variables (overridden inline by AppearanceContext) */\n  --glass-opacity: 0.24;\n  --blur: 18px;\n  --glass-refract: 0.85;\n  --backdrop-light: 1.00;\n  --nh-gap: 16px;\n  --nh-pad: 20px;\n  --nh-row: 36px;\n  --nh-fs: 13px;\n  --radius-lg: 26px;\n  --radius-md: 17px;\n  --radius-sm: 12px;\n  --radius-pill: 9999px;\n\n  /* Strict 4-Channel Semantic Palette (Dark default) */\n  --accent-gold: #e6b94c;\n  --accent-gold-soft: rgba(230, 185, 76, 0.14);\n  --state-active: #79b4ff;\n  --state-active-soft: rgba(121, 180, 255, 0.16);\n  --state-ok: #4be3a4;\n  --state-ok-soft: rgba(75, 227, 164, 0.13);\n  --state-warn: #ff9650;\n  --state-warn-soft: rgba(255, 150, 80, 0.15);\n  --state-danger: #ff647c;\n  --state-danger-soft: rgba(255, 100, 124, 0.15);\n\n  /* Gemini Aurora Gradient Stops */\n  --iris-1: #5a96ff;\n  --iris-2: #a882ff;\n  --iris-3: #f27dc2;\n  --iris-4: #ffc845;\n  --iris-5: #5ee7c8;\n  --a: var(--state-active);\n  --b: var(--iris-2);\n  --c: var(--iris-5);\n\n  /* WCAG AA+ Ink & Obsidian Crystal Surfaces */\n  --bg-canvas: #03050a;\n  --bg-grad-a: rgba(94, 164, 255, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(230, 185, 76, calc(0.22 * var(--backdrop-light)));\n  --bg-grad-c: rgba(166, 128, 255, calc(0.20 * var(--backdrop-light)));\n\n  --ink: #f8fafc;\n  --ink2: rgba(241, 245, 249, 0.85);\n  --muted: rgba(226, 232, 240, 0.68);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(20, 25, 36, var(--glass-opacity));\n  --nh-surface2: rgba(6, 9, 15, 0.44);\n  --nh-border: rgba(255, 255, 255, 0.20);\n  --nh-border-soft: rgba(255, 255, 255, 0.14);\n  --nh-accent: var(--state-active);\n  --nh-cyan: var(--iris-5);\n  --nh-hover: rgba(255, 255, 255, 0.08);\n  --nh-ok: var(--state-ok);\n  --nh-warn: var(--state-warn);\n  --nh-err: var(--state-danger);\n  --success: var(--state-ok);\n  --warning: var(--state-warn);\n  --error: var(--state-danger);\n  --line: rgba(255, 255, 255, 0.14);\n  --line-strong: rgba(255, 255, 255, 0.24);\n  --dotted: rgba(255, 255, 255, 0.24);\n  --tint: rgba(255, 255, 255, 0.07);\n  --selected: rgba(121, 180, 255, 0.15);\n  --button-bg: #f8fafc;\n  --button-ink: #050608;\n  --surface: 20 25 36;\n  --card: 18 22 32;\n\n  --rim-hi: rgba(255, 255, 255, 0.56);\n  --rim-mid: rgba(255, 255, 255, 0.20);\n  --rim-lo: rgba(255, 255, 255, 0.06);\n  --glass-edge: rgba(255, 255, 255, 0.22);\n  --glass-shine: rgba(255, 255, 255, 0.34);\n  --glass-bounce: rgba(145, 188, 255, 0.14);\n  --dock-outer: rgba(20, 24, 34, calc(var(--glass-opacity) + 0.18));\n  --dock-inner: rgba(255, 255, 255, 0.06);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 54%, rgba(255, 255, 255, 0.18) 100%);\n  --paper-bg: rgba(11, 13, 18, 0.90);\n  --paper-border: rgba(255, 255, 255, 0.14);\n  --shadow-glass: 0 22px 50px -20px rgba(0, 0, 0, 0.84), 0 6px 18px -6px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.06);\n\n  --ease: cubic-bezier(0.22, 1, 0.36, 1);\n  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);\n  --spring: cubic-bezier(0.22, 1.18, 0.36, 1);\n\n  position: relative;\n  isolation: isolate;\n  height: 100%;\n  m",
+          "in-height: 0;\n  display: flex;\n  flex-direction: column;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  font-family: var(--font-body);\n  font-size: var(--nh-fs);\n  line-height: 1.6;\n  overflow: hidden;\n  border-radius: 18px;\n  corner-shape: squircle;\n  /* Soft left ambient transition easing contrast against light DSH host rail */\n  box-shadow:\n    inset 24px 0 38px -22px rgba(148, 186, 240, 0.22),\n    inset 0 0 0 1px rgba(148, 163, 184, 0.14);\n}\n\n/* Light Mode Tokens */\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] {\n  --bg-canvas: #eef1f7;\n  --bg-grad-a: rgba(94, 152, 224, calc(0.38 * var(--backdrop-light)));\n  --bg-grad-b: rgba(229, 172, 102, calc(0.32 * var(--backdrop-light)));\n  --bg-grad-c: rgba(154, 130, 235, calc(0.22 * var(--backdrop-light)));\n\n  --accent-gold: #9e6d08;\n  --accent-gold-soft: rgba(158, 109, 8, 0.11);\n  --state-active: #2f5fe3;\n  --state-active-soft: rgba(47, 95, 227, 0.12);\n  --state-ok: #0d8a5f;\n  --state-ok-soft: rgba(13, 138, 95, 0.11);\n  --state-warn: #c95d12;\n  --state-warn-soft: rgba(201, 93, 18, 0.12);\n  --state-danger: #cc2945;\n  --state-danger-soft: rgba(204, 41, 69, 0.12);\n\n  --ink: #111318;\n  --ink2: rgba(17, 19, 24, 0.78);\n  --muted: rgba(17, 19, 24, 0.62);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --nh-surface2: rgba(17, 19, 24, 0.042);\n  --nh-border: rgba(17, 19, 24, 0.12);\n  --nh-border-soft: rgba(17, 19, 24, 0.10);\n  --nh-hover: rgba(17, 19, 24, 0.065);\n  --line: rgba(17, 19, 24, 0.11);\n  --line-strong: rgba(17, 19, 24, 0.18);\n  --dotted: rgba(17, 19, 24, 0.24);\n  --tint: rgba(17, 19, 24, 0.045);\n  --selected: rgba(47, 95, 227, 0.12);\n  --button-bg: #111318;\n  --button-ink: #ffffff;\n  --surface: 255 255 255;\n  --card: 255 255 255;\n\n  --rim-hi: rgba(255, 255, 255, 0.99);\n  --rim-mid: rgba(255, 255, 255, 0.65);\n  --rim-lo: rgba(17, 19, 24, 0.10);\n  --glass-edge: rgba(17, 19, 24, 0.10);\n  --glass-shine: rgba(255, 255, 255, 0.96);\n  --glass-bounce: rgba(125, 168, 255, 0.16);\n  --dock-outer: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --dock-inner: rgba(17, 19, 24, 0.05);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.70) 58%, rgba(255, 255, 255, 0.92) 100%);\n  --paper-bg: rgba(255, 255, 255, 0.92);\n  --paper-border: rgba(17, 19, 24, 0.10);\n  --shadow-glass: 0 20px 44px -18px rgba(17, 24, 39, 0.16), 0 4px 12px -4px rgba(17, 24, 39, 0.08), 0 0 0 1px rgba(17, 19, 24, 0.06);\n  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);\n}\n\n/* 3 Palettes (liquid / craft / apple, mapping legacy gemini -> liquid, ocean -> apple) */\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"] {\n  --bg-canvas: #080705;\n  --bg-grad-a: rgba(226, 174, 108, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(122, 158, 196, calc(0.22 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 29, 23, calc(var(--glass-opacity) + 0.06));\n}\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"][data-theme=\"light\"] {\n  --bg-canvas: #f5f1e9;\n  --nh-surface: rgba(255, 251, 244, calc(var(--glass-opacity) + 0.38));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"]) {\n  --bg-canvas: #050608;\n  --bg-grad-a: rgba(135, 176, 224, calc(0.30 * var(--backdrop-light)));\n  --bg-grad-b: rgba(224, 186, 138, calc(0.24 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 36, 42, var(--glass-opacity));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"])[data-theme=\"light\"] {\n  --bg-canvas: #f2f3f5;\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.40));\n}\n\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] {\n  --nh-gap: 12px;\n  --nh-pad: 15px;\n  --nh-row: 32px;\n  --nh-fs: 12.5px;\n  --radius-lg: 20px;\n  --radius-md: 14px;\n  --radius-sm: 10px;\n}\n\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::after,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *,\n.nh-root[d",
+          "ata-ui=\"atelier\"][data-motion=\"off\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *::after {\n  animation-duration: 0.01ms !important;\n  transition-duration: 0.01ms !important;\n}\n\n/* Backdrop Layer (Canvas Silk Ribbons + Optical Gradient Wash + SDF Filters) */\n.nh-root[data-ui=\"atelier\"] .cw-backdrop-layer {\n  position: absolute;\n  inset: 0;\n  z-index: 0;\n  pointer-events: none;\n  overflow: hidden;\n  border-radius: inherit;\n  corner-shape: inherit;\n}\n.nh-root[data-ui=\"atelier\"] .cw-cosmos-canvas {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  display: block;\n}\n.nh-root[data-ui=\"atelier\"] .cw-optical-wash {\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(64% 50% at 14% 8%, var(--bg-grad-a), transparent 68%),\n    radial-gradient(58% 48% at 86% 16%, var(--bg-grad-b), transparent 66%),\n    radial-gradient(48% 42% at 52% 86%, var(--bg-grad-c), transparent 72%);\n}\n\n/* Typography Discipline */\n.nh-root[data-ui=\"atelier\"] h1,\n.nh-root[data-ui=\"atelier\"] h2,\n.nh-root[data-ui=\"atelier\"] h3 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  color: var(--ink);\n  text-wrap: balance;\n}\n.nh-root[data-ui=\"atelier\"] p { text-wrap: pretty; }\n\n/* ==========================================================================\n   3-Island Floating Apple Liquid Glass Dock (Eliminates Internal Left Sidebar)\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-head {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-sticky {\n  position: relative;\n  z-index: 40;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  padding: 12px 18px 6px;\n  flex: 0 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-row {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 9px;\n  max-width: 100%;\n  width: 100%;\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n  position: relative;\n  isolation: isolate;\n  width: 42px;\n  height: 42px;\n  flex: 0 0 42px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--ink);\n  background: var(--dock-outer);\n  border: 0;\n  cursor: pointer;\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 12px 28px -12px rgba(0, 0, 0, 0.58);\n  backdrop-filter: blur(var(--blur)) saturate(2.1);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.1);\n  transition: transform 150ms var(--ease-expo), box-shadow 240ms ease;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n    backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:hover {\n  transform: translateY(-1.5px) scale(1.04);\n  box-shadow: 0 0 0 1px var(--rim-hi), inset 0 1.5px 1px var(--glass-shine), 0 14px 30px -10px rgba(0, 0, 0, 0.65);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-on {\n  box-shadow: 0 0 0 1.5px var(--state-active), inset 0 1.5px 1px var(--glass-shine), 0 10px 26px -8px rgba(121, 180, 255, 0.44);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-project-lens {\n  width: auto;\n  max-width: 210px;\n  height: 42px;\n  padding: 0 12px 0 7px;\n  border-radius: var(--radius-pill);\n  gap: 8px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-badge {\n  width: 26px;\n  height: 26px;\n  flex: 0 0 26px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-4), var(--iris-5), var(--iris-1));\n  color: #050608;\n  font-weight: 700;\n  font-size: 12px;\n  box-shadow: 0 0 12px rgba(139, 184, 255, 0.35);\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-title {\n  font-size: 12.5px;\n  font-weight: 600;\n  white-space: nowrap;\n  overflow: hidden;\n  text-over",
+          "flow: ellipsis;\n  color: var(--ink);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n  --mx: 50%;\n  --my: 20%;\n  position: relative;\n  display: flex;\n  align-items: center;\n  padding: 4px;\n  border-radius: var(--radius-pill);\n  background:\n    radial-gradient(220px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.14), transparent 70%),\n    var(--dock-outer);\n  backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  -webkit-backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 16px 36px -14px rgba(0, 0, 0, 0.60);\n  overflow-x: auto;\n  scrollbar-width: none;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n    backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule::-webkit-scrollbar { display: none; }\n.nh-root[data-ui=\"atelier\"] .cw-dock-track {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  border-radius: var(--radius-pill);\n  background: var(--dock-inner);\n  padding: 2px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-lens {\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  height: calc(100% - 4px);\n  border-radius: var(--radius-pill);\n  background: var(--lens-fill);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px rgba(0, 0, 0, 0.16),\n    0 4px 14px -4px rgba(0, 0, 0, 0.45),\n    0 0 0 1px var(--rim-mid);\n  transition: transform 0.44s var(--spring), width 0.36s var(--spring);\n  pointer-events: none;\n  z-index: 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill {\n  position: relative;\n  z-index: 1;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 30px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 0;\n  background: transparent;\n  font-size: 12.5px;\n  font-weight: 500;\n  color: var(--ink2);\n  white-space: nowrap;\n  cursor: pointer;\n  transition: color 180ms ease, transform 150ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:hover { color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill.is-active { color: var(--ink); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-pill-dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n.nh-root[data-ui=\"atelier\"] .cw-pill-badge {\n  font-size: 10px;\n  font-family: var(--nh-mono);\n  font-variant-numeric: tabular-nums;\n  padding: 1px 6px;\n  border-radius: var(--radius-pill);\n  background: var(--state-warn-soft);\n  color: var(--state-warn);\n  font-weight: 600;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-tools {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n}\n\n/* Gemini Living Breathing Halo Orb inside Dock */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb {\n  position: relative;\n  width: 22px;\n  height: 22px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb::before {\n  content: \"\";\n  position: absolute;\n  inset: -4px;\n  border-radius: 50%;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  opacity: 0.65;\n  filter: blur(5px);\n  animation: cw-spin-slow 9s linear infinite, cw-orb-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb-core {\n  position: relative;\n  width: 20px;\n  height: 20px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  border: 1px solid var(--rim-mid);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-streaming .cw-gemini-orb::before {\n  opacity: 1;\n  filter: blur(6px);\n  animation-duration: 2.2s, 1.8s;\n}\n@keyframes cw-spin-slow { to { transform: rotate(36",
+          "0deg); } }\n@keyframes cw-orb-breathe { 0%, 100% { transform: scale(0.95); opacity: 0.62; } 50% { transform: scale(1.12); opacity: 0.96; } }\n\n/* Compact Sub-Route & Service Strip */\n.nh-root[data-ui=\"atelier\"] .cw-subnav-bar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  flex-wrap: wrap;\n  width: 100%;\n  max-width: 1220px;\n  padding: 2px 4px 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subnav-pills {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill {\n  height: 28px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 12px;\n  font-weight: 500;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 140ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill.is-active {\n  color: var(--state-active);\n  border-color: var(--state-active);\n  background: var(--state-active-soft);\n}\n.nh-root[data-ui=\"atelier\"] .cw-service-cluster {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  margin-left: auto;\n  font-size: 11.5px;\n  color: var(--muted);\n}\n\n/* Popover Card (Origin-Anchored) */\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  position: absolute;\n  top: 66px;\n  left: 22px;\n  width: 310px;\n  max-width: calc(100vw - 44px);\n  z-index: 65;\n  transform-origin: top left;\n  animation: cw-pop-in 0.26s var(--ease-expo) backwards;\n}\n@keyframes cw-pop-in {\n  from { opacity: 0; filter: blur(6px); transform: translateY(-6px) scale(0.95); }\n  to { opacity: 1; filter: blur(0px); transform: translateY(0) scale(1); }\n}\n\n/* Collapse Old Vertical Left Sidebar Inside Plugin */\n.nh-root[data-ui=\"atelier\"] .nh-body {\n  position: relative;\n  z-index: 10;\n  flex: 1;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-nav {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-main {\n  flex: 1;\n  min-width: 0;\n  min-height: 0;\n  padding: 0 6px 28px;\n  background: transparent;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .nh-page {\n  padding: 10px 22px 32px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-route-heading {\n  padding: 10px 22px 2px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  margin-bottom: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  font-size: 26px;\n  margin: 0;\n}\n\n/* ==========================================================================\n   Optical Liquid Glass Cards, Squircles & Specular Rims\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-card,\n.nh-root[data-ui=\"atelier\"] .nh-stat,\n.nh-root[data-ui=\"atelier\"] .nh-hero,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card,\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  --mx: 50%;\n  --my: 15%;\n  position: relative;\n  isolation: isolate;\n  border: 0;\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  background: transparent;\n  box-shadow: var(--shadow-glass);\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::before,\n.nh-root[data-ui=\"atelier\"] .nh-stat::before,\n.nh-root[data-ui=\"atelier\"] .nh-hero::before,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n.nh-root[data-ui=\"atelier\"] .cw-popover::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -2;\n  border-radius: inherit;\n  corner-shape: inherit;\n  background:\n    radial-gradient(360px circle at var(--mx) var(--my), rgba(255, 255, 255, calc(0.13 * var(--glass-r",
+          "efract))), transparent 65%),\n    linear-gradient(132deg,\n      rgba(255, 255, 255, calc(0.15 * var(--glass-refract))) 0%,\n      rgba(255, 255, 255, 0.02) 48%,\n      rgba(255, 255, 255, calc(0.07 * var(--glass-refract))) 100%),\n    var(--nh-surface);\n  backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce);\n}\n@supports (backdrop-filter: url(#cw-lg-card-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n  .nh-root[data-ui=\"atelier\"] .cw-popover::before,\n  .nh-root[data-ui=\"atelier\"] .nh-hero::before {\n    backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::after,\n.nh-root[data-ui=\"atelier\"] .nh-stat::after,\n.nh-root[data-ui=\"atelier\"] .nh-hero::after,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::after,\n.nh-root[data-ui=\"atelier\"] .cw-popover::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  border-radius: inherit;\n  corner-shape: inherit;\n  padding: 1px;\n  background: linear-gradient(156deg, var(--rim-hi) 2%, var(--rim-mid) 44%, var(--rim-lo) 96%);\n  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  pointer-events: none;\n}\n\n.nh-root[data-ui=\"atelier\"] .nh-cardhead { padding: 16px 20px; border-bottom: 1px solid var(--line); background: transparent; }\n.nh-root[data-ui=\"atelier\"] .nh-cardbody { padding: 18px 20px; }\n.nh-root[data-ui=\"atelier\"] .nh-cardtitle { font-size: 15px; font-weight: 500; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .nh-cardhint { font-size: 12px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .nh-stat { padding: 16px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-statvalue { font-family: var(--font-display); font-size: 28px; font-weight: 300; font-variant-numeric: tabular-nums; }\n\n/* Signature Maserati Sweep Primary Buttons */\n.nh-root[data-ui=\"atelier\"] .nh-btn {\n  position: relative;\n  overflow: hidden;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  font-family: inherit;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line-strong);\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--ink);\n  padding: 0 14px;\n  height: 34px;\n  font-size: 12.5px;\n  font-weight: 500;\n  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);\n  backdrop-filter: blur(12px) saturate(1.8);\n  transition: transform 150ms var(--ease-expo), background 200ms ease, border-color 200ms ease, box-shadow 240ms ease;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn { background: rgba(255, 255, 255, 0.76); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:hover:not(:disabled) {\n  transform: translateY(-1px);\n  background: rgba(255, 255, 255, 0.16);\n  border-color: var(--rim-hi);\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.96); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:active:not(:disabled) { transform: scale(0.972); }\n\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-color: transparent;\n  font-weight: 600;\n  box-shadow: 0 4px 16px -6px rgba(0, 0, 0, 0.45);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]::after {\n  content: \"\";\n  position: absolute;\n  top: -20%; left: -45%;\n  width: 34%; height: 140%;\n  background: linear-gradient(90deg, transparent, rgba(230, 185, 76, 0.56), rgba(255, 255, 255, 0.88), transparent);\n  transform: skewX(-8deg) translateX(-160%);\n  transition: transform 0.85s var(--ease);\n  pointer-events: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled) {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  box-shadow: 0 10px 24px -10px rgba(230, 185, 76,",
+          " 0.42);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled)::after {\n  transform: skewX(-8deg) translateX(480%);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"ghost\"] {\n  border-color: transparent;\n  background: transparent;\n  box-shadow: none;\n  color: var(--state-active);\n  backdrop-filter: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"danger\"] {\n  color: var(--state-danger);\n  border-color: rgba(255, 100, 124, 0.36);\n  background: var(--state-danger-soft);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-size=\"sm\"] {\n  height: 28px;\n  padding: 0 10px;\n  font-size: 11.5px;\n}\n\n/* Badges (4-Channel Semantic Rules) */\n.nh-root[data-ui=\"atelier\"] .nh-badge {\n  border-radius: var(--radius-pill);\n  padding: 2px 9px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"ok\"] { color: var(--state-ok); border-color: rgba(75, 227, 164, 0.34); background: var(--state-ok-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"warn\"] { color: var(--state-warn); border-color: rgba(255, 150, 80, 0.36); background: var(--state-warn-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"err\"] { color: var(--state-danger); border-color: rgba(255, 100, 124, 0.36); background: var(--state-danger-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"info\"] { color: var(--state-active); border-color: rgba(121, 180, 255, 0.36); background: var(--state-active-soft); }\n\n/* Inputs & Modals */\n.nh-root[data-ui=\"atelier\"] .nh-input,\n.nh-root[data-ui=\"atelier\"] .nh-select,\n.nh-root[data-ui=\"atelier\"] .nh-textarea {\n  color: var(--ink);\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  font-family: var(--font-body);\n}\n.nh-root[data-ui=\"atelier\"] .nh-select option { background: #141924; color: #f8fafc; }\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-select option { background: #ffffff; color: #111318; }\n.nh-root[data-ui=\"atelier\"] .nh-seg {\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  background: var(--nh-surface2);\n  padding: 3px;\n  gap: 3px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-seg button[data-active=\"true\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-radius: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask { background: rgba(2, 5, 12, 0.62); backdrop-filter: blur(8px); padding: 24px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal {\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  width: 860px;\n  max-width: calc(100vw - 36px);\n  max-height: calc(100vh - 36px);\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  border: 1px solid var(--line-strong);\n  background: var(--paper-bg);\n  color: var(--ink);\n  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);\n  backdrop-filter: blur(26px) saturate(1.9);\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardhead { flex: 0 0 auto; }\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; max-height: none; }\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask:has(.cw-appearance-modal) { justify-content: flex-end; align-items: stretch; padding: 12px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal { width: 410px; height: 100%; max-height: 100%; max-width: calc(100vw - 24px); }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardhead { padding: 13px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardbody { padding: 10px 18px 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-appearance { display: flex; flex-direction: column; gap: 2px; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-section { padding: 6px 0; border-bottom: 1px solid var(--line); }\n.nh-root[data-ui=\"atelier\"] .cw-setting-section:last-of-type { border-bottom: 0; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-title { margin-bottom: 5px; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-title h3 { margin: 0; font-size: 11.5px; font-weight: 600; color: var(--muted); }\n.nh-root[da",
+          "ta-ui=\"atelier\"] .cw-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 12px; cursor: pointer; }\n.nh-root[data-ui=\"atelier\"] .cw-appearance > .nh-row { margin-top: 8px !important; }\n.nh-root[data-ui=\"atelier\"] .cw-range-label { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; font-family: var(--nh-mono); font-size: 11.5px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .cw-range-label input[type=\"range\"] { accent-color: var(--state-active); width: 100%; }\n.nh-root[data-ui=\"atelier\"] .nh-pre {\n  font-family: var(--font-body);\n  line-height: 1.92;\n  font-size: 15px;\n  color: var(--ink);\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  padding: 20px 24px;\n  white-space: pre-wrap;\n  overflow-wrap: anywhere;\n  max-width: 68ch;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-pre { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.95; }\n\n/* ==========================================================================\n   Editorial-First v5 Dashboard Layout\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .cw-dashboard {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-workflow-ribbon {\n  padding: 15px 20px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 11px;\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--muted);\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow .cw-reticle { color: var(--accent-gold); }\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top h1 {\n  margin: 2px 0 0;\n  font-size: clamp(20px, 2.3vw, 26px);\n  font-weight: 300;\n  line-height: 1.22;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-strip {\n  display: grid;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill {\n  height: 36px;\n  padding: 0 11px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  font-size: 12px;\n  color: var(--ink2);\n  cursor: pointer;\n  transition: transform 150ms var(--ease-expo), border-color 200ms ease, color 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done { border-color: rgba(75, 227, 164, 0.30); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done .cw-st-ico { color: var(--state-ok); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current {\n  color: var(--ink);\n  font-weight: 600;\n  border: 1px solid transparent;\n  background:\n    linear-gradient(var(--nh-surface2), var(--nh-surface2)) padding-box,\n    linear-gradient(115deg, var(--state-active), var(--iris-2), var(--iris-5)) border-box;\n  animation: cw-stage-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current .cw-st-code { color: var(--state-active); }\n.nh-root[data-ui=\"atelier\"] .cw-st-code { font-family: var(--nh-mono); font-size: 10.5px; opacity: 0.78; margin-right: 4px; }\n.nh-root[data-ui=\"atelier\"] .cw-stage-live-dot {\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n@keyframes cw-stage-breathe {\n  0%, 100% { box-shadow: 0 8px 20px -14px rgba(121, 180, 255, 0.45); }\n  50% { box-shadow: 0 10px 26px -12px rgba(121, 180, 255, 0.72); }\n}\n\n/* Silky Gemini Fluid Aurora Progress Bar */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-box {\n  margin-top: 12px;\n  ",
+          "padding: 12px 14px 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n@keyframes cw-aurora-flow {\n  0% { background-position: 0% 50%; }\n  100% { background-position: -300% 50%; }\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-track {\n  --p: 0%;\n  position: relative;\n  height: 7px;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.08);\n  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.42);\n  overflow: visible;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .cw-gemini-track {\n  background: rgba(17, 19, 24, 0.08);\n  box-shadow: inset 0 1px 2px rgba(17, 19, 24, 0.14);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-glow {\n  position: absolute;\n  inset: -3px 0;\n  border-radius: 999px;\n  background: linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n  filter: blur(8px);\n  opacity: 0.62;\n  pointer-events: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-fill {\n  position: absolute;\n  inset: 0;\n  border-radius: 999px;\n  background:\n    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0) 56%),\n    linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 100% 100%, 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-comet {\n  position: absolute;\n  top: 50%;\n  left: var(--p);\n  width: 13px;\n  height: 13px;\n  border-radius: 50%;\n  transform: translate(-50%, -50%);\n  background: radial-gradient(circle, #ffffff 20%, #b8d8ff 60%, rgba(125, 168, 255, 0) 78%);\n  box-shadow: 0 0 12px 3px rgba(121, 180, 255, 0.72), 0 0 20px 4px rgba(168, 130, 255, 0.45);\n  pointer-events: none;\n}\n\n/* Main Dashboard Split (Dominant Shielded Manuscript Left + Semantic Telemetry Rail Right) */\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid {\n  display: grid;\n  grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr);\n  gap: var(--nh-gap);\n  align-items: start;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card {\n  padding: 20px 22px;\n  display: flex;\n  flex-direction: column;\n  gap: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title h2,\n.nh-root[data-ui=\"atelier\"] .cw-card-title h3 {\n  margin: 0;\n  font-size: 16px;\n  font-weight: 400;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript {\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  backdrop-filter: blur(26px);\n  -webkit-backdrop-filter: blur(26px);\n  padding: 24px 26px;\n  min-height: 290px;\n  max-height: 460px;\n  overflow-y: auto;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4 {\n  font-family: var(--font-display);\n  font-size: 20px;\n  font-weight: 300;\n  margin: 0 0 14px;\n  letter-spacing: 0.02em;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p {\n  font-family: var(--font-body);\n  font-size: 15px;\n  line-height: 1.92;\n  letter-spacing: 0.015em;\n  color: var(--ink);\n  margin: 0 0 13px;\n  max-width: 68ch;\n  text-indent: 2em;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-root-skip,\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-manuscript p {\n  font-family: var(--font-serif);\n  font-size: 15.5px;\n  line-height: 1.96;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-reader-text p {\n  font-family: var(--font-serif) !important;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"sans\"] .cw-reader-text p {\n  font-family: var(--font-body) !important;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-footer {\n  display: flex;\n  align-items: center;\n  justify-conten",
+          "t: space-between;\n  gap: 12px;\n  font-size: 12px;\n  color: var(--muted);\n}\n\n/* Right Rail Telemetry & Dotted Specs */\n.nh-root[data-ui=\"atelier\"] .cw-rail-stack {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-rail-card {\n  padding: 18px 20px;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-list {\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row {\n  display: flex;\n  align-items: baseline;\n  gap: 8px;\n  font-size: 12.5px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .k { color: var(--muted); white-space: nowrap; font-size: 11.5px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .dots { flex: 1; border-bottom: 1px dotted var(--dotted); transform: translateY(-2px); min-width: 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v { font-family: var(--nh-mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-ok { color: var(--state-ok); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-active { color: var(--state-active); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-warn { color: var(--state-warn); font-weight: 600; }\n\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row {\n  width: 100%;\n  padding: 10px 12px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  text-align: left;\n  cursor: pointer;\n  color: var(--ink);\n  transition: border-color 180ms ease, background 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row:hover { border-color: var(--rim-hi); background: var(--nh-hover); }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index { font-family: var(--nh-mono); font-size: 11px; color: var(--state-active); min-width: 28px; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small { margin-left: 8px; color: var(--muted); font-size: 11px; }\n\n/* Responsive adjustments */\n@media (max-width: 960px) {\n  .nh-root[data-ui=\"atelier\"] .cw-primary-grid { grid-template-columns: 1fr; }\n  .nh-root[data-ui=\"atelier\"] .cw-stage-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n@media (max-width: 720px) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-sticky { padding: 8px 10px 4px; }\n  .nh-root[data-ui=\"atelier\"] .cw-project-lens .cw-project-title { display: none; }\n  .nh-root[data-ui=\"atelier\"] .nh-page { padding: 8px 12px 24px; }\n  .nh-root[data-ui=\"atelier\"] .nh-formgrid { grid-template-columns: 1fr !important; }\n  .nh-root[data-ui=\"atelier\"] .nh-role-grid { grid-template-columns: 1fr !important; }\n}\n"
         ].join('');
         // END GENERATED ATELIER CSS
 
@@ -1736,10 +1749,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           save: 'M2 2h9l3 3v9H2V2zm3 0v4h6V2M5 9h6v5H5V9z',
           settings: 'M2 5h12M2 11h12M5 3v4M11 9v4',
           search: 'M7 1.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11zM11 11l3 3',
+          spark: 'M8 1.2 9.7 6.3 14.8 8 9.7 9.7 8 14.8 6.3 9.7 1.2 8 6.3 6.3Z',
+          chevron: 'm4.5 6.5 3.5 3.5 3.5-3.5',
+          stop: 'M4 4h8v8H4Z',
         };
 
         function Icon(props) {
           const size = props.size || 14;
+          const d = ICON_PATHS[props.name] || ICON_PATHS.book;
           return e(
             'svg',
             {
@@ -1748,13 +1765,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               viewBox: '0 0 16 16',
               fill: 'none',
               stroke: 'currentColor',
-              strokeWidth: props.fill ? 0 : 1.35,
-              strokeLinecap: 'square',
+              strokeWidth: props.fill ? 0 : 1.5,
+              strokeLinecap: 'round',
+              strokeLinejoin: 'round',
               'aria-hidden': 'true',
             },
             props.fill
-              ? e('path', { d: ICON_PATHS[props.name], fill: 'currentColor' })
-              : e('path', { d: ICON_PATHS[props.name] }),
+              ? e('path', { d, fill: 'currentColor' })
+              : e('path', { d }),
           );
         }
 
@@ -1816,6 +1834,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           return sessionToken;
         }
 
+        function apiErrorMessage(data, status) {
+          if (data && typeof data === 'object') {
+            const text = data.detail || data.message || (data.code ? String(data.code) : '');
+            if (text) return typeof text === 'string' ? text : JSON.stringify(text);
+          }
+          if (typeof data === 'string' && data) return data.slice(0, 400);
+          return `HTTP ${status}`;
+        }
+
         async function api(path, options, retried) {
           const init = {
             method: (options && options.method) || 'GET',
@@ -1843,14 +1870,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             data = text;
           }
           if (!response.ok) {
-            const detail =
-              data && typeof data === 'object' && data.detail
-                ? data.detail
-                : typeof data === 'string' && data
-                  ? data.slice(0, 400)
-                  : `HTTP ${response.status}`;
-            const error = new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+            const error = new Error(apiErrorMessage(data, response.status));
             error.status = response.status;
+            error.code = data && typeof data === 'object' ? (data.code || '') : '';
+            error.data = data;
             throw error;
           }
           return data;
@@ -2268,7 +2291,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function Segmented(props) {
           return e(
             'div',
-            { className: 'nh-seg' },
+            { className: 'nh-seg', style: { flexWrap: 'wrap', ...(props.style || {}) } },
             (props.options || []).map((option) =>
               e(
                 'button',
@@ -2657,6 +2680,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function DashboardPage(props) {
           const { overview } = props;
+          const queue = overview.queue || {};
           const project = (overview.projects || [])[0] || null;
           const job = props.job || (overview.jobs || []).find(item => matchesProject(item, project)) || null;
           const work = workHeadline(job), cycle = job && job.cycle || {}, stage = chapterStage(job);
@@ -2683,42 +2707,107 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const paragraphs = paragraphText.split(/\n+/).map(text => text.trim()).filter(Boolean).slice(0, 12);
           const primaryPage = work.tone === 'err' ? 'jobs' : !overview.ai?.configured ? 'ai' : next && next.id !== 'writing' && next.id !== 'results' ? next.action.page : 'chapters';
           const primaryLabel = work.tone === 'err' ? '处理任务' : stage.active ? '查看任务' : !overview.ai?.configured ? '连接模型' : next && next.id !== 'writing' && next.id !== 'results' ? next.action.label : '开始创作';
-          const queue = overview.queue || {};
+          const stageNames = ['规划', '初稿', '润色', '审查', '交付'];
+          const stagePages = ['outline', 'chapters', 'chapters', 'chapters', 'publish'];
+          const streamPct = stage.complete
+            ? 100
+            : stage.active
+              ? Math.max(12, Math.min(96, Math.round((timing.known ? timing.ratio : 0.36) * 100)))
+              : 0;
+          const badgeTone = work.tone === 'err' ? 'err' : work.tone === 'warn' ? 'warn' : stage.complete ? 'ok' : 'info';
           return e('div', { className: 'nh-page cw-dashboard', 'data-running': stage.active, 'data-tone': work.tone },
-            e('div', { className: 'cw-page-heading' }, e('h1', null, '工作台'), e(Button, { icon: 'plus', onClick: () => props.navigate('chapters') }, '开始创作')),
-            e('section', { className: 'cw-overall-progress', 'aria-label': '全书进度' },
-              e('div', { className: 'cw-overall-meta' }, e('div', null, e('strong', null, job && job.name || project && project.title || '创作空间'), e('span', { className: 'cw-live-pill' }, e('i'), work.tag)),
-                e('span', null, goal)),
-              target ? e('div', { className: 'cw-progress-track', role: 'progressbar', 'aria-label': '全书已完成章节', 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': Math.min(count, target) }, e('div', { className: 'cw-progress-fill', style: { width: `${ratio * 100}%` } })) : null,
-              e('div', { className: 'cw-overall-foot' }, e('span', null, work.stageLabel || '准备下一章'), e('span', null, eta))),
+            e('section', { className: 'cw-glass-card cw-workflow-ribbon', 'aria-label': '创作工作流' },
+              e('div', { className: 'cw-ribbon-top' },
+                e('div', null,
+                  e('div', { className: 'cw-eyebrow' },
+                    e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 11, fill: true })),
+                    e('span', null, `${project && project.title ? project.title : '创作空间'} · ${goal}`)),
+                  e('h1', null, current && current.title || (chapter ? `第 ${chapter} 章` : '准备下一章'))),
+                e('div', { className: 'nh-row', style: { gap: 8 } },
+                  e('span', { className: 'nh-badge', 'data-tone': badgeTone }, work.tag),
+                  e(Button, { onClick: () => props.navigate(stage.active ? 'jobs' : 'chapters') }, stage.active ? '任务详情' : '章节列表'),
+                  e(Button, { kind: 'primary', onClick: () => current ? props.onOpenChapter(chapter) : props.navigate(primaryPage) }, current ? '专注审校本章' : primaryLabel))),
+              e('div', { className: 'cw-stage-strip', role: 'group', 'aria-label': '本章 A–E 流程' },
+                stageNames.map((label, index) => {
+                  const isDone = stage.complete || index < stage.index;
+                  const isCurr = !stage.complete && index === stage.index;
+                  return e('button', {
+                    key: label,
+                    type: 'button',
+                    className: `cw-stage-pill${isDone ? ' done' : isCurr ? ' current' : ''}`,
+                    'aria-current': isCurr ? 'step' : undefined,
+                    onClick: () => props.navigate(stagePages[index]),
+                  },
+                    e('span', null, e('span', { className: 'cw-st-code' }, 'ABCDE'[index]), label),
+                    e('span', { className: 'cw-st-ico' }, isDone ? e(Icon, { name: 'check', size: 12 }) : isCurr ? e('span', { className: 'cw-stage-live-dot', 'aria-hidden': 'true' }) : null));
+                })),
+              stage.active ? e('div', { className: 'cw-gemini-box', role: 'status' },
+                e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 } },
+                  e('span', null, `${stage.index >= 0 ? `阶段 ${'ABCDE'[stage.index]} · ${stageNames[stage.index]}` : work.stageLabel || '推进中'} — ${eta}`),
+                  e('span', { className: 'nh-mono nh-dim' }, `${streamPct}% · ${metrics.speed}`)),
+                e('div', { className: 'cw-gemini-track', style: { '--p': `${streamPct}%` } },
+                  e('div', { className: 'cw-gemini-glow' }),
+                  e('div', { className: 'cw-gemini-fill' }),
+                  e('div', { className: 'cw-gemini-comet' }))) : null),
+            work.tone === 'err' ? e('div', { className: 'nh-alertblock' }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
             e('div', { className: 'cw-primary-grid' },
-              e('section', { className: 'cw-creation-card cw-glass-card' },
-                e(AiPresence, { active: stage.active, tone: work.tone }),
-                e('div', { className: 'cw-card-topline' }, e('span', { className: 'cw-section-kicker' }, chapter ? `第 ${chapter} 章` : '当前任务'), e('div', { className: 'cw-card-top-actions' }, e('span', { className: 'cw-engine-pill' }, stage.index >= 0 ? `${'ABCDE'[stage.index]} · ${['规划', '初稿', '润色', '审查', '交付'][stage.index]}` : work.tag), e(Button, { kind: 'primary', onClick: () => props.navigate(stage.active ? 'jobs' : primaryPage) }, primaryLabel))),
-                e('h2', null, current && current.title || project && project.title || '准备开始创作'),
-                e('div', { className: 'cw-model-pill' }, e(Icon, { name: 'spark', size: 13 }), metrics.model ? `${metrics.role ? metrics.role + ' · ' : ''}${metrics.model}` : '按已保存的模型配置运行'),
-                e('div', { className: 'cw-word-progress' }, e('div', null, e('span', { className: 'cw-word-value' }, words === null ? '—' : num(words)), e('span', { className: 'cw-word-target' }, `/ ${num(wordTarget)} 字 · 已保存`)),
-                  e('div', { className: 'cw-progress-track cw-chapter-track' }, e('div', { className: 'cw-progress-fill', style: { width: words === null ? '0%' : `${Math.min(100, words / wordTarget * 100)}%` } }))),
-                e('div', { className: 'cw-live-metrics' }, ...[['用时', stage.active && timing.elapsedMs ? fmtDuration(timing.elapsedMs) : recordedMs ? fmtDuration(recordedMs) : '—'], ['最近输出速度', metrics.speed], ['本章费用', metrics.cost]].map(([label, value]) => e('div', { key: label }, e('span', null, label), e('strong', null, value)))),
-                e('div', { className: 'cw-hero-actions' }, e(Button, { kind: 'ghost', onClick: () => props.navigate('jobs') }, '任务详情'), e('span', { className: 'cw-saved-status' }, work.tone === 'err' ? work.subtitle : stage.active && !current ? '正文保存后显示' : current ? '正文已保存' : '等待创作'))),
-              e('section', { className: 'cw-manuscript-card cw-glass-card', 'aria-label': '正文预览' },
-                e('div', { className: 'cw-card-title' }, e('h3', null, '正文'), e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '专注阅读')),
-                e('div', { className: 'cw-manuscript' }, current ? e(React.Fragment, null, e('h4', null, current.title || `第 ${chapter} 章`), body.error ? e('p', null, '正文读取失败，请刷新重试。') : !savedBody ? e(Skeleton, { height: 90 }) : paragraphs.map((text, index) => e('p', { key: index }, text))) : e('div', { className: 'cw-reader-empty' }, e(AiPresence, { active: stage.active, tone: work.tone }), e('p', null, stage.active ? '本章正在创作' : '下一章，从这里开始'), e('span', null, stage.active ? '保存后可阅读正文' : '完成规划后即可开始写作'))),
-                e('div', { className: 'cw-manuscript-footer' }, e('span', null, current ? `${num(words || 0)} 字 · 已保存` : '暂无正文'), e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '阅读本章')))),
-            e('section', { className: 'cw-pipeline-card cw-glass-card', 'aria-label': '本章 A–E 流程' },
-              e('div', { className: 'cw-pipeline', style: { '--flow-progress': `${stage.complete ? 100 : Math.max(0, stage.index) * 25}%` } },
-                e('div', { className: 'cw-flow-rail', 'aria-hidden': true }, e('span', { className: 'cw-flow-fill' }), e('i', { className: 'cw-flow-front' })),
-                ...['规划', '初稿', '润色', '审查', '交付'].map((label, index) => e('button', { key: label, type: 'button', className: `cw-stage${stage.complete || index < stage.index ? ' done' : index === stage.index ? ' current' : ''}`, 'aria-current': !stage.complete && index === stage.index ? 'step' : undefined, onClick: () => props.navigate(['outline', 'chapters', 'chapters', 'chapters', 'publish'][index]) }, e('span', { className: 'cw-stage-node' }, stage.complete || index < stage.index ? e(Icon, { name: 'check', size: 12 }) : 'ABCDE'[index]), e('span', { className: 'cw-stage-copy' }, e('strong', null, label)), e('span', { className: 'cw-stage-state' }, index === stage.index ? stage.active ? '进行中' : stage.complete ? '已完成' : work.tag : ''))))),
-            work.tone === 'err' ? e('div', { className: 'nh-alertblock', style: { marginTop: 18 } }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
-            e('div', { className: 'cw-secondary-grid' },
-              e('section', { className: 'cw-chapters-card cw-glass-card' }, e('div', { className: 'cw-card-title' }, e('h3', null, '最近章节'), e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate('chapters') }, '全部章节')),
-                chapters.error ? e(Empty, null, '章节读取失败，请刷新重试') : !rows.length ? e(Empty, null, '还没有章节') : rows.slice(0, 3).map(row => e('button', { key: row.id, className: 'cw-chapter-row', type: 'button', onClick: () => props.onOpenChapter(row.id) }, e('span', { className: 'cw-chapter-index' }, row.id), e('span', { className: 'cw-chapter-row-title' }, row.title || `第 ${row.id} 章`, e('small', null, `${num(row.words)} 字`)), e('span', { className: 'cw-row-status' }, row.reviewed ? '已审查' : '待审查')))),
-              e('section', { className: 'cw-next-card cw-glass-card' }, e('div', { className: 'cw-card-title' }, e('h3', null, '下一步'), e(Icon, { name: 'clock', size: 15 })),
-                e('div', { className: 'cw-next-task-time' }, job && job.enabled ? e(React.Fragment, null, e('strong', null, (job.daily_times || [job.daily_time]).filter(Boolean).join(' / ') || '—'), e('span', null, job.timezone || '任务计划时区')) : e('strong', { style: { fontSize: 21 } }, next ? next.title : '继续你的故事')),
-                e('p', null, next ? next.blocked_reason || next.detail : job ? `${job.name || '日更任务'} · ${job.enabled ? '已启用' : '已停用'}` : '配置日更计划，安排下一次创作'),
-                e('div', { className: 'cw-schedule-tags' }, e('span', null, `${num(queue.queued || 0)} 章待发`), e('span', null, `${num(queue.published || 0)} 章已核验`)),
-                e('div', { className: 'cw-book-goal' }, e('div', null, e('span', null, '全书进度'), e('strong', null, goal)), target ? e('div', { className: 'cw-progress-track' }, e('div', { className: 'cw-progress-fill', style: { width: `${ratio * 100}%` } })) : null),
-                e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate(next ? next.action.page : 'jobs') }, next ? next.action.label : '管理日更任务'))));
+              e('section', { className: 'cw-glass-card cw-manuscript-card', 'aria-label': '正文预览' },
+                e('div', { className: 'cw-card-title' },
+                  e('div', null,
+                    e('div', { className: 'cw-eyebrow' },
+                      e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 10, fill: true })),
+                      e('span', null, 'CRAFT MANUSCRIPT · 正文直览')),
+                    e('h2', { style: { marginTop: 2 } }, current && current.title || (chapter ? `第 ${chapter} 章` : '正文预览'))),
+                  e('div', { className: 'nh-row', style: { gap: 8 } },
+                    e('span', { className: 'nh-badge', 'data-tone': current && current.reviewed ? 'ok' : current ? 'warn' : 'info' }, current ? (current.reviewed ? '已审查' : '待审查') : '未生成'),
+                    e(Button, { size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '专注阅读'))),
+                e('div', { className: 'cw-manuscript' },
+                  current
+                    ? e(React.Fragment, null,
+                        e('h4', null, current.title || `第 ${chapter} 章`),
+                        body.error ? e('p', null, '正文读取失败，请刷新重试。') : !savedBody ? e(Skeleton, { height: 110 }) : paragraphs.map((text, index) => e('p', { key: index }, text)))
+                    : e('div', { className: 'cw-reader-empty' },
+                        e(AiPresence, { active: stage.active, tone: work.tone }),
+                        e('p', null, stage.active ? '本章正在创作' : '下一章，从这里开始'),
+                        e('span', null, stage.active ? '保存后可阅读正文' : '完成规划后即可开始写作'))),
+                e('div', { className: 'cw-manuscript-footer' },
+                  e('span', null, current ? `${num(words || 0)} / ${num(wordTarget)} 字 · ${work.tone === 'err' ? work.subtitle : '正文已保存'}` : '暂无正文'),
+                  e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '打开全文与修订'))),
+              e('div', { className: 'cw-rail-stack' },
+                e('section', { className: 'cw-glass-card cw-rail-card', 'aria-label': '章节遥测' },
+                  e('div', { className: 'cw-card-title' },
+                    e('div', null,
+                      e('div', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 10, fill: true })), e('span', null, 'CHAPTER TELEMETRY')),
+                      e('h3', { style: { marginTop: 2 } }, '章节遥测与风格状态')),
+                    e('span', { className: 'nh-badge', 'data-tone': 'info' }, metrics.model ? `${metrics.role ? metrics.role + ' · ' : ''}${metrics.model}` : '默认模型')),
+                  e('div', { className: 'cw-dotted-list' },
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '本章字数 / 目标'), e('span', { className: 'dots' }), e('span', { className: `v${words && words >= wordTarget * 0.8 ? ' is-ok' : ''}` }, `${words === null ? '—' : num(words)} / ${num(wordTarget)} 字`)),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '最近输出速度'), e('span', { className: 'dots' }), e('span', { className: 'v is-active' }, metrics.speed)),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '本阶段用时'), e('span', { className: 'dots' }), e('span', { className: 'v' }, stage.active && timing.elapsedMs ? fmtDuration(timing.elapsedMs) : recordedMs ? fmtDuration(recordedMs) : '—')),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '本章模型费用'), e('span', { className: 'dots' }), e('span', { className: 'v' }, metrics.cost)))),
+                e('section', { className: 'cw-glass-card cw-rail-card', 'aria-label': '排期与最近章节' },
+                  e('div', { className: 'cw-card-title' },
+                    e('div', null,
+                      e('div', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 10, fill: true })), e('span', null, 'QUEUE & RECENT')),
+                      e('h3', { style: { marginTop: 2 } }, next ? next.title : '排期与最近章节')),
+                    e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate(next ? next.action.page : 'publish') }, next ? next.action.label : '发布队列')),
+                  e('div', { className: 'cw-dotted-list' },
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '队列待发 / 已核验'), e('span', { className: 'dots' }), e('span', { className: 'v is-ok' }, `${num(queue.queued || 0)} 待发 · ${num(queue.published || 0)} 已核验`)),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '日更调度状态'), e('span', { className: 'dots' }), e('span', { className: `v${job && job.enabled ? ' is-ok' : ' is-warn'}` }, job && job.enabled ? ((job.daily_times || [job.daily_time]).filter(Boolean).join(' / ') || '已启用') : '未启用或手动'))),
+                  chapters.error
+                    ? e(Empty, null, '章节读取失败，请刷新重试')
+                    : !rows.length
+                      ? e(Empty, null, '还没有章节')
+                      : e('div', { style: { display: 'flex', flexDirection: 'column', gap: 7 } },
+                          rows.slice(0, 3).map(row => e('button', {
+                            key: row.id,
+                            className: 'cw-chapter-row',
+                            type: 'button',
+                            onClick: () => props.onOpenChapter(row.id),
+                          },
+                            e('span', { className: 'cw-chapter-index' }, row.id),
+                            e('span', { className: 'cw-chapter-row-title' }, row.title || `第 ${row.id} 章`, e('small', null, `${num(row.words)} 字`)),
+                            e('span', { className: 'nh-badge', 'data-tone': row.reviewed ? 'ok' : 'warn' }, row.reviewed ? '已审查' : '待审查'))))))));
         }
 
 
@@ -2989,12 +3078,787 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         /* ------------------------------------------------------------ 发布队列 */
 
+        function MultiPlatformPublishPanel(props) {
+          const { project } = props;
+          const toast = useToast();
+          const [busy, setBusy] = React.useState('');
+          const [lastResult, setLastResult] = React.useState(null);
+          const [submitConfirm, setSubmitConfirm] = React.useState(false);
+
+          const platformsPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/publish/platforms`) : Promise.resolve(null)),
+            [project && project.id],
+            POLL_MS,
+          );
+          const statusPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/publish/status`) : Promise.resolve(null)),
+            [project && project.id],
+            POLL_MS,
+          );
+          const chaptersPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/chapters`) : Promise.resolve({ chapters: [] })),
+            [project && project.id],
+            POLL_MS * 2,
+          );
+
+          const savedTarget = (platformsPoll.data && platformsPoll.data.target) || {};
+          const [form, setForm] = React.useState({
+            platform: 'fanqie',
+            account: '',
+            platform_book_id: '',
+            book: '',
+            chapter: '1',
+            title: '',
+            body: '',
+            verified_via: 'manual',
+            observed_chapters: '',
+            auth_chapters: '1',
+            auth_note: '',
+            auth_expires: '',
+            rec_sha256: '',
+            rec_resolution: 'accepted',
+            rec_note: '',
+            rec_evidence: '',
+          });
+          const [targetSyncId, setTargetSyncId] = React.useState('');
+
+          React.useEffect(() => {
+            if (!project) return;
+            const key = `${project.id}:${savedTarget.platform || ''}:${savedTarget.account || ''}:${savedTarget.platform_book_id || ''}`;
+            if (targetSyncId === key) return;
+            setTargetSyncId(key);
+            setForm((current) => ({
+              ...current,
+              platform: savedTarget.platform || current.platform || 'fanqie',
+              account: savedTarget.account || current.account || '',
+              platform_book_id: savedTarget.platform_book_id || current.platform_book_id || '',
+              book: savedTarget.book || project.title || current.book || '',
+            }));
+          }, [project && project.id, savedTarget.platform, savedTarget.account, savedTarget.platform_book_id, savedTarget.book, targetSyncId]);
+
+          const exportsPoll = usePoll(
+            () =>
+              project && form.account.trim() && form.platform_book_id.trim()
+                ? api(
+                    `/projects/${project.id}/publish/exports?platform=${encodeURIComponent(form.platform)}&account=${encodeURIComponent(form.account.trim())}&platform_book_id=${encodeURIComponent(form.platform_book_id.trim())}`,
+                  )
+                : Promise.resolve({ items: [] }),
+            [project && project.id, form.platform, form.account, form.platform_book_id],
+            0,
+          );
+
+          if (!project) {
+            return e(Empty, null, '请先选择或创建一部作品');
+          }
+
+          const reloadAll = () => {
+            platformsPoll.reload(true);
+            statusPoll.reload(true);
+            exportsPoll.reload(true);
+          };
+
+          const runAction = async (tag, label, path, method, body) => {
+            setBusy(tag);
+            try {
+              const result = await api(path, { method, body });
+              setLastResult({ label, result });
+              toast.push(`${label} 完成`, 'ok');
+              reloadAll();
+              return result;
+            } catch (error) {
+              toast.push(`${label} 失败：${error.message}`, 'err');
+              return null;
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const parseChapters = (text) =>
+            String(text || '')
+              .split(/[,，\s]+/)
+              .map((item) => parseInt(item, 10))
+              .filter((item) => Number.isInteger(item) && item >= 1);
+
+          const loadChapter = async (chapterId) => {
+            const targetChapter = parseInt(chapterId || form.chapter, 10);
+            if (!Number.isInteger(targetChapter) || targetChapter < 1) {
+              toast.push('请输入有效章号', 'err');
+              return;
+            }
+            setBusy('loadChapter');
+            try {
+              const detail = await api(`/projects/${project.id}/chapters/${targetChapter}`);
+              setForm((current) => ({
+                ...current,
+                chapter: String(detail.id || targetChapter),
+                title: detail.title || `第${targetChapter}章`,
+                body: detail.content || '',
+              }));
+              toast.push(`已载入第 ${targetChapter} 章正文`, 'ok');
+            } catch (error) {
+              toast.push(`载入章节失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const capabilities = (platformsPoll.data && platformsPoll.data.platforms) || [];
+          const status = statusPoll.data || {};
+          const bindings = status.bindings || [];
+          const authorizations = status.authorizations || [];
+          const ledger = status.ledger || [];
+          const exportItems = (exportsPoll.data && exportsPoll.data.items) || [];
+          const chapterRows = (chaptersPoll.data && chaptersPoll.data.chapters) || [];
+          const capLabel = (val) => (val === true ? '是' : val === false ? '否' : '待实证');
+          const capTone = (val) => (val === true ? 'ok' : val === false ? 'mute' : 'warn');
+
+          return e(
+            'div',
+            { className: 'nh-col', style: { gap: 'var(--nh-gap)' } },
+            e(
+              'div',
+              { className: 'nh-note', 'data-tone': 'warn' },
+              '候选能力（默认零平台写入）：按「① 本地导出 → ② 只读登记 → ③ 服务端授权后单章提交」逐层开放。七猫仅支持本地导出与只读登记，不假设自动提交。',
+            ),
+            e(
+              'div',
+              { className: 'nh-stats' },
+              e(Stat, { label: '目标平台', value: savedTarget.platform || form.platform || '—', foot: savedTarget.account ? `账号 ${savedTarget.account}` : '未登记目标' }),
+              e(Stat, { label: '只读绑定', value: num(bindings.length), unit: '条' }),
+              e(Stat, { label: '有效授权', value: num(authorizations.filter((item) => item.active).length), unit: '条', foot: `历史 ${authorizations.length} 条` }),
+              e(Stat, { label: '提交账本', value: num(ledger.length), unit: '条', foot: status.corrupt_ledgers ? `损坏账本 ${status.corrupt_ledgers}` : '账本完整' }),
+            ),
+            e(
+              Card,
+              {
+                title: '平台能力契约矩阵',
+                hint: '只有 can_draft / can_schedule / can_verify_body / can_submit 全为 True 才可发布',
+                actions: e(Button, { size: 'sm', kind: 'ghost', icon: 'refresh', onClick: reloadAll }, '刷新'),
+              },
+              capabilities.length
+                ? e(
+                    'table',
+                    { className: 'nh-table' },
+                    e(
+                      'thead',
+                      null,
+                      e(
+                        'tr',
+                        null,
+                        e('th', null, '平台'),
+                        e('th', null, '导出'),
+                        e('th', null, '草稿'),
+                        e('th', null, '排期'),
+                        e('th', null, '回读'),
+                        e('th', null, '提交'),
+                        e('th', null, '可发布'),
+                        e('th', null, '说明'),
+                      ),
+                    ),
+                    e(
+                      'tbody',
+                      null,
+                      capabilities.map((row) =>
+                        e(
+                          'tr',
+                          { key: row.platform },
+                          e('td', null, e('strong', null, row.label || row.platform), ' ', e('span', { className: 'nh-k' }, row.platform)),
+                          e('td', null, e(Badge, { tone: capTone(row.can_export) }, capLabel(row.can_export))),
+                          e('td', null, e(Badge, { tone: capTone(row.can_draft) }, capLabel(row.can_draft))),
+                          e('td', null, e(Badge, { tone: capTone(row.can_schedule) }, capLabel(row.can_schedule))),
+                          e('td', null, e(Badge, { tone: capTone(row.can_verify_body) }, capLabel(row.can_verify_body))),
+                          e('td', null, e(Badge, { tone: capTone(row.can_submit) }, capLabel(row.can_submit))),
+                          e('td', null, e(Badge, { tone: row.publishable ? 'ok' : 'warn' }, row.publishable ? '可发布' : row.submission || '仅导出')),
+                          e('td', { className: 'nh-dim2 nh-wrap', style: { fontSize: 11 } }, row.note || '—'),
+                        ),
+                      ),
+                    ),
+                  )
+                : e(Skeleton, {}),
+            ),
+            e(
+              Card,
+              { title: '目标命名空间与身份绑定', hint: '按 platform / 账号短 hash / 平台作品 ID 隔离，不回落占位名' },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(
+                  Field,
+                  { label: 'target_platform' },
+                  e(Select, {
+                    value: form.platform,
+                    onChange: (value) => setForm({ ...form, platform: value }),
+                    options: [
+                      { value: 'fanqie', label: '番茄小说（fanqie）' },
+                      { value: 'qimao', label: '七猫中文网（qimao · 仅导出与登记）' },
+                    ],
+                  }),
+                ),
+                e(Field, { label: '平台账号标识（必填）' }, e(TextInput, { value: form.account, placeholder: '如：my-fanqie-acc', onChange: (value) => setForm({ ...form, account: value }) })),
+                e(Field, { label: '平台作品 ID（必填）' }, e(TextInput, { value: form.platform_book_id, placeholder: '如：7123456', onChange: (value) => setForm({ ...form, platform_book_id: value }) })),
+                e(Field, { label: '作品书名' }, e(TextInput, { value: form.book, onChange: (value) => setForm({ ...form, book: value }) })),
+              ),
+              e(
+                'div',
+                { className: 'nh-row', style: { marginTop: 10, gap: 8 } },
+                e(
+                  Button,
+                  {
+                    kind: 'primary',
+                    icon: 'save',
+                    busy: busy === 'target',
+                    onClick: () =>
+                      runAction('target', '保存目标平台', `/projects/${project.id}/publish/target`, 'PUT', {
+                        platform: form.platform,
+                        account: form.account.trim(),
+                        platform_book_id: form.platform_book_id.trim(),
+                        book: form.book.trim(),
+                      }),
+                  },
+                  '保存 target_platform',
+                ),
+                e(
+                  Select,
+                  {
+                    value: form.verified_via,
+                    onChange: (value) => setForm({ ...form, verified_via: value }),
+                    options: [
+                      { value: 'manual', label: '人工登记（manual → registered）' },
+                      { value: 'readonly_probe', label: '只读探测（readonly_probe）' },
+                    ],
+                  },
+                ),
+                e(TextInput, {
+                  value: form.observed_chapters,
+                  placeholder: '已观测章号，如 1,2',
+                  onChange: (value) => setForm({ ...form, observed_chapters: value }),
+                }),
+                e(
+                  Button,
+                  {
+                    busy: busy === 'bind',
+                    disabled: !form.account.trim() || !form.platform_book_id.trim(),
+                    onClick: () =>
+                      runAction('bind', '第二层只读登记', `/projects/${project.id}/publish/bind`, 'POST', {
+                        platform: form.platform,
+                        account: form.account.trim(),
+                        platform_book_id: form.platform_book_id.trim(),
+                        title: form.book.trim(),
+                        verified_via: form.verified_via,
+                        observed_chapters: parseChapters(form.observed_chapters),
+                      }),
+                  },
+                  '② 只读登记 bind_book',
+                ),
+              ),
+            ),
+            e(
+              Card,
+              { title: '第一层 · 本地标准导出（零平台写入）', hint: '生成 exports/第NNNN章.txt 与 manifest.json，固定 uploaded=False' },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(
+                  Field,
+                  { label: '从本作品章节载入' },
+                  e(Select, {
+                    value: form.chapter,
+                    onChange: (value) => loadChapter(value),
+                    options: [
+                      { value: '', label: '选择已有章节载入…' },
+                      ...chapterRows.map((row) => ({ value: String(row.id), label: `第 ${row.id} 章 · ${row.title || '无标题'}（${num(row.words)}字）` })),
+                    ],
+                  }),
+                ),
+                e(Field, { label: '章号' }, e(TextInput, { type: 'number', min: 1, value: form.chapter, onChange: (value) => setForm({ ...form, chapter: value }) })),
+                e(Field, { label: '章节标题' }, e(TextInput, { value: form.title, placeholder: '第1章 标题', onChange: (value) => setForm({ ...form, title: value }) })),
+              ),
+              e(
+                Field,
+                { label: '待导出 / 提交正文（UTF-8 ≤ 1 MiB）' },
+                e('textarea', {
+                  className: 'nh-textarea',
+                  rows: 4,
+                  value: form.body,
+                  placeholder: '输入或从上方章节下拉载入正文…',
+                  onChange: (event) => setForm({ ...form, body: event.target.value }),
+                }),
+              ),
+              e(
+                'div',
+                { className: 'nh-row', style: { marginTop: 8, gap: 8 } },
+                e(Button, { size: 'sm', busy: busy === 'loadChapter', onClick: () => loadChapter(form.chapter) }, '载入本章正文'),
+                e(
+                  Button,
+                  {
+                    kind: 'primary',
+                    busy: busy === 'export',
+                    disabled: !form.account.trim() || !form.platform_book_id.trim() || !form.body.trim(),
+                    onClick: async () => {
+                      const res = await runAction('export', '第一层本地导出', `/projects/${project.id}/publish/export`, 'POST', {
+                        platform: form.platform,
+                        chapter: parseInt(form.chapter, 10) || 1,
+                        title: form.title,
+                        body: form.body,
+                        account: form.account.trim(),
+                        platform_book_id: form.platform_book_id.trim(),
+                      });
+                      if (res && res.sha256) {
+                        setForm((current) => ({ ...current, rec_sha256: res.sha256 }));
+                      }
+                    },
+                  },
+                  '① 导出纯文本（不上传）',
+                ),
+              ),
+              exportItems.length
+                ? e(
+                    'div',
+                    { style: { marginTop: 12 } },
+                    e(
+                      'table',
+                      { className: 'nh-table' },
+                      e('thead', null, e('tr', null, e('th', null, '章'), e('th', null, '标题'), e('th', null, '净字数'), e('th', null, 'sha256'), e('th', null, '状态'))),
+                      e(
+                        'tbody',
+                        null,
+                        exportItems.slice(0, 12).map((item) =>
+                          e(
+                            'tr',
+                            { key: `${item.chapter}-${item.sha256}` },
+                            e('td', { className: 'nh-mono' }, item.chapter),
+                            e('td', { className: 'nh-wrap' }, item.title),
+                            e('td', { className: 'nh-mono' }, num(item.chars)),
+                            e('td', { className: 'nh-mono' }, String(item.sha256 || '').slice(0, 12) + '…'),
+                            e('td', null, e(Badge, { tone: 'mute' }, '本地导出 · 未上传')),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : e('div', { className: 'nh-k', style: { marginTop: 10 } }, '填写账号与平台作品 ID 并导出后，将在此列出清单与摘要。'),
+            ),
+            e(
+              Card,
+              { title: '第三层 · 服务端授权、受控提交与对账', hint: '提交前必过能力 → 适配器 → 只读绑定 → 服务端授权四关' },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: '授权章号列表（逗号分隔）' }, e(TextInput, { value: form.auth_chapters, placeholder: '1,2', onChange: (value) => setForm({ ...form, auth_chapters: value }) })),
+                e(Field, { label: '授权依据说明（必填）' }, e(TextInput, { value: form.auth_note, placeholder: '例如：作者确认单章试点', onChange: (value) => setForm({ ...form, auth_note: value }) })),
+                e(Field, { label: '过期时间 ISO（可选）' }, e(TextInput, { value: form.auth_expires, placeholder: '留空不限时', onChange: (value) => setForm({ ...form, auth_expires: value }) })),
+              ),
+              e(
+                'div',
+                { className: 'nh-row', style: { marginTop: 8, gap: 8 } },
+                e(
+                  Button,
+                  {
+                    busy: busy === 'authorize',
+                    disabled: !form.account.trim() || !form.platform_book_id.trim() || !form.auth_note.trim(),
+                    onClick: () =>
+                      runAction('authorize', '登记服务端授权', `/projects/${project.id}/publish/authorize`, 'POST', {
+                        platform: form.platform,
+                        account: form.account.trim(),
+                        platform_book_id: form.platform_book_id.trim(),
+                        chapters: parseChapters(form.auth_chapters),
+                        note: form.auth_note.trim(),
+                        expires_at: form.auth_expires.trim(),
+                      }),
+                  },
+                  '登记服务端授权',
+                ),
+                e(
+                  Button,
+                  {
+                    kind: 'primary',
+                    busy: busy === 'submit',
+                    disabled: !form.account.trim() || !form.platform_book_id.trim() || !form.body.trim(),
+                    onClick: () => setSubmitConfirm(true),
+                  },
+                  form.platform === 'qimao' ? '③ 受控提交（七猫恒拒绝）' : '③ 获准单章提交',
+                ),
+              ),
+              e('div', { className: 'nh-sep' }),
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: '对账正文 sha256（64位十六进制）' }, e(TextInput, { value: form.rec_sha256, placeholder: '从提交/导出结果填入 64 位摘要', onChange: (value) => setForm({ ...form, rec_sha256: value }) })),
+                e(
+                  Field,
+                  { label: '对账结论' },
+                  e(Select, {
+                    value: form.rec_resolution,
+                    onChange: (value) => setForm({ ...form, rec_resolution: value }),
+                    options: [
+                      { value: 'accepted', label: 'accepted（确凿已在平台接收）' },
+                      { value: 'abandoned', label: 'abandoned（终态放弃，不重发）' },
+                    ],
+                  }),
+                ),
+                e(Field, { label: '对账备注（必填）' }, e(TextInput, { value: form.rec_note, onChange: (value) => setForm({ ...form, rec_note: value }) })),
+                e(Field, { label: '平台回执/页面证据（必填）' }, e(TextInput, { value: form.rec_evidence, onChange: (value) => setForm({ ...form, rec_evidence: value }) })),
+              ),
+              e(
+                'div',
+                { className: 'nh-row', style: { marginTop: 8 } },
+                e(
+                  Button,
+                  {
+                    busy: busy === 'reconcile',
+                    disabled: !form.account.trim() || !form.platform_book_id.trim() || !form.rec_sha256.trim() || !form.rec_note.trim() || !form.rec_evidence.trim(),
+                    onClick: () =>
+                      runAction('reconcile', '提交账本对账', `/projects/${project.id}/publish/reconcile`, 'POST', {
+                        platform: form.platform,
+                        account: form.account.trim(),
+                        platform_book_id: form.platform_book_id.trim(),
+                        chapter: parseInt(form.chapter, 10) || 1,
+                        body_sha256: form.rec_sha256.trim(),
+                        resolution: form.rec_resolution,
+                        note: form.rec_note.trim(),
+                        evidence: form.rec_evidence.trim(),
+                      }),
+                  },
+                  '执行对账 reconcile',
+                ),
+              ),
+              ledger.length
+                ? e(
+                    'div',
+                    { style: { marginTop: 12 } },
+                    e('div', { className: 'nh-k', style: { marginBottom: 6 } }, '提交意图账本'),
+                    ledger.map((row) =>
+                      e(
+                        'div',
+                        { key: `${row.platform}-${row.chapter}-${row.body_sha256}`, className: 'nh-kvrow' },
+                        e('span', null, `${row.platform} · 第 ${row.chapter} 章 · ${String(row.body_sha256 || '').slice(0, 12)}…`),
+                        e(Badge, { tone: row.state === 'accepted' ? 'ok' : row.state === 'unknown' || row.state === 'mismatch' ? 'warn' : 'mute' }, row.state),
+                      ),
+                    ),
+                  )
+                : null,
+              lastResult
+                ? e('pre', { className: 'nh-pre', style: { marginTop: 12 } }, `${lastResult.label}：\n${JSON.stringify(lastResult.result, null, 2)}`)
+                : null,
+            ),
+            e(Modal, {
+              open: submitConfirm,
+              title: '确认执行第三层受控提交？',
+              onClose: () => setSubmitConfirm(false),
+              children: e(
+                'div',
+                { className: 'nh-col', style: { gap: 12 } },
+                e(
+                  'p',
+                  { style: { margin: 0, fontSize: 13, lineHeight: 1.7 } },
+                  form.platform === 'qimao'
+                    ? '当前选择七猫（qimao）：按平台契约，七猫未开放自动提交，将直接返回 refused 且不调用任何适配器（writes=0）。'
+                    : `将按契约校验能力、适配器、只读绑定与服务端授权，提交第 ${form.chapter} 章到 ${form.platform}（账号 ${form.account} / 作品 ${form.platform_book_id}）。`,
+                ),
+                e(
+                  'div',
+                  { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
+                  e(Button, { onClick: () => setSubmitConfirm(false) }, '取消'),
+                  e(
+                    Button,
+                    {
+                      kind: 'primary',
+                      onClick: () => {
+                        setSubmitConfirm(false);
+                        runAction('submit', '第三层受控提交', `/projects/${project.id}/publish/submit`, 'POST', {
+                          platform: form.platform,
+                          account: form.account.trim(),
+                          platform_book_id: form.platform_book_id.trim(),
+                          chapter: parseInt(form.chapter, 10) || 1,
+                          title: form.title,
+                          body: form.body,
+                        });
+                      },
+                    },
+                    '确认执行',
+                  ),
+                ),
+              ),
+            }),
+          );
+        }
+
+        function BrowserPilotPanel(props) {
+          const { project } = props;
+          const toast = useToast();
+          const [busy, setBusy] = React.useState('');
+          const [headless, setHeadless] = React.useState(false);
+          const [publishConfirm, setPublishConfirm] = React.useState(false);
+          const [lastOutput, setLastOutput] = React.useState(null);
+
+          const statusPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/browser/status`) : Promise.resolve(null)),
+            [project && project.id],
+            POLL_MS,
+          );
+          const targetPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/browser/target`) : Promise.resolve({ target: {} })),
+            [project && project.id],
+            0,
+          );
+          const healthPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/browser/health`) : Promise.resolve(null)),
+            [project && project.id],
+            0,
+          );
+          const capsPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/browser/capabilities`) : Promise.resolve(null)),
+            [project && project.id],
+            POLL_MS,
+          );
+
+          const saved = (targetPoll.data && targetPoll.data.target) || {};
+          const [targetForm, setTargetForm] = React.useState({
+            os: 'windows',
+            arch: 'x64',
+            runtime: 'native',
+            browser: 'chromium',
+            browser_version: '131.0',
+            driver: 'playwright',
+            credential: 'reconfigured',
+            scope: 'read_only',
+            authorization: '',
+            profile: '',
+            model: '',
+            platform: 'fanqie',
+            account: '',
+          });
+          const [syncedProject, setSyncedProject] = React.useState('');
+          const [loginForm, setLoginForm] = React.useState({ status: 'needs_human', account: '', reason: '' });
+          const [readonlyForm, setReadonlyForm] = React.useState({ book_id: '', chapter: '1', body_sha256: '' });
+          const [pubForm, setPubForm] = React.useState({ book_id: '', chapter: '1', body_sha256: '', replace: false });
+          const [recForm, setRecForm] = React.useState({ key: '', book_id: '', chapter: '0', resolution: 'abandoned', note: '' });
+
+          React.useEffect(() => {
+            if (!project) return;
+            const syncKey = `${project.id}:${JSON.stringify(saved)}`;
+            if (syncedProject === syncKey) return;
+            setSyncedProject(syncKey);
+            if (saved && saved.browser) {
+              setTargetForm({
+                os: saved.os || 'windows',
+                arch: saved.arch || 'x64',
+                runtime: saved.runtime || 'native',
+                browser: saved.browser || 'chromium',
+                browser_version: saved.browser_version || '131.0',
+                driver: saved.driver || 'playwright',
+                credential: saved.credential || 'reconfigured',
+                scope: saved.scope || 'read_only',
+                authorization: saved.authorization || '',
+                profile: saved.profile || '',
+                model: saved.model || '',
+                platform: saved.platform || 'fanqie',
+                account: saved.account || '',
+              });
+            }
+          }, [project && project.id, saved, syncedProject]);
+
+          if (!project) {
+            return e(Empty, null, '请先选择或创建一部作品');
+          }
+
+          const reloadAll = () => {
+            statusPoll.reload(true);
+            targetPoll.reload(true);
+            healthPoll.reload(true);
+            capsPoll.reload(true);
+          };
+
+          const callApi = async (tag, label, path, method, body) => {
+            setBusy(tag);
+            try {
+              const res = await api(path, { method, body });
+              setLastOutput({ label, res });
+              toast.push(`${label} 完成`, 'ok');
+              reloadAll();
+            } catch (error) {
+              toast.push(`${label} 失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const statusData = statusPoll.data || {};
+          const login = statusData.login || {};
+          const caps = capsPoll.data || {};
+          const columns = caps.columns || [];
+          const row = caps.row || {};
+          const evidence = caps.evidence || {};
+          const capTone = (val) => (val === 'real' ? 'ok' : val === 'simulated' ? 'warn' : 'mute');
+
+          return e(
+            'div',
+            { className: 'nh-col', style: { gap: 'var(--nh-gap)' } },
+            e(
+              'div',
+              { className: 'nh-note', 'data-tone': 'warn' },
+              '候选试点 · 待实机与真实扫码验证：浏览器登录 valid/expired 仅允许由后端适配器回读页面证据写入，客户端操作不可自证登录；默认无真实平台写入。',
+            ),
+            e(
+              'div',
+              { className: 'nh-stats' },
+              e(Stat, { label: '登录状态', value: login.status || 'unknown', foot: login.source ? `来源 ${login.source}` : '尚未回读' }),
+              e(Stat, { label: 'Journal 条目', value: num(statusData.journal || 0), unit: '条' }),
+              e(Stat, { label: '运行范围', value: (statusData.target && statusData.target.scope) || '未配置', foot: (statusData.target && statusData.target.platform) || '—' }),
+              e(Stat, { label: '适配器健康', value: healthPoll.data && healthPoll.data.ok ? '就绪' : '未连接', foot: healthPoll.error ? healthPoll.error.message : '仅诊断探测' }),
+            ),
+            e(
+              Card,
+              {
+                title: '八列能力矩阵与证据',
+                hint: '每列区分 real / simulated / pending',
+                actions: e(Button, { size: 'sm', kind: 'ghost', icon: 'refresh', onClick: reloadAll }, '刷新'),
+              },
+              columns.length
+                ? e(
+                    'div',
+                    { className: 'nh-chips' },
+                    columns.map((col) =>
+                      e(
+                        'div',
+                        { key: col, className: 'nh-panel', style: { minWidth: 135, flex: '1 1 135px' } },
+                        e('div', { className: 'nh-row', style: { justifyContent: 'space-between' } }, e('span', { className: 'nh-k' }, col), e(Badge, { tone: capTone(row[col]) }, row[col] || 'pending')),
+                        e('span', { className: 'nh-dim2 nh-wrap', style: { fontSize: 11 } }, evidence[col] || '暂无证据'),
+                      ),
+                    ),
+                  )
+                : e(Empty, null, '尚未读取能力矩阵'),
+            ),
+            e(
+              Card,
+              { title: '唯一目标配置（target）', hint: '八项必填，profile 拒绝对外越界与联接' },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: 'OS' }, e(Select, { value: targetForm.os, onChange: (value) => setTargetForm({ ...targetForm, os: value }), options: [{ value: 'windows', label: 'windows' }, { value: 'linux', label: 'linux' }, { value: 'macos', label: 'macos' }] })),
+                e(Field, { label: '架构' }, e(Select, { value: targetForm.arch, onChange: (value) => setTargetForm({ ...targetForm, arch: value }), options: [{ value: 'x64', label: 'x64' }, { value: 'amd64', label: 'amd64' }, { value: 'arm64', label: 'arm64' }] })),
+                e(Field, { label: '运行形态' }, e(Select, { value: targetForm.runtime, onChange: (value) => setTargetForm({ ...targetForm, runtime: value }), options: [{ value: 'native', label: 'native' }, { value: 'container', label: 'container' }] })),
+                e(Field, { label: '浏览器' }, e(TextInput, { value: targetForm.browser, onChange: (value) => setTargetForm({ ...targetForm, browser: value }) })),
+                e(Field, { label: '浏览器版本' }, e(TextInput, { value: targetForm.browser_version, onChange: (value) => setTargetForm({ ...targetForm, browser_version: value }) })),
+                e(Field, { label: '驱动' }, e(TextInput, { value: targetForm.driver, onChange: (value) => setTargetForm({ ...targetForm, driver: value }) })),
+                e(Field, { label: '凭据方案' }, e(TextInput, { value: targetForm.credential, onChange: (value) => setTargetForm({ ...targetForm, credential: value }) })),
+                e(Field, { label: '平台' }, e(TextInput, { value: targetForm.platform, onChange: (value) => setTargetForm({ ...targetForm, platform: value }) })),
+                e(Field, { label: '账号' }, e(TextInput, { value: targetForm.account, onChange: (value) => setTargetForm({ ...targetForm, account: value }) })),
+                e(Field, { label: '授权范围' }, e(Select, { value: targetForm.scope, onChange: (value) => setTargetForm({ ...targetForm, scope: value }), options: [{ value: 'read_only', label: 'read_only（仅只读）' }, { value: 'publish', label: 'publish（需授权依据）' }] })),
+              ),
+              targetForm.scope === 'publish'
+                ? e(Field, { label: 'publish 授权依据（必填）' }, e(TextInput, { value: targetForm.authorization, placeholder: '账号 / 书 / 章授权依据', onChange: (value) => setTargetForm({ ...targetForm, authorization: value }) }))
+                : null,
+              e(
+                'div',
+                { className: 'nh-row', style: { marginTop: 10, gap: 8 } },
+                e(Button, { kind: 'primary', icon: 'save', busy: busy === 'saveTarget', onClick: () => callApi('saveTarget', '保存浏览器 target', `/projects/${project.id}/browser/target`, 'PUT', targetForm) }, '保存 target'),
+                e('label', { className: 'nh-ack' }, e('input', { type: 'checkbox', checked: headless, onChange: (event) => setHeadless(event.target.checked) }), '无头模式（headless）'),
+                e(Button, { icon: 'play', busy: busy === 'launch', onClick: () => callApi('launch', '启动浏览器', `/projects/${project.id}/browser/launch?headless=${headless ? 'true' : 'false'}`, 'POST', {}) }, '启动浏览器'),
+                e(Button, { icon: 'stop', busy: busy === 'stop', onClick: () => callApi('stop', '停止浏览器', `/projects/${project.id}/browser/stop`, 'POST', {}) }, '停止浏览器'),
+              ),
+            ),
+            e(
+              'div',
+              { className: 'nh-grid', style: { gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))' } },
+              e(
+                Card,
+                { title: '登录状态与只读核验', hint: '客户端只可记非 valid 状态；只读核验 writes=0' },
+                e(
+                  'div',
+                  { className: 'nh-formgrid' },
+                  e(
+                    Field,
+                    { label: '客户端登录回执状态' },
+                    e(Select, {
+                      value: loginForm.status,
+                      onChange: (value) => setLoginForm({ ...loginForm, status: value }),
+                      options: [
+                        { value: 'needs_human', label: 'needs_human（等待本人扫码）' },
+                        { value: 'cancelled', label: 'cancelled（已取消）' },
+                        { value: 'unknown', label: 'unknown（未知）' },
+                      ],
+                    }),
+                  ),
+                  e(Field, { label: '原因/备注' }, e(TextInput, { value: loginForm.reason, onChange: (value) => setLoginForm({ ...loginForm, reason: value }) })),
+                ),
+                e('div', { className: 'nh-row', style: { marginTop: 8 } }, e(Button, { size: 'sm', busy: busy === 'login', onClick: () => callApi('login', '记录登录状态', `/projects/${project.id}/browser/login`, 'POST', loginForm) }, '记录状态')),
+                e('div', { className: 'nh-sep' }),
+                e(
+                  'div',
+                  { className: 'nh-formgrid' },
+                  e(Field, { label: '平台作品 ID' }, e(TextInput, { value: readonlyForm.book_id, onChange: (value) => setReadonlyForm({ ...readonlyForm, book_id: value }) })),
+                  e(Field, { label: '章号' }, e(TextInput, { type: 'number', min: 1, value: readonlyForm.chapter, onChange: (value) => setReadonlyForm({ ...readonlyForm, chapter: value }) })),
+                  e(Field, { label: '期望正文 sha256（可选）' }, e(TextInput, { value: readonlyForm.body_sha256, onChange: (value) => setReadonlyForm({ ...readonlyForm, body_sha256: value }) })),
+                ),
+                e('div', { className: 'nh-row', style: { marginTop: 8 } }, e(Button, { size: 'sm', kind: 'primary', disabled: !readonlyForm.book_id.trim(), busy: busy === 'readonly', onClick: () => callApi('readonly', '只读核验', `/projects/${project.id}/browser/readonly`, 'POST', { book_id: readonlyForm.book_id.trim(), chapter: parseInt(readonlyForm.chapter, 10) || 1, body_sha256: readonlyForm.body_sha256.trim() }) }, '执行只读核验')),
+              ),
+              e(
+                Card,
+                { title: '获准单章投递与清账对账', hint: '先落账本后写一次，未知只对账' },
+                e(
+                  'div',
+                  { className: 'nh-formgrid' },
+                  e(Field, { label: '平台作品 ID' }, e(TextInput, { value: pubForm.book_id, onChange: (value) => setPubForm({ ...pubForm, book_id: value }) })),
+                  e(Field, { label: '章号' }, e(TextInput, { type: 'number', min: 1, value: pubForm.chapter, onChange: (value) => setPubForm({ ...pubForm, chapter: value }) })),
+                  e(Field, { label: '正文 sha256（64位必填）' }, e(TextInput, { value: pubForm.body_sha256, onChange: (value) => setPubForm({ ...pubForm, body_sha256: value }) })),
+                ),
+                e('div', { className: 'nh-row', style: { marginTop: 8, gap: 10 } },
+                  e('label', { className: 'nh-ack' }, e('input', { type: 'checkbox', checked: pubForm.replace, onChange: (event) => setPubForm({ ...pubForm, replace: event.target.checked }) }), '允许替换（replace）'),
+                  e(Button, { size: 'sm', kind: 'primary', disabled: !pubForm.book_id.trim() || !/^[0-9a-f]{64}$/i.test(pubForm.body_sha256.trim()), busy: busy === 'pub', onClick: () => setPublishConfirm(true) }, '获准单章投递'),
+                ),
+                e('div', { className: 'nh-sep' }),
+                e(
+                  'div',
+                  { className: 'nh-formgrid' },
+                  e(Field, { label: '账本 Key（16位hex，可选）' }, e(TextInput, { value: recForm.key, onChange: (value) => setRecForm({ ...recForm, key: value }) })),
+                  e(Field, { label: '或 作品 ID' }, e(TextInput, { value: recForm.book_id, onChange: (value) => setRecForm({ ...recForm, book_id: value }) })),
+                  e(Field, { label: '章号' }, e(TextInput, { type: 'number', min: 0, value: recForm.chapter, onChange: (value) => setRecForm({ ...recForm, chapter: value }) })),
+                  e(Field, { label: '对账结论' }, e(Select, { value: recForm.resolution, onChange: (value) => setRecForm({ ...recForm, resolution: value }), options: [{ value: 'abandoned', label: 'abandoned（放弃）' }, { value: 'accepted', label: 'accepted（已接收）' }] })),
+                ),
+                e(Field, { label: '对账备注' }, e(TextInput, { value: recForm.note, onChange: (value) => setRecForm({ ...recForm, note: value }) })),
+                e('div', { className: 'nh-row', style: { marginTop: 8 } }, e(Button, { size: 'sm', busy: busy === 'rec', onClick: () => callApi('rec', '浏览器账本对账', `/projects/${project.id}/browser/publish/reconcile`, 'POST', { key: recForm.key.trim(), book_id: recForm.book_id.trim(), chapter: parseInt(recForm.chapter, 10) || 0, resolution: recForm.resolution, note: recForm.note }) }, '执行对账')),
+              ),
+            ),
+            lastOutput ? e('pre', { className: 'nh-pre' }, `${lastOutput.label}：\n${JSON.stringify(lastOutput.res, null, 2)}`) : null,
+            e(Modal, {
+              open: publishConfirm,
+              title: '确认执行单目标浏览器投递？',
+              onClose: () => setPublishConfirm(false),
+              children: e(
+                'div',
+                { className: 'nh-col', style: { gap: 12 } },
+                e('p', { style: { margin: 0, fontSize: 13 } }, `需已配置 scope=publish 与授权依据，且后端存在已注册浏览器适配器，否则将拒绝并保持零写入。继续投递第 ${pubForm.chapter} 章？`),
+                e(
+                  'div',
+                  { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
+                  e(Button, { onClick: () => setPublishConfirm(false) }, '取消'),
+                  e(Button, {
+                    kind: 'primary',
+                    onClick: () => {
+                      setPublishConfirm(false);
+                      callApi('pub', '单目标浏览器投递', `/projects/${project.id}/browser/publish`, 'POST', {
+                        book_id: pubForm.book_id.trim(),
+                        chapter: parseInt(pubForm.chapter, 10) || 1,
+                        body_sha256: pubForm.body_sha256.trim().toLowerCase(),
+                        replace: Boolean(pubForm.replace),
+                      });
+                    },
+                  }, '确认投递'),
+                ),
+              ),
+            }),
+          );
+        }
+
         function PublishPage(props) {
           const { overview } = props;
           const toast = useToast();
+          const [subTab, setSubTab] = React.useState('fanqie');
           const queue = overview.queue || {};
           const books = queue.books || [];
           const project = (overview.projects || [])[0];
+          const job = props.job || (overview.jobs || []).find((item) => matchesProject(item, project)) || (overview.jobs || [])[0] || null;
           const accounts = overview.accounts || [];
           const [accountName, setAccountName] = React.useState('');
           const account = accounts.find((item) => item.name === accountName) || accounts[0];
@@ -3026,9 +3890,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          return e(
+          const fanqieBody = e(
             'div',
-            { className: 'nh-page' },
+            null,
             e(
               'div',
               { className: 'nh-stats' },
@@ -3082,7 +3946,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               { style: { marginTop: 'var(--nh-gap)' } },
               e(
                 Card,
-                { title: '提交发布', hint: '真实提交到番茄，不可撤销' },
+                {
+                  title: '提交发布',
+                  hint: '真实提交到番茄，不可撤销',
+                  actions: (!account || !account.logged_in) && props.navigate
+                    ? e(Button, { size: 'sm', onClick: () => props.navigate('setup') }, '去登录番茄账号')
+                    : null,
+                },
                 e(
                   'div',
                   { className: 'nh-formgrid' },
@@ -3123,6 +3993,32 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 ),
               ),
             }),
+          );
+
+          return e(
+            'div',
+            { className: 'nh-page' },
+            e(
+              'div',
+              { style: { marginBottom: 'var(--nh-gap)' } },
+              e(Segmented, {
+                value: subTab,
+                onChange: setSubTab,
+                options: [
+                  { value: 'fanqie', label: '番茄发布与队列' },
+                  { value: 'schedule', label: '番茄排期缓冲（候选）' },
+                  { value: 'platforms', label: '多平台契约与导出（含七猫·候选）' },
+                  { value: 'browser', label: '浏览器试点（候选）' },
+                ],
+              }),
+            ),
+            subTab === 'fanqie'
+              ? fanqieBody
+              : subTab === 'schedule'
+                ? e(ScheduleBufferPanel, { job, navigate: props.navigate, refreshOverview: props.refreshOverview })
+                : subTab === 'platforms'
+                  ? e(MultiPlatformPublishPanel, { project })
+                  : e(BrowserPilotPanel, { project }),
           );
         }
 
@@ -3259,11 +4155,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const { overview } = props;
           const toast = useToast();
           const project = (overview.projects || [])[0];
+          const [subTab, setSubTab] = React.useState('memory');
           const [category, setCategory] = React.useState('');
           const [query, setQuery] = React.useState('');
           const [page, setPage] = React.useState(0);
           const [editing, setEditing] = React.useState(null);
           const [busy, setBusy] = React.useState(false);
+          const [entityChapter, setEntityChapter] = React.useState('0');
+          const [retChapter, setRetChapter] = React.useState('1');
+          const [retQuery, setRetQuery] = React.useState('');
+          const [retState, setRetState] = React.useState({ loading: false, data: null, error: '' });
+          const [impactChapter, setImpactChapter] = React.useState('1');
           const PAGE_SIZE = 40;
 
           const memory = usePoll(
@@ -3289,6 +4191,40 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             [project && project.id],
             POLL_MS,
           );
+          const entities = usePoll(
+            () =>
+              project && subTab === 'entities'
+                ? api(`/projects/${project.id}/entities?chapter=${Math.max(0, parseInt(entityChapter, 10) || 0)}`)
+                : Promise.resolve({ items: [], events: 0 }),
+            [project && project.id, subTab, entityChapter],
+            0,
+          );
+          const impact = usePoll(
+            () =>
+              project && subTab === 'impact'
+                ? api(`/projects/${project.id}/evidence/impact?chapter=${Math.max(1, parseInt(impactChapter, 10) || 1)}`)
+                : Promise.resolve({ affected: [], index: {}, log: {}, coverage: {} }),
+            [project && project.id, subTab, impactChapter],
+            0,
+          );
+
+          const runRetrieval = React.useCallback(async () => {
+            if (!project) return;
+            setRetState((current) => ({ ...current, loading: true, error: '' }));
+            try {
+              const ch = Math.max(1, parseInt(retChapter, 10) || 1);
+              const data = await api(`/projects/${project.id}/retrieval?chapter=${ch}&query=${encodeURIComponent(retQuery)}`);
+              setRetState({ loading: false, data, error: '' });
+            } catch (error) {
+              setRetState({ loading: false, data: null, error: error.message });
+            }
+          }, [project && project.id, retChapter, retQuery]);
+
+          React.useEffect(() => {
+            if (subTab === 'retrieval' && project && !retState.data && !retState.loading && !retState.error) {
+              runRetrieval();
+            }
+          }, [subTab, project && project.id]);
 
           const saveForeshadow = async (draft) => {
             setBusy(true);
@@ -3418,9 +4354,194 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
+          const entityData = entities.data || {};
+          const entityRows = entityData.items || [];
+          const retData = retState.data || {};
+          const retPlan = retData.plan || {};
+          const impactData = impact.data || {};
+          const impactRows = impactData.affected || [];
+          const impactIndexEntries = Object.entries(impactData.index || {});
+
+          const entitiesView = e(
+            Card,
+            {
+              title: '实体与事件归属',
+              hint: `折算视野：第 ${entityData.horizon || '—'} 章之前 · 共 ${num(entityData.events || 0)} 条事件`,
+              actions: e(
+                'div',
+                { className: 'nh-row', style: { gap: 8 } },
+                e('span', { className: 'nh-k' }, '按章折算（0=最新）'),
+                e('input', {
+                  className: 'nh-input',
+                  type: 'number',
+                  min: 0,
+                  style: { width: 90 },
+                  value: entityChapter,
+                  onChange: (event) => setEntityChapter(event.target.value),
+                }),
+                e(Button, { size: 'sm', icon: 'refresh', onClick: () => entities.reload(true) }, '刷新'),
+              ),
+            },
+            entityData.note ? e('div', { className: 'nh-note', style: { marginBottom: 12 } }, entityData.note) : null,
+            entityRows.length
+              ? e(
+                  'table',
+                  { className: 'nh-table' },
+                  e('thead', null, e('tr', null, e('th', null, '实体'), e('th', null, '当前归属'), e('th', null, '来源章'), e('th', null, '状态 / 依据'))),
+                  e(
+                    'tbody',
+                    null,
+                    entityRows.map((row) => {
+                      const cur = row.current || {};
+                      const holderText = cur.holder === 'unknown' ? '未知' : cur.holder || '未知';
+                      const statusText = cur.status || (cur.candidates ? 'same_chapter_order_unknown' : '—');
+                      return e(
+                        'tr',
+                        { key: row.name },
+                        e('td', { style: { fontWeight: 500 } }, row.name),
+                        e('td', null, e(Badge, { tone: cur.holder && cur.holder !== 'unknown' ? 'ok' : 'warn' }, holderText)),
+                        e('td', { className: 'nh-mono' }, cur.chapter ? `第 ${cur.chapter} 章` : '—'),
+                        e('td', { className: 'nh-dim2 nh-wrap', style: { fontSize: 12 } }, `${statusText}${cur.quote ? ` · 「${String(cur.quote).slice(0, 60)}」` : ''}`),
+                      );
+                    }),
+                  ),
+                )
+              : e(Empty, null, '当前作品还没有实体或物品归属事件记录'),
+          );
+
+          const retrievalView = e(
+            Card,
+            {
+              title: '可控检索规划与追踪（BM25 优先）',
+              hint: retData.ready ? '索引就绪' : '按文本/BM25 规划（默认不启向量模型）',
+            },
+            e(
+              'div',
+              { className: 'nh-formgrid' },
+              e(Field, { label: '目标章号' }, e(TextInput, { type: 'number', min: 1, value: retChapter, onChange: setRetChapter })),
+              e(Field, { label: '查询词（自动脱敏人名）' }, e(TextInput, { value: retQuery, placeholder: '输入关键词，如 钥匙', onChange: setRetQuery })),
+              e(Field, { label: ' ' }, e(Button, { kind: 'primary', icon: 'search', busy: retState.loading, onClick: runRetrieval }, '运行检索规划')),
+            ),
+            retState.error ? e('div', { className: 'nh-inline-err', style: { marginTop: 10 } }, retState.error) : null,
+            retState.data
+              ? e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 10, marginTop: 12 } },
+                  e(
+                    'div',
+                    { className: 'nh-chips' },
+                    e(Badge, { tone: 'accent' }, `模式 ${retPlan.mode || '—'}`),
+                    e(Badge, { tone: 'ok' }, `送入 ${((retPlan.counts && retPlan.counts.supplied) || 0)} 条`),
+                    e(Badge, { tone: 'mute' }, `预算 ${(retPlan.used || 0)}/${(retPlan.budget || 0)}`),
+                    e(Badge, { tone: retData.ready ? 'ok' : 'warn' }, retData.ready ? '索引就绪' : '文本回落'),
+                    (retPlan.removed_names || []).length ? e(Badge, { tone: 'warn' }, `已脱敏：${retPlan.removed_names.join('、')}`) : null,
+                  ),
+                  e(
+                    'div',
+                    { className: 'nh-panel' },
+                    e('div', { className: 'nh-k' }, '已送入上下文的证据'),
+                    (retPlan.supplied || []).length
+                      ? (retPlan.supplied || []).map((item, idx) =>
+                          e('div', { key: `${item.id}-${idx}`, className: 'nh-kvrow' }, e('span', null, `${item.why || item.id}`), e('span', { className: 'nh-mono' }, `score ${item.score}`)),
+                        )
+                      : e('span', { className: 'nh-dim2', style: { fontSize: 12 } }, '本次没有命中的证据'),
+                  ),
+                  (retPlan.omitted || []).length
+                    ? e(
+                        'div',
+                        { className: 'nh-panel' },
+                        e('div', { className: 'nh-k' }, '未选用条目与原因'),
+                        (retPlan.omitted || []).slice(0, 12).map((item, idx) =>
+                          e('div', { key: `${item.id}-${idx}`, className: 'nh-dim2', style: { fontSize: 12 } }, `· ${item.id || '规则'}：${item.reason}`),
+                        ),
+                      )
+                    : null,
+                  retData.report
+                    ? e('div', { className: 'nh-note' }, `累计追踪：${num(retData.report.plans || 0)} 次规划 · 累计送入 ${num(retData.report.supplied || 0)} 条 · 省略 ${num(retData.report.omitted || 0)} 条 · 平均耗时 ${retData.report.avg_ms ?? '—'} ms`)
+                    : null,
+                )
+              : null,
+          );
+
+          const impactView = e(
+            Card,
+            {
+              title: '证据反向索引与失效影响面',
+              hint: `覆盖范围：${(impactData.coverage && impactData.coverage.range) || '暂无记录'}`,
+              actions: e(
+                'div',
+                { className: 'nh-row', style: { gap: 8 } },
+                e('span', { className: 'nh-k' }, '源章号'),
+                e('input', {
+                  className: 'nh-input',
+                  type: 'number',
+                  min: 1,
+                  style: { width: 90 },
+                  value: impactChapter,
+                  onChange: (event) => setImpactChapter(event.target.value),
+                }),
+                e(Button, { size: 'sm', icon: 'refresh', onClick: () => impact.reload(true) }, '刷新'),
+              ),
+            },
+            impactData.coverage && impactData.coverage.note ? e('div', { className: 'nh-note', style: { marginBottom: 12 } }, impactData.coverage.note) : null,
+            e(
+              'div',
+              { className: 'nh-col', style: { gap: 10 } },
+              e(
+                'div',
+                { className: 'nh-panel' },
+                e('div', { className: 'nh-k' }, `第 ${impactData.chapter || impactChapter} 章改动会影响的记忆条目（${impactRows.length}）`),
+                impactRows.length
+                  ? impactRows.map((row) => e('div', { key: row.id, className: 'nh-kvrow' }, e('span', null, `${row.title || row.id}（${CATEGORY_LABELS[row.category] || row.category}）`), e('span', { className: 'nh-k' }, `源自第 ${row.source_chapter} 章`)))
+                  : e('span', { className: 'nh-dim2', style: { fontSize: 12 } }, '当前章暂无已登记的派生记忆条目'),
+              ),
+              e(
+                'div',
+                { className: 'nh-panel' },
+                e('div', { className: 'nh-k' }, `证据反向索引（共 ${impactIndexEntries.length} 个来源章）`),
+                impactIndexEntries.length
+                  ? impactIndexEntries.slice(0, 10).map(([srcCh, factsMap]) =>
+                      e(
+                        'div',
+                        { key: srcCh, style: { fontSize: 12 } },
+                        e('strong', null, `来源第 ${srcCh} 章：`),
+                        Object.values(factsMap || {}).map((fact) => `${fact.title}（被用于 ${((fact.uses || []).map((u) => `第${u.chapter}章[${u.state}]`).join('、')) || '—'}）`).join('；'),
+                      ),
+                    )
+                  : e('span', { className: 'nh-dim2', style: { fontSize: 12 } }, '还没有证据使用日志'),
+              ),
+              impactData.log
+                ? e('div', { className: 'nh-note' }, `统一失效日志：revision ${impactData.log.revision || 0} · 共 ${num(impactData.log.entries || 0)} 条`)
+                : null,
+            ),
+          );
+
           return e(
             'div',
             { className: 'nh-page' },
+            e(
+              'div',
+              { style: { marginBottom: 'var(--nh-gap)' } },
+              e(Segmented, {
+                value: subTab,
+                onChange: setSubTab,
+                options: [
+                  { value: 'memory', label: '记忆、人物与伏笔' },
+                  { value: 'entities', label: '实体与事件' },
+                  { value: 'retrieval', label: '检索与追踪' },
+                  { value: 'impact', label: '证据影响面' },
+                ],
+              }),
+            ),
+            subTab === 'entities'
+              ? entitiesView
+              : subTab === 'retrieval'
+                ? retrievalView
+                : subTab === 'impact'
+                  ? impactView
+                  : e(
+                      React.Fragment,
+                      null,
             e(
               'div',
               { className: 'nh-stats' },
@@ -3868,27 +4989,3108 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   )
                 : null,
             }),
+                      ),
+          );
+        }
+
+        /* ------------------------------------------------------------ 读者反馈 */
+
+        function ReadersPage(props) {
+          const { overview } = props;
+          const toast = useToast();
+          const project = (overview.projects || [])[0];
+          const [subTab, setSubTab] = React.useState('import');
+          const [busy, setBusy] = React.useState('');
+
+          const dictPoll = usePoll(
+            () => (project ? api(`/projects/${project.id}/readers/dictionary`) : Promise.resolve({ metrics: [], batches: [] })),
+            [project && project.id],
+            POLL_MS * 2,
+          );
+          const [seriesMetric, setSeriesMetric] = React.useState('chapter_completion_rate');
+          const [seriesWorkId, setSeriesWorkId] = React.useState('');
+          const seriesPoll = usePoll(
+            () =>
+              project
+                ? api(`/projects/${project.id}/readers/series?metric=${encodeURIComponent(seriesMetric)}&work_id=${encodeURIComponent(seriesWorkId.trim())}`)
+                : Promise.resolve({ points: [], limitations: [] }),
+            [project && project.id, seriesMetric, seriesWorkId],
+            0,
+          );
+          const [commentChapter, setCommentChapter] = React.useState('1');
+          const [commentDraft, setCommentDraft] = React.useState('');
+          const commentsPoll = usePoll(
+            () =>
+              project
+                ? api(`/projects/${project.id}/readers/comments?chapter=${Math.max(1, parseInt(commentChapter, 10) || 1)}`)
+                : Promise.resolve({ clusters: [], trace: [] }),
+            [project && project.id, commentChapter],
+            0,
+          );
+          const [obsFilter, setObsFilter] = React.useState('');
+          const obsPoll = usePoll(
+            () =>
+              project
+                ? api(`/projects/${project.id}/readers/observations?status=${encodeURIComponent(obsFilter)}`)
+                : Promise.resolve({ cards: [], active: [] }),
+            [project && project.id, obsFilter],
+            POLL_MS,
+          );
+
+          const [csvText, setCsvText] = React.useState('');
+          const [workId, setWorkId] = React.useState('');
+          const [platform, setPlatform] = React.useState('fanqie');
+          const [filename, setFilename] = React.useState('manual.csv');
+          const [allowPartial, setAllowPartial] = React.useState(false);
+          const [previewResult, setPreviewResult] = React.useState(null);
+
+          const [obsForm, setObsForm] = React.useState({ chapter: '1', metric: 'chapter_completion_rate', chapters: '3', days: '14' });
+          const [adoptChapters, setAdoptChapters] = React.useState('3');
+          const [revokeReason, setRevokeReason] = React.useState('');
+          const [cardDetail, setCardDetail] = React.useState(null);
+
+          if (!project) {
+            return e('div', { className: 'nh-page' }, e(Empty, null, '请先创建或选择一部作品'));
+          }
+
+          const dictData = dictPoll.data || {};
+          const metricsList = dictData.metrics || [];
+          const batchesList = dictData.batches || [];
+          const seriesData = seriesPoll.data || {};
+          const seriesPoints = seriesData.points || [];
+          const commentData = commentsPoll.data || {};
+          const obsCards = (obsPoll.data && obsPoll.data.cards) || [];
+
+          const onCsvFile = (event) => {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+            setFilename(file.name || 'upload.csv');
+            const reader = new FileReader();
+            reader.onload = () => setCsvText(String(reader.result || ''));
+            reader.readAsText(file, 'utf-8');
+          };
+
+          const runPreview = async () => {
+            setBusy('preview');
+            try {
+              const res = await api(`/projects/${project.id}/readers/preview`, {
+                method: 'POST',
+                body: { csv: csvText, work_id: workId.trim(), platform, filename },
+              });
+              setPreviewResult(res);
+              toast.push(`预览完成：有效 ${res.counts?.valid || 0}、修订 ${res.counts?.revisions || 0}、拒绝 ${res.counts?.rejected || 0}`, 'ok');
+            } catch (error) {
+              toast.push(`预览失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const runImport = async () => {
+            if (!previewResult || !previewResult.token) return;
+            setBusy('import');
+            try {
+              const res = await api(`/projects/${project.id}/readers/import`, {
+                method: 'POST',
+                body: { csv: csvText, work_id: workId.trim(), platform, filename, token: previewResult.token, allow_partial: Boolean(allowPartial) },
+              });
+              toast.push(`导入完成：新增 ${res.added || 0}、修订 ${res.revised || 0}`, 'ok');
+              setPreviewResult(null);
+              dictPoll.reload(true);
+              seriesPoll.reload(true);
+            } catch (error) {
+              toast.push(`导入失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const revokeBatch = async (batchId) => {
+            if (!window.confirm(`确认撤销导入批次 ${batchId}？该批次新增行将被删除，修订行将回退到上一版。`)) return;
+            setBusy(`del-${batchId}`);
+            try {
+              await api(`/projects/${project.id}/readers/batches/${encodeURIComponent(batchId)}`, { method: 'DELETE' });
+              toast.push(`批次 ${batchId} 已撤销`, 'ok');
+              dictPoll.reload(true);
+              seriesPoll.reload(true);
+            } catch (error) {
+              toast.push(`撤销失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const submitComments = async () => {
+            const lines = commentDraft.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+            if (!lines.length) return;
+            setBusy('comments');
+            try {
+              await api(`/projects/${project.id}/readers/comments`, {
+                method: 'POST',
+                body: { chapter: Math.max(1, parseInt(commentChapter, 10) || 1), texts: lines },
+              });
+              setCommentDraft('');
+              toast.push('评论已导入并脱敏', 'ok');
+              commentsPoll.reload(true);
+            } catch (error) {
+              toast.push(`导入失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const buildObservation = async () => {
+            setBusy('buildObs');
+            try {
+              await api(`/projects/${project.id}/readers/observations`, {
+                method: 'POST',
+                body: {
+                  chapter: Math.max(1, parseInt(obsForm.chapter, 10) || 1),
+                  metric: obsForm.metric,
+                  chapters: Math.max(1, Math.min(20, parseInt(obsForm.chapters, 10) || 3)),
+                  days: Math.max(1, Math.min(120, parseInt(obsForm.days, 10) || 14)),
+                },
+              });
+              toast.push('观察卡已生成（默认候选态，未注入写作提示）', 'ok');
+              obsPoll.reload(true);
+            } catch (error) {
+              toast.push(`生成失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const cardAction = async (cardId, action) => {
+            setBusy(`obs-${cardId}`);
+            try {
+              await api(`/projects/${project.id}/readers/observations/${encodeURIComponent(cardId)}/action`, {
+                method: 'POST',
+                body: {
+                  action,
+                  chapters: action === 'adopt' ? Math.max(1, Math.min(20, parseInt(adoptChapters, 10) || 3)) : null,
+                  reason: action === 'revoke' ? (revokeReason.trim() || '作者撤销') : '',
+                },
+              });
+              toast.push(`观察卡操作（${action}）已完成`, 'ok');
+              obsPoll.reload(true);
+            } catch (error) {
+              toast.push(`操作失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const openCardDetail = async (cardId) => {
+            setBusy(`detail-${cardId}`);
+            try {
+              const [card, outline] = await Promise.all([
+                api(`/projects/${project.id}/readers/observations/${encodeURIComponent(cardId)}`),
+                api(`/projects/${project.id}/readers/observations/${encodeURIComponent(cardId)}/outline`),
+              ]);
+              setCardDetail({ card, outline });
+            } catch (error) {
+              toast.push(`读取详情失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const importTab = e(
+            'div',
+            { className: 'nh-col', style: { gap: 'var(--nh-gap)' } },
+            e(
+              Card,
+              {
+                title: '两步导入读者数据（CSV）',
+                hint: `口径 ${dictData.caliber || 'v1'} · 跳出率平台未提供，绝不本地臆造`,
+                actions: e(
+                  'label',
+                  { className: 'nh-btn nh-btn-sm', style: { cursor: 'pointer' } },
+                  '选择 CSV 文件',
+                  e('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' }, onChange: onCsvFile }),
+                ),
+              },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: '作品 ID（work_id）' }, e(TextInput, { value: workId, placeholder: '可选，如 demo-book', onChange: setWorkId })),
+                e(Field, { label: '平台' }, e(Select, { value: platform, onChange: setPlatform, options: [{ value: 'fanqie', label: '番茄小说' }, { value: 'qimao', label: '七猫中文网' }] })),
+                e(Field, { label: '来源文件名' }, e(TextInput, { value: filename, onChange: setFilename })),
+              ),
+              e(
+                Field,
+                { label: 'CSV 内容（含表头：platform,work_id,chapter_id,metric,window_start,window_end,observed_at,value,unit,denominator,source）' },
+                e('textarea', {
+                  className: 'nh-textarea',
+                  rows: 4,
+                  value: csvText,
+                  onChange: (event) => {
+                    setCsvText(event.target.value);
+                    setPreviewResult(null);
+                  },
+                }),
+              ),
+              e(
+                'div',
+                { className: 'nh-row', style: { marginTop: 8, gap: 10 } },
+                e(Button, { kind: 'primary', busy: busy === 'preview', disabled: !csvText.trim(), onClick: runPreview }, '① 预览校验（不落库）'),
+                e('label', { className: 'nh-ack' }, e('input', { type: 'checkbox', checked: allowPartial, onChange: (event) => setAllowPartial(event.target.checked) }), '存在拒绝行时允许部分导入'),
+                e(Button, { busy: busy === 'import', disabled: !previewResult || !previewResult.token, onClick: runImport }, '② 确认导入'),
+              ),
+              previewResult
+                ? e(
+                    'div',
+                    { className: 'nh-panel', style: { marginTop: 10 } },
+                    e('div', { className: 'nh-chips' },
+                      e(Badge, { tone: 'ok' }, `有效 ${previewResult.counts?.valid || 0}`),
+                      e(Badge, { tone: 'accent' }, `修订 ${previewResult.counts?.revisions || 0}`),
+                      e(Badge, { tone: 'mute' }, `重复 ${previewResult.counts?.duplicates || 0}`),
+                      e(Badge, { tone: (previewResult.counts?.rejected || 0) > 0 ? 'err' : 'mute' }, `拒绝 ${previewResult.counts?.rejected || 0}`),
+                    ),
+                    (previewResult.rejected || []).length
+                      ? e('div', { className: 'nh-dim2', style: { fontSize: 12 } }, (previewResult.rejected || []).slice(0, 6).map((item, idx) => `第${idx + 1}条拒绝：${item.reason || JSON.stringify(item)}`).join('；'))
+                      : null,
+                  )
+                : null,
+            ),
+            e(
+              Card,
+              { title: '官方指标字段字典', hint: '0 为真实读数；分母未知保持空白不填零' },
+              metricsList.length
+                ? e(
+                    'table',
+                    { className: 'nh-table' },
+                    e('thead', null, e('tr', null, e('th', null, '指标'), e('th', null, '官方名'), e('th', null, '粒度/单位'), e('th', null, '分母可见'), e('th', null, '说明'))),
+                    e(
+                      'tbody',
+                      null,
+                      metricsList.map((m) =>
+                        e(
+                          'tr',
+                          { key: m.metric },
+                          e('td', null, e('strong', null, m.label), ' ', e('span', { className: 'nh-k' }, m.metric)),
+                          e('td', null, m.official_name),
+                          e('td', { className: 'nh-mono' }, `${m.granularity} / ${m.unit}`),
+                          e('td', null, e(Badge, { tone: m.denominator_visible ? 'ok' : 'warn' }, m.denominator_visible ? '可见' : '平台未给分母')),
+                          e('td', { className: 'nh-dim2 nh-wrap', style: { fontSize: 11 } }, m.notes),
+                        ),
+                      ),
+                    ),
+                  )
+                : e(Skeleton, {}),
+            ),
+            e(
+              Card,
+              { title: '导入批次（支持按批撤销）', hint: `${batchesList.length} 批` },
+              batchesList.length
+                ? e(
+                    'table',
+                    { className: 'nh-table' },
+                    e('thead', null, e('tr', null, e('th', null, '批次'), e('th', null, '文件'), e('th', null, '新增/修订'), e('th', null, '操作'))),
+                    e(
+                      'tbody',
+                      null,
+                      batchesList.map((b) =>
+                        e(
+                          'tr',
+                          { key: b.id },
+                          e('td', { className: 'nh-mono' }, b.id),
+                          e('td', { className: 'nh-wrap' }, b.filename || '—'),
+                          e('td', { className: 'nh-mono' }, `+${b.added || 0} / ~${b.revised || 0}${b.partial ? '（部分）' : ''}`),
+                          e('td', null, e(Button, { size: 'sm', kind: 'danger', busy: busy === `del-${b.id}`, onClick: () => revokeBatch(b.id) }, '撤销本批')),
+                        ),
+                      ),
+                    ),
+                  )
+                : e(Empty, null, '还没有导入批次'),
+            ),
+          );
+
+          const seriesTab = e(
+            Card,
+            {
+              title: '读者趋势与数据局限（可回源）',
+              hint: `${seriesPoints.length} 个读数点`,
+              actions: e(
+                'div',
+                { className: 'nh-row', style: { gap: 8 } },
+                e(Select, {
+                  value: seriesMetric,
+                  onChange: setSeriesMetric,
+                  options: metricsList.length
+                    ? metricsList.map((m) => ({ value: m.metric, label: `${m.label}（${m.metric}）` }))
+                    : [
+                        { value: 'chapter_completion_rate', label: '读完率' },
+                        { value: 'chapter_follow_rate', label: '追读率' },
+                        { value: 'update_requests', label: '催更' },
+                        { value: 'comments', label: '评论数' },
+                      ],
+                }),
+                e(TextInput, { value: seriesWorkId, placeholder: '筛选 work_id', onChange: setSeriesWorkId }),
+                e(Button, { size: 'sm', icon: 'refresh', onClick: () => seriesPoll.reload(true) }, '刷新'),
+              ),
+            },
+            seriesPoints.length
+              ? e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 12 } },
+                  e(Bars, {
+                    values: seriesPoints.map((pt) => Number(pt.value) || 0),
+                    labels: seriesPoints.map((pt) => `c${pt.chapter_id}`),
+                  }),
+                  e(
+                    'table',
+                    { className: 'nh-table' },
+                    e('thead', null, e('tr', null, e('th', null, '章'), e('th', null, '读数'), e('th', null, '分母'), e('th', null, '窗口'), e('th', null, '成熟度 / 批次'))),
+                    e(
+                      'tbody',
+                      null,
+                      seriesPoints.map((pt, idx) =>
+                        e(
+                          'tr',
+                          { key: `${pt.key}-${idx}` },
+                          e('td', { className: 'nh-mono' }, pt.chapter_id),
+                          e('td', { className: 'nh-mono' }, `${pt.value} ${pt.unit || ''}`),
+                          e('td', null, pt.denominator_known ? String(pt.denominator) : e(Badge, { tone: 'warn' }, '分母未知')),
+                          e('td', { className: 'nh-mono' }, Array.isArray(pt.window) ? pt.window.join(' ~ ') : '—'),
+                          e('td', null, e(Badge, { tone: pt.stage === 'new' ? 'warn' : 'mute' }, pt.stage), ' ', e('span', { className: 'nh-k' }, pt.batch)),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : e(Empty, null, '当前指标暂无可回源数据点'),
+            (seriesData.limitations || []).length
+              ? e('div', { className: 'nh-note', 'data-tone': 'warn', style: { marginTop: 12 } }, (seriesData.limitations || []).join(' '))
+              : null,
+          );
+
+          const commentsTab = e(
+            Card,
+            { title: '评论导入与脱敏聚类', hint: '评论只当数据，命中控制指令原句直接丢弃并标记' },
+            e(
+              'div',
+              { className: 'nh-formgrid' },
+              e(Field, { label: '所属章号' }, e(TextInput, { type: 'number', min: 1, value: commentChapter, onChange: setCommentChapter })),
+            ),
+            e(Field, { label: '评论文本（每行一条）' }, e('textarea', { className: 'nh-textarea', rows: 4, value: commentDraft, placeholder: '每行粘贴一条读者评论…', onChange: (event) => setCommentDraft(event.target.value) })),
+            e('div', { className: 'nh-row', style: { marginTop: 8, gap: 8 } },
+              e(Button, { kind: 'primary', busy: busy === 'comments', disabled: !commentDraft.trim(), onClick: submitComments }, '导入并脱敏'),
+              e(Button, { size: 'sm', icon: 'refresh', onClick: () => commentsPoll.reload(true) }, '刷新聚类'),
+            ),
+            e('div', { className: 'nh-sep' }),
+            (commentData.clusters || []).length
+              ? e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 8 } },
+                  (commentData.clusters || []).map((c, idx) =>
+                    e(
+                      'div',
+                      { key: `${c.topic}-${idx}`, className: 'nh-panel' },
+                      e('div', { className: 'nh-row', style: { justifyContent: 'space-between' } }, e('strong', null, c.topic), e(Badge, { tone: 'accent' }, `${c.count} 条`)),
+                      e('div', { className: 'nh-dim2', style: { fontSize: 12 } }, (c.samples || []).join(' ｜ ')),
+                    ),
+                  ),
+                )
+              : e(Empty, null, `第 ${commentChapter} 章暂无评论聚类`),
+          );
+
+          const observationsTab = e(
+            'div',
+            { className: 'nh-col', style: { gap: 'var(--nh-gap)' } },
+            e(
+              Card,
+              {
+                title: '生成可撤销观察卡',
+                hint: '只有「已采纳 + 在生效章段内 + 未到期」才会注入写作/修订/审查提醒',
+                actions: e(Button, {
+                  size: 'sm',
+                  busy: busy === 'expire',
+                  onClick: async () => {
+                    setBusy('expire');
+                    try {
+                      await api(`/projects/${project.id}/readers/observations/expire`, { method: 'POST', body: {} });
+                      toast.push('已刷新的到期状态并落盘', 'ok');
+                      obsPoll.reload(true);
+                    } catch (error) {
+                      toast.push(`刷新失败：${error.message}`, 'err');
+                    } finally {
+                      setBusy('');
+                    }
+                  },
+                }, '刷新到期状态'),
+              },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: '基准章号' }, e(TextInput, { type: 'number', min: 1, value: obsForm.chapter, onChange: (value) => setObsForm({ ...obsForm, chapter: value }) })),
+                e(
+                  Field,
+                  { label: '观察指标' },
+                  e(Select, {
+                    value: obsForm.metric,
+                    onChange: (value) => setObsForm({ ...obsForm, metric: value }),
+                    options: [
+                      { value: 'chapter_completion_rate', label: '读完率' },
+                      { value: 'chapter_follow_rate', label: '追读率' },
+                      { value: 'update_requests', label: '催更' },
+                      { value: 'comments', label: '评论数' },
+                    ],
+                  }),
+                ),
+                e(Field, { label: '建议生效章数（1–20）' }, e(TextInput, { type: 'number', min: 1, max: 20, value: obsForm.chapters, onChange: (value) => setObsForm({ ...obsForm, chapters: value }) })),
+                e(Field, { label: '有效天数（1–120）' }, e(TextInput, { type: 'number', min: 1, max: 120, value: obsForm.days, onChange: (value) => setObsForm({ ...obsForm, days: value }) })),
+                e(Field, { label: ' ' }, e(Button, { kind: 'primary', busy: busy === 'buildObs', onClick: buildObservation }, '生成观察卡')),
+              ),
+            ),
+            e(
+              Card,
+              {
+                title: '观察卡列表',
+                hint: `${obsCards.length} 张`,
+                actions: e(
+                  'div',
+                  { className: 'nh-row', style: { gap: 8 } },
+                  e(Select, {
+                    value: obsFilter,
+                    onChange: setObsFilter,
+                    options: [
+                      { value: '', label: '全部状态' },
+                      { value: 'candidate', label: '候选（零注入）' },
+                      { value: 'adopted', label: '已采纳（注入中）' },
+                      { value: 'ignored', label: '已忽略' },
+                      { value: 'revoked', label: '已撤销（零注入）' },
+                      { value: 'expired', label: '已到期（零注入）' },
+                    ],
+                  }),
+                  e(TextInput, { value: adoptChapters, placeholder: '采纳章数', onChange: setAdoptChapters }),
+                  e(TextInput, { value: revokeReason, placeholder: '撤销原因', onChange: setRevokeReason }),
+                ),
+              },
+              obsCards.length
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 10 } },
+                    obsCards.map((card) =>
+                      e(
+                        'div',
+                        { key: card.id, className: 'nh-panel' },
+                        e(
+                          'div',
+                          { className: 'nh-row', style: { gap: 8 } },
+                          e('strong', null, `第 ${card.chapter} 章 · ${card.metric_label || card.metric}`),
+                          e(Badge, { tone: card.status === 'adopted' ? 'ok' : card.status === 'candidate' ? 'accent' : 'mute' }, card.status),
+                          card.snapshot ? e(Badge, { tone: 'mute' }, `值 ${card.snapshot.value}`) : null,
+                          card.delta !== null && card.delta !== undefined ? e(Badge, { tone: 'mute' }, `变化 ${card.delta}`) : null,
+                          e('span', { className: 'nh-spacer' }),
+                          e(Button, { size: 'sm', kind: 'ghost', busy: busy === `detail-${card.id}`, onClick: () => openCardDetail(card.id) }, '详情与大纲差异'),
+                        ),
+                        card.reminder ? e('div', { className: 'nh-dim2', style: { fontSize: 12 } }, card.reminder) : null,
+                        (card.alternatives || []).length ? e('div', { className: 'nh-k', style: { lineHeight: 1.6 } }, `备选解释：${card.alternatives.join(' / ')}`) : null,
+                        e(
+                          'div',
+                          { className: 'nh-row', style: { gap: 6 } },
+                          e(Button, { size: 'sm', kind: 'primary', busy: busy === `obs-${card.id}`, onClick: () => cardAction(card.id, 'adopt') }, '采纳'),
+                          e(Button, { size: 'sm', busy: busy === `obs-${card.id}`, onClick: () => cardAction(card.id, 'ignore') }, '忽略'),
+                          e(Button, { size: 'sm', kind: 'danger', busy: busy === `obs-${card.id}`, onClick: () => cardAction(card.id, 'revoke') }, '撤销'),
+                        ),
+                      ),
+                    ),
+                  )
+                : e(Empty, null, '当前筛选下没有观察卡'),
+            ),
+            e(Modal, {
+              open: Boolean(cardDetail),
+              title: cardDetail ? `观察卡详情 · ${cardDetail.card.id}` : '观察卡详情',
+              onClose: () => setCardDetail(null),
+              children: cardDetail
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 10 } },
+                    e('div', { className: 'nh-note' }, cardDetail.outline.note || '大纲差异仅作参考，不会覆盖创作约定。'),
+                    (cardDetail.outline.conflicts || []).map((c, idx) =>
+                      e('div', { key: idx, className: 'nh-panel' }, e('strong', null, `字段 ${c.field}`), e('div', { className: 'nh-dim2', style: { fontSize: 12 } }, `当前：${c.current || '（空）'}`), e('div', { className: 'nh-dim2', style: { fontSize: 12 } }, `建议：${c.proposal}`), e('div', { className: 'nh-k' }, c.choice)),
+                    ),
+                    e('pre', { className: 'nh-pre' }, JSON.stringify(cardDetail.card, null, 2)),
+                  )
+                : null,
+            }),
+          );
+
+          return e(
+            'div',
+            { className: 'nh-page' },
+            e(
+              'div',
+              { className: 'nh-stats', style: { marginBottom: 'var(--nh-gap)' } },
+              e(Stat, { label: '指标字典', value: num(metricsList.length), unit: '项', foot: `口径 ${dictData.caliber || 'v1'}` }),
+              e(Stat, { label: '导入批次', value: num(batchesList.length), unit: '批' }),
+              e(Stat, { label: '序列数据点', value: num(seriesPoints.length), unit: '个' }),
+              e(Stat, { label: '观察卡', value: num(obsCards.length), unit: '张', foot: `采纳 ${obsCards.filter((c) => c.status === 'adopted').length} 张` }),
+            ),
+            e(
+              'div',
+              { style: { marginBottom: 'var(--nh-gap)' } },
+              e(Segmented, {
+                value: subTab,
+                onChange: setSubTab,
+                options: [
+                  { value: 'import', label: '指标导入与批次' },
+                  { value: 'series', label: '趋势与局限' },
+                  { value: 'comments', label: '脱敏评论' },
+                  { value: 'observations', label: '观察卡与建议' },
+                ],
+              }),
+            ),
+            subTab === 'import' ? importTab : subTab === 'series' ? seriesTab : subTab === 'comments' ? commentsTab : observationsTab,
           );
         }
 
         /* ------------------------------------------------------------ 日更任务 */
 
+        /* ==================================================== 开书到日更（A02） */
+
+        const FLOW_TRIAL_STORE = 'chapter-whale-trial-operation';
+        const FLOW_CONNECTION_KEY = 'chapter-whale-connection-mode';
+        const FLOW_SCHEDULER_ACK = 'chapter-whale-scheduler-ack';
+        const FLOW_DEFAULT_TIMEZONE = (() => {
+          try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+          } catch (error) {
+            return 'Asia/Shanghai';
+          }
+        })();
+
+        const PUBLICATION_LABELS = {
+          draft_only: '仅本机存稿',
+          publish_now: '发布到平台',
+          platform_scheduled: '番茄排期缓冲（候选）',
+        };
+        const REMOTE_STATE_LABELS = {
+          not_applicable: '仅本机存稿',
+          published: '已发布',
+          pending_verification: '待平台确认',
+          not_submitted: '未提交',
+          unknown: '状态未知',
+        };
+        const RUNNING_STATUS = ['queued', 'running', 'waiting', 'awaiting_login'];
+        const FINAL_STATUS = ['success', 'failed', 'cancelled', 'interrupted'];
+        const TIMEZONE_CHOICES = [
+          FLOW_DEFAULT_TIMEZONE,
+          'Asia/Shanghai',
+          'Asia/Tokyo',
+          'Asia/Singapore',
+          'Europe/London',
+          'America/New_York',
+          'UTC',
+        ].filter((zone, index, list) => zone && list.indexOf(zone) === index);
+
+        function newOperationKey() {
+          try {
+            const value = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+            if (/^[A-Za-z0-9_-]{8,64}$/.test(value)) return value;
+          } catch (error) {
+            /* 非安全上下文没有 randomUUID，退回时间戳 + 随机数。 */
+          }
+          const stamp = Date.now().toString(36);
+          let noise = '';
+          for (let index = 0; index < 20; index += 1) {
+            noise += Math.floor(Math.random() * 36).toString(36);
+          }
+          return (stamp + noise).slice(0, 32);
+        }
+
+        function readTrialRecord(projectId) {
+          try {
+            const raw = localStorage.getItem(FLOW_TRIAL_STORE);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return null;
+            if (String(parsed.project || '') !== String(projectId || '')) return null;
+            return parsed.key ? parsed : null;
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function writeTrialRecord(record) {
+          try {
+            localStorage.setItem(FLOW_TRIAL_STORE, JSON.stringify(record));
+          } catch (error) {
+            /* 隐私模式下无法持久化：本次会话仍沿用内存里的同一个 key。 */
+          }
+        }
+
+        /* 关键：operation_key 在点击提交之前就生成并落盘，重试与刷新恢复都复用同一个值。 */
+        function ensureTrialRecord(projectId) {
+          const existing = readTrialRecord(projectId);
+          if (existing) return existing;
+          const record = {
+            project: String(projectId || ''),
+            key: newOperationKey(),
+            createdAt: new Date().toISOString(),
+            operationId: '',
+          };
+          writeTrialRecord(record);
+          return record;
+        }
+
+        function zoneTime(value, timeZone) {
+          if (value === null || value === undefined || value === '') return '';
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return String(value);
+          try {
+            const parts = new Intl.DateTimeFormat('zh-CN', {
+              timeZone: timeZone || undefined,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).formatToParts(date);
+            const map = {};
+            parts.forEach((part) => {
+              map[part.type] = part.value;
+            });
+            return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`;
+          } catch (error) {
+            return date.toISOString().slice(0, 16).replace('T', ' ');
+          }
+        }
+
+        function untilText(value) {
+          const stamp = Date.parse(value);
+          if (!Number.isFinite(stamp)) return '';
+          const delta = stamp - Date.now();
+          if (delta <= 0) return '已到时间，等待调度';
+          const minutes = Math.round(delta / 60000);
+          if (minutes < 60) return `还有 ${minutes} 分钟`;
+          const hours = Math.floor(minutes / 60);
+          const rest = minutes % 60;
+          if (hours < 48) return rest ? `还有 ${hours} 小时 ${rest} 分钟` : `还有 ${hours} 小时`;
+          return `还有 ${Math.round(hours / 24)} 天`;
+        }
+
+        /* 只做展示格式化；下一次时间点完全来自服务端 next_due，不在客户端重算排期。 */
+        function nextDueText(job) {
+          if (!job) return '还没有任务';
+          if (!job.next_due) {
+            return job.enabled ? '已启用，等待服务端排期' : '任务未启用，服务端不会排期';
+          }
+          return `${zoneTime(job.next_due, job.timezone)}（${job.timezone || FLOW_DEFAULT_TIMEZONE}）· ${untilText(job.next_due)}`;
+        }
+
+        function knownText(value, unit) {
+          if (value === null || value === undefined || value === '') return '未知';
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric)) return String(value);
+          return unit ? `${numeric}${unit}` : String(numeric);
+        }
+
+        function publicationText(job) {
+          const mode = job && job.publication_mode;
+          return PUBLICATION_LABELS[mode] || '旧版默认（发布到平台）';
+        }
+
+        function dailyTimeList(job) {
+          if (!job) return [];
+          const list = Array.isArray(job.daily_times) ? job.daily_times.filter(Boolean) : [];
+          if (list.length) return list;
+          return job.daily_time ? [job.daily_time] : [];
+        }
+
+        function operationRows(overview) {
+          const raw = overview ? overview.operations : null;
+          if (Array.isArray(raw)) return raw;
+          if (raw && typeof raw === 'object') return Object.values(raw);
+          return [];
+        }
+
+        function providerRows(ai) {
+          const raw = ai ? ai.providers : null;
+          if (Array.isArray(raw)) return raw;
+          if (raw && typeof raw === 'object') return Object.values(raw);
+          return [];
+        }
+
+        function providerModels(row) {
+          const raw = row ? row.models : null;
+          if (!Array.isArray(raw)) return [];
+          return raw
+            .map((model) => (typeof model === 'string' ? model : model && (model.id || model.model_id)))
+            .filter(Boolean);
+        }
+
+        /* ------------------------------------------------------------ 投递状态 */
+
+        function DeliveryChips(props) {
+          const job = props.job || {};
+          const drafts = job.drafts && typeof job.drafts === 'object' ? job.drafts : {};
+          const hasDrafts = ['saved', 'reviewed', 'pending', 'words'].some(
+            (key) => drafts[key] !== null && drafts[key] !== undefined,
+          );
+          const chips = [
+            {
+              tone: job.publication_mode === 'draft_only' ? 'accent' : 'mute',
+              text: publicationText(job),
+            },
+            {
+              tone: job.remote_state === 'published' ? 'ok' : 'mute',
+              text: REMOTE_STATE_LABELS[job.remote_state] || (job.remote_state ? String(job.remote_state) : '平台状态未知'),
+            },
+          ];
+          if (hasDrafts) {
+            chips.push({
+              tone: 'ok',
+              text: `已存稿 ${knownText(drafts.saved)} · 已审 ${knownText(drafts.reviewed)} · 待处理 ${knownText(drafts.pending)}`,
+            });
+          }
+          if (drafts.words !== null && drafts.words !== undefined) {
+            chips.push({ tone: 'mute', text: `本轮 ${knownText(drafts.words, ' 字')}` });
+          }
+          return e(
+            'div',
+            { className: 'nh-chips' },
+            chips.map((chip, index) => e(Badge, { key: `${chip.text}-${index}`, tone: chip.tone }, chip.text)),
+            drafts.updated_at
+              ? e('span', { className: 'nh-chipmeta' }, `草稿更新 ${zoneTime(drafts.updated_at, job.timezone)}`)
+              : null,
+          );
+        }
+
+        function DeliveryCard(props) {
+          const job = props.job || {};
+          const rows = [
+            ['下次运行（服务端）', nextDueText(job)],
+            ['时区', job.timezone || FLOW_DEFAULT_TIMEZONE],
+            ['每日时段', dailyTimeList(job).join('、') || '未知'],
+            ['每时段章数', knownText(job.chapters_per_run, ' 章')],
+            ['每章字数', knownText(job.word_count, ' 字')],
+            ['自动修订上限', knownText(job.max_revisions, ' 轮')],
+          ];
+          return e(
+            Card,
+            {
+              title: '投递状态',
+              hint: props.schedulerEnabled ? '全局调度已启用' : '全局调度未启用',
+            },
+            e(
+              'div',
+              { className: 'nh-col' },
+              e(DeliveryChips, { job }),
+              e(
+                'div',
+                { className: 'nh-kv' },
+                rows.map((row) =>
+                  e(
+                    'div',
+                    { key: row[0], className: 'nh-kvrow' },
+                    e('span', { className: 'nh-k' }, row[0]),
+                    e('span', { className: 'nh-kvval' }, String(row[1])),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        /* -------------------------------------------------------------- 试写一章 */
+
+        function excerptOf(text, limit) {
+          const clean = String(text || '').replace(/\s+/g, ' ').trim();
+          if (!clean) return '';
+          return clean.length > limit ? `${clean.slice(0, limit)}…` : clean;
+        }
+
+        function TrialCard(props) {
+          const { project, refreshOverview, navigate } = props;
+          const toast = useToast();
+          const [wordCount, setWordCount] = React.useState('3000');
+          const [maxRevisions, setMaxRevisions] = React.useState('1');
+          const [record, setRecord] = React.useState(() => (project ? ensureTrialRecord(project.id) : null));
+          const [busy, setBusy] = React.useState(false);
+          const [error, setError] = React.useState('');
+          const [deduplicated, setDeduplicated] = React.useState(false);
+          const [review, setReview] = React.useState(null);
+          const [reviewError, setReviewError] = React.useState('');
+
+          React.useEffect(() => {
+            setRecord(project ? ensureTrialRecord(project.id) : null);
+            setReview(null);
+            setReviewError('');
+            setError('');
+            setDeduplicated(false);
+          }, [project && project.id]);
+
+          const operationId = record && record.operationId ? record.operationId : '';
+          const operations = usePoll(
+            () => (operationId ? api(`/operations/${encodeURIComponent(operationId)}`) : Promise.resolve(null)),
+            [operationId],
+            2500,
+          );
+          const operation = operations.data || null;
+          const status = operation ? String(operation.status || '') : '';
+          const active = RUNNING_STATUS.indexOf(status) >= 0;
+          const finished = Boolean(operation) && FINAL_STATUS.indexOf(status) >= 0;
+
+          React.useEffect(() => {
+            if (!project || !operation || status !== 'success' || review) return undefined;
+            let alive = true;
+            const load = async () => {
+              try {
+                const result = operation.result && typeof operation.result === 'object' ? operation.result : {};
+                const completed = Array.isArray(result.completed) ? result.completed : [];
+                let chapterId = completed.length ? completed[completed.length - 1] : null;
+                if (chapterId === null || chapterId === undefined) {
+                  const listing = await api(`/projects/${project.id}/chapters`);
+                  const rows = (listing && listing.chapters) || [];
+                  if (rows.length) chapterId = rows[rows.length - 1].id;
+                }
+                if (chapterId === null || chapterId === undefined) {
+                  if (alive) setReviewError('运行成功，但服务端没有返回新章节标识。');
+                  return;
+                }
+                const detail = await api(`/projects/${project.id}/chapters/${encodeURIComponent(chapterId)}`);
+                let quality = null;
+                try {
+                  quality = await api(`/projects/${project.id}/chapters/${encodeURIComponent(chapterId)}/quality`);
+                } catch (caught) {
+                  quality = { error: String(caught.message || caught) };
+                }
+                if (!alive) return;
+                setReview({ chapterId, detail: detail || {}, quality: quality || {}, result });
+              } catch (caught) {
+                if (alive) setReviewError(String(caught.message || caught));
+              }
+            };
+            load();
+            return () => {
+              alive = false;
+            };
+          }, [project && project.id, operation && operation.id, status, review]);
+
+          const submit = async () => {
+            if (!project || !record || busy) return;
+            setBusy(true);
+            setError('');
+            try {
+              const answer = await api(`/projects/${project.id}/generate`, {
+                method: 'POST',
+                body: {
+                  word_count: Number(wordCount) || 3000,
+                  max_revisions: Number.isFinite(Number(maxRevisions)) ? Number(maxRevisions) : 1,
+                  count: 1,
+                  scenes: 0,
+                  operation_key: record.key,
+                },
+              });
+              const id =
+                (answer && (answer.id || (answer.operation && answer.operation.id))) || record.operationId || '';
+              const next = { ...record, operationId: id, submittedAt: new Date().toISOString() };
+              writeTrialRecord(next);
+              setRecord(next);
+              setDeduplicated(Boolean(answer && answer.deduplicated));
+              setReview(null);
+              setReviewError('');
+              toast.push(answer && answer.deduplicated ? '服务端按 operation_key 复用了同一次操作' : '试写已提交', 'ok');
+              operations.reload(true);
+              if (refreshOverview) refreshOverview();
+            } catch (caught) {
+              setError(String(caught.message || caught));
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          const cancel = async () => {
+            if (!operationId) return;
+            try {
+              await api(`/operations/${encodeURIComponent(operationId)}/cancel`, { method: 'POST' });
+              toast.push('已请求取消，稍后读取服务端真实状态', 'ok');
+              operations.reload(true);
+            } catch (caught) {
+              toast.push(`取消失败：${caught.message}`, 'err');
+            }
+          };
+
+          const startFresh = () => {
+            if (!project) return;
+            const next = {
+              project: String(project.id),
+              key: newOperationKey(),
+              createdAt: new Date().toISOString(),
+              operationId: '',
+            };
+            writeTrialRecord(next);
+            setRecord(next);
+            setReview(null);
+            setReviewError('');
+            setError('');
+            setDeduplicated(false);
+            operations.setData(null);
+          };
+
+          /* 运行中按 Escape 取消，与 Modal 的键盘约定一致。 */
+          React.useEffect(() => {
+            if (!active || !operationId) return undefined;
+            const handle = (event) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              cancel();
+            };
+            document.addEventListener('keydown', handle);
+            return () => document.removeEventListener('keydown', handle);
+          }, [active, operationId]);
+
+          const result = operation && operation.result && typeof operation.result === 'object' ? operation.result : {};
+          const recovery = result.recovery && typeof result.recovery === 'object' ? result.recovery : {};
+          const detail = review ? review.detail : {};
+          const report = review && review.quality && review.quality.report ? review.quality.report : null;
+          const qualityStatus = review && review.quality ? review.quality.status : null;
+          const revisionRounds =
+            result.revision_rounds !== undefined
+              ? result.revision_rounds
+              : detail.revision_rounds !== undefined
+                ? detail.revision_rounds
+                : report && report.revision_rounds !== undefined
+                  ? report.revision_rounds
+                  : null;
+          const targets = Array.isArray(result.targets) ? result.targets : [];
+          const completed = Array.isArray(result.completed) ? result.completed : [];
+
+          return e(
+            Card,
+            { title: '试写一章', hint: '先花一章的钱，再决定要不要日更' },
+            e(
+              'div',
+              { className: 'nh-col' },
+              e(
+                'form',
+                {
+                  className: 'nh-formgrid',
+                  onSubmit: (event) => {
+                    event.preventDefault();
+                    submit();
+                  },
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      submit();
+                    }
+                  },
+                },
+                e(
+                  Field,
+                  { label: '本章字数' },
+                  e(TextInput, { value: wordCount, onChange: setWordCount, type: 'number', min: 500, max: 10000 }),
+                ),
+                e(
+                  Field,
+                  { label: '自动修订轮数（0—3）' },
+                  e(TextInput, { value: maxRevisions, onChange: setMaxRevisions, type: 'number', min: 0, max: 3 }),
+                ),
+                e(
+                  Field,
+                  { label: ' ' },
+                  e(
+                    'div',
+                    { className: 'nh-row' },
+                    e(Button, { kind: 'primary', icon: 'pen', busy, onClick: submit, disabled: !project }, '试写一章'),
+                    active
+                      ? e(Button, { icon: 'x', onClick: cancel }, '取消（Esc）')
+                      : e(Button, { icon: 'refresh', onClick: startFresh, disabled: !project }, '换一个新的操作'),
+                  ),
+                ),
+              ),
+              project
+                ? e(
+                    'div',
+                    { className: 'nh-note' },
+                    `幂等键 ${record ? record.key : '未生成'} 已在提交前写入本机；重试与刷新恢复都会复用它。`,
+                  )
+                : e('div', { className: 'nh-note', 'data-tone': 'warn' }, '先在第一步选一本书，才能试写。'),
+              deduplicated
+                ? e('div', { className: 'nh-note', 'data-tone': 'ok' }, '本次响应带 deduplicated：服务端命中了同一个 operation_key，没有重复计费。')
+                : null,
+              error ? e('div', { className: 'nh-inline-err' }, `提交失败：${error}`) : null,
+              operation
+                ? e(
+                    'div',
+                    { className: 'nh-col' },
+                    e(
+                      'div',
+                      { className: 'nh-chips' },
+                      e(Badge, { tone: status === 'success' ? 'ok' : status === 'failed' ? 'err' : 'accent' }, operationStatusText(status)),
+                      e(Badge, { tone: 'mute' }, `operation ${operation.id || '—'}`),
+                      operation.created_at ? e(Badge, { tone: 'mute' }, zoneTime(operation.created_at, FLOW_DEFAULT_TIMEZONE)) : null,
+                      targets.length ? e(Badge, { tone: 'mute' }, `目标 ${targets.length} 章 · 完成 ${completed.length} 章`) : null,
+                    ),
+                    operation.error ? e('div', { className: 'nh-inline-err' }, `失败原因：${operation.error}`) : null,
+                    recovery.failure_kind || recovery.next_retry_at
+                      ? e(
+                          'div',
+                          { className: 'nh-note', 'data-tone': 'warn' },
+                          `可恢复失败：${recovery.failure_kind || '未知类型'}${
+                            recovery.next_retry_at ? ` · 服务端建议重试时间 ${zoneTime(recovery.next_retry_at, FLOW_DEFAULT_TIMEZONE)}` : ''
+                          }`,
+                        )
+                      : null,
+                    operation.log_tail && status === 'failed'
+                      ? e('pre', { className: 'nh-pre', style: { maxHeight: 150 } }, String(operation.log_tail).slice(-1200))
+                      : null,
+                  )
+                : null,
+              reviewError ? e('div', { className: 'nh-inline-err' }, `读取正文失败：${reviewError}`) : null,
+              review
+                ? e(
+                    'div',
+                    { className: 'nh-col' },
+                    e(
+                      'div',
+                      { className: 'nh-chips' },
+                      e(Badge, { tone: 'mute' }, `第 ${review.chapterId} 章`),
+                      e(Badge, { tone: 'mute' }, `正文 ${knownText(detail.words, ' 字')}`),
+                      e(Badge, { tone: 'mute' }, `修订轮数 ${knownText(revisionRounds)}`),
+                      report && report.review_decision
+                        ? e(Badge, { tone: report.quality_pass ? 'ok' : 'err' }, `审查：${report.review_decision}`)
+                        : e(Badge, { tone: 'mute' }, '审查：本轮无报告'),
+                    ),
+                    e(
+                      'div',
+                      { className: 'nh-excerpt' },
+                      excerptOf(detail.content, 360) || '（服务端没有返回正文内容）',
+                    ),
+                    report
+                      ? e(
+                          'div',
+                          { className: 'nh-col' },
+                          e(
+                            'div',
+                            { className: 'nh-kvrow' },
+                            e('span', { className: 'nh-k' }, '审查结论'),
+                            e(
+                              'span',
+                              { className: 'nh-kvval' },
+                              `${report.review_decision || '未知'} · 总分 ${knownText(report.total)} · ${
+                                report.quality_pass === true ? '通过' : report.quality_pass === false ? '未通过' : '未知'
+                              }`,
+                            ),
+                          ),
+                          report.summary ? e('div', { className: 'nh-note' }, String(report.summary)) : null,
+                          Array.isArray(report.issues) && report.issues.length
+                            ? e(
+                                'ul',
+                                { className: 'nh-issues' },
+                                report.issues.slice(0, 5).map((issue, index) =>
+                                  e(
+                                    'li',
+                                    { key: `issue-${index}` },
+                                    typeof issue === 'string'
+                                      ? issue
+                                      : `${(issue && (issue.title || issue.code || issue.kind)) || '问题'}：${
+                                          (issue && (issue.detail || issue.message || issue.summary)) || ''
+                                        }`,
+                                  ),
+                                ),
+                              )
+                            : null,
+                          Array.isArray(report.reasons) && report.reasons.length
+                            ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, `未通过原因：${report.reasons.join('；')}`)
+                            : null,
+                        )
+                      : e('div', { className: 'nh-note' }, '本章还没有质量报告，可能只落了稿或审查尚未回写。'),
+                    qualityStatus && qualityStatus.valid === false
+                      ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, `审查报告已过期：${qualityStatus.stale_reason || '正文有更新'}`)
+                      : null,
+                    e(
+                      'div',
+                      { className: 'nh-row' },
+                      e(Button, { icon: 'book', onClick: () => (navigate ? navigate('chapters') : null) }, '打开作品与章节'),
+                      e(Button, {
+                        icon: 'refresh',
+                        onClick: () => {
+                          setReview(null);
+                          setReviewError('');
+                          operations.reload(true);
+                        },
+                      }, '重新读取结果'),
+                    ),
+                  )
+                : null,
+              finished && status === 'success' && !review
+                ? e('div', { className: 'nh-note' }, '运行成功，正在读取正文与审查结果…')
+                : null,
+            ),
+          );
+        }
+
+        function operationStatusText(status) {
+          const labels = {
+            queued: '排队中',
+            running: '生成中',
+            waiting: '等待重试',
+            awaiting_login: '等待登录',
+            success: '已完成',
+            failed: '失败',
+            cancelled: '已取消',
+            interrupted: '已中断',
+          };
+          return labels[status] || status || '未知状态';
+        }
+
+        /* ---------------------------------------------------------- 最新章节审查 */
+
+        function LatestChapterCard(props) {
+          const { project, navigate } = props;
+          const chapters = usePoll(
+            () => (project ? api(`/projects/${project.id}/chapters`) : Promise.resolve(null)),
+            [project && project.id],
+            POLL_MS,
+          );
+          const rows = (chapters.data && chapters.data.chapters) || [];
+          const latest = rows.length ? rows[rows.length - 1] : null;
+          const chapterId = latest ? latest.id : '';
+          const detail = usePoll(
+            () => (project && chapterId ? api(`/projects/${project.id}/chapters/${encodeURIComponent(chapterId)}`) : Promise.resolve(null)),
+            [project && project.id, chapterId],
+            0,
+          );
+          const quality = usePoll(
+            () => (project && chapterId ? api(`/projects/${project.id}/chapters/${encodeURIComponent(chapterId)}/quality`) : Promise.resolve(null)),
+            [project && project.id, chapterId],
+            0,
+          );
+          const body = detail.data || {};
+          const report = quality.data && quality.data.report ? quality.data.report : null;
+          const status = quality.data ? quality.data.status : null;
+
+          if (!project) {
+            return e(Card, { title: '读正文与审查结果' }, e(Empty, null, '还没有作品'));
+          }
+          if (!latest) {
+            return e(Card, { title: '读正文与审查结果', hint: project.title }, e(Empty, null, '这本书还没有章节'));
+          }
+          return e(
+            Card,
+            { title: '读正文与审查结果', hint: `${latest.title || `第 ${chapterId} 章`} · ${knownText(latest.words, ' 字')}` },
+            e(
+              'div',
+              { className: 'nh-col' },
+              e(
+                'div',
+                { className: 'nh-chips' },
+                e(Badge, { tone: latest.reviewed ? 'ok' : 'mute' }, latest.reviewed ? `已审：${latest.review_status || '通过'}` : '尚未审查'),
+                report
+                  ? e(Badge, { tone: report.quality_pass ? 'ok' : 'err' }, `质量 ${knownText(report.total)} · ${report.review_decision || '未知'}`)
+                  : e(Badge, { tone: 'mute' }, '暂无质量报告'),
+                status && status.valid === false ? e(Badge, { tone: 'warn' }, '报告已过期') : null,
+              ),
+              e('div', { className: 'nh-excerpt' }, excerptOf(body.content, 360) || '正在读取正文…'),
+              report && report.summary ? e('div', { className: 'nh-note' }, String(report.summary)) : null,
+              e(
+                'div',
+                { className: 'nh-row' },
+                e(Button, { icon: 'book', onClick: () => (navigate ? navigate('chapters') : null) }, '打开章节详情'),
+                e(Button, {
+                  icon: 'refresh',
+                  onClick: () => {
+                    chapters.reload(true);
+                    detail.reload(true);
+                    quality.reload(true);
+                  },
+                }, '重新读取'),
+              ),
+            ),
+          );
+        }
+
+        /* ---------------------------------------------------------- 日更与两步启用 */
+
+        function scheduleDraft(job, project) {
+          const times = dailyTimeList(job);
+          return {
+            name: (job && job.name) || '日更任务',
+            book: (job && job.book) || (project && project.title) || '',
+            account: (job && job.account) || '',
+            platform: (job && job.platform) || 'fanqie',
+            times: times.length ? times : ['08:00'],
+            timezone: (job && job.timezone) || FLOW_DEFAULT_TIMEZONE,
+            chaptersPerRun: String((job && job.chapters_per_run) || 1),
+            wordCount: String((job && job.word_count) || 3000),
+            maxRevisions: String(job && job.max_revisions !== undefined && job.max_revisions !== null ? job.max_revisions : 1),
+            publicationMode: (job && job.publication_mode) || 'draft_only',
+            deliveryMode: (job && job.delivery_mode) || 'batch',
+            approvalMode: (job && job.approval_mode) || 'unattended',
+          };
+        }
+
+        function ScheduleCard(props) {
+          const { project, jobs, schedulerEnabled, refreshOverview, ai } = props;
+          const toast = useToast();
+          const existing = (jobs || []).find((item) => matchesProject(item, project)) || null;
+          const [form, setForm] = React.useState(() => scheduleDraft(existing, project));
+          const [phase, setPhase] = React.useState({ save: false, enableJob: false, enableScheduler: false });
+          const [stepError, setStepError] = React.useState({ save: '', enableJob: '', enableScheduler: '' });
+          const [savedJob, setSavedJob] = React.useState(null);
+          const [schedulerAck, setSchedulerAck] = React.useState(false);
+
+          React.useEffect(() => {
+            setForm(scheduleDraft(existing, project));
+          }, [project && project.id, existing ? existing.id : '', existing ? existing.publication_mode : '', existing ? existing.platform : '']);
+
+          const job = savedJob || existing;
+          const patch = (value) => setForm((current) => ({ ...current, ...value }));
+          const enabledJobs = (jobs || []).filter((item) => item.enabled);
+          const affected = enabledJobs.length
+            ? enabledJobs
+            : job
+              ? [job]
+              : [];
+          const binding = ai && ai.default_binding ? ai.default_binding : null;
+          const policy = ai && ai.resource_policy ? ai.resource_policy : null;
+          const limits = (policy && policy.limits) || {};
+
+          const normalizedTimes = () => {
+            const values = (form.times || [])
+              .map((value) => String(value || '').trim())
+              .filter((value) => /^\d{1,2}:\d{2}$/.test(value));
+            const unique = values.filter((value, index) => values.indexOf(value) === index);
+            return unique.length ? unique : ['08:00'];
+          };
+
+          const needsPlatform = form.publicationMode === 'publish_now' || form.publicationMode === 'platform_scheduled';
+
+          const buildBody = (enabled) => {
+            const times = normalizedTimes();
+            const mode = ['draft_only', 'publish_now', 'platform_scheduled'].includes(form.publicationMode)
+              ? form.publicationMode
+              : 'draft_only';
+            const body = {
+              name: String(form.name || '日更任务').slice(0, 96) || '日更任务',
+              project: (existing && existing.project) || (project && (project.path || project.id)) || '',
+              book: String(form.book || (project && project.title) || '未命名作品').slice(0, 96),
+              account: needsPlatform ? String(form.account || '') : '',
+              platform: needsPlatform ? String(form.platform || (existing && existing.platform) || 'fanqie') : (existing && existing.platform) || 'fanqie',
+              daily_time: times[0],
+              daily_times: times,
+              timezone: form.timezone || FLOW_DEFAULT_TIMEZONE,
+              chapters_per_run: Number(form.chaptersPerRun) || 1,
+              word_count: Number(form.wordCount) || 3000,
+              max_revisions: Number.isFinite(Number(form.maxRevisions)) ? Number(form.maxRevisions) : 1,
+              delivery_mode: form.deliveryMode === 'serial' ? 'serial' : 'batch',
+              publication_mode: mode,
+              approval_mode: form.approvalMode === 'attended' ? 'attended' : 'unattended',
+              enabled: Boolean(enabled),
+            };
+            if (existing) {
+              body.id = existing.id;
+              if (Array.isArray(existing.quota_phases)) body.quota_phases = existing.quota_phases;
+              if (existing.slot_quotas !== undefined && existing.slot_quotas !== null) body.slot_quotas = existing.slot_quotas;
+              if (existing.schedule_buffer !== undefined && existing.schedule_buffer !== null) body.schedule_buffer = existing.schedule_buffer;
+            }
+            return body;
+          };
+
+          const validate = () => {
+            if (!project) return '先选一本书，再设日更。';
+            if (needsPlatform) {
+              if (!String(form.book || '').trim()) return '需要平台发布或排期时必须填平台作品名。';
+              if (!String(form.account || '').trim()) return '需要平台发布或排期时必须填账号标识。';
+            }
+            const times = normalizedTimes();
+            if (!times.length) return '至少保留一个每日时段。';
+            return '';
+          };
+
+          const readBack = async (identity, projectPath) => {
+            const listing = await api('/jobs');
+            const rows = Array.isArray(listing) ? listing : (listing && listing.jobs) || [];
+            const stored =
+              rows.find((row) => identity && row.id === identity) ||
+              rows.find((row) => row.project === projectPath) ||
+              rows.find((row) => matchesProject(row, project)) ||
+              null;
+            setSavedJob(stored);
+            return stored;
+          };
+
+          const save = async () => {
+            const problem = validate();
+            if (problem) {
+              setStepError((current) => ({ ...current, save: problem }));
+              return;
+            }
+            setPhase((current) => ({ ...current, save: true }));
+            setStepError((current) => ({ ...current, save: '' }));
+            try {
+              const keepEnabled = Boolean(existing && existing.enabled);
+              const body = buildBody(keepEnabled);
+              const answer = existing
+                ? await api(`/jobs/${encodeURIComponent(existing.id)}`, { method: 'PUT', body })
+                : await api('/jobs', { method: 'POST', body });
+              const identity =
+                (answer && (answer.id || (answer.job && answer.job.id))) || (existing && existing.id) || '';
+              const stored = await readBack(identity, body.project);
+              toast.push(stored ? '任务已保存，并已从服务端读回' : '任务已保存', 'ok');
+              refreshOverview();
+            } catch (caught) {
+              setStepError((current) => ({ ...current, save: String(caught.message || caught) }));
+            } finally {
+              setPhase((current) => ({ ...current, save: false }));
+            }
+          };
+
+          const enableJob = async () => {
+            const target = savedJob || existing;
+            if (!target) {
+              setStepError((current) => ({ ...current, enableJob: '先执行第一步「保存任务」，再单独启用。' }));
+              return;
+            }
+            setPhase((current) => ({ ...current, enableJob: true }));
+            setStepError((current) => ({ ...current, enableJob: '' }));
+            try {
+              const body = buildBody(true);
+              body.id = target.id;
+              await api(`/jobs/${encodeURIComponent(target.id)}`, { method: 'PUT', body });
+              const stored = await readBack(target.id, body.project);
+              toast.push('任务已启用；还需要开启全局调度才会按时运行', 'ok');
+              refreshOverview();
+              return stored;
+            } catch (caught) {
+              setStepError((current) => ({ ...current, enableJob: String(caught.message || caught) }));
+            } finally {
+              setPhase((current) => ({ ...current, enableJob: false }));
+            }
+          };
+
+          const enableScheduler = async () => {
+            if (!schedulerAck) {
+              setStepError((current) => ({ ...current, enableScheduler: '先勾选确认，明确会影响哪些任务。' }));
+              return;
+            }
+            setPhase((current) => ({ ...current, enableScheduler: true }));
+            setStepError((current) => ({ ...current, enableScheduler: '' }));
+            try {
+              await api('/settings', { method: 'PUT', body: { scheduler_enabled: true } });
+              toast.push('全局调度已启用', 'ok');
+              refreshOverview();
+            } catch (caught) {
+              setStepError((current) => ({
+                ...current,
+                enableScheduler: `全局调度启用失败：${caught.message}。任务「${(job && job.name) || form.name}」已保留，可稍后重试这一步。`,
+              }));
+            } finally {
+              setPhase((current) => ({ ...current, enableScheduler: false }));
+            }
+          };
+
+          if (!project) {
+            return e(Card, { title: '设日更' }, e(Empty, null, '还没有作品，先建书。'));
+          }
+
+          return e(
+            Card,
+            {
+              title: '设日更',
+              hint: schedulerEnabled ? '全局调度已启用' : '全局调度未启用',
+              actions: e(Badge, { tone: schedulerEnabled ? 'ok' : 'mute' }, schedulerEnabled ? '调度开' : '调度关'),
+            },
+            e(
+              'form',
+              {
+                className: 'nh-col',
+                style: { gap: 12 },
+                onSubmit: (event) => {
+                  event.preventDefault();
+                  save();
+                },
+              },
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: '任务名' }, e(TextInput, { value: form.name, onChange: (value) => patch({ name: value }) })),
+                e(
+                  Field,
+                  { label: '投递方式' },
+                  e(Segmented, {
+                    value: form.publicationMode,
+                    onChange: (value) => patch({ publicationMode: value }),
+                    options: [
+                      { value: 'draft_only', label: '只存稿' },
+                      { value: 'publish_now', label: '发布到平台' },
+                      { value: 'platform_scheduled', label: '排期缓冲（候选）' },
+                    ],
+                  }),
+                ),
+                e(
+                  Field,
+                  { label: '每时段章数' },
+                  e(TextInput, { value: form.chaptersPerRun, onChange: (value) => patch({ chaptersPerRun: value }), type: 'number', min: 1, max: 50 }),
+                ),
+                e(
+                  Field,
+                  { label: '每章字数' },
+                  e(TextInput, { value: form.wordCount, onChange: (value) => patch({ wordCount: value }), type: 'number', min: 500, max: 10000 }),
+                ),
+                e(
+                  Field,
+                  { label: '自动修订轮数（0—3）' },
+                  e(TextInput, { value: form.maxRevisions, onChange: (value) => patch({ maxRevisions: value }), type: 'number', min: 0, max: 3 }),
+                ),
+                e(
+                  Field,
+                  { label: '时区' },
+                  e(Select, {
+                    value: form.timezone,
+                    onChange: (value) => patch({ timezone: value }),
+                    options: TIMEZONE_CHOICES.map((zone) => ({ value: zone, label: zone })),
+                  }),
+                ),
+                e(
+                  Field,
+                  { label: '串行还是批量' },
+                  e(Select, {
+                    value: form.deliveryMode,
+                    onChange: (value) => patch({ deliveryMode: value }),
+                    options: [
+                      { value: 'batch', label: '批量：一次排完本时段' },
+                      { value: 'serial', label: '串行：一章接一章' },
+                    ],
+                  }),
+                ),
+                needsPlatform
+                  ? e(Field, { label: '平台作品名（必填）' }, e(TextInput, { value: form.book, onChange: (value) => patch({ book: value }) }))
+                  : e(Field, { label: '作品名' }, e(TextInput, { value: form.book, onChange: (value) => patch({ book: value }) })),
+                needsPlatform
+                  ? e(Field, { label: '账号标识（必填）' }, e(TextInput, { value: form.account, onChange: (value) => patch({ account: value }) }))
+                  : null,
+                needsPlatform
+                  ? e(
+                      Field,
+                      { label: '目标平台' },
+                      e(Select, {
+                        value: form.platform || 'fanqie',
+                        onChange: (value) => patch({ platform: value }),
+                        options: [
+                          { value: 'fanqie', label: '番茄小说（主流程）' },
+                          { value: 'qimao', label: '七猫（仅契约只读，未实连）' },
+                        ],
+                      }),
+                    )
+                  : null,
+              ),
+              e(
+                'div',
+                { className: 'nh-field' },
+                e('label', null, '每日时段（可多点，最多 8 个）'),
+                e(
+                  'div',
+                  { className: 'nh-timegrid' },
+                  (form.times.length ? form.times : ['08:00']).map((value, index) =>
+                    e(
+                      'div',
+                      { key: `time-${index}`, className: 'nh-timerow' },
+                      e('input', {
+                        className: 'nh-input',
+                        type: 'time',
+                        value: value,
+                        'aria-label': `第 ${index + 1} 个时段`,
+                        onChange: (event) => {
+                          const next = form.times.slice();
+                          next[index] = event.target.value;
+                          patch({ times: next });
+                        },
+                      }),
+                      e(
+                        Button,
+                        {
+                          size: 'sm',
+                          icon: 'x',
+                          label: `删除第 ${index + 1} 个时段`,
+                          disabled: form.times.length <= 1,
+                          onClick: () => patch({ times: form.times.filter((item, position) => position !== index) }),
+                        },
+                        '',
+                      ),
+                    ),
+                  ),
+                  e(
+                    Button,
+                    {
+                      size: 'sm',
+                      icon: 'plus',
+                      disabled: form.times.length >= 8,
+                      onClick: () =>
+                        patch({
+                          times: [...(form.times.length ? form.times : ['08:00']), '08:00'].slice(0, 8),
+                        }),
+                    },
+                    '增加时段',
+                  ),
+                ),
+              ),
+              form.publicationMode === 'platform_scheduled'
+                ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, '排期缓冲（候选，未做真实番茄页实测）：生成后优先按目标天数与时段写入排期缓冲队列；保存后请在「日更任务 → 排期缓冲」或「发布队列 → 排期缓冲」录入能力观测并核对。')
+                : form.publicationMode === 'publish_now'
+                  ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, '发布到平台：需要账号与平台作品名；平台返回后会有 remote_state 与草稿计数。')
+                  : e('div', { className: 'nh-note' }, '只保存在本机，不发布：正文写入本地 正文/ 目录，平台账号字段不必填。'),
+              e(
+                'div',
+                { className: 'nh-note' },
+                `模型与预算沿用全局资源策略：默认 ${binding ? `${binding.provider_id || '未命名'} · ${binding.model_id || '未知模型'}` : '未绑定'}；` +
+                  `自动修订上限 ${knownText(limits.revision_rounds, ' 轮')}、费用上限 ${knownText(limits.chapter_cost_cny, ' 元/章')}。` +
+                  '任务级预算字段本版沿用已存值，不在表单里改写。',
+              ),
+              e('div', { className: 'nh-kvrow' }, e('span', { className: 'nh-k' }, '下次运行（服务端 next_due）'), e('span', { className: 'nh-kvval' }, nextDueText(job))),
+              job ? e(DeliveryChips, { job }) : null,
+              stepError.save ? e('div', { className: 'nh-inline-err' }, `保存失败：${stepError.save}`) : null,
+              e(
+                'div',
+                { className: 'nh-row' },
+                e(Button, { kind: 'primary', icon: 'save', busy: phase.save, onClick: save }, '① 保存任务'),
+                e(Button, { icon: 'check', busy: phase.enableJob, onClick: enableJob }, '② 启用此任务'),
+              ),
+              e(
+                'div',
+                { className: 'nh-note' },
+                '两步分开：先保存任务（上一步），再单独启用任务与全局调度。任一步失败都不会删除已建任务。',
+              ),
+              stepError.enableJob ? e('div', { className: 'nh-inline-err' }, `启用任务失败：${stepError.enableJob}`) : null,
+              e(
+                'div',
+                { className: 'nh-panel' },
+                e('div', { className: 'nh-k' }, '③ 启用全局调度'),
+                e(
+                  'div',
+                  { className: 'nh-note' },
+                  affected.length
+                    ? `开启后会影响 ${affected.length} 个任务：${affected.map((item) => item.name || item.id).join('、')}`
+                    : '开启后会让已启用的日更任务按各自 next_due 运行。',
+                ),
+                e(
+                  'label',
+                  { className: 'nh-ack' },
+                  e('input', {
+                    type: 'checkbox',
+                    checked: schedulerAck,
+                    onChange: (event) => setSchedulerAck(event.target.checked),
+                  }),
+                  '我已确认上述任务会按各自时区自动运行',
+                ),
+                e(
+                  'div',
+                  { className: 'nh-row' },
+                  e(
+                    Button,
+                    { kind: schedulerEnabled ? 'default' : 'primary', icon: 'clock', busy: phase.enableScheduler, onClick: enableScheduler, disabled: schedulerEnabled },
+                    schedulerEnabled ? '全局调度已启用' : '启用全局调度',
+                  ),
+                ),
+                stepError.enableScheduler
+                  ? e('div', { className: 'nh-inline-err' }, stepError.enableScheduler)
+                  : null,
+              ),
+            ),
+          );
+        }
+
+        /* ------------------------------------------------------------ 资源策略 */
+
+        function ResourcePolicyCard(props) {
+          const { job, ai, onReload } = props;
+          const toast = useToast();
+          const [rotating, setRotating] = React.useState(false);
+          const [choice, setChoice] = React.useState('');
+          React.useEffect(() => {
+            if (!rotating) return undefined;
+            const handle = (event) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              setRotating(false);
+            };
+            document.addEventListener('keydown', handle);
+            return () => document.removeEventListener('keydown', handle);
+          }, [rotating]);
+          const [busy, setBusy] = React.useState(false);
+          const [error, setError] = React.useState('');
+          const rows = providerRows(ai);
+          const policy = (ai && ai.resource_policy) || {};
+          const limits = policy.limits || {};
+          const binding = (ai && ai.default_binding) || null;
+          const candidates = [];
+          rows.forEach((row) => {
+            const id = row.id || row.provider_id || row.name;
+            providerModels(row).forEach((model) => {
+              candidates.push({
+                value: `${id}||${model}`,
+                label: `${row.name || id} · ${model}${row.protocol === 'free_pool' ? '（免费池）' : ''}`,
+                provider_id: id,
+                model_id: model,
+                free: row.protocol === 'free_pool',
+              });
+            });
+          });
+          const failure = props.failure || null;
+          const quota = (job && job.effective_quota) || null;
+
+          const rotate = async () => {
+            const picked = candidates.find((item) => item.value === choice);
+            if (!picked) {
+              setError('先选择一个模型。');
+              return;
+            }
+            setBusy(true);
+            setError('');
+            try {
+              await api('/ai/bindings', {
+                method: 'PUT',
+                body: { default_binding: { provider_id: picked.provider_id, model_id: picked.model_id, fallbacks: [] } },
+              });
+              toast.push('默认模型已切换', 'ok');
+              setRotating(false);
+              if (onReload) onReload();
+            } catch (caught) {
+              setError(String(caught.message || caught));
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          return e(
+            Card,
+            { title: '模型与额度作用域', hint: '未知就写未知，不拿 0 顶替' },
+            e(
+              'div',
+              { className: 'nh-col' },
+              e(
+                'div',
+                { className: 'nh-kv' },
+                [
+                  ['全局默认模型', binding ? `${binding.provider_id || '未命名'} · ${binding.model_id || '未知模型'}` : '未绑定'],
+                  ['全局 · 每日请求', knownText(limits.requests_per_day, ' 次')],
+                  ['全局 · 每章费用上限', knownText(limits.chapter_cost_cny, ' 元')],
+                  ['全局 · 每章 Token', knownText(limits.chapter_tokens)],
+                  ['全局 · 自动修订', knownText(limits.revision_rounds, ' 轮')],
+                  ['作品级', '本版未提供作品级额度覆盖（后端无对应字段）'],
+                  ['任务级 · 每时段章数', quota ? knownText(quota.chapters_per_run, ' 章') : job ? knownText(job.chapters_per_run, ' 章') : '未知'],
+                  ['任务级 · 每章字数', quota ? knownText(quota.word_count, ' 字') : job ? knownText(job.word_count, ' 字') : '未知'],
+                ].map((row) =>
+                  e(
+                    'div',
+                    { key: row[0], className: 'nh-kvrow' },
+                    e('span', { className: 'nh-k' }, row[0]),
+                    e('span', { className: 'nh-kvval' }, String(row[1])),
+                  ),
+                ),
+              ),
+              policy.fallback_cost_limit_cny
+                ? e('div', { className: 'nh-note' }, `后备模型费用上限 ${policy.fallback_cost_limit_cny} 元；Token 由供应商侧管理。`)
+                : e('div', { className: 'nh-note' }, '后备模型费用上限：未知（后端未设置）。'),
+              failure
+                ? e(
+                    'div',
+                    { className: 'nh-note', 'data-tone': 'warn' },
+                    `免费渠道失败：${failure.message || '未知原因'}。可以先换后备模型，或改用付费模型；只有你确认后才轮换。`,
+                  )
+                : null,
+              e(
+                'div',
+                { className: 'nh-row' },
+                e(Button, { icon: 'plug', onClick: () => setRotating(!rotating) }, rotating ? '收起' : '选择后备模型 / 改用付费'),
+                e(Button, { icon: 'refresh', onClick: () => (onReload ? onReload() : null) }, '重新读取策略'),
+              ),
+              rotating
+                ? e(
+                    'div',
+                    { className: 'nh-panel' },
+                    e(
+                      'div',
+                      { className: 'nh-col' },
+                      e('div', { className: 'nh-k' }, '确认轮换默认模型（会写入 /api/ai/bindings）'),
+                      candidates.length
+                        ? e(Select, {
+                            value: choice,
+                            onChange: setChoice,
+                            options: [{ value: '', label: '选择一个模型…' }, ...candidates],
+                          })
+                        : e('div', { className: 'nh-note', 'data-tone': 'warn' }, '后端没有返回可用模型清单，无法在这里轮换。'),
+                      error ? e('div', { className: 'nh-inline-err' }, error) : null,
+                      e(
+                        'div',
+                        { className: 'nh-row' },
+                        e(Button, { kind: 'primary', icon: 'check', busy, onClick: rotate, disabled: !candidates.length }, '确认切换'),
+                        e(Button, { icon: 'x', onClick: () => setRotating(false) }, '取消（Esc）'),
+                      ),
+                    ),
+                  )
+                : null,
+            ),
+          );
+        }
+
+        /* ------------------------------------------------------------ 免费渠道 */
+
+        function FreeChannelCard(props) {
+          const { project, refreshOverview } = props;
+          const toast = useToast();
+          const [status, setStatus] = React.useState(null);
+          const [summary, setSummary] = React.useState(null);
+          const [busy, setBusy] = React.useState({});
+          const [error, setError] = React.useState('');
+          const [notice, setNotice] = React.useState('');
+          const [provider, setProvider] = React.useState('');
+          const [login, setLogin] = React.useState(null);
+          const [accounts, setAccounts] = React.useState([]);
+          const [models, setModels] = React.useState([]);
+          const [selection, setSelection] = React.useState({});
+          const [quotaConfirmed, setQuotaConfirmed] = React.useState(false);
+          const [sms, setSms] = React.useState({ phone: '', code: '', msgid: '' });
+
+          const mark = (key, value) => setBusy((current) => ({ ...current, [key]: value }));
+
+          const loadStatus = React.useCallback(async () => {
+            try {
+              const answer = await api('/free-model/status');
+              setStatus(answer);
+              return answer;
+            } catch (caught) {
+              setError(`读取独立服务状态失败：${caught.message}`);
+              return null;
+            }
+          }, []);
+
+          React.useEffect(() => {
+            loadStatus();
+          }, [loadStatus]);
+
+          /* 离开页面 / 取消 / 超时之后不假设结果，回到页面重读真实状态。 */
+          React.useEffect(() => {
+            const handle = () => {
+              if (!document.hidden) loadStatus();
+            };
+            document.addEventListener('visibilitychange', handle);
+            window.addEventListener('focus', handle);
+            return () => {
+              document.removeEventListener('visibilitychange', handle);
+              window.removeEventListener('focus', handle);
+            };
+          }, [loadStatus]);
+
+          const call = async (key, method, path, body) => {
+            mark(key, true);
+            setError('');
+            try {
+              const answer = await api(path, { method, body: body === undefined ? {} : body });
+              return answer;
+            } catch (caught) {
+              setError(String(caught.message || caught));
+              return null;
+            } finally {
+              mark(key, false);
+            }
+          };
+
+          const startService = async () => {
+            const answer = await call('start', 'POST', '/free-model/start', {});
+            if (answer) {
+              setStatus(answer);
+              toast.push('独立渠道服务已启动', 'ok');
+            }
+          };
+
+          const refreshCatalog = async () => {
+            const answer = await call('refresh', 'POST', '/free-model/refresh', {});
+            if (answer) {
+              setSummary(answer);
+              toast.push('模型清单已刷新', 'ok');
+            }
+          };
+
+          const loadSummary = async () => {
+            const answer = await call('summary', 'GET', '/free-model/summary');
+            if (answer) setSummary(answer);
+          };
+
+          const rpc = async (key, method, payload) => {
+            const answer = await call(key, 'POST', '/free-model/rpc', { method, payload });
+            if (!answer) return null;
+            if (answer.ok === false) {
+              setError((answer.error && answer.error.message) || '渠道操作未完成');
+              return null;
+            }
+            return answer;
+          };
+
+          const createAccount = async () => {
+            if (!provider) {
+              setError('先选一个渠道。');
+              return;
+            }
+            const answer = await rpc('account', 'account.create', { provider, zcodeProvider: provider });
+            if (!answer) return;
+            const value = answer.value || {};
+            const accountId =
+              (value.account && value.account.id) || value.id || value.accountId || '';
+            if (accountId) {
+              setLogin({ provider, accountId, state: 'polling', done: false, url: '', qr: '', message: '' });
+              setNotice('等待本人在渠道侧完成登录/验证，页面会自动读取状态。');
+            } else {
+              setNotice('账号已创建；后端没有返回账号标识，请用「拉取账号」再继续登录轮询。');
+            }
+          };
+
+          const pollLogin = async (target) => {
+            const pair = target || login;
+            if (!pair || !pair.provider || !pair.accountId) {
+              setError('没有可轮询的账号标识。');
+              return;
+            }
+            const answer = await rpc('poll', 'login.poll', { provider: pair.provider, accountId: pair.accountId });
+            if (!answer) return;
+            const value = answer.value || {};
+            const done = value.done === true;
+            const success = value.success === true;
+            setLogin({
+              provider: pair.provider,
+              accountId: pair.accountId,
+              done,
+              success,
+              state: value.state || (done ? (success ? 'success' : 'failed') : 'polling'),
+              url: value.url || value.loginUrl || value.verifyUrl || '',
+              qr: value.qr || value.qrCode || value.qrDataUrl || '',
+              message: value.message || value.hint || '',
+            });
+            if (done && success) {
+              setNotice('登录成功，正在刷新渠道清单。');
+              await loadSummary();
+              const list = await rpc('accounts', 'account.list', { provider: pair.provider });
+              setAccounts((list && Array.isArray(list.value && list.value.accounts)) ? list.value.accounts : []);
+              const published = await rpc('models', 'model.list', { provider: pair.provider });
+              const rows = published && published.value && Array.isArray(published.value.models) ? published.value.models : [];
+              setModels(rows);
+            }
+          };
+
+          const sendSms = async () => {
+            if (!login || !login.provider || !sms.phone) {
+              setError('先有账号，再填手机号。');
+              return;
+            }
+            const answer = await rpc('sms', 'login.sendSms', {
+              provider: login.provider,
+              accountId: login.accountId,
+              phone: sms.phone,
+            });
+            if (!answer) return;
+            const msgid = (answer.value && (answer.value.msgid || answer.value.id)) || sms.msgid;
+            setSms((current) => ({ ...current, msgid: msgid || '' }));
+            setNotice('验证码已发送，填入验证码后提交。');
+          };
+
+          const submitSms = async () => {
+            if (!login || !sms.code) {
+              setError('先填验证码。');
+              return;
+            }
+            const answer = await rpc('sms', 'login.submitSms', {
+              provider: login.provider,
+              accountId: login.accountId,
+              code: sms.code,
+              msgid: sms.msgid,
+              phone: sms.phone,
+            });
+            if (answer) pollLogin();
+          };
+
+          const savePool = async () => {
+            if (!project) {
+              setError('先选一本书，再把免费池授权到这个作品。');
+              return;
+            }
+            const members = Object.keys(selection)
+              .filter((key) => selection[key] && selection[key].selected)
+              .map((key) => ({
+                model_id: key,
+                roles: (selection[key].roles && selection[key].roles.length ? selection[key].roles : ['A', 'B', 'C', 'D', 'E']).slice(),
+                quota_confirmed: quotaConfirmed === true,
+              }));
+            if (!members.length) {
+              setError('至少选择一个免费池模型。');
+              return;
+            }
+            if (!quotaConfirmed) {
+              setError('必须确认这些模型走免费额度，而不是付费订阅或按量计费。');
+              return;
+            }
+            const answer = await call('pool', 'PUT', '/free-model/pool', {
+              members,
+              project: project.path || project.id,
+              authorize_project: true,
+            });
+            if (answer) {
+              toast.push('免费池已保存，并授权到当前作品', 'ok');
+              setSelection({});
+              setQuotaConfirmed(false);
+              loadStatus();
+              if (refreshOverview) refreshOverview();
+            }
+          };
+
+          const channels = (summary && Array.isArray(summary.channels) ? summary.channels : []).filter(Boolean);
+          const options = channels.map((channel) => {
+            const id = channel.id || channel.channel || channel.provider || '';
+            return { value: id, label: channel.name || channel.label || id };
+          }).filter((option) => option.value);
+          const modelRows = models.length
+            ? models
+            : (summary && Array.isArray(summary.catalog) ? summary.catalog : []).filter((row) => row && row.routable !== false);
+          const modelOptions = modelRows && modelRows.length ? modelRows : [];
+          const modelKey = (row) => row.id || row.model_id || row.key || '';
+
+          return e(
+            Card,
+            { title: '免费渠道（可选）', hint: '凭据只在后端编解码，前端不接触明文' },
+            e(
+              'div',
+              { className: 'nh-col' },
+              e(
+                'div',
+                { className: 'nh-chips' },
+                e(Badge, { tone: status && status.running ? 'ok' : 'mute' }, status && status.running ? '服务运行中' : '服务未启动'),
+                status && status.enabled ? e(Badge, { tone: 'accent' }, '已在设置里启用') : null,
+                status && status.endpoint ? e(Badge, { tone: 'mute' }, String(status.endpoint)) : null,
+                status && status.version ? e(Badge, { tone: 'mute' }, `v${status.version}`) : null,
+              ),
+              e(
+                'div',
+                { className: 'nh-row' },
+                e(Button, { kind: status && status.running ? 'default' : 'primary', icon: 'play', busy: busy.start, onClick: startService }, '启动独立服务'),
+                e(Button, { icon: 'refresh', busy: busy.summary, onClick: loadSummary }, '读取汇总'),
+                e(Button, { icon: 'refresh', busy: busy.refresh, onClick: refreshCatalog }, '刷新模型清单'),
+                e(Button, { icon: 'refresh', busy: busy.status, onClick: loadStatus }, '重新读取状态'),
+              ),
+              e('div', { className: 'nh-note' }, '顺序：读取状态 → 显式启动 → 本人登录/验证 → 刷新汇总 → 选模型 → 授权到当前作品。'),
+              error ? e('div', { className: 'nh-inline-err' }, error) : null,
+              notice ? e('div', { className: 'nh-note', 'data-tone': 'ok' }, notice) : null,
+              e(
+                'div',
+                { className: 'nh-panel' },
+                e('div', { className: 'nh-k' }, '① 登录 / 验证（在侧栏发起，二维码或链接由渠道返回）'),
+                e(
+                  'div',
+                  { className: 'nh-formgrid' },
+                  e(
+                    Field,
+                    { label: '渠道' },
+                    options.length
+                      ? e(Select, { value: provider, onChange: setProvider, options: [{ value: '', label: '选择渠道…' }, ...options] })
+                      : e(TextInput, { value: provider, onChange: setProvider, placeholder: '渠道标识（先读取汇总）' }),
+                  ),
+                  e(
+                    Field,
+                    { label: ' ' },
+                    e(
+                      'div',
+                      { className: 'nh-row' },
+                      e(Button, { icon: 'plus', busy: busy.account, onClick: createAccount }, '发起登录'),
+                      e(Button, { icon: 'refresh', busy: busy.poll, onClick: () => pollLogin() }, '读取登录状态'),
+                    ),
+                  ),
+                ),
+                login
+                  ? e(
+                      'div',
+                      { className: 'nh-loginbox' },
+                      e(
+                        'div',
+                        { className: 'nh-chips' },
+                        e(Badge, { tone: login.done && login.success ? 'ok' : login.done ? 'err' : 'accent' }, login.state || 'polling'),
+                        e(Badge, { tone: 'mute' }, login.accountId || '—'),
+                      ),
+                      login.url ? e('a', { className: 'nh-link', href: login.url, target: '_blank', rel: 'noreferrer' }, '在浏览器打开登录页') : null,
+                      login.qr ? e('img', { className: 'nh-qr', src: login.qr, alt: '渠道登录二维码' }) : null,
+                      login.message ? e('div', { className: 'nh-note' }, String(login.message)) : null,
+                      e(
+                        'div',
+                        { className: 'nh-formgrid' },
+                        e(Field, { label: '手机号（短信验证时）' }, e(TextInput, { value: sms.phone, onChange: (value) => setSms({ ...sms, phone: value }) })),
+                        e(
+                          Field,
+                          { label: ' ' },
+                          e(Button, { icon: 'send', busy: busy.sms, onClick: sendSms }, '发送验证码'),
+                        ),
+                        e(Field, { label: '验证码' }, e(TextInput, { value: sms.code, onChange: (value) => setSms({ ...sms, code: value }) })),
+                        e(
+                          Field,
+                          { label: ' ' },
+                          e(Button, { icon: 'check', busy: busy.sms, onClick: submitSms }, '提交验证码'),
+                        ),
+                      ),
+                    )
+                  : null,
+              ),
+              e(
+                'div',
+                { className: 'nh-panel' },
+                e('div', { className: 'nh-k' }, '② 选模型并授权到当前作品'),
+                modelOptions.length
+                  ? e(
+                      'div',
+                      { className: 'nh-catalog' },
+                      modelOptions.map((row) => {
+                        const key = modelKey(row);
+                        const picked = selection[key] || { selected: false, roles: ['A', 'B', 'C', 'D', 'E'] };
+                        return e(
+                          'div',
+                          { key: `model-${key}`, className: 'nh-poolrow' },
+                          e(
+                            'label',
+                            { className: 'nh-ack' },
+                            e('input', {
+                              type: 'checkbox',
+                              checked: Boolean(picked.selected),
+                              onChange: (event) =>
+                                setSelection({
+                                  ...selection,
+                                  [key]: { ...picked, selected: event.target.checked },
+                                }),
+                            }),
+                            `${row.channel || row.provider || ''} · ${row.model_id || row.label || key}`,
+                          ),
+                          e(
+                            'div',
+                            { className: 'nh-rolepick' },
+                            ['A', 'B', 'C', 'D', 'E'].map((role) =>
+                              e(
+                                'label',
+                                { key: `${key}-${role}`, className: 'nh-tagbtn' },
+                                e('input', {
+                                  type: 'checkbox',
+                                  checked: picked.roles.indexOf(role) >= 0,
+                                  onChange: (event) => {
+                                    const roles = event.target.checked
+                                      ? [...picked.roles, role]
+                                      : picked.roles.filter((item) => item !== role);
+                                    setSelection({ ...selection, [key]: { ...picked, roles } });
+                                  },
+                                }),
+                                role,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    )
+                  : e('div', { className: 'nh-note' }, '还没有模型清单：先启动服务并刷新模型清单。'),
+                e(
+                  'label',
+                  { className: 'nh-ack' },
+                  e('input', {
+                    type: 'checkbox',
+                    checked: quotaConfirmed,
+                    onChange: (event) => setQuotaConfirmed(event.target.checked),
+                  }),
+                  '我确认所选模型使用免费额度，不是付费订阅或按量计费',
+                ),
+                e(
+                  'div',
+                  { className: 'nh-row' },
+                  e(Button, { kind: 'primary', icon: 'save', busy: busy.pool, onClick: savePool }, '授权到当前作品'),
+                ),
+                e('div', { className: 'nh-note' }, `授权范围仅限「${project ? project.title : '未选作品'}」的正文与必要记忆。`),
+              ),
+              accounts.length ? e('div', { className: 'nh-note' }, `已读取 ${accounts.length} 个账号记录（凭据不经过前端）。`) : null,
+            ),
+          );
+        }
+
+        /* -------------------------------------------------------------- 流程页 */
+
+        function FlowPage(props) {
+          const { overview, selectProject, navigate, refreshOverview, job, service } = props;
+          const toast = useToast();
+          const projects = overview.projects || [];
+          const project = projects[0] || null;
+          const jobs = overview.jobs || [];
+          const settings = overview.settings || {};
+          const schedulerEnabled = Boolean(settings.scheduler_enabled);
+          const aiPoll = usePoll(() => api('/ai/providers'), [], POLL_MS * 4);
+          const ai = aiPoll.data || null;
+          const [connection, setConnection] = React.useState(() => {
+            try {
+              return localStorage.getItem(FLOW_CONNECTION_KEY) || 'hosted';
+            } catch (error) {
+              return 'hosted';
+            }
+          });
+          const chooseConnection = (value) => {
+            setConnection(value);
+            try {
+              localStorage.setItem(FLOW_CONNECTION_KEY, value);
+            } catch (error) {
+              /* 忽略持久化失败。 */
+            }
+          };
+          const ofm = usePoll(() => api('/free-model/status'), [], POLL_MS);
+          const ofmStatus = ofm.data || null;
+          const [creating, setCreating] = React.useState({ title: '', genre: '', outline: '' });
+          const [busyCreate, setBusyCreate] = React.useState(false);
+          const [createError, setCreateError] = React.useState('');
+          const [createOpen, setCreateOpen] = React.useState(!project);
+
+          const createBook = async () => {
+            if (busyCreate) return;
+            if (!String(creating.title || '').trim()) {
+              setCreateError('书名不能为空。');
+              return;
+            }
+            setBusyCreate(true);
+            setCreateError('');
+            try {
+              const answer = await api('/projects/create', {
+                method: 'POST',
+                body: {
+                  title: String(creating.title).trim(),
+                  genre: String(creating.genre || '').trim(),
+                  outline: String(creating.outline || ''),
+                },
+              });
+              const identity = (answer && (answer.id || (answer.project && answer.project.id))) || '';
+              if (identity) selectProject(identity);
+              toast.push('新作品已创建', 'ok');
+              setCreating({ title: '', genre: '', outline: '' });
+              setCreateOpen(false);
+              refreshOverview();
+            } catch (caught) {
+              setCreateError(String(caught.message || caught));
+            } finally {
+              setBusyCreate(false);
+            }
+          };
+
+          const operations = operationRows(overview);
+          const latestOperation = operations.length
+            ? operations.slice().sort((left, right) => String(right.created_at || '').localeCompare(String(left.created_at || '')))[0]
+            : null;
+          const activeJob = job || (jobs.length ? jobs[0] : null);
+          const failedFree =
+            activeJob && activeJob.last_status === 'failed'
+              ? { message: activeJob.last_message || '任务上次运行失败' }
+              : latestOperation && latestOperation.status === 'failed'
+                ? { message: latestOperation.error || '最近一次运行失败' }
+                : null;
+
+          const statusStats = [
+            {
+              label: '当前作品',
+              value: project ? project.title : '还没有作品',
+              foot: project ? `${knownText(project.chapters, ' 章')} · 连接 ${service && service.running ? 'DSH 托管在线' : '未连接'}` : '先建一本书',
+            },
+            {
+              label: '连接方式',
+              value: connection === 'independent' ? '独立服务' : '当前 DSH 托管',
+              foot:
+                connection === 'independent'
+                  ? ofmStatus && ofmStatus.running
+                    ? `运行中${ofmStatus.version ? ` · v${ofmStatus.version}` : ''}`
+                    : '独立服务未启动'
+                  : '由当前面板托管的服务执行',
+            },
+            {
+              label: '日程调度',
+              value: schedulerEnabled ? '已启用' : '未启用',
+              foot: activeJob ? `下次 ${nextDueText(activeJob)}` : '还没有日更任务',
+            },
+            {
+              label: '最近一次运行',
+              value: latestOperation ? operationStatusText(String(latestOperation.status || '')) : activeJob ? activeJob.last_status || '—' : '—',
+              foot: latestOperation
+                ? `${latestOperation.kind || '运行'} · ${zoneTime(latestOperation.created_at, FLOW_DEFAULT_TIMEZONE)}`
+                : activeJob
+                  ? `${activeJob.last_run_date || '未运行'}${activeJob.last_message ? ` · ${excerptOf(activeJob.last_message, 28)}` : ''}`
+                  : '还没有运行记录',
+            },
+          ];
+
+          return e(
+            'div',
+            { className: 'nh-page nh-flow' },
+            e(
+              Card,
+              { title: '从这里开始', hint: '建书 → 选连接 → 试写 → 读审查 → 设日更' },
+              e(
+                'div',
+                { className: 'nh-stats' },
+                statusStats.map((item) =>
+                  e(Stat, { key: item.label, label: item.label, value: item.value, foot: item.foot }),
+                ),
+              ),
+            ),
+            e(
+              'div',
+              { className: 'nh-step' },
+              e('div', { className: 'nh-stepno', 'aria-hidden': 'true' }, '1'),
+              e(
+                Card,
+                { title: '建书或选书', hint: project ? `当前：${project.title}` : '还没有作品' },
+                e(
+                  'div',
+                  { className: 'nh-col' },
+                  projects.length
+                    ? e(
+                        'div',
+                        { className: 'nh-chips' },
+                        projects.map((item) =>
+                          e(
+                            'button',
+                            {
+                              key: item.id,
+                              type: 'button',
+                              className: 'nh-chipbtn',
+                              'data-active': project && project.id === item.id ? 'true' : 'false',
+                              onClick: () => selectProject(item.id),
+                            },
+                            `${item.title}${item.chapters ? ` · ${item.chapters} 章` : ''}`,
+                          ),
+                        ),
+                      )
+                    : e(Empty, null, '还没有作品，先在下面建一本。'),
+                  e(
+                    'div',
+                    { className: 'nh-row' },
+                    e(Button, { icon: createOpen ? 'x' : 'plus', onClick: () => setCreateOpen(!createOpen) }, createOpen ? '收起建书表单' : '建一本新书'),
+                  ),
+                  createOpen
+                    ? e(
+                        'form',
+                        {
+                          className: 'nh-col',
+                          style: { gap: 10 },
+                          onSubmit: (event) => {
+                            event.preventDefault();
+                            createBook();
+                          },
+                        },
+                        e(
+                          'div',
+                          { className: 'nh-formgrid' },
+                          e(Field, { label: '书名（必填）' }, e(TextInput, { value: creating.title, onChange: (value) => setCreating({ ...creating, title: value }) })),
+                          e(Field, { label: '题材' }, e(TextInput, { value: creating.genre, onChange: (value) => setCreating({ ...creating, genre: value }), placeholder: '都市 / 玄幻 / 悬疑…' })),
+                        ),
+                        e(
+                          Field,
+                          { label: '一句话大纲（可选）' },
+                          e('textarea', {
+                            className: 'nh-textarea',
+                            rows: 3,
+                            value: creating.outline,
+                            onChange: (event) => setCreating({ ...creating, outline: event.target.value }),
+                          }),
+                        ),
+                        createError ? e('div', { className: 'nh-inline-err' }, createError) : null,
+                        e(Button, { kind: 'primary', icon: 'save', busy: busyCreate, onClick: createBook }, '创建作品'),
+                      )
+                    : null,
+                ),
+              ),
+            ),
+            e(
+              'div',
+              { className: 'nh-step' },
+              e('div', { className: 'nh-stepno', 'aria-hidden': 'true' }, '2'),
+              e(
+                Card,
+                { title: '选连接', hint: '当前 DSH 托管，或独立免费渠道服务' },
+                e(
+                  'div',
+                  { className: 'nh-col' },
+                  e(Segmented, {
+                    value: connection,
+                    onChange: chooseConnection,
+                    options: [
+                      { value: 'hosted', label: '当前 DSH 托管' },
+                      { value: 'independent', label: '独立服务' },
+                    ],
+                  }),
+                  connection === 'independent'
+                    ? e(
+                        'div',
+                        { className: 'nh-col' },
+                        e(
+                          'div',
+                          { className: 'nh-chips' },
+                          e(Badge, { tone: ofmStatus && ofmStatus.running ? 'ok' : 'mute' }, ofmStatus && ofmStatus.running ? '独立服务运行中' : '独立服务未启动'),
+                          ofmStatus && ofmStatus.endpoint ? e(Badge, { tone: 'mute' }, String(ofmStatus.endpoint)) : null,
+                        ),
+                        e(
+                          'div',
+                          { className: 'nh-row' },
+                          e(Button, { icon: 'refresh', onClick: () => ofm.reload(true) }, '重新读取状态'),
+                          e(
+                            Button,
+                            {
+                              kind: 'primary',
+                              icon: 'play',
+                              busy: Boolean(ofmStatus && ofmStatus.starting),
+                              onClick: async () => {
+                                try {
+                                  await api('/free-model/start', { method: 'POST', body: {} });
+                                  toast.push('独立服务已启动', 'ok');
+                                  ofm.reload(true);
+                                } catch (caught) {
+                                  toast.push(`启动失败：${caught.message}`, 'err');
+                                }
+                              },
+                            },
+                            '启动独立服务',
+                          ),
+                        ),
+                        e('div', { className: 'nh-note' }, '独立服务与 DSH 托管共用同一套插件权限；账号凭据只在后端编解码。'),
+                      )
+                    : e(
+                        'div',
+                        { className: 'nh-note' },
+                        `当前使用 DSH 托管服务${service && service.running ? '（在线）' : '（未连接）'}；模型绑定见下方「模型与额度作用域」。`,
+                      ),
+                  e(FreeChannelCard, { project, refreshOverview }),
+                ),
+              ),
+            ),
+            e(
+              'div',
+              { className: 'nh-step' },
+              e('div', { className: 'nh-stepno', 'aria-hidden': 'true' }, '3'),
+              e(TrialCard, { project, refreshOverview, navigate }),
+            ),
+            e(
+              'div',
+              { className: 'nh-step' },
+              e('div', { className: 'nh-stepno', 'aria-hidden': 'true' }, '4'),
+              e(LatestChapterCard, { project, navigate }),
+            ),
+            e(
+              'div',
+              { className: 'nh-step' },
+              e('div', { className: 'nh-stepno', 'aria-hidden': 'true' }, '5'),
+              e(ScheduleCard, {
+                project,
+                jobs,
+                schedulerEnabled,
+                refreshOverview,
+                ai,
+              }),
+            ),
+            e(
+              'div',
+              { className: 'nh-step' },
+              e('div', { className: 'nh-stepno', 'aria-hidden': 'true' }, '6'),
+              e(ResourcePolicyCard, { job: activeJob, ai, failure: failedFree, onReload: () => aiPoll.reload(true) }),
+            ),
+            jobs.length
+              ? e(
+                  Card,
+                  { title: '当前任务的投递状态', hint: `${jobs.length} 个任务` },
+                  e(
+                    'div',
+                    { className: 'nh-col' },
+                    jobs.map((item) =>
+                      e(
+                        'div',
+                        { key: item.id, className: 'nh-panel' },
+                        e(
+                          'div',
+                          { className: 'nh-kvrow' },
+                          e('span', { className: 'nh-kvval' }, `${item.name || item.id} · ${item.enabled ? '启用' : '停用'}`),
+                          e('span', { className: 'nh-k' }, nextDueText(item)),
+                        ),
+                        e(DeliveryChips, { job: item }),
+                      ),
+                    ),
+                  ),
+                )
+              : null,
+          );
+        }
+
+        function ScheduleBufferPanel(props) {
+          const { job, navigate, refreshOverview } = props;
+          const toast = useToast();
+          const jobId = (job && job.id) || '';
+          const [busy, setBusy] = React.useState('');
+          const [errMsg, setErrMsg] = React.useState('');
+          const [capForm, setCapForm] = React.useState({
+            observed_at: new Date().toISOString(),
+            source: 'manual_observation',
+            evidence: '',
+            can_read_schedule: false,
+            can_schedule: false,
+            can_confirm_schedule: false,
+            can_confirm_body: false,
+            lead_time_minutes: '30',
+            max_scheduled: '20',
+            max_chapters_per_day: '2',
+          });
+          const [bufForm, setBufForm] = React.useState({
+            enabled: false,
+            target_days: '3',
+            slots: '08:00',
+            chapters_per_slot: '1',
+            keep_local: '2',
+            stop_after_gap: true,
+          });
+          const [syncedKey, setSyncedKey] = React.useState('');
+          const [reconcileText, setReconcileText] = React.useState('');
+          const [reconcileComplete, setReconcileComplete] = React.useState(true);
+          const [reconcileSource, setReconcileSource] = React.useState('author_import');
+          const [resolveNotes, setResolveNotes] = React.useState({});
+          const [previewData, setPreviewData] = React.useState(null);
+
+          const schedPoll = usePoll(
+            () => (jobId ? api(`/jobs/${encodeURIComponent(jobId)}/schedule`) : Promise.resolve(null)),
+            [jobId],
+            POLL_MS,
+          );
+          const reviewPoll = usePoll(
+            () => (jobId ? api(`/jobs/${encodeURIComponent(jobId)}/schedule/review`) : Promise.resolve({ items: [] })),
+            [jobId],
+            POLL_MS,
+          );
+
+          const syncFromServer = (data) => {
+            if (!data) return;
+            const s = data.settings || {};
+            const cap = data.capability || {};
+            setBufForm({
+              enabled: Boolean(s.enabled),
+              target_days: String(s.target_days ?? 3),
+              slots: Array.isArray(s.slots) && s.slots.length ? s.slots.join(',') : (job && job.daily_time) || '08:00',
+              chapters_per_slot: String(s.chapters_per_slot ?? 1),
+              keep_local: String(s.keep_local ?? 2),
+              stop_after_gap: s.stop_after_gap !== false,
+            });
+            setCapForm({
+              observed_at: data.capability_observed_at || cap.observed_at || new Date().toISOString(),
+              source: cap.source || 'manual_observation',
+              evidence: cap.evidence || '',
+              can_read_schedule: Boolean(cap.can_read_schedule),
+              can_schedule: Boolean(cap.can_schedule),
+              can_confirm_schedule: Boolean(cap.can_confirm_schedule),
+              can_confirm_body: Boolean(cap.can_confirm_body),
+              lead_time_minutes: String(cap.lead_time_minutes ?? 30),
+              max_scheduled: String(cap.max_scheduled ?? 20),
+              max_chapters_per_day: String(cap.max_chapters_per_day ?? 2),
+            });
+          };
+
+          React.useEffect(() => {
+            if (!jobId) {
+              setSyncedKey('');
+              return;
+            }
+            if (schedPoll.data && syncedKey !== jobId) {
+              syncFromServer(schedPoll.data);
+              if (schedPoll.data.preview) setPreviewData(schedPoll.data.preview);
+              setSyncedKey(jobId);
+            }
+          }, [jobId, schedPoll.data, syncedKey]);
+
+          if (!job) {
+            return e(
+              Card,
+              { title: '番茄排期缓冲（候选）', hint: '需先创建日更任务' },
+              e(Empty, null, '当前没有日更任务；请先在「开始 → 开书到日更」创建任务。'),
+              navigate ? e('div', { className: 'nh-row', style: { marginTop: 10 } }, e(Button, { onClick: () => navigate('flow') }, '前往开书向导')) : null,
+            );
+          }
+
+          const sd = schedPoll.data || {};
+          const state = sd.state || {};
+          const cov = state.coverage || {};
+          const reviewItems = (reviewPoll.data && reviewPoll.data.items) || sd.review || [];
+
+          const parsedBufferBody = () => ({
+            enabled: Boolean(bufForm.enabled),
+            target_days: Math.max(1, parseInt(bufForm.target_days, 10) || 1),
+            slots: String(bufForm.slots || '')
+              .split(/[,，\s]+/)
+              .map((v) => v.trim())
+              .filter(Boolean),
+            chapters_per_slot: Math.max(1, parseInt(bufForm.chapters_per_slot, 10) || 1),
+            keep_local: Math.max(0, parseInt(bufForm.keep_local, 10) || 0),
+            stop_after_gap: Boolean(bufForm.stop_after_gap),
+          });
+
+          const callSched = async (actionKey, label, path, body) => {
+            setBusy(actionKey);
+            setErrMsg('');
+            try {
+              const res = await api(`/jobs/${encodeURIComponent(jobId)}${path}`, { method: 'POST', body: body || {} });
+              toast.push(`${label} 完成`, 'ok');
+              await schedPoll.reload(true);
+              await reviewPoll.reload(true);
+              if (refreshOverview) refreshOverview();
+              return res;
+            } catch (error) {
+              const code = error && error.code ? ` [${error.code}]` : '';
+              const msg = `${label} 失败${code}：${error.message}`;
+              setErrMsg(msg);
+              toast.push(msg, 'err');
+              return null;
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const saveCapability = () =>
+            callSched('cap', '能力观测记录', '/schedule/capability', {
+              observed_at: String(capForm.observed_at || '').trim() || new Date().toISOString(),
+              source: String(capForm.source || 'manual_observation').trim(),
+              evidence: String(capForm.evidence || ''),
+              can_read_schedule: Boolean(capForm.can_read_schedule),
+              can_schedule: Boolean(capForm.can_schedule),
+              can_confirm_schedule: Boolean(capForm.can_confirm_schedule),
+              can_confirm_body: Boolean(capForm.can_confirm_body),
+              lead_time_minutes: Math.max(0, parseInt(capForm.lead_time_minutes, 10) || 0),
+              max_scheduled: Math.max(0, parseInt(capForm.max_scheduled, 10) || 0),
+              max_chapters_per_day: Math.max(1, parseInt(capForm.max_chapters_per_day, 10) || 1),
+            });
+
+          const runPreview = async () => {
+            const res = await callSched('preview', '排期预览', '/schedule/preview', {});
+            if (res) setPreviewData(res.preview || res);
+          };
+
+          const applyBuffer = () =>
+            callSched('apply', '应用排期设置', '/schedule/apply', {
+              schedule_buffer: parsedBufferBody(),
+              expected_revision: cov.revision ?? 0,
+              expected_updated_at: cov.updated_at || '',
+            });
+
+          const parseReconcileRows = () => {
+            const raw = String(reconcileText || '').trim();
+            if (!raw) return [];
+            if (raw.startsWith('[')) {
+              const arr = JSON.parse(raw);
+              return Array.isArray(arr) ? arr : [];
+            }
+            return raw
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter((line) => line && !line.startsWith('#'))
+              .map((line) => {
+                const [ch, st, planned] = line.split(/[,\t]+/).map((s) => s.trim());
+                return {
+                  chapter_id: /^\d+$/.test(ch || '') ? Number(ch) : ch,
+                  state: st || 'scheduled',
+                  planned_at: planned || '',
+                };
+              });
+          };
+
+          const submitReconcile = async () => {
+            let rows;
+            try {
+              rows = parseReconcileRows();
+            } catch (err) {
+              setErrMsg(`对账行解析失败：${err.message}`);
+              return;
+            }
+            await callSched('reconcile', '人工对账回填', '/schedule/reconcile', {
+              rows,
+              complete: Boolean(reconcileComplete),
+              source: String(reconcileSource || 'author_import').trim() || 'author_import',
+            });
+          };
+
+          const resolveReviewItem = (chapterId, resolution) =>
+            callSched(`res-${chapterId}`, '人工核对确认', '/schedule/resolve', {
+              chapter_id: chapterId,
+              resolution,
+              note: resolveNotes[chapterId] || '',
+            });
+
+          const activePreview = previewData || sd.preview || null;
+
+          return e(
+            'div',
+            { className: 'nh-col', style: { gap: 14 } },
+            e(
+              'div',
+              { className: 'nh-note', 'data-tone': 'warn' },
+              '候选状态机（尚未在真实番茄创作者后台实测网页排期控件）：能力未观测确认前，系统不会静默开启自动定时发布；所有异常或待确认章节都可在此核对回退。',
+            ),
+            errMsg ? e('div', { className: 'nh-inline-err' }, errMsg) : null,
+            e(
+              'div',
+              { className: 'nh-stats' },
+              e(Stat, {
+                label: '投递模式',
+                value: PUBLICATION_LABELS[job.publication_mode] || job.publication_mode || 'draft_only',
+                foot: `平台：${sd.platform || job.platform || 'fanqie'}`,
+              }),
+              e(Stat, {
+                label: '已核实缓冲',
+                value: num(cov.verified || 0),
+                unit: '章',
+                foot: `核实至 ${cov.verified_until || '—'} · 修订 v${cov.revision ?? 0}`,
+              }),
+              e(Stat, {
+                label: '计划 / 本地余量',
+                value: `${num(cov.in_flight || 0)} / ${num(cov.local_remaining || 0)}`,
+                foot: `计划至 ${cov.planned_until || '—'}`,
+              }),
+              e(Stat, {
+                label: '自动补排许可',
+                value: state.auto_allowed ? '允许' : '受限',
+                foot: state.reason || (cov.needs_reconcile ? '需对账' : '—'),
+              }),
+            ),
+            cov.gap_at || cov.replenish_stopped || cov.needs_reconcile
+              ? e(
+                  'div',
+                  { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
+                  cov.gap_at ? e(Badge, { tone: 'warn' }, `缺口 ${cov.gap_at}：${cov.gap_reason || ''}`) : null,
+                  cov.replenish_stopped ? e(Badge, { tone: 'err' }, '自动补排已暂停') : null,
+                  cov.needs_reconcile ? e(Badge, { tone: 'warn' }, '等待对账') : null,
+                  cov.needs_review ? e(Badge, { tone: 'warn' }, `待人工核对 ${cov.needs_review} 章`) : null,
+                )
+              : null,
+            e(
+              'div',
+              { className: 'nh-grid', style: { gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))' } },
+              e(
+                Card,
+                {
+                  title: '平台能力观测',
+                  hint: sd.capability_observed_at ? `最近观测：${sd.capability_observed_at}` : '尚未观测',
+                },
+                e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 10 } },
+                  e(
+                    'div',
+                    { className: 'nh-formgrid' },
+                    e(Field, { label: '观测时间 (ISO)' }, e(TextInput, { value: capForm.observed_at, onChange: (v) => setCapForm({ ...capForm, observed_at: v }) })),
+                    e(Field, { label: '观测来源' }, e(TextInput, { value: capForm.source, onChange: (v) => setCapForm({ ...capForm, source: v }) })),
+                    e(Field, { label: '提前分钟限制' }, e(TextInput, { type: 'number', value: capForm.lead_time_minutes, onChange: (v) => setCapForm({ ...capForm, lead_time_minutes: v }) })),
+                    e(Field, { label: '最大排期总数' }, e(TextInput, { type: 'number', value: capForm.max_scheduled, onChange: (v) => setCapForm({ ...capForm, max_scheduled: v }) })),
+                    e(Field, { label: '单日上限章数' }, e(TextInput, { type: 'number', value: capForm.max_chapters_per_day, onChange: (v) => setCapForm({ ...capForm, max_chapters_per_day: v }) })),
+                    e(Field, { label: '证据 / 备注' }, e(TextInput, { value: capForm.evidence, placeholder: '截图或页面观察说明', onChange: (v) => setCapForm({ ...capForm, evidence: v }) })),
+                  ),
+                  e(
+                    'div',
+                    { className: 'nh-row', style: { gap: 12, flexWrap: 'wrap', fontSize: 12 } },
+                    [
+                      ['can_read_schedule', '可读排期列表'],
+                      ['can_schedule', '可提交定时发布'],
+                      ['can_confirm_schedule', '可二次确认排期'],
+                      ['can_confirm_body', '可回读确认正文'],
+                    ].map(([k, lbl]) =>
+                      e(
+                        'label',
+                        { key: k, className: 'nh-row', style: { gap: 5, cursor: 'pointer' } },
+                        e('input', {
+                          type: 'checkbox',
+                          checked: Boolean(capForm[k]),
+                          onChange: (ev) => setCapForm({ ...capForm, [k]: ev.target.checked }),
+                        }),
+                        lbl,
+                      ),
+                    ),
+                  ),
+                  e(
+                    'div',
+                    { className: 'nh-row', style: { gap: 8 } },
+                    e(Button, { busy: busy === 'cap', onClick: saveCapability }, '记录能力观测'),
+                    e(Button, { kind: 'ghost', onClick: async () => { const res = await schedPoll.reload(true); if (res) syncFromServer(res); } }, '从服务端同步表单'),
+                  ),
+                ),
+              ),
+              e(
+                Card,
+                { title: '缓冲配置与控制', hint: `期望修订 expected_revision=${cov.revision ?? 0}` },
+                e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 10 } },
+                  e(
+                    'div',
+                    { className: 'nh-formgrid' },
+                    e(Field, { label: '缓冲目标天数' }, e(TextInput, { type: 'number', value: bufForm.target_days, onChange: (v) => setBufForm({ ...bufForm, target_days: v }) })),
+                    e(Field, { label: '每日排期时段（逗号分隔）' }, e(TextInput, { value: bufForm.slots, placeholder: '08:00,20:00', onChange: (v) => setBufForm({ ...bufForm, slots: v }) })),
+                    e(Field, { label: '每时段排期章数' }, e(TextInput, { type: 'number', value: bufForm.chapters_per_slot, onChange: (v) => setBufForm({ ...bufForm, chapters_per_slot: v }) })),
+                    e(Field, { label: '本地保留余量章数' }, e(TextInput, { type: 'number', value: bufForm.keep_local, onChange: (v) => setBufForm({ ...bufForm, keep_local: v }) })),
+                  ),
+                  e(
+                    'div',
+                    { className: 'nh-row', style: { gap: 14, flexWrap: 'wrap', fontSize: 12 } },
+                    e(
+                      'label',
+                      { className: 'nh-row', style: { gap: 5, cursor: 'pointer' } },
+                      e('input', { type: 'checkbox', checked: bufForm.enabled, onChange: (ev) => setBufForm({ ...bufForm, enabled: ev.target.checked }) }),
+                      '启用排期缓冲',
+                    ),
+                    e(
+                      'label',
+                      { className: 'nh-row', style: { gap: 5, cursor: 'pointer' } },
+                      e('input', { type: 'checkbox', checked: bufForm.stop_after_gap, onChange: (ev) => setBufForm({ ...bufForm, stop_after_gap: ev.target.checked }) }),
+                      '遇到排期缺口时自动暂停补排',
+                    ),
+                  ),
+                  e(
+                    'div',
+                    { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
+                    e(Button, { kind: 'primary', icon: 'save', busy: busy === 'apply', onClick: applyBuffer }, '应用缓冲设置'),
+                    e(Button, { icon: 'play', busy: busy === 'preview', onClick: runPreview }, '预览排期计划'),
+                    e(Button, { kind: 'ghost', busy: busy === 'stop', onClick: () => callSched('stop', '暂停补排', '/schedule/stop', {}) }, '暂停自动补排'),
+                    e(Button, { kind: 'ghost', busy: busy === 'resume', onClick: () => callSched('resume', '恢复补排', '/schedule/resume', {}) }, '恢复自动补排'),
+                  ),
+                  activePreview
+                    ? e(
+                        'div',
+                        { className: 'nh-panel' },
+                        e('div', { className: 'nh-row', style: { justifyContent: 'space-between', marginBottom: 6 } },
+                          e('span', { className: 'nh-k' }, `预览状态：${activePreview.status || '—'}`),
+                          e('span', { className: 'nh-muted' }, `计划 ${num(activePreview.planned_count || 0)} 章 · 理由：${activePreview.reason || '—'}`),
+                        ),
+                        (activePreview.entries || []).length
+                          ? e(
+                              'div',
+                              { className: 'nh-col', style: { gap: 4 } },
+                              (activePreview.entries || []).slice(0, 12).map((entry, idx) =>
+                                e(
+                                  'div',
+                                  { key: idx, className: 'nh-kvrow' },
+                                  e('span', { className: 'nh-mono' }, `第 ${entry.chapter_id || entry.chapter || '?'} 章`),
+                                  e('span', { className: 'nh-kvval' }, `${entry.planned_at || entry.date || ''} (${entry.slot || ''}) · ${entry.action || entry.state || 'plan'}`),
+                                ),
+                              ),
+                            )
+                          : e('div', { className: 'nh-muted' }, '当前预览没有新增排期条目。'),
+                      )
+                    : null,
+                ),
+              ),
+            ),
+            e(
+              'div',
+              { className: 'nh-grid', style: { gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))' } },
+              e(
+                Card,
+                { title: '人工对账回填', hint: '每行：章节号,状态,计划时间（或 JSON 数组）' },
+                e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 8 } },
+                  e(Field, { label: '对账来源' }, e(TextInput, { value: reconcileSource, onChange: setReconcileSource })),
+                  e('textarea', {
+                    className: 'nh-input',
+                    rows: 4,
+                    value: reconcileText,
+                    placeholder: '示例：\n12,scheduled,2026-11-24T08:00:00+08:00\n13,published,2026-11-23T08:00:00+08:00',
+                    onChange: (ev) => setReconcileText(ev.target.value),
+                  }),
+                  e(
+                    'label',
+                    { className: 'nh-row', style: { gap: 6, fontSize: 12, cursor: 'pointer' } },
+                    e('input', { type: 'checkbox', checked: reconcileComplete, onChange: (ev) => setReconcileComplete(ev.target.checked) }),
+                    '本次为完整平台列表（缺席条目按已核销处理）',
+                  ),
+                  e('div', { className: 'nh-row' }, e(Button, { busy: busy === 'reconcile', onClick: submitReconcile }, '提交对账结果')),
+                ),
+              ),
+              e(
+                Card,
+                { title: '待人工核对列表', hint: `${reviewItems.length} 项` },
+                reviewItems.length
+                  ? e(
+                      'div',
+                      { className: 'nh-col', style: { gap: 8 } },
+                      reviewItems.map((item) =>
+                        e(
+                          'div',
+                          { key: String(item.chapter_id), className: 'nh-panel' },
+                          e(
+                            'div',
+                            { className: 'nh-row', style: { justifyContent: 'space-between', marginBottom: 4 } },
+                            e('strong', null, `第 ${item.chapter_id} 章 · ${item.state || 'needs_review'}`),
+                            e(Badge, { tone: 'warn' }, `尝试 ${num(item.attempts || 0)} 次`),
+                          ),
+                          item.planned_at ? e('div', { className: 'nh-muted' }, `计划时间：${item.planned_at}`) : null,
+                          item.last_error ? e('div', { className: 'nh-inline-err', style: { marginTop: 4 } }, item.last_error) : null,
+                          e(
+                            'div',
+                            { className: 'nh-row', style: { gap: 6, marginTop: 6 } },
+                            e(TextInput, {
+                              value: resolveNotes[item.chapter_id] || '',
+                              placeholder: '核对备注（可选）',
+                              onChange: (v) => setResolveNotes((prev) => ({ ...prev, [item.chapter_id]: v })),
+                            }),
+                            e(Button, { size: 'sm', busy: busy === `res-${item.chapter_id}`, onClick: () => resolveReviewItem(item.chapter_id, 'planned') }, '标为已排'),
+                            e(Button, { size: 'sm', kind: 'ghost', busy: busy === `res-${item.chapter_id}`, onClick: () => resolveReviewItem(item.chapter_id, 'cancelled') }, '标为取消'),
+                          ),
+                        ),
+                      ),
+                    )
+                  : e(Empty, null, '当前没有待人工核对的排期章节。'),
+              ),
+            ),
+          );
+        }
+
+        function RunsNotificationsPanel(props) {
+          const { job, refreshOverview } = props;
+          const toast = useToast();
+          const jobId = (job && job.id) || '';
+          const [busy, setBusy] = React.useState('');
+          const [runDetail, setRunDetail] = React.useState(null);
+          const [recipientForm, setRecipientForm] = React.useState({ url: '', secret: '' });
+          const [outboxNotes, setOutboxNotes] = React.useState({});
+
+          const runsPoll = usePoll(
+            () => (jobId ? api(`/jobs/${encodeURIComponent(jobId)}/runs?limit=20`) : Promise.resolve([])),
+            [jobId],
+            POLL_MS,
+          );
+          const notifPoll = usePoll(() => api('/notifications?limit=20'), [], POLL_MS);
+
+          const runs = Array.isArray(runsPoll.data) ? runsPoll.data : (runsPoll.data && runsPoll.data.runs) || [];
+          const notif = notifPoll.data || {};
+          const recipients = notif.recipients || [];
+          const events = notif.events || [];
+          const outbox = notif.outbox || [];
+
+          const callNotif = async (key, label, path, options) => {
+            setBusy(key);
+            try {
+              const res = await api(path, options || { method: 'POST', body: {} });
+              toast.push(`${label} 完成`, 'ok');
+              await runsPoll.reload(true);
+              await notifPoll.reload(true);
+              if (refreshOverview) refreshOverview();
+              return res;
+            } catch (error) {
+              toast.push(`${label} 失败：${error.message}`, 'err');
+              return null;
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const openRunDetail = async (runId) => {
+            if (!jobId) return;
+            setBusy(`run-${runId}`);
+            try {
+              const detail = await api(`/jobs/${encodeURIComponent(jobId)}/runs/${encodeURIComponent(runId)}`);
+              setRunDetail(detail);
+            } catch (error) {
+              toast.push(`读取运行详情失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const addRecipient = async () => {
+            const url = String(recipientForm.url || '').trim();
+            if (!url) {
+              toast.push('请先填写接收端 Webhook URL。', 'err');
+              return;
+            }
+            const res = await callNotif('add-rec', '添加通知接收端', '/notifications/recipients', {
+              method: 'POST',
+              body: { url, secret: String(recipientForm.secret || '') },
+            });
+            if (res) setRecipientForm({ url: '', secret: '' });
+          };
+
+          return e(
+            'div',
+            { className: 'nh-col', style: { gap: 14 } },
+            e(
+              'div',
+              { className: 'nh-note', 'data-tone': 'warn' },
+              '通知与 Webhook 说明：未对真实外网接收端做实测；若未配置接收端，提醒事件仍保存在本机待办与发件箱，不会对外发起真实网络请求。',
+            ),
+            e(
+              Card,
+              {
+                title: '任务运行历史',
+                hint: job ? `${job.name || job.id} · ${runs.length} 条记录` : '未选择任务',
+                actions: job
+                  ? e(Button, { size: 'sm', busy: busy === 'resolve-job', onClick: () => callNotif('resolve-job', '清空任务通知', `/jobs/${encodeURIComponent(jobId)}/notifications/resolve`, { method: 'POST', body: {} }) }, '标记任务通知已处理')
+                  : null,
+              },
+              !job
+                ? e(Empty, null, '当前没有任务。')
+                : runs.length
+                  ? e(
+                      'div',
+                      { className: 'nh-col', style: { gap: 8 } },
+                      runs.map((run) =>
+                        e(
+                          'div',
+                          { key: run.run_id, className: 'nh-panel' },
+                          e(
+                            'div',
+                            { className: 'nh-row', style: { justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 } },
+                            e('div', { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
+                              e('strong', { className: 'nh-mono' }, run.run_id),
+                              e(Badge, { tone: run.status === 'success' ? 'ok' : run.status === 'failed' ? 'err' : 'warn' }, run.status || 'unknown'),
+                              e(Badge, { tone: 'mute' }, run.mode || 'draft_only'),
+                              run.remote_state ? e(Badge, { tone: 'mute' }, run.remote_state) : null,
+                            ),
+                            e(Button, { size: 'sm', kind: 'ghost', busy: busy === `run-${run.run_id}`, onClick: () => openRunDetail(run.run_id) }, '查看详情'),
+                          ),
+                          e('div', { className: 'nh-muted', style: { marginTop: 4 } }, `开始：${run.started_at || '—'} · 结束：${run.finished_at || '—'} · 时段：${run.slot || '—'}`),
+                          run.error ? e('div', { className: 'nh-inline-err', style: { marginTop: 4 } }, run.error) : null,
+                        ),
+                      ),
+                    )
+                  : e(Empty, null, '还没有运行记录。'),
+            ),
+            e(
+              'div',
+              { className: 'nh-grid', style: { gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))' } },
+              e(
+                Card,
+                { title: 'Webhook 接收端', hint: `${recipients.length} 个（待投递 ${num(notif.pending || 0)}）` },
+                e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 10 } },
+                  e(
+                    'div',
+                    { className: 'nh-formgrid' },
+                    e(Field, { label: 'Webhook URL' }, e(TextInput, { value: recipientForm.url, placeholder: 'https://example.com/hook', onChange: (v) => setRecipientForm({ ...recipientForm, url: v }) })),
+                    e(Field, { label: '签名 Secret（可选）' }, e(TextInput, { value: recipientForm.secret, onChange: (v) => setRecipientForm({ ...recipientForm, secret: v }) })),
+                  ),
+                  e('div', { className: 'nh-row' }, e(Button, { busy: busy === 'add-rec', onClick: addRecipient }, '添加接收端')),
+                  recipients.length
+                    ? recipients.map((rec) =>
+                        e(
+                          'div',
+                          { key: rec.id, className: 'nh-panel' },
+                          e('div', { className: 'nh-row', style: { justifyContent: 'space-between', gap: 8 } },
+                            e('span', { className: 'nh-mono nh-wrap', style: { fontSize: 12 } }, rec.url || rec.id),
+                            e('div', { className: 'nh-row', style: { gap: 6 } },
+                              e(Button, { size: 'sm', kind: 'ghost', busy: busy === `test-${rec.id}`, onClick: () => callNotif(`test-${rec.id}`, '发送测试事件', `/notifications/recipients/${encodeURIComponent(rec.id)}/test`, { method: 'POST', body: {} }) }, '测试'),
+                              e(Button, { size: 'sm', kind: 'ghost', busy: busy === `del-${rec.id}`, onClick: () => callNotif(`del-${rec.id}`, '删除接收端', `/notifications/recipients/${encodeURIComponent(rec.id)}`, { method: 'DELETE' }) }, '删除'),
+                            ),
+                          ),
+                        ),
+                      )
+                    : e(Empty, null, '尚未配置 Webhook 接收端。'),
+                ),
+              ),
+              e(
+                Card,
+                { title: '事件与发件箱', hint: `事件 ${events.length} · 发件箱 ${outbox.length}` },
+                e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 10 } },
+                  outbox.length
+                    ? e(
+                        'div',
+                        { className: 'nh-col', style: { gap: 8 } },
+                        e('div', { className: 'nh-k' }, '待处理 / 历史投递'),
+                        outbox.map((item) =>
+                          e(
+                            'div',
+                            { key: item.id, className: 'nh-panel' },
+                            e('div', { className: 'nh-row', style: { justifyContent: 'space-between', gap: 6 } },
+                              e('strong', { className: 'nh-mono', style: { fontSize: 12 } }, item.id),
+                              e(Badge, { tone: item.state === 'sent' ? 'ok' : item.state === 'dead' || item.state === 'failed' ? 'err' : 'warn' }, item.state || 'pending'),
+                            ),
+                            item.last_error ? e('div', { className: 'nh-inline-err', style: { marginTop: 4 } }, item.last_error) : null,
+                            e('div', { className: 'nh-row', style: { gap: 6, marginTop: 6, flexWrap: 'wrap' } },
+                              e(TextInput, {
+                                value: outboxNotes[item.id] || '',
+                                placeholder: '处理备注（可选）',
+                                onChange: (v) => setOutboxNotes((prev) => ({ ...prev, [item.id]: v })),
+                              }),
+                              e(Button, { size: 'sm', busy: busy === `req-${item.id}`, onClick: () => callNotif(`req-${item.id}`, '重新入队', `/notifications/outbox/${encodeURIComponent(item.id)}/requeue`, { method: 'POST', body: {} }) }, '重新入队'),
+                              e(Button, { size: 'sm', kind: 'ghost', busy: busy === `sent-${item.id}`, onClick: () => callNotif(`sent-${item.id}`, '标为已发', `/notifications/outbox/${encodeURIComponent(item.id)}/resolve`, { method: 'POST', body: { state: 'sent', note: outboxNotes[item.id] || '' } }) }, '标为已发'),
+                              e(Button, { size: 'sm', kind: 'ghost', busy: busy === `dead-${item.id}`, onClick: () => callNotif(`dead-${item.id}`, '标为死信', `/notifications/outbox/${encodeURIComponent(item.id)}/resolve`, { method: 'POST', body: { state: 'dead', note: outboxNotes[item.id] || '' } }) }, '标为死信'),
+                            ),
+                          ),
+                        ),
+                      )
+                    : e('div', { className: 'nh-muted' }, '发件箱为空。'),
+                  events.length
+                    ? e(
+                        'div',
+                        { className: 'nh-col', style: { gap: 6 } },
+                        e('div', { className: 'nh-k' }, '最近事件'),
+                        events.slice(0, 10).map((ev, idx) =>
+                          e(
+                            'div',
+                            { key: ev.id || idx, className: 'nh-kvrow' },
+                            e('span', { className: 'nh-mono' }, ev.kind || ev.type || ev.event || 'event'),
+                            e('span', { className: 'nh-kvval' }, ev.message || ev.title || ev.created_at || ''),
+                          ),
+                        ),
+                      )
+                    : null,
+                ),
+              ),
+            ),
+            e(Modal, {
+              open: Boolean(runDetail),
+              title: runDetail ? `运行详情 · ${runDetail.run_id || ''}` : '运行详情',
+              onClose: () => setRunDetail(null),
+              children: runDetail
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 10 } },
+                    e('div', { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
+                      e(Badge, { tone: runDetail.status === 'success' ? 'ok' : 'warn' }, runDetail.status || '—'),
+                      e(Badge, { tone: 'mute' }, runDetail.publication_mode || '—'),
+                      e(Badge, { tone: 'mute' }, `remote=${runDetail.remote_state || '—'}`),
+                    ),
+                    runDetail.decision ? e('div', { className: 'nh-note' }, `判定：${runDetail.decision}（${runDetail.decision_reason || '—'}）`) : null,
+                    runDetail.tally
+                      ? e('div', { className: 'nh-kv' }, [
+                          ['目标章数', runDetail.tally.target],
+                          ['已存本地', runDetail.tally.saved],
+                          ['已审查', runDetail.tally.reviewed],
+                          ['已发布', runDetail.tally.published],
+                          ['待处理', runDetail.tally.pending],
+                          ['总字数', runDetail.tally.words],
+                        ].map(([k, v]) => e('div', { key: k, className: 'nh-kvrow' }, e('span', { className: 'nh-k' }, k), e('span', { className: 'nh-kvval' }, String(v ?? 0)))))
+                      : null,
+                    e('pre', { className: 'nh-pre', style: { maxHeight: '36vh' } }, JSON.stringify({ verification: runDetail.verification, available_actions: runDetail.available_actions, chapters: runDetail.chapters, costs: runDetail.costs }, null, 2)),
+                  )
+                : null,
+            }),
+          );
+        }
+
         function JobsPage(props) {
           const { overview, refreshOverview } = props;
           const toast = useToast();
-          const job = (overview.jobs || [])[0];
+          const jobsList = overview.jobs || [];
+          const [selectedJobId, setSelectedJobId] = React.useState('');
+          const [subTab, setSubTab] = React.useState('config');
+          const job = jobsList.find((item) => item.id === selectedJobId) || jobsList[0] || null;
           const [busy, setBusy] = React.useState({});
           const [draft, setDraft] = React.useState(null);
 
           React.useEffect(() => {
-            if (job && !draft) {
+            if (job && (!draft || draft._jobId !== job.id)) {
               setDraft({
+                _jobId: job.id,
+                book: job.book || '',
+                account: job.account || '',
+                platform: job.platform || 'fanqie',
+                publication_mode: job.publication_mode || 'draft_only',
                 daily_time: job.daily_time || '09:00',
                 chapters_per_run: job.chapters_per_run || 1,
                 word_count: job.word_count || 3500,
                 max_revisions: job.max_revisions ?? 1,
                 enabled: Boolean(job.enabled),
               });
+            } else if (!job && draft) {
+              setDraft(null);
             }
           }, [job, draft]);
 
@@ -3917,28 +8119,42 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const saveJob = async () => {
             setBusy((current) => ({ ...current, save: true }));
             try {
+              const mode = ['draft_only', 'publish_now', 'platform_scheduled'].includes(draft.publication_mode)
+                ? draft.publication_mode
+                : job.publication_mode || 'draft_only';
+              const nextDailyTimes =
+                Array.isArray(job.daily_times) && job.daily_times.length > 1
+                  ? job.daily_times
+                  : [draft.daily_time || job.daily_time || '09:00'];
+              const body = {
+                id: job.id,
+                name: job.name,
+                project: job.project,
+                book: String(draft.book ?? job.book ?? ''),
+                account: mode === 'draft_only' ? String(draft.account ?? '') : String(draft.account ?? job.account ?? ''),
+                platform: String(draft.platform || job.platform || 'fanqie'),
+                publication_mode: mode,
+                daily_time: draft.daily_time,
+                daily_times: nextDailyTimes,
+                timezone: job.timezone,
+                chapters_per_run: Number(draft.chapters_per_run) || 1,
+                word_count: Number(draft.word_count) || 3500,
+                quota_phases: job.quota_phases || [],
+                slot_quotas: job.slot_quotas || null,
+                delivery_mode: job.delivery_mode || 'batch',
+                max_revisions: Number.isFinite(Number(draft.max_revisions)) ? Number(draft.max_revisions) : 1,
+                enabled: Boolean(draft.enabled),
+                approval_mode: job.approval_mode || 'unattended',
+              };
+              if (job.schedule_buffer !== undefined && job.schedule_buffer !== null) {
+                body.schedule_buffer = job.schedule_buffer;
+              }
               await api(`/jobs/${job.id}`, {
                 method: 'PUT',
-                body: {
-                  id: job.id,
-                  name: job.name,
-                  project: job.project,
-                  book: job.book,
-                  account: job.account,
-                  daily_time: draft.daily_time,
-                  daily_times: job.daily_times || [],
-                  timezone: job.timezone,
-                  chapters_per_run: Number(draft.chapters_per_run) || 1,
-                  word_count: Number(draft.word_count) || 3500,
-                  quota_phases: job.quota_phases || [],
-                  slot_quotas: job.slot_quotas || null,
-                  delivery_mode: job.delivery_mode || 'batch',
-                  max_revisions: Number.isFinite(Number(draft.max_revisions)) ? Number(draft.max_revisions) : 1,
-                  enabled: Boolean(draft.enabled),
-                  approval_mode: job.approval_mode || 'unattended',
-                },
+                body,
               });
               toast.push('任务配置已保存', 'ok');
+              setDraft((current) => (current ? { ...current, _jobId: '' } : null));
               refreshOverview();
             } catch (error) {
               toast.push(`保存失败：${error.message}`, 'err');
@@ -3947,16 +8163,16 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          return e(
+          const configBody = e(
             'div',
-            { className: 'nh-page' },
+            null,
             e(
               'div',
               { className: 'nh-stats' },
               e(Stat, {
                 label: '任务状态',
                 value: job.enabled ? '启用' : '停用',
-                foot: job.last_status || '—',
+                foot: `${PUBLICATION_LABELS[job.publication_mode] || job.publication_mode || 'draft_only'} · ${job.last_status || '—'}`,
               }),
               e(Stat, {
                 label: '今日进度',
@@ -3981,7 +8197,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               { className: 'nh-grid', style: { marginTop: 'var(--nh-gap)', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))' } },
               e(
                 Card,
-                { title: '任务配置', hint: job.name },
+                { title: '任务配置', hint: `${job.name} · ${PUBLICATION_LABELS[job.publication_mode] || job.publication_mode || 'draft_only'}` },
                 draft
                   ? e(
                       'div',
@@ -3993,6 +8209,33 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         e(Field, { label: '每时段章数' }, e(TextInput, { value: draft.chapters_per_run, onChange: (value) => setDraft({ ...draft, chapters_per_run: value }), type: 'number', min: 1, max: 50 })),
                         e(Field, { label: '每章字数' }, e(TextInput, { value: draft.word_count, onChange: (value) => setDraft({ ...draft, word_count: value }), type: 'number', min: 500, max: 10000 })),
                         e(Field, { label: '自动修订轮数（0—3）' }, e(TextInput, { value: draft.max_revisions, onChange: (value) => setDraft({ ...draft, max_revisions: value }), type: 'number', min: 0, max: 3 })),
+                        e(
+                          Field,
+                          { label: '投递方式' },
+                          e(Select, {
+                            value: draft.publication_mode,
+                            onChange: (value) => setDraft({ ...draft, publication_mode: value }),
+                            options: [
+                              { value: 'draft_only', label: '只存稿' },
+                              { value: 'publish_now', label: '发布到平台' },
+                              { value: 'platform_scheduled', label: '番茄排期缓冲（候选）' },
+                            ],
+                          }),
+                        ),
+                        e(
+                          Field,
+                          { label: '目标平台' },
+                          e(Select, {
+                            value: draft.platform,
+                            onChange: (value) => setDraft({ ...draft, platform: value }),
+                            options: [
+                              { value: 'fanqie', label: '番茄小说（主流程）' },
+                              { value: 'qimao', label: '七猫（仅契约只读，未实连）' },
+                            ],
+                          }),
+                        ),
+                        e(Field, { label: '作品名' }, e(TextInput, { value: draft.book, onChange: (value) => setDraft({ ...draft, book: value }) })),
+                        e(Field, { label: '账号标识' }, e(TextInput, { value: draft.account, onChange: (value) => setDraft({ ...draft, account: value }) })),
                       ),
                       e(
                         'label',
@@ -4014,6 +8257,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     )
                   : e(Skeleton, {}),
               ),
+              e(DeliveryCard, { job, schedulerEnabled: Boolean((props.overview.settings || {}).scheduler_enabled) }),
               e(
                 Card,
                 { title: '当前批次', hint: cycle.status || 'idle' },
@@ -4048,6 +8292,41 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 ),
               ),
             ),
+          );
+
+          return e(
+            'div',
+            { className: 'nh-page' },
+            e(
+              'div',
+              { className: 'nh-row', style: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 } },
+              e(Segmented, {
+                value: subTab,
+                onChange: setSubTab,
+                options: [
+                  { value: 'config', label: '任务配置' },
+                  { value: 'schedule', label: '排期缓冲（候选）' },
+                  { value: 'runs', label: '运行与通知' },
+                ],
+              }),
+              jobsList.length > 1
+                ? e(
+                    'div',
+                    { className: 'nh-row', style: { gap: 8, alignItems: 'center' } },
+                    e('span', { className: 'nh-k' }, '切换任务'),
+                    e(Select, {
+                      value: job.id,
+                      onChange: setSelectedJobId,
+                      options: jobsList.map((item) => ({ value: item.id, label: `${item.name || item.id} (${item.book || ''})` })),
+                    }),
+                  )
+                : null,
+            ),
+            subTab === 'config'
+              ? configBody
+              : subTab === 'schedule'
+                ? e(ScheduleBufferPanel, { job, navigate: props.navigate, refreshOverview })
+                : e(RunsNotificationsPanel, { job, refreshOverview }),
           );
         }
 
@@ -4985,6 +9264,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [quality, setQuality] = React.useState(null);
           const [revision, setRevision] = React.useState(null);
           const [bench, setBench] = React.useState(null);
+          const [precheck, setPrecheck] = React.useState(null);
+          const [ignoreDraft, setIgnoreDraft] = React.useState('');
+          const [precheckBusy, setPrecheckBusy] = React.useState(false);
+          const [precheckNote, setPrecheckNote] = React.useState('');
           const [versionBody, setVersionBody] = React.useState(null);
           const [revBusy, setRevBusy] = React.useState(false);
           const [tab, setTab] = React.useState('body');
@@ -4997,6 +9280,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             let alive = true;
             setLoading(true);
             setQuality(null);
+            setPrecheck(null);
             api(`/projects/${props.projectId}/chapters/${props.chapter}`)
               .then((value) => {
                 if (alive) setData(value);
@@ -5027,6 +9311,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               })
               .catch(() => {
                 if (alive) setBench(null);
+              });
+            api(`/projects/${props.projectId}/precheck?chapter=${props.chapter}`)
+              .then((value) => {
+                if (!alive) return;
+                setPrecheck(value);
+                setIgnoreDraft((value && Array.isArray(value.ignore_terms) ? value.ignore_terms : []).join('\n'));
+              })
+              .catch(() => {
+                if (alive) setPrecheck(null);
               });
             return () => {
               alive = false;
@@ -5059,6 +9352,42 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               setRevBusy(false);
             }
           };
+          const precheckAction = async (ruleId, action) => {
+            setPrecheckBusy(true);
+            try {
+              await api(`/projects/${props.projectId}/precheck/action`, {
+                method: 'POST',
+                body: { rule_id: ruleId, action, note: precheckNote },
+              });
+              toast.push(`已记录规则反馈（${action}）`, 'ok');
+              setTick((v) => v + 1);
+            } catch (error) {
+              toast.push(`记录失败：${error.message}`, 'err');
+            } finally {
+              setPrecheckBusy(false);
+            }
+          };
+
+          const saveIgnoreTerms = async () => {
+            setPrecheckBusy(true);
+            try {
+              const terms = String(ignoreDraft || '')
+                .split(/[\r\n,，]+/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+              await api(`/projects/${props.projectId}/precheck/ignore`, {
+                method: 'PUT',
+                body: { terms },
+              });
+              toast.push(`忽略词表已保存（${terms.length} 项）`, 'ok');
+              setTick((v) => v + 1);
+            } catch (error) {
+              toast.push(`保存忽略词表失败：${error.message}`, 'err');
+            } finally {
+              setPrecheckBusy(false);
+            }
+          };
+
           const showVersion = async (versionId) => {
             try {
               const value = await api(`/projects/${props.projectId}/chapters/${props.chapter}/versions/${versionId}`);
@@ -5152,6 +9481,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         ['quality', '质量报告'],
                         ['revision', '修订'],
                         ['versions', '版本历史'],
+                        ['precheck', '预检'],
                       ].map(([id, label]) =>
                         e(
                           'button',
@@ -5361,6 +9691,95 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           )
                         : null,
                     ) : null,
+                    tab === 'precheck'
+                      ? e(
+                          'div',
+                          { className: 'nh-col', style: { gap: 10, marginTop: 10 } },
+                          precheck
+                            ? e(
+                                'div',
+                                { className: 'nh-col', style: { gap: 10 } },
+                                e(
+                                  'div',
+                                  { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
+                                  e(Badge, { tone: 'mute' }, `段落 ${num(precheck.paragraphs || 0)}`),
+                                  e(Badge, { tone: (precheck.findings || []).length ? 'warn' : 'ok' }, `命中 ${num((precheck.findings || []).length)} 条`),
+                                  e(Badge, { tone: 'mute' }, `已忽略 ${num(precheck.ignored || 0)} 条`),
+                                  precheck.advisory_only ? e(Badge, { tone: 'ok' }, '提示性规则 · 默认不阻断') : null,
+                                ),
+                                precheck.metrics
+                                  ? e(
+                                      'div',
+                                      { className: 'nh-note' },
+                                      `累计检查 ${num(precheck.metrics.checks || 0)} 次 · 每百段命中 ${precheck.metrics.per_100_paragraphs ?? 0} 条 · 采纳 ${num(precheck.metrics.accepted || 0)} / 忽略 ${num(precheck.metrics.ignored || 0)} / 误报 ${num(precheck.metrics.false_positive || 0)}`,
+                                    )
+                                  : null,
+                                e(
+                                  Field,
+                                  { label: '反馈备注（可选，随采纳/忽略/误报提交）' },
+                                  e(TextInput, { value: precheckNote, placeholder: '说明为何采纳、忽略或误报', onChange: setPrecheckNote }),
+                                ),
+                                (precheck.findings || []).length
+                                  ? e(
+                                      'div',
+                                      { className: 'nh-col', style: { gap: 8 } },
+                                      (precheck.findings || []).map((item, idx) =>
+                                        e(
+                                          'div',
+                                          { key: `${item.rule_id}-${idx}`, className: 'nh-panel' },
+                                          e(
+                                            'div',
+                                            { className: 'nh-row', style: { justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' } },
+                                            e('strong', { className: 'nh-mono' }, `${item.rule_id || 'rule'} · ${item.category || ''}`),
+                                            e(
+                                              'div',
+                                              { className: 'nh-row', style: { gap: 6 } },
+                                              e(Badge, { tone: item.severity === 'warn' ? 'warn' : 'mute' }, item.severity || 'advisory'),
+                                              item.paragraph != null ? e(Badge, { tone: 'mute' }, `第 ${item.paragraph} 段`) : null,
+                                            ),
+                                          ),
+                                          item.quote ? e('div', { className: 'nh-muted', style: { marginTop: 4 } }, `片段：${item.quote}`) : null,
+                                          item.suggestion ? e('div', { style: { marginTop: 4, fontSize: 12 } }, `建议：${item.suggestion}`) : null,
+                                          e(
+                                            'div',
+                                            { className: 'nh-row', style: { gap: 6, marginTop: 6 } },
+                                            e(Button, { size: 'sm', busy: precheckBusy, onClick: () => precheckAction(item.rule_id, 'accepted') }, '采纳'),
+                                            e(Button, { size: 'sm', kind: 'ghost', busy: precheckBusy, onClick: () => precheckAction(item.rule_id, 'ignored') }, '忽略'),
+                                            e(Button, { size: 'sm', kind: 'ghost', busy: precheckBusy, onClick: () => precheckAction(item.rule_id, 'false_positive') }, '误报'),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : e('div', { className: 'nh-muted' }, '本章未命中任何风格预检提示。'),
+                                e(
+                                  'div',
+                                  { className: 'nh-panel' },
+                                  e('div', { className: 'nh-k', style: { marginBottom: 6 } }, '忽略词表（每行或逗号分隔一条）'),
+                                  e('textarea', {
+                                    className: 'nh-input',
+                                    rows: 3,
+                                    value: ignoreDraft,
+                                    placeholder: '输入需要跳过预检检查的专有名词或习惯表达',
+                                    onChange: (ev) => setIgnoreDraft(ev.target.value),
+                                  }),
+                                  e('div', { className: 'nh-row', style: { marginTop: 8 } }, e(Button, { size: 'sm', busy: precheckBusy, onClick: saveIgnoreTerms }, '保存忽略词表')),
+                                ),
+                                (precheck.rules || []).length
+                                  ? e(
+                                      'div',
+                                      { className: 'nh-panel' },
+                                      e('div', { className: 'nh-k', style: { marginBottom: 4 } }, `规则清单（${precheck.rules.length} 条）`),
+                                      e(
+                                        'div',
+                                        { className: 'nh-muted', style: { fontSize: 12, lineHeight: 1.6 } },
+                                        precheck.rules.map((r) => `${r.rule_id}(${r.category || r.severity || ''})`).join('、'),
+                                      ),
+                                    )
+                                  : null,
+                              )
+                            : e(Skeleton, {}),
+                        )
+                      : null,
                   )
                 : e(Empty, null, '读取失败'),
           });
@@ -5371,7 +9790,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         /* `id` is the locale key suffix; `group`/`label` are the Chinese
            fallbacks rendered when no translation service is present. */
         const NAV = [
-          { id: 'start', group: '开始', items: [{ id: 'setup', label: '开始创作与账号', icon: 'pen' }] },
+          {
+            id: 'start',
+            group: '开始',
+            items: [
+              { id: 'flow', label: '开书到日更', icon: 'pen' },
+              { id: 'setup', label: '开始创作与账号', icon: 'book' },
+            ],
+          },
           {
             id: 'overview',
             group: '总览',
@@ -5385,6 +9811,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               { id: 'memory', label: '共享记忆', icon: 'memory' },
               { id: 'brief', label: '创作约定', icon: 'doc' },
               { id: 'outline', label: '大纲与规划', icon: 'tree' },
+              { id: 'readers', label: '读者反馈', icon: 'cost' },
             ],
           },
           {
@@ -5428,17 +9855,21 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           );
         }
 
-        const APPEARANCE_KEY = 'chapter-whale-appearance-v1';
-        const APPEARANCE_DEFAULTS = { palette: 'gemini', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'sans', opacity: 86, blur: 14 };
+        const APPEARANCE_KEY = 'chapter-whale-appearance-v2';
+        const APPEARANCE_DEFAULTS = { palette: 'liquid', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'serif', opacity: 24, blur: 18, refract: 85, backdrop: 100 };
         const AppearanceContext = React.createContext(APPEARANCE_DEFAULTS);
         function readAppearance() {
           const result = { ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) };
           try {
             const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || '{}');
-            const options = { palette: ['gemini', 'ocean'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
+            const paletteMap = { gemini: 'liquid', ocean: 'apple' };
+            if (saved.palette && paletteMap[saved.palette]) saved.palette = paletteMap[saved.palette];
+            const options = { palette: ['liquid', 'craft', 'apple'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
             for (const [key, allowed] of Object.entries(options)) if (allowed.includes(saved[key])) result[key] = saved[key];
             if (typeof saved.reduced === 'boolean') result.reduced = saved.reduced;
-            for (const [key, low, high] of [['opacity', 75, 96], ['blur', 0, 18]]) if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+            for (const [key, low, high] of [['opacity', 10, 78], ['blur', 4, 32], ['refract', 10, 160], ['backdrop', 35, 175]]) {
+              if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+            }
           } catch {}
           return result;
         }
@@ -5451,19 +9882,247 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             onClick: () => onChange({ ...value, [key]: id }),
           }, label)));
           const section = (title, content) => e('section', { className: 'cw-setting-section', key: title }, e('div', { className: 'cw-setting-title' }, e('h3', null, title)), content);
-          return e(Modal, { open, onClose, title: '外观与动效', className: 'cw-appearance-modal' },
+          return e(Modal, { open, onClose, title: '光学玻璃与排版控制台', className: 'cw-appearance-modal' },
             e('div', { className: 'cw-appearance' },
-              section('配色', choose('palette', [['gemini', '蓝紫 · Gemini'], ['ocean', '海洋 · Ocean']])),
+              section('玻璃主题', choose('palette', [['liquid', '星曜极光'], ['craft', '墨玉暖金'], ['apple', '冰霜极简']])),
               section('明暗主题', choose('theme', [['auto', '跟随 DSH'], ['dark', '深色'], ['light', '浅色']])),
-              section('炫彩程度', choose('fx', [['1', '轻彩'], ['2', '绚彩'], ['3', '幻彩']])),
               section('动效强度', e(React.Fragment, null,
                 choose('motion', [['off', '静止'], ['soft', '轻柔'], ['strong', '舒展']]),
-                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
-              section('信息密度', choose('density', [['compact', '紧凑'], ['comfortable', '舒适']])),
-              section('阅读字体', choose('readerFont', [['sans', '黑体'], ['serif', '宋体']])),
-              ...[['opacity', '内容遮罩', 75, 96, '%'], ['blur', '背景模糊', 0, 18, ' px']].map(([key, label, min, max, unit]) => section(label,
+                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画 / 星空静止')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
+              section('信息密度', choose('density', [['comfortable', '舒朗'], ['compact', '紧凑']])),
+              section('阅读字体', choose('readerFont', [['serif', '衬线书卷'], ['sans', '现代黑体']])),
+              ...[
+                ['opacity', '表面通透度', 10, 78, '%'],
+                ['blur', '玻璃模糊度', 4, 32, ' px'],
+                ['refract', '折射与色散', 10, 160, '%'],
+                ['backdrop', '光带对比度', 35, 175, '%'],
+              ].map(([key, label, min, max, unit]) => section(label,
                 e('label', { className: 'cw-range-label' }, e('span', null, `${value[key]}${unit}`), e('input', { type: 'range', 'aria-label': label, min, max, value: value[key], onChange: event => onChange({ ...value, [key]: Number(event.target.value) }) })))),
-              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } }, e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'), e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } },
+                e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'),
+                e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+        }
+
+        function buildConvexBevelMap(w, h, radius, bevelPx) {
+          const off = document.createElement('canvas');
+          if (!off || typeof off.getContext !== 'function') return '';
+          off.width = w;
+          off.height = h;
+          const ctx = off.getContext('2d');
+          if (!ctx) return '';
+          const img = ctx.createImageData(w, h);
+          const data = img.data;
+          const hw = w / 2;
+          const hh = h / 2;
+          const rx = Math.max(2, hw - radius);
+          const ry = Math.max(2, hh - radius);
+          const sdRect = (px, py) => {
+            const x = Math.abs(px - hw) - rx;
+            const y = Math.abs(py - hh) - ry;
+            return Math.hypot(Math.max(x, 0), Math.max(y, 0)) + Math.min(Math.max(x, y), 0) - radius;
+          };
+          for (let py = 0; py < h; py++) {
+            for (let px = 0; px < w; px++) {
+              const idx = (py * w + px) * 4;
+              const depth = -sdRect(px + 0.5, py + 0.5);
+              let gx = 0;
+              let gy = 0;
+              if (depth >= 0 && depth < bevelPx) {
+                const ddx = sdRect(px + 1.5, py + 0.5) - sdRect(px - 0.5, py + 0.5);
+                const ddy = sdRect(px + 0.5, py + 1.5) - sdRect(px + 0.5, py - 0.5);
+                const len = Math.hypot(ddx, ddy) || 1;
+                const curve = Math.pow(1 - depth / bevelPx, 1.65);
+                gx = (ddx / len) * curve;
+                gy = (ddy / len) * curve;
+              }
+              data[idx] = Math.round(128 + gx * 124);
+              data[idx + 1] = Math.round(128 + gy * 124);
+              data[idx + 2] = 128;
+              data[idx + 3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+          return typeof off.toDataURL === 'function' ? off.toDataURL('image/png') : '';
+        }
+
+        function CosmosBackdrop(props) {
+          const canvasRef = React.useRef(null);
+          const pillMapRef = React.useRef(null);
+          const cardMapRef = React.useRef(null);
+          const pillRRef = React.useRef(null);
+          const pillGRef = React.useRef(null);
+          const pillBRef = React.useRef(null);
+          const cardRRef = React.useRef(null);
+          const cardGRef = React.useRef(null);
+          const cardBRef = React.useRef(null);
+
+          React.useEffect(() => {
+            const pMap = pillMapRef.current;
+            const cMap = cardMapRef.current;
+            if (!pMap || !cMap || typeof document.createElement !== 'function') return undefined;
+            const pillUrl = buildConvexBevelMap(260, 56, 28, 17);
+            const cardUrl = buildConvexBevelMap(260, 170, 26, 18);
+            if (pillUrl && typeof pMap.setAttribute === 'function') pMap.setAttribute('href', pillUrl);
+            if (cardUrl && typeof cMap.setAttribute === 'function') cMap.setAttribute('href', cardUrl);
+            return undefined;
+          }, []);
+
+          React.useEffect(() => {
+            const mult = Math.max(0.1, Number(props.refract || 85) / 100);
+            const pBase = Math.max(2, mult * 24);
+            const cBase = Math.max(2, mult * 15);
+            [
+              [pillRRef.current, pBase * 1.15],
+              [pillGRef.current, pBase * 0.92],
+              [pillBRef.current, pBase * 0.68],
+              [cardRRef.current, cBase * 1.12],
+              [cardGRef.current, cBase * 0.90],
+              [cardBRef.current, cBase * 0.68],
+            ].forEach(([node, val]) => {
+              if (node && typeof node.setAttribute === 'function') node.setAttribute('scale', val.toFixed(1));
+            });
+          }, [props.refract]);
+
+          React.useEffect(() => {
+            const canvas = canvasRef.current;
+            if (!canvas || typeof canvas.getContext !== 'function') return undefined;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return undefined;
+            const staticOnly = Boolean(props.reduced || props.motion === 'off' || props.hidden);
+            let stars = [];
+            let tick = 0;
+            let rafId = null;
+
+            const setup = () => {
+              const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+              const w = canvas.width = Math.max(1, canvas.offsetWidth || 960) * dpr;
+              const h = canvas.height = Math.max(1, canvas.offsetHeight || 640) * dpr;
+              const count = Math.min(96, Math.max(40, Math.floor((w * h) / 28000)));
+              stars = Array.from({ length: count }, (_, idx) => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                r: (idx % 12 === 0 ? 1.8 : 0.6 + Math.random()) * dpr,
+                twinkle: Math.random() * Math.PI * 2,
+                speed: 0.004 + Math.random() * 0.01,
+                gold: idx % 10 === 0,
+                vx: (Math.random() - 0.5) * 0.12,
+                vy: (Math.random() - 0.5) * 0.08,
+              }));
+            };
+
+            const drawRibbon = (w, h, dpr, yFrac, amp, phase, cStart, cEnd, lw) => {
+              const grad = ctx.createLinearGradient(0, 0, w, h * 0.55);
+              grad.addColorStop(0, 'transparent');
+              grad.addColorStop(0.28, cStart);
+              grad.addColorStop(0.72, cEnd);
+              grad.addColorStop(1, 'transparent');
+              ctx.save();
+              ctx.beginPath();
+              const baseY = h * yFrac;
+              ctx.moveTo(-40 * dpr, baseY + Math.sin(phase) * amp);
+              for (let t = 0; t <= 12; t++) {
+                const fx = t / 12;
+                ctx.lineTo(fx * (w + 80 * dpr) - 40 * dpr, baseY - fx * h * 0.18 + Math.sin(fx * 4.4 + phase) * amp);
+              }
+              ctx.strokeStyle = grad;
+              ctx.lineWidth = lw * dpr;
+              ctx.lineCap = 'round';
+              ctx.stroke();
+              ctx.restore();
+            };
+
+            const frame = () => {
+              const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+              const w = canvas.width;
+              const h = canvas.height;
+              const isDark = props.theme !== 'light';
+              const lm = Math.max(0.3, Number(props.backdrop || 100) / 100);
+              ctx.clearRect(0, 0, w, h);
+              if (!staticOnly) tick += 0.008;
+
+              const coolA = isDark ? `rgba(92, 162, 255, ${(0.20 * lm).toFixed(3)})` : `rgba(82, 138, 224, ${(0.22 * lm).toFixed(3)})`;
+              const warmB = isDark ? `rgba(230, 185, 76, ${(0.16 * lm).toFixed(3)})` : `rgba(218, 158, 78, ${(0.22 * lm).toFixed(3)})`;
+              const irisC = isDark ? `rgba(176, 134, 255, ${(0.16 * lm).toFixed(3)})` : `rgba(148, 118, 228, ${(0.16 * lm).toFixed(3)})`;
+
+              drawRibbon(w, h, dpr, 0.18, 46 * dpr, tick * 0.9, coolA, warmB, 76);
+              drawRibbon(w, h, dpr, 0.42, 36 * dpr, tick * 0.65 + 1.8, irisC, coolA, 50);
+              drawRibbon(w, h, dpr, 0.78, 52 * dpr, -tick * 0.5 + 3.1, warmB, irisC, 64);
+
+              ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 20, 26, 0.05)';
+              ctx.lineWidth = 0.85 * dpr;
+              ctx.beginPath();
+              ctx.arc(w * 0.74, h * 0.34, Math.min(w, h) * 0.40, 0.4, 3.6);
+              ctx.stroke();
+
+              for (const s of stars) {
+                if (!staticOnly) {
+                  s.x = (s.x + s.vx + w) % w;
+                  s.y = (s.y + s.vy + h) % h;
+                  s.twinkle += s.speed;
+                }
+                const pulse = 0.55 + 0.45 * Math.sin(s.twinkle);
+                ctx.fillStyle = s.gold
+                  ? (isDark ? `rgba(230, 185, 76, ${0.42 + pulse * 0.48})` : `rgba(158, 109, 8, ${0.28 + pulse * 0.30})`)
+                  : (isDark ? `rgba(255, 255, 255, ${0.25 + pulse * 0.56})` : `rgba(30, 41, 59, ${0.14 + pulse * 0.18})`);
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+              }
+
+              if (!staticOnly && typeof requestAnimationFrame === 'function') {
+                rafId = requestAnimationFrame(frame);
+              }
+            };
+
+            setup();
+            frame();
+            const onResize = () => {
+              setup();
+              if (staticOnly) frame();
+            };
+            let ro = null;
+            if (typeof ResizeObserver === 'function') {
+              ro = new ResizeObserver(() => onResize());
+              ro.observe(canvas.parentElement || canvas);
+            }
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('resize', onResize);
+            }
+            return () => {
+              if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+              if (ro && typeof ro.disconnect === 'function') ro.disconnect();
+              if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+                window.removeEventListener('resize', onResize);
+              }
+            };
+          }, [props.theme, props.palette, props.reduced, props.motion, props.hidden, props.backdrop]);
+
+          return e(React.Fragment, null,
+            e('svg', { width: 0, height: 0, style: { position: 'absolute', pointerEvents: 'none' }, 'aria-hidden': 'true' },
+              e('defs', null,
+                e('filter', { id: 'cw-lg-pill-refract', x: '-4%', y: '-4%', width: '108%', height: '108%', colorInterpolationFilters: 'sRGB' },
+                  e('feImage', { ref: pillMapRef, id: 'cw-lg-pill-map', x: '0%', y: '0%', width: '100%', height: '100%', preserveAspectRatio: 'none', href: '', result: 'map' }),
+                  e('feDisplacementMap', { ref: pillRRef, in: 'SourceGraphic', in2: 'map', scale: '24', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispR' }),
+                  e('feColorMatrix', { in: 'dispR', type: 'matrix', values: '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'rCh' }),
+                  e('feDisplacementMap', { ref: pillGRef, in: 'SourceGraphic', in2: 'map', scale: '19', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispG' }),
+                  e('feColorMatrix', { in: 'dispG', type: 'matrix', values: '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'gCh' }),
+                  e('feDisplacementMap', { ref: pillBRef, in: 'SourceGraphic', in2: 'map', scale: '14', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispB' }),
+                  e('feColorMatrix', { in: 'dispB', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0', result: 'bCh' }),
+                  e('feBlend', { in: 'rCh', in2: 'gCh', mode: 'screen', result: 'rgCh' }),
+                  e('feBlend', { in: 'rgCh', in2: 'bCh', mode: 'screen', result: 'rgbOut' })),
+                e('filter', { id: 'cw-lg-card-refract', x: '-2%', y: '-2%', width: '104%', height: '104%', colorInterpolationFilters: 'sRGB' },
+                  e('feImage', { ref: cardMapRef, id: 'cw-lg-card-map', x: '0%', y: '0%', width: '100%', height: '100%', preserveAspectRatio: 'none', href: '', result: 'cmap' }),
+                  e('feDisplacementMap', { ref: cardRRef, in: 'SourceGraphic', in2: 'cmap', scale: '15', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cR' }),
+                  e('feColorMatrix', { in: 'cR', type: 'matrix', values: '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'crCh' }),
+                  e('feDisplacementMap', { ref: cardGRef, in: 'SourceGraphic', in2: 'cmap', scale: '12', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cG' }),
+                  e('feColorMatrix', { in: 'cG', type: 'matrix', values: '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'cgCh' }),
+                  e('feDisplacementMap', { ref: cardBRef, in: 'SourceGraphic', in2: 'cmap', scale: '9', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cB' }),
+                  e('feColorMatrix', { in: 'cB', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0', result: 'cbCh' }),
+                  e('feBlend', { in: 'crCh', in2: 'cgCh', mode: 'screen', result: 'crgCh' }),
+                  e('feBlend', { in: 'crgCh', in2: 'cbCh', mode: 'screen', result: 'cOut' })))),
+            e('div', { className: 'cw-backdrop-layer', 'aria-hidden': 'true' },
+              e('canvas', { ref: canvasRef, className: 'cw-cosmos-canvas' }),
+              e('div', { className: 'cw-optical-wash' })));
         }
         function AiPresence({ active, tone }) {
           return e('div', { className: 'cw-ai-presence', 'aria-hidden': 'true', 'data-active': active, 'data-tone': tone },
@@ -5501,6 +10160,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         }
 
 
+        const HUBS = [
+          { id: 'work', label: '工作台', groupId: 'overview', routes: ['dashboard'] },
+          { id: 'studio', label: '创作室', groupId: 'creation', routes: ['chapters', 'outline', 'brief', 'flow'] },
+          { id: 'insights', label: '记忆与洞察', groupId: 'creation', routes: ['memory', 'readers'] },
+          { id: 'publish', label: '发布与排期', groupId: 'publish', routes: ['publish', 'setup'] },
+          { id: 'ops', label: '日更与运行', groupId: 'publish', routes: ['jobs', 'operations'] },
+          { id: 'system', label: '模型与系统', groupId: 'system', routes: ['ai', 'providers', 'free', 'costs'] },
+        ];
+
         function Shell() {
           const service = useService();
           const [route, setRoute] = React.useState('dashboard');
@@ -5508,8 +10176,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const selectProject = (id) => { setSelectedProject(id); localStorage.setItem('chapter-whale-project', id); };
           const [appearance, setAppearance] = React.useState(readAppearance);
           const [appearanceOpen, setAppearanceOpen] = React.useState(false);
+          const [projectPopOpen, setProjectPopOpen] = React.useState(false);
           const [hostTheme, setHostTheme] = React.useState(hostAppearance);
+          const rootRef = React.useRef(null);
+          const trackRef = React.useRef(null);
+          const lensRef = React.useRef(null);
           const density = appearance.density;
+          const activeTheme = appearance.theme === 'auto' ? hostTheme : appearance.theme;
           React.useEffect(() => { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch {} }, [appearance]);
           React.useEffect(() => {
             const update = () => setHostTheme(hostAppearance());
@@ -5528,10 +10201,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             scenes: '0',
           });
 
-          const overview = usePoll(() => api('/overview'), [], POLL_MS);
-          /* The live strip needs sub-minute freshness; /api/jobs is ~4 KB, so it
-             can afford the faster cadence without hammering the service. */
-          const liveJobs = usePoll(() => api('/jobs'), [], LIVE_POLL_MS);
+          const overview = usePoll(() => (service.state.running ? api('/overview') : Promise.resolve(null)), [service.state.running], POLL_MS);
+          const liveJobs = usePoll(() => (service.state.running ? api('/jobs') : Promise.resolve(null)), [service.state.running], LIVE_POLL_MS);
 
           React.useEffect(() => {
             const timer = setInterval(() => service.refresh(), POLL_MS);
@@ -5562,6 +10233,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             navigate: setRoute,
             job: liveJob,
             refreshOverview: () => overview.reload(true),
+            service: service.state,
             studio: {
               wordCount: studio.wordCount,
               maxRevisions: studio.maxRevisions,
@@ -5575,7 +10247,64 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             onOpenChapter: (id) => setChapter(id),
           };
 
-          const current = NAV.reduce((found, group) => found || group.items.find((item) => item.id === route), null);
+          const flatNav = NAV.flatMap((group) => group.items.map((item) => ({ ...item, groupId: group.id, groupLabel: t('nav.group.' + group.id, group.group) })));
+          const current = flatNav.find((item) => item.id === route) || null;
+          const activeHub = HUBS.find((hub) => hub.routes.includes(route)) || HUBS[0];
+
+          React.useEffect(() => {
+            const syncLens = () => {
+              const track = trackRef.current;
+              const lens = lensRef.current;
+              if (!track || !lens || typeof track.querySelector !== 'function') return;
+              const btn = track.querySelector('.cw-nav-pill.is-active');
+              if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
+              const tr = track.getBoundingClientRect();
+              const br = btn.getBoundingClientRect();
+              lens.style.width = `${br.width}px`;
+              lens.style.transform = `translateX(${br.left - tr.left - 2}px)`;
+            };
+            const timer = setTimeout(syncLens, 0);
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('resize', syncLens);
+            }
+            return () => {
+              clearTimeout(timer);
+              if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+                window.removeEventListener('resize', syncLens);
+              }
+            };
+          }, [activeHub.id, route, ready, allProjects.length]);
+
+          React.useEffect(() => {
+            if (!projectPopOpen || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return undefined;
+            const onKeyDown = (event) => {
+              if (event.key === 'Escape') setProjectPopOpen(false);
+            };
+            document.addEventListener('keydown', onKeyDown);
+            return () => document.removeEventListener('keydown', onKeyDown);
+          }, [projectPopOpen]);
+          React.useEffect(() => {
+            const root = rootRef.current;
+            if (!root || typeof root.addEventListener !== 'function') return undefined;
+            let rafPending = false;
+            const onMove = (event) => {
+              if (rafPending || appearance.reduced || appearance.motion === 'off') return;
+              rafPending = true;
+              requestAnimationFrame(() => {
+                rafPending = false;
+                const surf = event.target && event.target.closest && event.target.closest('.cw-glass-card, .cw-dock-capsule, .cw-popover');
+                if (surf && typeof surf.getBoundingClientRect === 'function') {
+                  const rect = surf.getBoundingClientRect();
+                  surf.style.setProperty('--mx', `${(((event.clientX - rect.left) / Math.max(1, rect.width)) * 100).toFixed(1)}%`);
+                  surf.style.setProperty('--my', `${(((event.clientY - rect.top) / Math.max(1, rect.height)) * 100).toFixed(1)}%`);
+                }
+              });
+            };
+            root.addEventListener('pointermove', onMove, { passive: true });
+            return () => {
+              if (typeof root.removeEventListener === 'function') root.removeEventListener('pointermove', onMove);
+            };
+          }, [appearance.reduced, appearance.motion]);
 
           let body;
           if (service.state.loading && !overview.data) {
@@ -5597,11 +10326,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   'div',
                   { style: { position: 'relative', zIndex: 1 } },
                   e('span', { className: 'nh-herotag', 'data-state': 'failed' }, '服务未运行'),
-                  e(
-                    'h2',
-                    { className: 'nh-herotitle' },
-                    '准备开始你的新故事',
-                  ),
+                  e('h2', { className: 'nh-herotitle' }, '准备开始你的新故事'),
                   e(
                     'p',
                     { className: 'nh-herosub' },
@@ -5610,12 +10335,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       : '首次启动将准备内置写作环境，无需安装 Python 或选择项目文件夹。',
                   ),
                   service.state.hint
-                    ? e(
-                        'div',
-                        { style: { marginTop: 12 } },
-                        e('div', { className: 'nh-k' }, '首次使用'),
-                        e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.hint)),
-                      )
+                    ? e('div', { style: { marginTop: 12 } }, e('div', { className: 'nh-k' }, '首次使用'), e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.hint)))
                     : null,
                   e(
                     'div',
@@ -5631,27 +10351,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           if (result && result.running) overview.reload(false);
                         },
                       },
-                      service.state.starting
-                        ? t('panel.starting', '正在启动…')
-                        : '开始使用码章鲸',
+                      service.state.starting ? t('panel.starting', '正在启动…') : '开始使用码章鲸',
                     ),
                     e(Button, { icon: 'refresh', onClick: () => service.refresh() }, '重新检测'),
                   ),
                   service.state.error
-                    ? e(
-                        'div',
-                        { style: { marginTop: 14 } },
-                        e('div', { className: 'nh-k' }, '错误信息'),
-                        e('pre', { className: 'nh-pre', style: { maxHeight: 180 } }, String(service.state.error)),
-                      )
+                    ? e('div', { style: { marginTop: 14 } }, e('div', { className: 'nh-k' }, '错误信息'), e('pre', { className: 'nh-pre', style: { maxHeight: 180 } }, String(service.state.error)))
                     : null,
                   service.state.logTail
-                    ? e(
-                        'div',
-                        { style: { marginTop: 12 } },
-                        e('div', { className: 'nh-k' }, `启动日志 · ${service.state.logFile || ''}`),
-                        e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.logTail)),
-                      )
+                    ? e('div', { style: { marginTop: 12 } }, e('div', { className: 'nh-k' }, `启动日志 · ${service.state.logFile || ''}`), e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.logTail)))
                     : null,
                 ),
               ),
@@ -5660,12 +10368,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             body = e('div', { className: 'nh-page' }, e(Empty, null, '加载总览失败'));
           } else {
             const map = {
+              flow: () => e(FlowPage, pageProps),
               setup: () => e(SetupPage, pageProps),
               dashboard: () => e(DashboardPage, { ...pageProps, key: project ? project.id : 'empty' }),
               chapters: () => e(ChaptersPage, pageProps),
               memory: () => e(MemoryPage, pageProps),
               brief: () => e(BriefPage, pageProps),
               outline: () => e(OutlinePage, pageProps),
+              readers: () => e(ReadersPage, pageProps),
               publish: () => e(PublishPage, pageProps),
               jobs: () => e(JobsPage, pageProps),
               ai: () => e(AIPage, pageProps),
@@ -5674,107 +10384,193 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               costs: () => e(CostsPage, pageProps),
               operations: () => e(OperationsPage, pageProps),
             };
-            body = (!project && !['ai', 'free', 'operations'].includes(route) ? map.setup : (map[route] || map.dashboard))();
+            body = (!project && !['ai', 'free', 'operations', 'flow'].includes(route) ? map.setup : (map[route] || map.dashboard))();
           }
+
+          const bookTitle = project ? project.title : '创作空间';
+          const bookMark = (bookTitle || '鲸').slice(0, 1);
+          const subRoutes = activeHub.routes.map((id) => flatNav.find((item) => item.id === id)).filter(Boolean);
 
           return e(
             ToastProvider,
             null,
             e(
               'div',
-              { className: 'nh-root', 'data-ui': 'atelier', 'data-density': density,
-                'data-theme': appearance.theme === 'auto' ? hostTheme : appearance.theme, 'data-palette': appearance.palette,
-                'data-fx': appearance.fx, 'data-motion': appearance.motion, 'data-reduced': String(appearance.reduced),
-                'data-reader-font': appearance.readerFont, 'data-user-motion': 'true', 'data-hidden': String(background),
-                style: { '--glass-opacity': String(appearance.opacity / 100), '--blur': `${appearance.blur}px` } },
+              {
+                ref: rootRef,
+                className: 'nh-root',
+                'data-ui': 'atelier',
+                'data-density': density,
+                'data-theme': activeTheme,
+                'data-palette': appearance.palette,
+                'data-fx': appearance.fx,
+                'data-motion': appearance.motion,
+                'data-reduced': String(appearance.reduced),
+                'data-reader-font': appearance.readerFont,
+                'data-user-motion': 'true',
+                'data-hidden': String(background),
+                style: {
+                  '--glass-opacity': String(appearance.opacity / 100),
+                  '--blur': `${appearance.blur}px`,
+                  '--glass-refract': (appearance.refract / 100).toFixed(2),
+                  '--backdrop-light': (appearance.backdrop / 100).toFixed(2),
+                },
+                onClick: () => { if (projectPopOpen) setProjectPopOpen(false); },
+              },
+              e(CosmosBackdrop, {
+                theme: activeTheme,
+                palette: appearance.palette,
+                reduced: appearance.reduced,
+                motion: appearance.motion,
+                hidden: background,
+                refract: appearance.refract,
+                backdrop: appearance.backdrop,
+              }),
               e(
                 'header',
-                { className: 'nh-head' },
-                e(Icon, { name: 'pen', size: 15 }),
-                e('h1', null, '码章鲸'),
-                allProjects.length ? e(Select, { value: project ? project.id : '', onChange: selectProject, options: allProjects.map((item) => ({ value: item.id, label: item.title })) }) : null,
-                e('span', { className: 'nh-sub' }, current ? current.label : ''),
-                e('span', { className: 'nh-spacer' }),
+                { className: 'cw-dock-sticky' },
                 e(
                   'div',
-                  { className: 'nh-row', style: { gap: 10 } },
+                  { className: 'cw-dock-row' },
                   e(
-                    'span',
-                    { className: 'nh-live' },
-                    e('span', {
-                      className: 'nh-dot',
-                      'data-state': service.state.running ? 'ok' : 'err',
-                    }),
-                    service.state.running ? '在线' : '离线',
-                  ),
-                  e(Button, { kind: 'ghost', size: 'sm', onClick: () => setAppearanceOpen(true), icon: 'settings' }, '外观'),
-                  e(
-                    Button,
+                    'button',
                     {
-                      kind: 'ghost',
-                      size: 'sm',
-                      icon: 'refresh',
-                      busy: overview.loading,
-                      onClick: () => {
-                        overview.reload(false);
-                        service.refresh();
-                      },
+                      type: 'button',
+                      className: 'cw-lens-circle cw-project-lens',
+                      title: '切换作品上下文',
+                      onClick: (event) => { event.stopPropagation(); setProjectPopOpen((open) => !open); },
                     },
-                    t('panel.refresh', '刷新'),
+                    e('span', { className: 'cw-project-badge' }, bookMark),
+                    e('span', { className: 'cw-project-title' }, bookTitle),
+                    e(Icon, { name: 'chevron', size: 12 }),
                   ),
-                  service.state.running
-                    ? e(
-                        Button,
-                        {
-                          kind: 'ghost',
-                          size: 'sm',
-                          icon: 'stop',
-                          busy: service.state.stopping,
-                          onClick: () => service.stop(),
-                        },
-                        service.state.stopping
-                          ? t('panel.stopping', '正在停止…')
-                          : t('panel.stop', '停止服务'),
-                      )
-                    : null,
+                  e(
+                    'nav',
+                    { className: 'cw-dock-capsule', 'aria-label': t('panel.title', '码章鲸') },
+                    e(
+                      'div',
+                      { className: 'cw-dock-track', ref: trackRef },
+                      e('div', { className: 'cw-nav-lens', ref: lensRef }),
+                      HUBS.map((hub) => {
+                        const isHubActive = hub.id === activeHub.id;
+                        return e(
+                          'button',
+                          {
+                            key: hub.id,
+                            type: 'button',
+                            className: `cw-nav-pill${isHubActive ? ' is-active' : ''}`,
+                            title: t('nav.group.' + hub.groupId, hub.label),
+                            onClick: () => {
+                              setProjectPopOpen(false);
+                              if (!hub.routes.includes(route)) setRoute(hub.routes[0]);
+                            },
+                          },
+                          isHubActive ? e('span', { className: 'cw-pill-dot' }) : null,
+                          hub.label,
+                          hub.id === 'studio' && stripWork.tone === 'err' ? e('span', { className: 'cw-pill-badge' }, '!') : null,
+                        );
+                      }),
+                    ),
+                  ),
+                  e(
+                    'div',
+                    { className: 'cw-dock-tools' },
+                    e(
+                      'button',
+                      {
+                        type: 'button',
+                        className: `cw-lens-circle${stripWork.active ? ' is-streaming is-on' : ''}`,
+                        title: stripWork.active ? '正在执行 · 查看任务' : 'AI 设置与运行状态',
+                        onClick: () => setRoute(stripWork.active ? 'jobs' : 'ai'),
+                      },
+                      e(
+                        'span',
+                        { className: 'cw-gemini-orb' },
+                        e('span', { className: 'cw-gemini-orb-core' }, e(Icon, { name: 'spark', size: 11, fill: true })),
+                      ),
+                    ),
+                    e(
+                      'button',
+                      {
+                        type: 'button',
+                        className: `cw-lens-circle${appearanceOpen ? ' is-on' : ''}`,
+                        title: '光学玻璃与排版控制台',
+                        onClick: () => setAppearanceOpen(true),
+                      },
+                      e(Icon, { name: 'settings', size: 15 }),
+                    ),
+                  ),
                 ),
+                subRoutes.length > 1 || service.state.running
+                  ? e(
+                      'div',
+                      { className: 'cw-subnav-bar' },
+                      subRoutes.length > 1
+                        ? e(
+                            'div',
+                            { className: 'cw-subnav-pills' },
+                            subRoutes.map((item) => e(
+                              'button',
+                              {
+                                key: item.id,
+                                type: 'button',
+                                className: `cw-subpill${route === item.id ? ' is-active' : ''}`,
+                                onClick: () => setRoute(item.id),
+                              },
+                              e(Icon, { name: item.icon, size: 12 }),
+                              t('nav.' + item.id, item.label),
+                            )),
+                          )
+                        : e('span', null),
+                      e(
+                        'div',
+                        { className: 'cw-service-cluster' },
+                        e('span', { className: 'nh-dot', 'data-state': service.state.running ? 'ok' : 'err' }),
+                        e('span', null, service.state.running ? '在线' : '离线'),
+                        e(Button, { kind: 'ghost', size: 'sm', icon: 'refresh', busy: overview.loading, onClick: () => { overview.reload(false); service.refresh(); } }, t('panel.refresh', '刷新')),
+                        service.state.running
+                          ? e(Button, { kind: 'ghost', size: 'sm', icon: 'stop', busy: service.state.stopping, onClick: () => service.stop() }, service.state.stopping ? t('panel.stopping', '正在停止…') : t('panel.stop', '停止服务'))
+                          : null,
+                      ),
+                    )
+                  : null,
               ),
-              route !== 'dashboard' && liveJob ? e(StatusBar, {
-                work: stripWork,
-                ratio: stripRatio,
-                elapsedMs: stripElapsed,
-              }) : null,
+              projectPopOpen
+                ? e(
+                    'div',
+                    { className: 'cw-popover', onClick: (event) => event.stopPropagation() },
+                    e(
+                      'div',
+                      { className: 'nh-cardbody', style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+                      e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                        e('span', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 11, fill: true })), '切换作品'),
+                        e(Button, { kind: 'ghost', size: 'sm', icon: 'x', onClick: () => setProjectPopOpen(false) }, '')),
+                      allProjects.map((item) => e(
+                        'button',
+                        {
+                          key: item.id,
+                          type: 'button',
+                          className: 'cw-chapter-row',
+                          style: { borderColor: project && item.id === project.id ? 'var(--state-active)' : undefined },
+                          onClick: () => { selectProject(item.id); setProjectPopOpen(false); },
+                        },
+                        e('span', { className: 'cw-chapter-row-title' }, item.title, e('small', null, `${num(item.chapters)} 章`)),
+                        project && item.id === project.id ? e('span', { className: 'nh-badge', 'data-tone': 'info' }, '当前') : null,
+                      )),
+                      e(Button, { size: 'sm', icon: 'plus', onClick: () => { setProjectPopOpen(false); setRoute('setup'); } }, '管理作品与开书'),
+                    ),
+                  )
+                : null,
+              route !== 'dashboard' && liveJob ? e(StatusBar, { work: stripWork, ratio: stripRatio, elapsedMs: stripElapsed }) : null,
               e(
                 'div',
                 { className: 'nh-body' },
                 e(
-                  'nav',
-                  { className: 'nh-nav' },
-                  NAV.map((group) =>
-                    e(
-                      'div',
-                      { key: group.group, className: 'nh-navgroup' },
-                      e('div', { className: 'nh-navlabel' }, t('nav.group.' + group.id, group.group)),
-                      group.items.map((item) =>
-                        e(
-                          'button',
-                          {
-                            key: item.id,
-                            type: 'button',
-                            className: 'nh-navitem',
-                            'aria-label': t('nav.' + item.id, item.label),
-                            title: t('nav.' + item.id, item.label),
-                            'data-active': route === item.id ? 'true' : 'false',
-                            onClick: () => setRoute(item.id),
-                          },
-                          e(Icon, { name: item.icon, size: 14 }),
-                          e('span', null, t('nav.' + item.id, item.label)),
-                        ),
-                      ),
-                    ),
-                  ),
+                  'main',
+                  { className: 'nh-main' },
+                  route !== 'dashboard' && ready ? e('div', { className: 'cw-page-heading cw-route-heading' }, e('h1', null, current ? t('nav.' + route, current.label) : t('panel.title', '码章鲸'))) : null,
+                  e(AppearanceContext.Provider, { value: appearance }, body),
                 ),
-                e('main', { className: 'nh-main' }, route !== 'dashboard' && ready ? e('div', { className: 'cw-page-heading cw-route-heading' }, e('h1', null, current ? t('nav.' + route, current.label) : '码章鲸')) : null, e(AppearanceContext.Provider, { value: appearance }, body)),
               ),
               e(AppearancePanel, { open: appearanceOpen, onClose: () => setAppearanceOpen(false), value: appearance, onChange: setAppearance }),
               e(ChapterModal, {
@@ -5845,7 +10641,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         exports.apply = apply;
         /* Pure functions the panel's own test harness drives across every cycle
            shape. Exposed read-only: nothing here touches React or the DOM. */
-        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance };
+        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage };
         return module.exports;
       },
     });

@@ -301,3 +301,160 @@ test('样式表随 effect 一起回收（审计 F24）', () => {
   for (const dispose of disposers) dispose();
   assert.equal(children.length, 0, 'dispose 后必须从 head 摘掉，否则热重载会留下死样式');
 });
+
+test('0.7.0 错误解析、读者反馈导航与后端路由面板全覆盖', async () => {
+  const { default: assertMod } = await import('node:assert/strict');
+  const fsMod = await import('node:fs');
+  const pathMod = await import('node:path');
+  const vmMod = await import('node:vm');
+  const src = fsMod.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  let factoryFn = null;
+  const ctx = {
+    window: {
+      __ModuleLoader__: {
+        load(spec) {
+          factoryFn = spec.factory;
+        },
+      },
+    },
+    document: { createElement: () => ({}) },
+    Intl: globalThis.Intl,
+    console,
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    AbortController,
+    fetch: async () => ({ ok: true, status: 200, text: async () => '{}' }),
+  };
+  vmMod.runInNewContext(src, ctx);
+  assertMod.ok(typeof factoryFn === 'function', 'module factory registered');
+  const exported = factoryFn((name) => {
+    if (name === 'react') {
+      return {
+        Fragment: 'Fragment',
+        createContext: (v) => ({ Provider: () => null, Consumer: () => null, _default: v }),
+        createElement: () => null,
+        useContext: (c) => (c ? c._default : undefined),
+        useState: (v) => [typeof v === 'function' ? v() : v, () => {}],
+        useEffect: () => {},
+        useRef: (v) => ({ current: v }),
+        useMemo: (fn) => fn(),
+        useCallback: (fn) => fn,
+      };
+    }
+    return {};
+  });
+  const internals = exported.__internals || {};
+  assertMod.equal(typeof internals.apiErrorMessage, 'function', 'apiErrorMessage exposed on __internals');
+  assertMod.equal(internals.apiErrorMessage({ detail: '详情错误' }, 400), '详情错误');
+  assertMod.equal(internals.apiErrorMessage({ code: 'invalid_request', message: '参数非法' }, 422), '参数非法');
+  assertMod.equal(internals.apiErrorMessage({ code: 'stale_buffer' }, 409), 'stale_buffer');
+  assertMod.equal(internals.apiErrorMessage(null, 502), 'HTTP 502');
+
+  assertMod.ok(Array.isArray(internals.NAV), 'NAV exposed on __internals');
+  const flatNav = internals.NAV.flatMap((g) => g.items || []).map((i) => i.id);
+  assertMod.ok(flatNav.includes('readers'), 'NAV includes readers');
+  assertMod.ok(src.includes("'nav.readers'"), 'DICTIONARY includes nav.readers');
+
+  for (const snippet of [
+    '/schedule',
+    '/precheck',
+    '/entities',
+    '/retrieval',
+    '/evidence/impact',
+    '/readers/preview',
+    '/readers/observations',
+    '/browser/target',
+    '/publish/platforms',
+    '/publish/export',
+    '/notifications',
+  ]) {
+    assertMod.ok(src.includes(snippet), `client.js includes route ${snippet}`);
+  }
+});
+
+test('v5 液态玻璃重整、DashboardPage 无异常渲染与 standalone Web API 契约', async () => {
+  const { default: assertMod } = await import('node:assert/strict');
+  const fsMod = await import('node:fs');
+  const vmMod = await import('node:vm');
+  const src = fsMod.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  let factoryFn = null;
+  const storage = new Map();
+  const ctx = {
+    window: {
+      __ModuleLoader__: { load(spec) { factoryFn = spec.factory; } },
+      matchMedia: () => ({ matches: false }),
+    },
+    localStorage: {
+      getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+      setItem: (k, v) => { storage.set(k, String(v)); },
+    },
+    document: { createElement: () => ({}) },
+    Intl: globalThis.Intl,
+    console,
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    AbortController,
+    fetch: async () => ({ ok: true, status: 200, text: async () => '{}' }),
+  };
+  vmMod.runInNewContext(src, ctx);
+  const exported = factoryFn((name) => {
+    if (name === 'react') {
+      return {
+        Fragment: 'Fragment',
+        createContext: (v) => ({ Provider: () => null, Consumer: () => null, _default: v }),
+        createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
+        useContext: (c) => (c ? c._default : undefined),
+        useState: (v) => [typeof v === 'function' ? v() : v, () => {}],
+        useEffect: () => {},
+        useRef: (v) => ({ current: v }),
+        useMemo: (fn) => fn(),
+        useCallback: (fn) => fn,
+      };
+    }
+    return {};
+  });
+  const internals = exported.__internals || {};
+
+  // 1. readAppearance migrates legacy palettes and clamps sliders
+  storage.set('chapter-whale-appearance-v2', JSON.stringify({ palette: 'gemini', opacity: 99, blur: 1, refract: 999, backdrop: 5 }));
+  const migratedGemini = internals.readAppearance();
+  assertMod.equal(migratedGemini.palette, 'liquid');
+  assertMod.equal(migratedGemini.opacity, 78);
+  assertMod.equal(migratedGemini.blur, 4);
+  assertMod.equal(migratedGemini.refract, 160);
+  assertMod.equal(migratedGemini.backdrop, 35);
+  storage.set('chapter-whale-appearance-v2', JSON.stringify({ palette: 'ocean' }));
+  assertMod.equal(internals.readAppearance().palette, 'apple');
+
+  // 2. HUBS covers all 6 top-dock workspaces (array returned from vm context -> convert via Array.from)
+  assertMod.deepEqual(
+    Array.from(internals.HUBS || [], (h) => h.id),
+    ['work', 'studio', 'insights', 'publish', 'ops', 'system'],
+  );
+
+  // 3. DashboardPage renders without throwing ReferenceError (e.g. queue or icon checks)
+  const tree = internals.DashboardPage({
+    overview: {
+      projects: [{ id: 'p1', title: '测试书', chapters: 2, target_chapters: 100 }],
+      jobs: [],
+      queue: { queued: 3, published: 2 },
+      ai: { configured: true },
+    },
+    job: null,
+    studio: { wordCount: '3500' },
+    navigate: () => {},
+    onOpenChapter: () => {},
+  });
+  assertMod.ok(tree && tree.props && String(tree.props.className).includes('cw-dashboard'));
+
+  // 4. Standalone liquid-glass.js syntax & corrected API contract keys
+  const webLgSrc = fsMod.readFileSync(new URL('../backend/manager/static/liquid-glass.js', import.meta.url), 'utf8');
+  new vmMod.Script(webLgSrc, { filename: 'backend/manager/static/liquid-glass.js' });
+  for (const snippet of ['data.findings', 'data-pc-action="ignored"', 'obs.cards', 'plan.supplied', 'visibilitychange']) {
+    assertMod.ok(webLgSrc.includes(snippet), `liquid-glass.js includes ${snippet}`);
+  }
+});

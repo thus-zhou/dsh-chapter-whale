@@ -8,6 +8,7 @@ permissions:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -18,9 +19,14 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      # 必须在任何清单重算之前运行：它逐字节核对清单与干净检出，
+      # 一旦有人在 CRLF 工作树上重建过清单，这一步会立刻失败而不是等到发版。
+      - name: Release manifest matches checked-out bytes
+        run: node scripts/check-release.mjs --local
       - run: npm test
   backend:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
         python: ['3.11', '3.13']
@@ -35,45 +41,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      # Style learning imports the editor services (``services.*``) for its
-      # prompt builder, so the runtime dependencies must be installed first;
-      # previously they came after this suite and CI failed on httpx.
+      # 一次性安装全部离线测试依赖；不涉及真实模型调用或外部账号/平台写入。
       - name: Install backend test dependencies
-        run: python -m pip install --disable-pip-version-check fastapi httpx tzdata
-      # Offline suites only: nothing here calls a model or touches user data.
-      - name: Chapter version store (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_chapter_versions.py" -t backend -v
-      - name: Budget and context limits (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_budget.py" -t backend -v
-      - name: Quality score and gate (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_quality.py" -t backend -v
-      - name: Style learning and profile (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_style.py" -t backend -v
-      - name: Revision previews and anchors (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_revision.py" -t backend -v
-      - name: Version history and restore (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_history.py" -t backend -v
-      - name: Credential store migration and fallback (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_secrets.py" -t backend -v
-      - name: Fact provenance and validity windows (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_memory_facts.py" -t backend -v
-      - name: Character registry, relations and knowledge (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_characters.py" -t backend -v
-      - name: Foreshadow states, conflicts and impact index (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_continuity.py" -t backend -v
-      - name: Scene cards and scene-by-scene drafting (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_scenes.py" -t backend -v
-
-      - name: Workbench flow state (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_workflow.py" -t backend -v
-      - name: Bundle composition rules (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_bundle.py" -t backend -v
-      - name: Pipeline wiring regressions (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_pipeline_fixes.py" -t backend -v
-      - name: Long-form replay and hundred-chapter index (offline, no model calls)
-        run: python -m unittest discover -s backend/integration -p "test_longform.py" -t backend -v
-
-      - name: Install manager test dependencies
-        run: python -m pip install --disable-pip-version-check --no-input "fastapi>=0.110" "httpx>=0.27" "python-multipart>=0.0.9" "tzdata>=2024.1"
+        run: python -m pip install --disable-pip-version-check --no-input "fastapi>=0.110" "httpx>=0.27" "python-multipart>=0.0.9" "tzdata>=2024.1" "filelock>=3.12" "aiohttp>=3.9" "playwright>=1.40"
+      - name: Integration checks (offline, no model calls)
+        run: python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend -v
       - name: Manager checks (offline, no model calls)
-        run: python -m unittest discover -s backend/manager -p "test_*.py" -t backend -v
+        run: python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend -v

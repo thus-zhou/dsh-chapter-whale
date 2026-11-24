@@ -1,12 +1,14 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**0.5.0：新的创作工作台、玻璃界面与 A–E 实时流程。**
+**0.7.0（PR 候选版 · GPL-3.0-only）：整合番茄主流程与排期缓冲状态机、长篇连续性与风格预检、读者反馈观察卡、常驻存稿服务包及多平台能力契约。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，也可以接入部分免费模型，通过支持的厂商账号渠道完成授权。
 
 **[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · DSH ≥ 0.2.2-rc.1 · 内置 Python 与浏览器 · 0.5.0
+Windows 10/11 x64（DSH 主插件）· Linux / macOS 常驻存稿服务归档（待实机）· DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.0
+
+> **状态与边界说明**：`0.7.0` 当前处于开发分支 PR 收口阶段，**尚未发布正式 GitHub Release 或 npm `latest`**；线上最新公开版本仍以发布页与 [RELEASE_STATUS.md](RELEASE_STATUS.md) 为准。排期缓冲、七猫导出/只读绑定、单目标浏览器试点、Linux/macOS 常驻归档与 Webhook 外发等新增能力目前仅通过本机离线单元测试与本地回环代理冒烟验证，**真实番茄/七猫页面、真实模型调用与跨平台实机测试均未在本轮实测**，界面中已明确标注「候选 / 未实连 / 待实机」。
 
 **安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载插件 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：创建作品，使用 DSH 已登录模型开始写作，需要发布时再登录番茄。
 
@@ -140,21 +142,21 @@ npm pack dsh-chapter-whale@latest
 
 然后把生成的 `.tgz` 文件交给 DSH 插件管理安装。`npm pack` 只下载插件包，首次启动仍需要下载运行环境。
 
-**通过 GitHub 安装最新版**：使用下方 0.5.0 插件包，首次启动会下载固定运行时。
+**通过 GitHub 安装最新版**：正式发版后可在下方获取 `0.7.0` 轻量插件包（首次启动按清单下载并校验固定运行时）或完整运行时归档；当前开发分支状态见 [RELEASE_STATUS.md](RELEASE_STATUS.md)。
 
-在 DSH 插件管理中添加下方地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
+在 DSH 插件管理中添加对应版本的下载包地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.5.0/dsh-chapter-whale-0.5.0.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-0.7.0.tgz
 ```
 
-0.5.0 插件包约 **约 16 MB**。后端、Python 和 Chromium 与 0.4.2 相同，首次启动下载并校验约 **279.7 MB** 的固定运行时；已有相同运行时的工作目录可直接复用。希望预先下载完整环境，可使用 [0.4.2 完整包](https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.4.2/dsh-chapter-whale-0.4.2.tgz)，再更新到 0.5.0 安装器。
+`0.7.0` 轻量插件包约 **17 MB**，代码随当前包携带；完整版固定运行时约 **287 MB**（已有相同 `buildId` 运行时的工作目录可直接复用）。也提供单独的 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz` 完整运行时包。
 
 <details>
 <summary>使用命令行安装</summary>
 
 ```powershell
-dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.5.0/dsh-chapter-whale-0.5.0.tgz
+dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-0.7.0.tgz
 ```
 
 这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；首次启动按固定 buildId 和摘要核对运行时。插件版本与运行时版本分别记录。
@@ -217,14 +219,20 @@ http://127.0.0.1:18765
 
 当前公开版支持 Windows 10/11 x64、DSH ≥ 0.2.2-rc.1，发布适配番茄小说。平台审核与发布规则仍由平台决定。ARM64、macOS 和 Linux 尚未验收。
 
+## 许可证与第三方组件
+
+- 插件自有代码采用 MIT（[LICENSE](LICENSE)）；内嵌的写作器 [webnovel-writer](https://github.com/981029l/webnovel-writer) 采用 **GPL-3.0-only**（上游只声明 GPL v3，无 “or later”）。
+- 写作器由后端在同一进程内导入调用，因此**后端与写作器组成的整体按 GPLv3 组合分发**；插件外壳、字体与运行时依赖仍按各自许可证分发。完整许可证文本见 [LICENSES/](LICENSES/)。
+- 对应源码、上游基线、构建脚本（`scripts/build-runtime.py`、`scripts/pack-bundle.py`）与可复制的重建命令见 [docs/license-decision.md](docs/license-decision.md)；逐组件版本、来源与证据见 [docs/license-inventory.md](docs/license-inventory.md) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 文档与项目状态
 
 - [从安装到自动连载](docs/quickstart.md)：模型、厂商登录、番茄账号、任务和自动调度。
 - [七张实机截图](docs/screenshots.md)：各页面的用途及脱敏说明。
-- [当前版本验证记录](RELEASE_STATUS.md)：56 项插件检查、277 项后端集成及 83 项管理端检查；另有实际发行包的 Windows 首次启动验证。
+- [当前版本验证记录](RELEASE_STATUS.md)：`0.7.0` 离线测试、本地代理冒烟与待实机验证项清单。
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前发行版本为 `0.5.0`。项目使用 AI 辅助开发，组件声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+包名为 `dsh-chapter-whale`，当前收敛版本为 `0.7.0`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
 
-**[下载码章鲸，设置你的第一项自动更新任务 →](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0)**
+**[查看 0.7.0 候选状态与验证边界 →](RELEASE_STATUS.md)**

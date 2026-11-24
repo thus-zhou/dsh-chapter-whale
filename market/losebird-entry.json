@@ -5,12 +5,12 @@
   "package": "dsh-chapter-whale",
   "repo": "thus-zhou/dsh-chapter-whale",
   "spec": "dsh-chapter-whale",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "author": {
     "name": "thus-zhou",
     "url": "https://github.com/thus-zhou"
   },
-  "description": "0.5.0 玻璃创作工作台：A–E 流程、主题与动效、小说写作与番茄发布。",
+  "description": "0.7.0 统一候选版（GPL-3.0-only）：延续番茄日更主流程并整合排期缓冲状态机、长篇连续性与风格预检、读者反馈导入与可撤销观察卡、Linux/macOS 常驻存稿与单目标浏览器试点，以及多平台能力契约（七猫仅开放本地导出与只读绑定）。安装包代码只来自本包，真实平台/模型真调仍标明为待实测。",
   "longDescription": "按设定时间、章数和目标字数执行写作、审查修订、发布与状态核验。首次配置后可无人值守运行，需要保持电脑、本地服务、模型及发布账号可用。当前仅验收 Windows 10/11 x64，DSH >= 0.2.2-rc.1。完整 Release 包内含 Python、后端和 Chromium；用户自行提供模型连接并登录自己的平台账号。组件许可见仓库 THIRD_PARTY_NOTICES.md（连接器 MIT，写作器 GPL v3）。\n\n[完整教程](https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/quickstart.md) · [新版演示图](https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md)\n\n新版界面截图：https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
   "category": "agent",
   "tags": [
@@ -21,5 +21,6 @@
     "番茄发布",
     "免费模型"
   ],
-  "license": "SEE LICENSE IN THIRD_PARTY_NOTICES.md"
+  "license": "GPL-3.0-only",
+  "latestVersion": "0.7.0"
 }

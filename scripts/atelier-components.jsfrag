@@ -1,14 +1,18 @@
-        const APPEARANCE_KEY = 'chapter-whale-appearance-v1';
-        const APPEARANCE_DEFAULTS = { palette: 'gemini', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'sans', opacity: 86, blur: 14 };
+        const APPEARANCE_KEY = 'chapter-whale-appearance-v2';
+        const APPEARANCE_DEFAULTS = { palette: 'liquid', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'serif', opacity: 24, blur: 18, refract: 85, backdrop: 100 };
         const AppearanceContext = React.createContext(APPEARANCE_DEFAULTS);
         function readAppearance() {
           const result = { ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) };
           try {
             const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || '{}');
-            const options = { palette: ['gemini', 'ocean'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
+            const paletteMap = { gemini: 'liquid', ocean: 'apple' };
+            if (saved.palette && paletteMap[saved.palette]) saved.palette = paletteMap[saved.palette];
+            const options = { palette: ['liquid', 'craft', 'apple'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
             for (const [key, allowed] of Object.entries(options)) if (allowed.includes(saved[key])) result[key] = saved[key];
             if (typeof saved.reduced === 'boolean') result.reduced = saved.reduced;
-            for (const [key, low, high] of [['opacity', 75, 96], ['blur', 0, 18]]) if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+            for (const [key, low, high] of [['opacity', 10, 78], ['blur', 4, 32], ['refract', 10, 160], ['backdrop', 35, 175]]) {
+              if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+            }
           } catch {}
           return result;
         }
@@ -21,19 +25,247 @@
             onClick: () => onChange({ ...value, [key]: id }),
           }, label)));
           const section = (title, content) => e('section', { className: 'cw-setting-section', key: title }, e('div', { className: 'cw-setting-title' }, e('h3', null, title)), content);
-          return e(Modal, { open, onClose, title: '外观与动效', className: 'cw-appearance-modal' },
+          return e(Modal, { open, onClose, title: '光学玻璃与排版控制台', className: 'cw-appearance-modal' },
             e('div', { className: 'cw-appearance' },
-              section('配色', choose('palette', [['gemini', '蓝紫 · Gemini'], ['ocean', '海洋 · Ocean']])),
+              section('玻璃主题', choose('palette', [['liquid', '星曜极光'], ['craft', '墨玉暖金'], ['apple', '冰霜极简']])),
               section('明暗主题', choose('theme', [['auto', '跟随 DSH'], ['dark', '深色'], ['light', '浅色']])),
-              section('炫彩程度', choose('fx', [['1', '轻彩'], ['2', '绚彩'], ['3', '幻彩']])),
               section('动效强度', e(React.Fragment, null,
                 choose('motion', [['off', '静止'], ['soft', '轻柔'], ['strong', '舒展']]),
-                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
-              section('信息密度', choose('density', [['compact', '紧凑'], ['comfortable', '舒适']])),
-              section('阅读字体', choose('readerFont', [['sans', '黑体'], ['serif', '宋体']])),
-              ...[['opacity', '内容遮罩', 75, 96, '%'], ['blur', '背景模糊', 0, 18, ' px']].map(([key, label, min, max, unit]) => section(label,
+                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画 / 星空静止')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
+              section('信息密度', choose('density', [['comfortable', '舒朗'], ['compact', '紧凑']])),
+              section('阅读字体', choose('readerFont', [['serif', '衬线书卷'], ['sans', '现代黑体']])),
+              ...[
+                ['opacity', '表面通透度', 10, 78, '%'],
+                ['blur', '玻璃模糊度', 4, 32, ' px'],
+                ['refract', '折射与色散', 10, 160, '%'],
+                ['backdrop', '光带对比度', 35, 175, '%'],
+              ].map(([key, label, min, max, unit]) => section(label,
                 e('label', { className: 'cw-range-label' }, e('span', null, `${value[key]}${unit}`), e('input', { type: 'range', 'aria-label': label, min, max, value: value[key], onChange: event => onChange({ ...value, [key]: Number(event.target.value) }) })))),
-              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } }, e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'), e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } },
+                e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'),
+                e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+        }
+
+        function buildConvexBevelMap(w, h, radius, bevelPx) {
+          const off = document.createElement('canvas');
+          if (!off || typeof off.getContext !== 'function') return '';
+          off.width = w;
+          off.height = h;
+          const ctx = off.getContext('2d');
+          if (!ctx) return '';
+          const img = ctx.createImageData(w, h);
+          const data = img.data;
+          const hw = w / 2;
+          const hh = h / 2;
+          const rx = Math.max(2, hw - radius);
+          const ry = Math.max(2, hh - radius);
+          const sdRect = (px, py) => {
+            const x = Math.abs(px - hw) - rx;
+            const y = Math.abs(py - hh) - ry;
+            return Math.hypot(Math.max(x, 0), Math.max(y, 0)) + Math.min(Math.max(x, y), 0) - radius;
+          };
+          for (let py = 0; py < h; py++) {
+            for (let px = 0; px < w; px++) {
+              const idx = (py * w + px) * 4;
+              const depth = -sdRect(px + 0.5, py + 0.5);
+              let gx = 0;
+              let gy = 0;
+              if (depth >= 0 && depth < bevelPx) {
+                const ddx = sdRect(px + 1.5, py + 0.5) - sdRect(px - 0.5, py + 0.5);
+                const ddy = sdRect(px + 0.5, py + 1.5) - sdRect(px + 0.5, py - 0.5);
+                const len = Math.hypot(ddx, ddy) || 1;
+                const curve = Math.pow(1 - depth / bevelPx, 1.65);
+                gx = (ddx / len) * curve;
+                gy = (ddy / len) * curve;
+              }
+              data[idx] = Math.round(128 + gx * 124);
+              data[idx + 1] = Math.round(128 + gy * 124);
+              data[idx + 2] = 128;
+              data[idx + 3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+          return typeof off.toDataURL === 'function' ? off.toDataURL('image/png') : '';
+        }
+
+        function CosmosBackdrop(props) {
+          const canvasRef = React.useRef(null);
+          const pillMapRef = React.useRef(null);
+          const cardMapRef = React.useRef(null);
+          const pillRRef = React.useRef(null);
+          const pillGRef = React.useRef(null);
+          const pillBRef = React.useRef(null);
+          const cardRRef = React.useRef(null);
+          const cardGRef = React.useRef(null);
+          const cardBRef = React.useRef(null);
+
+          React.useEffect(() => {
+            const pMap = pillMapRef.current;
+            const cMap = cardMapRef.current;
+            if (!pMap || !cMap || typeof document.createElement !== 'function') return undefined;
+            const pillUrl = buildConvexBevelMap(260, 56, 28, 17);
+            const cardUrl = buildConvexBevelMap(260, 170, 26, 18);
+            if (pillUrl && typeof pMap.setAttribute === 'function') pMap.setAttribute('href', pillUrl);
+            if (cardUrl && typeof cMap.setAttribute === 'function') cMap.setAttribute('href', cardUrl);
+            return undefined;
+          }, []);
+
+          React.useEffect(() => {
+            const mult = Math.max(0.1, Number(props.refract || 85) / 100);
+            const pBase = Math.max(2, mult * 24);
+            const cBase = Math.max(2, mult * 15);
+            [
+              [pillRRef.current, pBase * 1.15],
+              [pillGRef.current, pBase * 0.92],
+              [pillBRef.current, pBase * 0.68],
+              [cardRRef.current, cBase * 1.12],
+              [cardGRef.current, cBase * 0.90],
+              [cardBRef.current, cBase * 0.68],
+            ].forEach(([node, val]) => {
+              if (node && typeof node.setAttribute === 'function') node.setAttribute('scale', val.toFixed(1));
+            });
+          }, [props.refract]);
+
+          React.useEffect(() => {
+            const canvas = canvasRef.current;
+            if (!canvas || typeof canvas.getContext !== 'function') return undefined;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return undefined;
+            const staticOnly = Boolean(props.reduced || props.motion === 'off' || props.hidden);
+            let stars = [];
+            let tick = 0;
+            let rafId = null;
+
+            const setup = () => {
+              const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+              const w = canvas.width = Math.max(1, canvas.offsetWidth || 960) * dpr;
+              const h = canvas.height = Math.max(1, canvas.offsetHeight || 640) * dpr;
+              const count = Math.min(96, Math.max(40, Math.floor((w * h) / 28000)));
+              stars = Array.from({ length: count }, (_, idx) => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                r: (idx % 12 === 0 ? 1.8 : 0.6 + Math.random()) * dpr,
+                twinkle: Math.random() * Math.PI * 2,
+                speed: 0.004 + Math.random() * 0.01,
+                gold: idx % 10 === 0,
+                vx: (Math.random() - 0.5) * 0.12,
+                vy: (Math.random() - 0.5) * 0.08,
+              }));
+            };
+
+            const drawRibbon = (w, h, dpr, yFrac, amp, phase, cStart, cEnd, lw) => {
+              const grad = ctx.createLinearGradient(0, 0, w, h * 0.55);
+              grad.addColorStop(0, 'transparent');
+              grad.addColorStop(0.28, cStart);
+              grad.addColorStop(0.72, cEnd);
+              grad.addColorStop(1, 'transparent');
+              ctx.save();
+              ctx.beginPath();
+              const baseY = h * yFrac;
+              ctx.moveTo(-40 * dpr, baseY + Math.sin(phase) * amp);
+              for (let t = 0; t <= 12; t++) {
+                const fx = t / 12;
+                ctx.lineTo(fx * (w + 80 * dpr) - 40 * dpr, baseY - fx * h * 0.18 + Math.sin(fx * 4.4 + phase) * amp);
+              }
+              ctx.strokeStyle = grad;
+              ctx.lineWidth = lw * dpr;
+              ctx.lineCap = 'round';
+              ctx.stroke();
+              ctx.restore();
+            };
+
+            const frame = () => {
+              const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+              const w = canvas.width;
+              const h = canvas.height;
+              const isDark = props.theme !== 'light';
+              const lm = Math.max(0.3, Number(props.backdrop || 100) / 100);
+              ctx.clearRect(0, 0, w, h);
+              if (!staticOnly) tick += 0.008;
+
+              const coolA = isDark ? `rgba(92, 162, 255, ${(0.20 * lm).toFixed(3)})` : `rgba(82, 138, 224, ${(0.22 * lm).toFixed(3)})`;
+              const warmB = isDark ? `rgba(230, 185, 76, ${(0.16 * lm).toFixed(3)})` : `rgba(218, 158, 78, ${(0.22 * lm).toFixed(3)})`;
+              const irisC = isDark ? `rgba(176, 134, 255, ${(0.16 * lm).toFixed(3)})` : `rgba(148, 118, 228, ${(0.16 * lm).toFixed(3)})`;
+
+              drawRibbon(w, h, dpr, 0.18, 46 * dpr, tick * 0.9, coolA, warmB, 76);
+              drawRibbon(w, h, dpr, 0.42, 36 * dpr, tick * 0.65 + 1.8, irisC, coolA, 50);
+              drawRibbon(w, h, dpr, 0.78, 52 * dpr, -tick * 0.5 + 3.1, warmB, irisC, 64);
+
+              ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 20, 26, 0.05)';
+              ctx.lineWidth = 0.85 * dpr;
+              ctx.beginPath();
+              ctx.arc(w * 0.74, h * 0.34, Math.min(w, h) * 0.40, 0.4, 3.6);
+              ctx.stroke();
+
+              for (const s of stars) {
+                if (!staticOnly) {
+                  s.x = (s.x + s.vx + w) % w;
+                  s.y = (s.y + s.vy + h) % h;
+                  s.twinkle += s.speed;
+                }
+                const pulse = 0.55 + 0.45 * Math.sin(s.twinkle);
+                ctx.fillStyle = s.gold
+                  ? (isDark ? `rgba(230, 185, 76, ${0.42 + pulse * 0.48})` : `rgba(158, 109, 8, ${0.28 + pulse * 0.30})`)
+                  : (isDark ? `rgba(255, 255, 255, ${0.25 + pulse * 0.56})` : `rgba(30, 41, 59, ${0.14 + pulse * 0.18})`);
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+              }
+
+              if (!staticOnly && typeof requestAnimationFrame === 'function') {
+                rafId = requestAnimationFrame(frame);
+              }
+            };
+
+            setup();
+            frame();
+            const onResize = () => {
+              setup();
+              if (staticOnly) frame();
+            };
+            let ro = null;
+            if (typeof ResizeObserver === 'function') {
+              ro = new ResizeObserver(() => onResize());
+              ro.observe(canvas.parentElement || canvas);
+            }
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('resize', onResize);
+            }
+            return () => {
+              if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+              if (ro && typeof ro.disconnect === 'function') ro.disconnect();
+              if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+                window.removeEventListener('resize', onResize);
+              }
+            };
+          }, [props.theme, props.palette, props.reduced, props.motion, props.hidden, props.backdrop]);
+
+          return e(React.Fragment, null,
+            e('svg', { width: 0, height: 0, style: { position: 'absolute', pointerEvents: 'none' }, 'aria-hidden': 'true' },
+              e('defs', null,
+                e('filter', { id: 'cw-lg-pill-refract', x: '-4%', y: '-4%', width: '108%', height: '108%', colorInterpolationFilters: 'sRGB' },
+                  e('feImage', { ref: pillMapRef, id: 'cw-lg-pill-map', x: '0%', y: '0%', width: '100%', height: '100%', preserveAspectRatio: 'none', href: '', result: 'map' }),
+                  e('feDisplacementMap', { ref: pillRRef, in: 'SourceGraphic', in2: 'map', scale: '24', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispR' }),
+                  e('feColorMatrix', { in: 'dispR', type: 'matrix', values: '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'rCh' }),
+                  e('feDisplacementMap', { ref: pillGRef, in: 'SourceGraphic', in2: 'map', scale: '19', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispG' }),
+                  e('feColorMatrix', { in: 'dispG', type: 'matrix', values: '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'gCh' }),
+                  e('feDisplacementMap', { ref: pillBRef, in: 'SourceGraphic', in2: 'map', scale: '14', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispB' }),
+                  e('feColorMatrix', { in: 'dispB', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0', result: 'bCh' }),
+                  e('feBlend', { in: 'rCh', in2: 'gCh', mode: 'screen', result: 'rgCh' }),
+                  e('feBlend', { in: 'rgCh', in2: 'bCh', mode: 'screen', result: 'rgbOut' })),
+                e('filter', { id: 'cw-lg-card-refract', x: '-2%', y: '-2%', width: '104%', height: '104%', colorInterpolationFilters: 'sRGB' },
+                  e('feImage', { ref: cardMapRef, id: 'cw-lg-card-map', x: '0%', y: '0%', width: '100%', height: '100%', preserveAspectRatio: 'none', href: '', result: 'cmap' }),
+                  e('feDisplacementMap', { ref: cardRRef, in: 'SourceGraphic', in2: 'cmap', scale: '15', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cR' }),
+                  e('feColorMatrix', { in: 'cR', type: 'matrix', values: '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'crCh' }),
+                  e('feDisplacementMap', { ref: cardGRef, in: 'SourceGraphic', in2: 'cmap', scale: '12', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cG' }),
+                  e('feColorMatrix', { in: 'cG', type: 'matrix', values: '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'cgCh' }),
+                  e('feDisplacementMap', { ref: cardBRef, in: 'SourceGraphic', in2: 'cmap', scale: '9', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cB' }),
+                  e('feColorMatrix', { in: 'cB', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0', result: 'cbCh' }),
+                  e('feBlend', { in: 'crCh', in2: 'cgCh', mode: 'screen', result: 'crgCh' }),
+                  e('feBlend', { in: 'crgCh', in2: 'cbCh', mode: 'screen', result: 'cOut' })))),
+            e('div', { className: 'cw-backdrop-layer', 'aria-hidden': 'true' },
+              e('canvas', { ref: canvasRef, className: 'cw-cosmos-canvas' }),
+              e('div', { className: 'cw-optical-wash' })));
         }
         function AiPresence({ active, tone }) {
           return e('div', { className: 'cw-ai-presence', 'aria-hidden': 'true', 'data-active': active, 'data-tone': tone },
@@ -69,3 +301,5 @@
             speed: newest ? `${(Number(newest.output_tokens) / (Number(newest.elapsed_ms) / 1000)).toFixed(1)} Token/s` : '—',
             model: last && last.model || (rows[0] && rows[0].model) || '', role: last && last.role || '' };
         }
+
+

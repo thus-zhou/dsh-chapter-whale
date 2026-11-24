@@ -402,8 +402,13 @@ def accept(project, chapter: int, preview_id: str, *, expected_sha256: Optional[
         project, chapter, record["candidate_id"], op_id=op_id or f"preview-{preview_id}",
         expected_sha256=current, allow_new=current is None)
     _mark(project, chapter, preview_id, "accepted", accepted_at=chapter_versions._now())
+    from . import invalidation
+    impact = invalidation.invalidate(project, chapters=[chapter], reason="revision_accepted",
+                                     source=f"preview:{preview_id}", actor="author",
+                                     op_id=op_id or f"accept-{preview_id}")
     return {"status": "accepted", "chapter_id": int(chapter), "preview_id": preview_id,
-            "sha256": commit.get("content_sha256") or commit.get("sha256"), "commit": commit}
+            "sha256": commit.get("content_sha256") or commit.get("sha256"), "commit": commit,
+            "invalidated": impact.get("marked", []), "index_rebuilt": bool(impact.get("rebuilt"))}
 
 
 def reject(project, chapter: int, preview_id: str, reason: str = "") -> Dict[str, Any]:

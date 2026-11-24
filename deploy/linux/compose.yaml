@@ -1,0 +1,38 @@
+name: chapter-whale-service
+
+services:
+  chapter-whale:
+    build:
+      context: ../..
+      dockerfile: deploy/linux/Dockerfile
+    image: chapter-whale-service:0.7.0
+    container_name: chapter-whale
+    user: "10001:10001"
+    environment:
+      NOVEL_HELPER_ROOT: /data
+      TZ: Asia/Shanghai
+      RESIDENT_INTERVAL: "30"
+    volumes:
+      - /srv/chapter-whale:/data
+      - /srv/chapter-whale-config:/config:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_signal: SIGTERM
+    stop_grace_period: 40s
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-B", "-X", "utf8", "-m", "integration.resident_service", "health"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

@@ -369,10 +369,17 @@ def save_prices(db_path, payload):
 def calculate(event):
     price=event.get("price")
     if price is None or event.get("metering") not in {"reported","estimated"}: return {"cost":None,"cost_cny":None}
+    try:
+        input_tokens=int(event["input_tokens"]); output_tokens=int(event["output_tokens"])
+        cached=int(event.get("cached_tokens") or 0)
+    except (KeyError,TypeError,ValueError):
+        # 分量缺失（部分已知）不得当作 0 计价：宁可不报价，也不出假数。
+        return {"cost":None,"cost_cny":None}
+    cached=max(0,min(cached,input_tokens))
     million=Decimal(1000000)
-    amount=(Decimal(event["input_tokens"]-event["cached_tokens"])*Decimal(price["input"])
-             +Decimal(event["cached_tokens"])*Decimal(price["cached"])
-             +Decimal(event["output_tokens"])*Decimal(price["output"]))/million
+    amount=(Decimal(input_tokens-cached)*Decimal(price["input"])
+             +Decimal(cached)*Decimal(price["cached"])
+             +Decimal(output_tokens)*Decimal(price["output"]))/million
     cny=amount if price["currency"]=="CNY" else amount*Decimal(price["usd_to_cny"]) if price.get("usd_to_cny") is not None else None
     return {"cost":str(amount),"cost_cny":str(cny) if cny is not None else None}
 
@@ -412,20 +419,81 @@ def tokens(value):
     return None
 
 
+def _first_count(*values):
+    """返回第一个“存在且合法”的计数；0 是真实计数，None/非法值才算未知。"""
+    for value in values:
+        parsed=tokens(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def parse_usage(usage, embedding=False):
+    """归一化一份 usage 文档；未知分量保持未知，绝不补成“真实零用量”。
+
+    宿主契约（DSH ``TokenUsage``；asar 内 ``dsh-llm/src/types.ts:174-196`` 原文）：
+      “Counts are DISJOINT: ``inputTokens`` is uncached input only; cached input is
+       reported separately as ``cacheReadTokens``/``cacheWriteTokens`` (billed input =
+       sum of the three). Adapters whose providers fold cache hits into a total prompt
+       count (DeepSeek's ``prompt_tokens``) subtract them out.”
+      “``totalTokens`` … adapters omit it when unavailable or inconsistent.”
+
+    据此本服务会收到两种形状，必须区别对待：
+      1. OpenAI 形状（有 ``prompt_tokens``）：``prompt_tokens`` **已包含**缓存命中，
+         ``cached_tokens`` 只是它的子集 —— 不能再加一次。本仓库的桥
+         （``dsh-model-bridge.mjs`` 的 ``contractUsage``）发出的正是这一形状：
+         ``prompt_tokens = inputTokens + cacheRead + cacheWrite``，
+         ``prompt_tokens_details.cached_tokens = cacheRead``。
+      2. 仅 ``input_tokens``（Anthropic 形状，无 ``prompt_tokens``）：``input_tokens``
+         是**未缓存**输入，必须把 ``cache_read_input_tokens`` /
+         ``cache_creation_input_tokens`` 加回，否则少算输入。
+
+    ``total_tokens`` 只在输入与输出都可靠时推导：与报告值一致则沿用（reported），
+    否则自行相加（derived）；分量缺失时保留报告值或保持未知，不猜测。
+    """
     if not isinstance(usage,dict): return None
-    incoming=tokens(usage.get("prompt_tokens",usage.get("input_tokens")))
-    outgoing=tokens(usage.get("completion_tokens",usage.get("output_tokens")))
-    if embedding:
-        incoming=incoming if incoming is not None else tokens(usage.get("total_tokens")); outgoing=0
-    if incoming is None or outgoing is None: return None
-    detail=usage.get("prompt_tokens_details",usage.get("input_tokens_details",{})) or {}
+    detail=usage.get("prompt_tokens_details")
+    if not isinstance(detail,dict): detail=usage.get("input_tokens_details")
     detail=detail if isinstance(detail,dict) else {}
-    cached=tokens(detail.get("cached_tokens",usage.get("prompt_cache_hit_tokens",0)))
-    cached=0 if cached is None else min(cached,incoming)
-    output_detail=usage.get("completion_tokens_details",usage.get("output_tokens_details",{})) or {}
-    reasoning=tokens(output_detail.get("reasoning_tokens",0)) if isinstance(output_detail,dict) else 0
-    return {"input_tokens":incoming,"output_tokens":outgoing,"cached_tokens":cached,"reasoning_tokens":min(reasoning or 0,outgoing)}
+    output_detail=usage.get("completion_tokens_details")
+    if not isinstance(output_detail,dict): output_detail=usage.get("output_tokens_details")
+    output_detail=output_detail if isinstance(output_detail,dict) else {}
+    reported_prompt=_first_count(usage.get("prompt_tokens"))            # 含缓存分量
+    base_input=_first_count(usage.get("input_tokens"))                  # 仅未缓存输入
+    cache_read=_first_count(detail.get("cached_tokens"), usage.get("prompt_cache_hit_tokens"),
+                            usage.get("cache_read_input_tokens"))
+    cache_write=_first_count(detail.get("cache_write_tokens"), usage.get("prompt_cache_miss_tokens"),
+                             usage.get("cache_creation_input_tokens"), usage.get("cache_write_tokens"))
+    output=_first_count(usage.get("completion_tokens"), usage.get("output_tokens"))
+    reasoning=_first_count(output_detail.get("reasoning_tokens"), usage.get("reasoning_tokens"))
+    reported_total=_first_count(usage.get("total_tokens"))
+    derived_input=False
+    if reported_prompt is not None:
+        incoming=reported_prompt
+    elif base_input is not None:
+        incoming=base_input+(cache_read or 0)+(cache_write or 0)
+    elif embedding:
+        # 向量接口没有补全；用 total_tokens 反推输入是接口语义，标记 derived。
+        incoming=reported_total; derived_input=incoming is not None
+    else:
+        incoming=None
+    if embedding and output is None: output=0
+    missing=[name for name,value in (("input_tokens",incoming),("output_tokens",output)) if value is None]
+    if incoming is None and output is None: return None
+    if cache_read is not None and incoming is not None: cache_read=min(cache_read,incoming)
+    if incoming is not None and output is not None:
+        summed=incoming+output
+        total,total_source=(reported_total,"reported") if reported_total==summed else (summed,"derived")
+    else:
+        total,total_source=(reported_total,"reported") if reported_total is not None else (None,None)
+    result={"input_tokens":incoming,"output_tokens":output,"cached_tokens":cache_read,
+            "cache_write_tokens":cache_write,
+            "reasoning_tokens":min(reasoning or 0,output) if output is not None else (reasoning or 0),
+            "total_tokens":total,"total_source":total_source,
+            "usage_source":("derived" if derived_input and not missing else "reported" if not missing else "partial"),
+            "usage_missing":missing}
+    if embedding: result["usage_embedding"]=True
+    return result
 
 
 def estimate(value):
@@ -538,10 +606,27 @@ class Attempt:
         try:
             self.event.update(status="success" if self.completed else "interrupted" if self.output_chars else "failed",
                               elapsed_ms=round((time.monotonic()-self.started)*1000))
-            if self.usage is not None and not (self.output_chars and self.usage['input_tokens'] == 0 and self.usage['output_tokens'] == 0): self.event.update(self.usage,metering="reported")
+            usage=self.usage
+            zero_claim=usage is not None and usage.get("input_tokens")==0 and usage.get("output_tokens")==0
+            if usage is not None and not (self.output_chars and zero_claim):
+                # 未知分量先从事件里移除，避免种子 0 冒充“真实零用量”。
+                for key in usage.get("usage_missing") or []:
+                    self.event.pop(key,None)
+                measured={key:value for key,value in usage.items()
+                          if key not in {"usage_source","total_source","usage_missing","usage_embedding"} and value is not None}
+                self.event.update(measured)
+                self.event["usage_source"]=usage.get("usage_source")
+                if usage.get("usage_missing"): self.event["usage_missing"]=list(usage["usage_missing"])
+                else: self.event.pop("usage_missing",None)
+                # 部分已知不进报价分支：缺分量时计价只能靠猜，宁可标记待核对。
+                self.event["metering"]="partial" if usage.get("usage_missing") else "reported"
+                if self.event.get("cached_tokens") is None:
+                    # 没有缓存明细时按 0 折价，属于保守计价（多算不减），不是虚构缓存命中。
+                    self.event["cached_tokens"]=0
             elif self.completed or self.output_chars:
                 self.event.update(input_tokens=self.input_estimate,
-                    output_tokens=0 if self.embedding else math.ceil(self.output_cjk*1.5+(self.output_chars-self.output_cjk)/4),metering="estimated")
+                    output_tokens=0 if self.embedding else math.ceil(self.output_cjk*1.5+(self.output_chars-self.output_cjk)/4),
+                    metering="estimated",usage_source="estimated")
             self.event.update(calculate(self.event));self.persist()
             if self.reservation is not None:
                 settle_request(self.db_path, self.reservation, tokens=int(self.event.get("input_tokens") or 0)+int(self.event.get("output_tokens") or 0),
@@ -567,12 +652,12 @@ def event_rows(db_path, project=None, chapter=None, days=0):
 
 
 def aggregate(events):
-    result={"calls":len(events),"input_tokens":0,"output_tokens":0,"cached_tokens":0,"reasoning_tokens":0,
+    result={"calls":len(events),"input_tokens":0,"output_tokens":0,"cached_tokens":0,"cache_write_tokens":0,"reasoning_tokens":0,
             "reported_calls":0,"estimated_calls":0,"unknown_usage":0,"unpriced":0,"unconverted":0,"failed_calls":0,
             "cost_cny":"0","reported_cost_cny":"0","estimated_cost_cny":"0","currencies":{},"unconverted_amounts":{}}
     total=Decimal(0);reported=Decimal(0);estimated=Decimal(0);currencies={};unconverted={}
     for event in events:
-        for key in ("input_tokens","output_tokens","cached_tokens","reasoning_tokens"): result[key]+=int(event.get(key) or 0)
+        for key in ("input_tokens","output_tokens","cached_tokens","cache_write_tokens","reasoning_tokens"): result[key]+=int(event.get(key) or 0)
         metering=event.get("metering") or "unknown"
         result[{"reported":"reported_calls","estimated":"estimated_calls"}.get(metering,"unknown_usage")]+=1
         if event["status"]!="success":result["failed_calls"]+=1

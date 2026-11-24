@@ -39,7 +39,9 @@ class BodyLimitMiddleware:
             if message['type']=='http.disconnect':return
             count+=len(message.get('body',b''))
             if count>self.limit:
-                return await JSONResponse({'detail':'请求体超过32MB上限'},status_code=413)(scope,receive,send)
+                return await JSONResponse(
+                    {'code':'payload_too_large','message':'请求体超过32MB上限'},
+                    status_code=413)(scope,receive,send)
             chunks.append(message)
             if not message.get('more_body',False):break
         cursor=iter(chunks)

@@ -111,7 +111,90 @@ def config_transaction():
 
 _JOB_FIELDS = {"name", "project", "book", "account", "daily_time", "timezone",
                "chapters_per_run", "word_count", "max_revisions", "volume",
-               "approval_mode", "enabled", "daily_times", "quota_phases", "slot_quotas", "delivery_mode", "daily_word_goals", "recovery_policy"}
+               "approval_mode", "enabled", "daily_times", "quota_phases", "slot_quotas", "delivery_mode",
+               "daily_word_goals", "recovery_policy", "publication_mode", "schedule_buffer",
+               "platform"}
+
+# 投递方式与发布方式是两个正交概念：
+#   delivery_mode    = batch | serial   —— 一次跑几章、怎么串起来
+#   publication_mode = draft_only | publish_now | platform_scheduled
+#                      —— 写完是本机存稿、立刻投平台，还是先进排期缓冲等平台定时发布
+# 旧任务没有 publication_mode 字段，它们是在只有发布语义的版本里建的，一律按 publish_now 处理；
+# platform_scheduled 只在排期能力被证实后才真正代提交，否则降级为本地存稿候选（见 scheduled_delivery）。
+PUBLICATION_MODES = ("draft_only", "publish_now", "platform_scheduled")
+UNSUPPORTED_PUBLICATION_MODES: tuple = ()
+LEGACY_PUBLICATION_MODE = "publish_now"
+
+
+def publication_mode(job: Dict[str, Any]) -> str:
+    raw = job.get("publication_mode")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return LEGACY_PUBLICATION_MODE
+    return str(raw).strip()
+
+
+def is_draft_only(job: Dict[str, Any]) -> bool:
+    return publication_mode(job) == "draft_only"
+
+
+def is_publish_job(job: Dict[str, Any]) -> bool:
+    """这条任务是否会立刻向平台写入。只存稿与排期任务返回 False。"""
+    return publication_mode(job) == "publish_now"
+
+
+def is_scheduled_job(job: Dict[str, Any]) -> bool:
+    """排期任务：先本机审定，再按能力决定是否代提交定时发布。"""
+    return publication_mode(job) == "platform_scheduled"
+
+
+def remote_state(job: Dict[str, Any]) -> str:
+    """平台侧状态。只存稿任务没有远端意图，明确标注为不适用，绝不显示成“已发”。"""
+    if is_draft_only(job):
+        return "not_applicable"
+    cycle = job.get("cycle") if isinstance(job.get("cycle"), dict) else {}
+    if is_scheduled_job(job):
+        # 排期任务的本地存稿成功只代表“稿子写好了”。已发布只能来自对账证据
+        # （scheduled_verified / published），绝不能从 last_status 推断。
+        state = str(cycle.get("remote_state") or "")
+        if state in {"capability_unknown", "scheduled_pending", "local_draft",
+                     "scheduled_verified", "needs_review", "published", "not_attempted"}:
+            return state
+        return "not_submitted"
+    if cycle.get("status") == "failed":
+        return "unknown"
+    if cycle.get("remote_state") in {"pending_verification", "published", "unknown", "not_submitted"}:
+        return cycle["remote_state"]
+    if job.get("last_status") == "success":
+        return "published"
+    return "not_submitted"
+
+
+def draft_tally(job: Dict[str, Any]) -> Dict[str, Any]:
+    """按本地回执统计存稿进度：正文已保存 / 审查通过 / 待处理。全部来自本机文件事实。"""
+    cycle = job.get("cycle") if isinstance(job.get("cycle"), dict) else {}
+    chapters = [item for item in cycle.get("draft_chapters", []) if isinstance(item, dict)]
+    saved = [item for item in chapters if item.get("body_saved")]
+    reviewed = [item for item in chapters if item.get("review_passed")]
+    return {
+        "saved": len(saved),
+        "reviewed": len(reviewed),
+        "pending": len([i for i in cycle.get("target_ids", []) if i not in {c.get("chapter_id") for c in reviewed}]),
+        "words": sum(int(item.get("words") or 0) for item in reviewed),
+        "updated_at": cycle.get("updated_at", ""),
+    }
+
+
+def validate_publication_mode(value: Any) -> str:
+    if value is None:
+        return LEGACY_PUBLICATION_MODE
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("publication_mode 必须是 draft_only、publish_now 或 platform_scheduled")
+    mode = value.strip()
+    if mode in UNSUPPORTED_PUBLICATION_MODES:
+        raise ValueError("本版不支持该发布方式")
+    if mode not in PUBLICATION_MODES:
+        raise ValueError("publication_mode 必须是 draft_only、publish_now 或 platform_scheduled")
+    return mode
 
 
 def validate_slot_quotas(value):
@@ -230,21 +313,32 @@ def _validate_job(job: Dict[str, Any]) -> None:
         raise ValueError('额外恢复次数需为0–6的整数，或null表示不限次数')
     validate_quota_phases(job.get("quota_phases", []))
     validate_slot_quotas(job.get("slot_quotas"))
-    for field in ("project", "book", "account"):
+    mode = validate_publication_mode(job.get("publication_mode"))
+    job["publication_mode"] = mode
+    # 只存稿只要求“作品已登记 + 时间合法 + 有可用模型”；账号、平台绑定、登录态都属于发布资格，
+    # 在这里分流，避免作者为了往本地写稿被迫先登录平台。排期任务最终仍会写平台，所以
+    # 账号是必填；但登录态只在真正代提交那一刻检查，能力未证实时不拦本地存稿。
+    for field in ("project", "book") + (("account",) if mode != "draft_only" else ()):
         if not isinstance(job.get(field), str) or not job[field].strip():
             raise ValueError(f"任务缺少 {field}")
         job[field] = job[field].strip()
+    if mode == "draft_only":
+        job["account"] = str(job.get("account") or "").strip()
+    if mode == "platform_scheduled":
+        from integration import schedule_buffer
+        job["schedule_buffer"] = schedule_buffer.validate_settings(job.get("schedule_buffer") or {})
     root = Path(job["project"]).expanduser().resolve()
     if not root.is_dir() or not (root / "正文").is_dir():
         raise FileNotFoundError(f"项目或正文目录不存在：{root}")
     job["project"] = str(root)
-    if not bridge.account_state_path(job["account"]).is_file():
+    if mode == "publish_now" and not bridge.account_state_path(job["account"]).is_file():
         raise FileNotFoundError("任务账号尚未登录")
     job["daily_time"] = _validate_time(job.get("daily_time", "00:00"))
     if job.get("daily_times"):
         job["daily_times"]=job_times(job)
         job["daily_time"]=job["daily_times"][0]
     job["timezone"] = str(job.get("timezone", "Asia/Shanghai") or "Asia/Shanghai").strip()
+    job["platform"] = str(job.get("platform") or "fanqie").strip().lower()
     _now_for_job(job)
     for field, minimum, default in (("chapters_per_run", 1, 1), ("word_count", 1, 3500), ("max_revisions", 0, 2)):
         value = job.get(field, default)
@@ -262,17 +356,31 @@ def _validate_job(job: Dict[str, Any]) -> None:
         quota_for_date(job, phase["start_date"])
 
 
+def _binding_key(job: Dict[str, Any]) -> tuple:
+    return (str(job.get("platform") or "fanqie").strip().lower(),
+            bridge.safe_dir_name(job.get("account", "")).casefold(),
+            bridge.safe_dir_name(job.get("book", "")).casefold())
+
+
 def _check_binding(data: Dict[str, Any], job_id: str, job: Dict[str, Any]) -> None:
+    # 只存稿任务不占平台队列/归档，因此既不与别人抢书名，也不该被别的任务的绑定卡住。
+    if is_draft_only(job):
+        return
     book = bridge.safe_dir_name(job["book"]).casefold()
+    key = _binding_key(job)
     for other_id, other in data["jobs"].items():
-        if other_id == job_id or not isinstance(other, dict):
+        if other_id == job_id or not isinstance(other, dict) or is_draft_only(other):
             continue
-        if bridge.safe_dir_name(other.get("book", "")).casefold() == book:
-            # Queue/archive/manifest are keyed by book only, not by account.
-            if (Path(other.get("project", "")).resolve() != Path(job["project"]).resolve()
-                    or bridge.safe_dir_name(other.get("account", "")).casefold()
-                    != bridge.safe_dir_name(job["account"]).casefold()):
-                raise ValueError("同名或安全化后同名书籍不能绑定不同项目或账号")
+        if bridge.safe_dir_name(other.get("book", "")).casefold() != book:
+            continue
+        # Queue/archive/manifest are keyed by book only, not by account.
+        if _binding_key(other) != key:
+            raise ValueError("同名或安全化后同名书籍不能绑定不同项目或账号")
+        if Path(other.get("project", "")).resolve() != Path(job["project"]).resolve():
+            raise ValueError("同名或安全化后同名书籍不能绑定不同项目或账号")
+        if is_scheduled_job(job) and is_scheduled_job(other):
+            # 两个排期任务各自记账、各自提交，同一本书会双写；T10/T27 要求单执行者。
+            raise ValueError("同一平台账号与书籍只能有一个排期任务")
 
 
 def update_job(job_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
@@ -333,6 +441,19 @@ def next_due(job: Dict[str, Any], now: Optional[datetime] = None) -> Optional[st
     return (current.replace(hour=hh,minute=mm,second=0,microsecond=0)+timedelta(days=1)).isoformat()
 
 
+def retryable(job: Dict[str, Any], slot: str) -> bool:
+    """上一个时段留下的 running/failed/needs_revision 允许在新时段重试。
+
+    同一时段内不重试：崩溃或审查未过可能是确定性原因，循环重跑只会烧钱。
+    跨时段重试才符合「只补缺步」——强杀留下的 running 不会永久停更。
+    """
+    status = (job.get("cycle") or {}).get("status")
+    if status not in {"running", "failed", "needs_revision"}:
+        return False
+    attempted = str(job.get("last_attempt_slot") or "")
+    return bool(attempted) and attempted != slot
+
+
 def due_jobs(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Due job summaries; master switch defaults off. Does not run jobs."""
     data = load_scheduler()
@@ -352,15 +473,16 @@ def due_jobs(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
         # A failed publication may have reached the server. Retry is an explicit
         # run-once action, not a daemon loop which blindly repeats side effects.
         slot=today+"@"+datetime.fromisoformat(due).strftime("%H:%M")
-        if job.get("cycle") and job["cycle"].get("status") not in {"success",None} and job.get("last_status")!="awaiting_approval":
+        recovering = retryable(job, slot)
+        if job.get("cycle") and job["cycle"].get("status") not in {"success",None} and job.get("last_status")!="awaiting_approval" and not recovering:
             continue
         late_goal=False
         if job.get('delivery_mode')=='serial' and (job.get('cycle') or {}).get('status') in {None,'success'} and job.get('daily_word_goals',{}).get(today):
             from integration.daily_word_goal import progress
             goal=progress(job,today);late_goal=goal['confirmed_words']<goal['target'] and not goal['unknown_word_counts']
-        if not late_goal and (job.get("last_attempt_slot")==slot or not job.get("last_attempt_slot") and job.get("last_attempt_date")==today) and job.get("last_status")!="awaiting_approval":
+        if not late_goal and not recovering and (job.get("last_attempt_slot")==slot or not job.get("last_attempt_slot") and job.get("last_attempt_date")==today) and job.get("last_status")!="awaiting_approval":
             continue
-        result.append(_job_summary(job_id, job) | {"next_due": due})
+        result.append(_job_summary(job_id, job) | {"next_due": due, "recovering": bool(recovering)})
     return result
 
 
@@ -412,6 +534,9 @@ def _job_summary(job_id: str, job: Dict[str, Any]) -> Dict[str, Any]:
         "effective_quota": quota_for_date(job, _job_today(job)),
         "slot_quotas": copy.deepcopy(job.get("slot_quotas")),
         "delivery_mode": job.get("delivery_mode", "batch"),
+        "publication_mode": publication_mode(job),
+        "remote_state": remote_state(job),
+        "drafts": draft_tally(job),
         "daily_word_goals": copy.deepcopy(job.get('daily_word_goals',{})),
         "daily_word_goal": progress(job,_job_today(job)),
         'runtime':runtime,
@@ -423,11 +548,17 @@ def add_job(args: argparse.Namespace) -> Dict[str, Any]:
     project = Path(args.project).expanduser().resolve()
     if not project.is_dir():
         raise FileNotFoundError(f"项目目录不存在：{project}")
-    if not bridge.account_state_path(args.account).is_file():
-        raise FileNotFoundError(
-            f"账号“{args.account}”尚未登录：{bridge.account_state_path(args.account)}。"
-            "请先执行 bridge.py login --account。"
-        )
+    # 新任务默认只存稿：先把正文稳定写进本机，需要发布时由作者显式改成 publish_now。
+    mode = validate_publication_mode(getattr(args, "publication_mode", None) or "draft_only")
+    account = str(getattr(args, "account", "") or "").strip()
+    if mode in {"publish_now", "platform_scheduled"} and not account:
+        raise ValueError("发布或排期任务必须指定账号")
+    if mode == "publish_now":
+        if not bridge.account_state_path(account).is_file():
+            raise FileNotFoundError(
+                f"账号“{account}”尚未登录：{bridge.account_state_path(account)}。"
+                "请先执行 bridge.py login --account。"
+            )
     chapters_per_run = int(args.chapters_per_run)
     word_count = int(args.word_count)
     max_revisions = int(args.max_revisions)
@@ -447,7 +578,10 @@ def add_job(args: argparse.Namespace) -> Dict[str, Any]:
         "name": args.name or job_id,
         "project": str(project),
         "book": args.book.strip(),
-        "account": args.account.strip(),
+        "account": account,
+        "publication_mode": mode,
+        "platform": str(getattr(args, "platform", "fanqie") or "fanqie"),
+        "schedule_buffer": copy.deepcopy(getattr(args, "schedule_buffer", None) or {}),
         "daily_time": _validate_time(args.daily_time),
         "daily_times": getattr(args,"daily_times",None) or [],
         "quota_phases": copy.deepcopy(getattr(args, "quota_phases", [])),
@@ -622,9 +756,10 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
         return {"job_id": job_id, "status": "already_ran", "reason": "inactive_slot", "slot": slot}
     project = Path(job["project"])
     book, account = job["book"], job["account"]
-    binding = bridge.load_manifest().get("books", {}).get(bridge.safe_dir_name(book), {})
-    if binding.get("project_root") and Path(binding["project_root"]).resolve() != project:
-        raise RuntimeError("manifest 书籍已绑定其他项目")
+    if is_publish_job(job):
+        binding = bridge.load_manifest().get("books", {}).get(bridge.safe_dir_name(book), {})
+        if binding.get("project_root") and Path(binding["project_root"]).resolve() != project:
+            raise RuntimeError("manifest 书籍已绑定其他项目")
     record = {"job_id": job_id, "started_at": bridge.now_iso(), "project": str(project),
               "book": book, "account": account, "run_date": run_date, "slot":slot, "status": "running",
               "generated": [], "verification": "platform_receipt_and_body_hash"}
@@ -645,6 +780,20 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             record['target_ids']=list(cycle['target_ids'])
             record['verification']='local_qualification_and_memory_only_not_platform_publication'
             return local_step(job_id,job,cycle,record,force)
+        if is_scheduled_job(job):
+            # 排期：同一套生成/审查/落稿，收尾后按平台能力决定是否代提交定时发布。
+            # 能力未证实时这里只产出本地存稿候选，绝不会误报“已排期”。
+            from integration.scheduled_delivery import step as scheduled_step
+            record['verification']='platform_schedule_intent_and_readback_identity'
+            record['remote_state']='scheduled_pending'
+            return scheduled_step(job_id,job,cycle,quota,record,force)
+        if is_draft_only(job):
+            # 只存稿：在这里就分流，绕开归档凭据、发布队列、平台绑定与账号登录这些
+            # “发表资格”检查。整条路径不会调用 stage_project / run_publish。
+            from integration.draft_delivery import step as draft_step
+            record['verification']='local_body_review_and_memory_only_no_remote_delivery'
+            record['remote_state']='not_applicable'
+            return draft_step(job_id,job,cycle,quota,record,force)
         receipts = writer_runner.reviewed_chapters(project)
         archive = _verified_archive(book, receipts, account)
         queue = _verify_queue(book, receipts)
@@ -828,7 +977,13 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--name", help="任务显示名")
     add.add_argument("--project", required=True, help="webnovel 项目目录")
     add.add_argument("--book", required=True, help="番茄书名")
-    add.add_argument("--account", required=True, help="accounts/ 下的账号名")
+    add.add_argument("--account", default="", help="accounts/ 下的账号名；publish_now 必填，draft_only 可留空")
+    add.add_argument(
+        "--publication-mode",
+        choices=list(PUBLICATION_MODES),
+        default="draft_only",
+        help="draft_only 只写本机存稿（默认），publish_now 生成后投递到平台",
+    )
     add.add_argument("--time", dest="daily_time", required=True, help="每日运行时间 HH:MM")
     add.add_argument("--timezone", default="Asia/Shanghai", help="时区标签，默认 Asia/Shanghai")
     add.add_argument("--chapters-per-run", type=int, default=1, help="每次生成/发布章节数，默认 1")
@@ -854,9 +1009,13 @@ def build_parser() -> argparse.ArgumentParser:
         item.add_argument("--job-id", required=True)
     remove = sub.add_parser("remove", help="移除任务配置（不删除作品和运行日志）")
     remove.add_argument("--job-id", required=True)
-    run = sub.add_parser("run-once", help="立即执行一次指定任务")
-    run.add_argument("--job-id", required=True)
-    run.add_argument("--force", action="store_true", help="忽略任务停用；不跳过审查、配额或平台证据")
+    # 管理服务用 ``run`` 调用“立即执行一次”，命令行历史用 ``run-once``；两者等价。
+    for command in ("run-once", "run"):
+        run = sub.add_parser(command, help="立即执行一次指定任务")
+        run.add_argument("--job-id", required=True)
+        run.add_argument("--force", action="store_true", help="忽略任务停用；不跳过审查、配额或平台证据")
+        # 兼容旧客户端的显式串行开关：串行与批量走同一次 run，参数只做接受不改变语义。
+        run.add_argument("--serial-step", action="store_true", help=argparse.SUPPRESS)
     daemon_parser = sub.add_parser("daemon", help="本地轮询日更任务")
     daemon_parser.add_argument("--interval", type=int, default=30, help="轮询间隔秒数，默认 30")
     return parser
@@ -898,7 +1057,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             remove_job(args.job_id)
             print(json.dumps({"removed": args.job_id}, ensure_ascii=False))
             return 0
-        if args.command == "run-once":
+        if args.command in {"run-once", "run"}:
             result = run_once(args.job_id, force=args.force)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("status") in {"success", "published_existing", "already_ran"} else 2

@@ -33,9 +33,26 @@ sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
 from manager import ai_tools, device_access
 from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer, workflow
+from integration import entity_state, evidence_usage, invalidation, retrieval_plan, style_rules
+from integration import observation, reader_metrics
+from integration import browser_target
+from integration import publishing
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
+# main() 在监听前写入实际端口；进程内 create_app() 测试时保持 None。
+_LISTEN_PORT = None
+
+
+def _deliver_notifications_once(owner):
+    """每次调用各自开连接：sqlite3 连接不可跨线程复用。"""
+    from integration import notification_hooks, notifications
+    db = notification_hooks.connection()
+    try:
+        notifications.recover_stale_leases(db)
+        return notifications.run_once(db, owner, limit=5)
+    finally:
+        db.close()
 DB_PATH = Path(os.getenv("NOVEL_HELPER_MANAGER_DB", str(DATA / "manager.sqlite3"))).resolve()
 # 允许用 NOVEL_HELPER_AI_CONFIG 覆盖（README 承诺；旧实现硬编码 O 盘路径，
 # 导致界面与 CLI 可能读写不同配置文件）。
@@ -54,6 +71,9 @@ class Store:
                 CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL);
                 CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE UNIQUE INDEX IF NOT EXISTS operations_operation_key
+                    ON operations(json_extract(payload, '$.operation_key'))
+                    WHERE json_extract(payload, '$.operation_key') IS NOT NULL;
             """)
 
     @contextmanager
@@ -94,6 +114,15 @@ class Store:
         with self.lock, self.connect() as db:
             db.execute("INSERT INTO operations VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
                        (payload["id"], json.dumps(payload, ensure_ascii=False)))
+
+    def operation_by_key(self, operation_key):
+        """同一个操作键永久只对应一条运行记录，跨重启有效。"""
+        if not operation_key:
+            return None
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM operations WHERE json_extract(payload, '$.operation_key')=?",
+                             (operation_key,)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def settings(self):
         with self.connect() as db:
@@ -142,8 +171,14 @@ class Operations:
                 old.update(status="interrupted", finished_at=bridge.now_iso(), error="管理服务已重启；请核对队列后重新执行")
                 store.save_operation(old)
 
-    def start(self, kind: str, args: list[str], identity: str, metadata: dict | None = None):
+    def start(self, kind: str, args: list[str], identity: str, metadata: dict | None = None,
+              operation_key: str | None = None):
         with self.lock:
+            # 稳定操作键先于任何派发检查：刷新、双击或丢应答后的重试都回到同一条记录。
+            if operation_key:
+                existing = self.store.operation_by_key(operation_key)
+                if existing:
+                    return {**existing, "deduplicated": True}
             if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':
                 raise HTTPException(409,'正在维护升级，暂不派发新操作；完成后可继续原任务')
             active = self.store.operations(active_only=True)
@@ -151,7 +186,16 @@ class Operations:
                 raise HTTPException(409, "同一操作正在执行，请查看运行记录")
             payload = {"id": uuid.uuid4().hex, "kind": kind, "identity": identity,
                        "created_at": bridge.now_iso(), "status": "queued", "log_tail": "", **(metadata or {})}
-            self.store.save_operation(payload)
+            if operation_key:
+                payload["operation_key"] = operation_key
+            try:
+                self.store.save_operation(payload)
+            except sqlite3.IntegrityError:
+                # 另一个进程抢先写入同一个操作键：返回它，绝不再派发第二次。
+                existing = self.store.operation_by_key(operation_key)
+                if not existing:
+                    raise
+                return {**existing, "deduplicated": True}
             thread = threading.Thread(target=self._execute, args=(payload["id"], args), daemon=True)
             thread.start()
         return payload
@@ -324,6 +368,7 @@ class GenerateInput(BaseModel):
     max_revisions: int = Field(default=1, ge=0, le=3)
     count: int = Field(default=1, ge=1, le=30)
     scenes: int = Field(default=0, ge=0, le=3)
+    operation_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{8,64}$")
 
 
 class PlanInput(BaseModel):
@@ -344,6 +389,157 @@ class StyleProfileInput(BaseModel):
 class RevisionClose(BaseModel):
     preview_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     reason: str = Field(default="", max_length=200)
+
+
+class StyleIgnoreInput(BaseModel):
+    terms: list[str] = Field(default_factory=list, max_length=40)
+
+
+class StyleActionInput(BaseModel):
+    rule_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z_]+\.[a-z_]+$")
+    action: str = Field(pattern=r"^(accepted|ignored|false_positive)$")
+    note: str = Field(default="", max_length=200)
+
+
+class ReaderImportInput(BaseModel):
+    csv: str = Field(default="", max_length=2 * 1024 * 1024)
+    rows: list[dict] | None = None
+    work_id: str = Field(default="", max_length=64)
+    platform: str = Field(default="fanqie", max_length=32)
+    filename: str = Field(default="", max_length=200)
+    token: str = Field(default="", max_length=64)
+    allow_partial: bool = False
+
+
+class ReaderCommentInput(BaseModel):
+    chapter: int = Field(ge=1)
+    texts: list[str] = Field(default_factory=list, max_length=200)
+
+
+class ObservationInput(BaseModel):
+    chapter: int = Field(ge=1)
+    metric: str = Field(default="chapter_completion_rate", max_length=64)
+    chapters: int = Field(default=3, ge=1, le=20)
+    days: int = Field(default=14, ge=1, le=120)
+
+
+class ObservationActionInput(BaseModel):
+    action: str = Field(pattern=r"^(adopt|ignore|revoke)$")
+    chapters: int | None = Field(default=None, ge=1, le=20)
+    reason: str = Field(default="", max_length=200)
+
+
+class BrowserTargetInput(BaseModel):
+    os: str = Field(min_length=1, max_length=32)
+    arch: str = Field(min_length=1, max_length=16)
+    runtime: str = Field(pattern=r"^(native|container)$")
+    browser: str = Field(min_length=1, max_length=64)
+    browser_version: str = Field(min_length=1, max_length=64)
+    driver: str = Field(min_length=1, max_length=64)
+    credential: str = Field(min_length=1, max_length=64)
+    scope: str = Field(pattern=r"^(read_only|publish)$")
+    authorization: str = Field(default="", max_length=200)
+    profile: str = Field(default="", max_length=400)
+    model: str = Field(default="", max_length=64)
+    platform: str = Field(default="fanqie", max_length=32)
+    account: str = Field(default="", max_length=64)
+
+
+class BrowserLoginInput(BaseModel):
+    status: str = Field(pattern=r"^(unknown|valid|expired|needs_human|cancelled)$")
+    account: str = Field(default="", max_length=64)
+    evidence: str = Field(default="", max_length=300)
+    reason: str = Field(default="", max_length=200)
+
+
+class BrowserReadonlyInput(BaseModel):
+    book_id: str = Field(min_length=1, max_length=64)
+    chapter: int = Field(ge=1, le=100000)
+    body_sha256: str = Field(default="", pattern=r"^$|^[0-9a-f]{64}$")
+
+
+class BrowserPublishInput(BaseModel):
+    book_id: str = Field(min_length=1, max_length=64)
+    chapter: int = Field(ge=1, le=100000)
+    body_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    replace: bool = False
+
+
+class BrowserReconcileInput(BaseModel):
+    key: str = Field(default="", pattern=r"^$|^[0-9a-f]{16}$")
+    book_id: str = Field(default="", max_length=64)
+    chapter: int = Field(default=0, ge=0, le=100000)
+    resolution: str = Field(pattern=r"^(accepted|abandoned)$")
+    note: str = Field(default="", max_length=200)
+
+
+class PublishTargetInput(BaseModel):
+    platform: str = Field(pattern=r"^(fanqie|qimao)$")
+    account: str = Field(default="", max_length=64)
+    platform_book_id: str = Field(default="", max_length=64)
+    book: str = Field(default="", max_length=96)
+
+
+class PublishExportInput(BaseModel):
+    platform: str = Field(pattern=r"^(fanqie|qimao)$")
+    chapter: int = Field(ge=1, le=100000)
+    title: str = Field(default="", max_length=120)
+    body: str = Field(min_length=1, max_length=400000)
+    account: str = Field(min_length=1, max_length=64)
+    platform_book_id: str = Field(min_length=1, max_length=64)
+
+    @field_validator("body")
+    @classmethod
+    def _body_bytes(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > publishing.MAX_EXPORT_BYTES:
+            raise ValueError(f"正文超过 {publishing.MAX_EXPORT_BYTES} 字节上限（按 UTF-8 计算）")
+        return value
+
+
+class PublishBindInput(BaseModel):
+    platform: str = Field(pattern=r"^(fanqie|qimao)$")
+    account: str = Field(min_length=1, max_length=64)
+    platform_book_id: str = Field(min_length=1, max_length=64)
+    title: str = Field(default="", max_length=120)
+    verified_via: str = Field(default="manual", pattern=r"^(manual|readonly_probe)$")
+    observed_chapters: list[int] = Field(default_factory=list, max_length=2000)
+    probe_evidence: dict | None = None
+
+
+class PublishAuthorizeInput(BaseModel):
+    platform: str = Field(pattern=r"^(fanqie|qimao)$")
+    account: str = Field(min_length=1, max_length=64)
+    platform_book_id: str = Field(min_length=1, max_length=64)
+    chapters: list[int] = Field(min_length=1, max_length=200)
+    note: str = Field(min_length=1, max_length=300)
+    expires_at: str = Field(default="", max_length=40)
+
+
+class PublishSubmitInput(BaseModel):
+    platform: str = Field(pattern=r"^(fanqie|qimao)$")
+    account: str = Field(min_length=1, max_length=64)
+    platform_book_id: str = Field(min_length=1, max_length=64)
+    chapter: int = Field(ge=1, le=100000)
+    title: str = Field(default="", max_length=120)
+    body: str = Field(min_length=1, max_length=400000)
+
+    @field_validator("body")
+    @classmethod
+    def _body_bytes(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > publishing.MAX_EXPORT_BYTES:
+            raise ValueError(f"正文超过 {publishing.MAX_EXPORT_BYTES} 字节上限（按 UTF-8 计算）")
+        return value
+
+
+class PublishReconcileInput(BaseModel):
+    platform: str = Field(pattern=r"^(fanqie|qimao)$")
+    account: str = Field(min_length=1, max_length=64)
+    platform_book_id: str = Field(min_length=1, max_length=64)
+    chapter: int = Field(ge=1, le=100000)
+    body_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resolution: str = Field(pattern=r"^(accepted|abandoned)$")
+    note: str = Field(min_length=1, max_length=200)
+    evidence: str = Field(min_length=1, max_length=300)
 
 
 class RestoreInput(BaseModel):
@@ -419,7 +615,7 @@ class JobInput(BaseModel):
     name: str = Field(default="日更任务", min_length=1, max_length=96)
     project: str
     book: str = Field(min_length=1, max_length=96)
-    account: str = Field(min_length=1, max_length=96)
+    account: str = Field(default="", max_length=96)
     daily_time: str = "08:00"
     daily_times: list[str] = Field(default_factory=list,max_length=8)
     timezone: str = "Asia/Shanghai"
@@ -428,6 +624,14 @@ class JobInput(BaseModel):
     quota_phases: list[dict] = Field(default_factory=list, max_length=24)
     slot_quotas: dict[str, int] | None = None
     delivery_mode: str = Field(default="batch", pattern="^(batch|serial)$")
+    # None 表示“这个客户端没提这件事”：新建时落到 draft_only，更新时保留原值不擦除。
+    publication_mode: str | None = Field(default=None, pattern="^(draft_only|publish_now|platform_scheduled)$")
+    # 平台排期缓冲（0.6.1）：None/缺省表示“这个客户端没提”，更新时保留原值。
+    schedule_buffer: dict | None = None
+    # 非 Optional 的默认值会出现在 model_dump 里：旧客户端不带这些键时，
+    # edit_job 必须按 model_fields_set 把它们 pop 掉，否则一次普通保存就会
+    # 把 platform 重置成 fanqie、account 清空（审计 P1-7）。
+    platform: str = Field(default="fanqie", max_length=32)
     max_revisions: int = Field(default=1, ge=0, le=3)
     enabled: bool = False
     approval_mode: str = "unattended"
@@ -435,6 +639,53 @@ class JobInput(BaseModel):
 
 class ApproveInput(BaseModel):
     for_date: str | None = None
+
+
+class RecipientInput(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+    secret: str | None = Field(default=None, max_length=512)
+
+
+class ScheduleBufferInput(BaseModel):
+    schedule_buffer: dict = Field(default_factory=dict)
+    # 乐观并发：带上客户端看到的台账版本（revision 更强；updated_at 兼容旧客户端）。
+    # 两者都没带表示“不申领租约”，允许写入；带了就必须对上，落后即 409。
+    expected_updated_at: str | None = Field(default=None, max_length=64)
+    expected_revision: int | None = Field(default=None, ge=0)
+
+
+class ScheduleCapabilityInput(BaseModel):
+    observed_at: str | None = Field(default=None, max_length=64)
+    source: str = Field(default="", max_length=200)
+    evidence: str = Field(default="", max_length=2000)
+    can_read_schedule: bool | None = None
+    can_schedule: bool | None = None
+    can_confirm_schedule: bool | None = None
+    can_confirm_body: bool | None = None
+    lead_time_minutes: int | None = Field(default=None, ge=0, le=10080)
+    max_scheduled: int | None = Field(default=None, ge=0, le=500)
+    max_chapters_per_day: int | None = Field(default=None, ge=0, le=200)
+
+
+class ScheduleReconcileInput(BaseModel):
+    """对账输入：既可用适配器回读，也可由作者粘贴/导入只读清单。"""
+
+    rows: list[dict] = Field(default_factory=list)
+    complete: bool = True
+    source: str = Field(default="", max_length=200)
+
+
+class ScheduleResolveInput(BaseModel):
+    """销账：作者确认平台没有该章，或确认要重新排。"""
+
+    chapter_id: int | str
+    resolution: str = Field(default="cancelled", pattern="^(cancelled|planned)$")
+    note: str = Field(default="", max_length=400)
+
+
+class OutboxResolveInput(BaseModel):
+    state: str = Field(pattern="^(sent|failed|dead)$")
+    note: str = Field(default="", max_length=400)
 
 
 class AIInput(BaseModel):
@@ -658,16 +909,30 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                 # this coroutine permanently, silently stopping all schedules.
                 print(f"调度配置不可用：{redact(str(exc))}", file=sys.stderr)
 
+    async def deliver_notifications():
+        """通知发件箱投递循环：只在后台线程发 HTTP，绝不改章节与调度状态。"""
+        if os.environ.get("CHAPTER_WHALE_NOTIFY_WORKER", "1") == "0":
+            return
+        owner = f"notify-{os.getpid()}"
+        while True:
+            await asyncio.sleep(3)
+            try:
+                await asyncio.to_thread(_deliver_notifications_once, owner)
+            except (ValueError, KeyError, RuntimeError, OSError, sqlite3.Error) as exc:
+                print(f"通知投递暂不可用：{redact(str(exc))}", file=sys.stderr)
+
     @asynccontextmanager
     async def lifespan(app):
         task = asyncio.create_task(dispatch()) if start_dispatcher else None
+        notify_task = asyncio.create_task(deliver_notifications())
         yield
-        if task:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        for pending in (task, notify_task):
+            if pending:
+                pending.cancel()
+                try:
+                    await pending
+                except asyncio.CancelledError:
+                    pass
         ops.shutdown()
 
     app = FastAPI(title="番茄小说发布助手", lifespan=lifespan)
@@ -692,19 +957,25 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         try:
             content_length = int(request.headers.get("content-length", "0") or 0)
         except ValueError:
-            return JSONResponse({"detail": "请求长度无效"}, status_code=400)
+            return JSONResponse({"code": "invalid_length", "message": "请求长度无效"},
+                                status_code=400)
         if content_length > 32 * 1024 * 1024:
-            return JSONResponse({"detail": "请求体过大"}, status_code=413)
+            return JSONResponse({"code": "payload_too_large", "message": "请求体超过32MB上限"},
+                                status_code=413)
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             if request.headers.get("X-Novel-Helper") != "1":
-                return JSONResponse({"detail": "需要管理界面的请求标识"}, status_code=403)
+                return JSONResponse({"code": "header_missing",
+                                     "message": "需要管理界面的请求标识"},
+                                    status_code=403)
             origin = request.headers.get("origin")
             if origin and urlparse(origin).netloc != request.headers.get("host"):
-                return JSONResponse({"detail": "拒绝跨站修改请求"}, status_code=403)
+                return JSONResponse({"code": "cross_origin", "message": "拒绝跨站修改请求"},
+                                    status_code=403)
             if request.url.path.endswith("/samples"):
                 length = content_length
                 if length > studio.MAX_UPLOAD + 65536:
-                    return JSONResponse({"detail": "文件超过 5 MB"}, status_code=413)
+                    return JSONResponse({"code": "file_too_large", "message": "文件超过 5 MB"},
+                                        status_code=413)
         with costs.scope(db=str(DATA / "costs.sqlite3")):
             response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -717,17 +988,58 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         async def handler(request, exc):
             if "resource_busy" in str(exc):
                 # 发布/入队持锁属于“暂时不可用”，不是客户端请求错误。
-                return JSONResponse({"detail": "系统正忙，请稍后重试"}, status_code=503,
-                                    headers={"Retry-After": "2"})
+                return JSONResponse({"code": "resource_busy", "message": "系统正忙，请稍后重试"},
+                                    status_code=503, headers={"Retry-After": "2"})
             code = 404 if isinstance(exc, (KeyError, FileNotFoundError)) else 409 if isinstance(exc, FileExistsError) else 400
-            return JSONResponse({"detail": redact(str(exc))}, status_code=code)
+            return JSONResponse({"code": "request_failed", "message": redact(str(exc))},
+                                status_code=code)
         app.add_exception_handler(exception, handler)
+
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse as _JSON
+
+    async def validation_handler(request, exc):
+        first = (exc.errors() or [{}])[0]
+        field = ".".join(str(part) for part in first.get("loc", []) if part != "body")
+        return _JSON({"code": "invalid_request",
+                      "message": f"请求字段不合法：{field or 'body'}（{first.get('msg', '校验失败')}）"},
+                     status_code=422)
+
+    app.add_exception_handler(RequestValidationError, validation_handler)
+
+    from fastapi import HTTPException as _HTTPException
+
+    async def http_error_handler(request, exc: "_HTTPException"):
+        detail = exc.detail if isinstance(exc.detail, str) else "请求未通过"
+        code = {400: "invalid_request", 401: "unauthorized", 403: "forbidden",
+                404: "not_found", 405: "method_not_allowed", 409: "conflict",
+                413: "payload_too_large", 429: "too_many_requests"}.get(exc.status_code,
+                                                                    "request_failed")
+        return _JSON({"code": code, "message": detail}, status_code=exc.status_code,
+                     headers=getattr(exc, "headers", None))
+
+    app.add_exception_handler(_HTTPException, http_error_handler)
+
+    async def unhandled_handler(request, exc: Exception):
+        # 兜底：未登记异常也要给同一个 {"code","message"} 形状，不能让框架返回纯文本 500。
+        try:
+            logger.exception("未处理的异常：%s %s", request.method, request.url.path)
+        except Exception:
+            pass
+        return _JSON({"code": "internal_error",
+                      "message": f"服务内部错误：{redact(str(exc)) or exc.__class__.__name__}"},
+                     status_code=500)
+
+    app.add_exception_handler(Exception, unhandled_handler)
 
     @app.get("/api/health")
     def health():
         maintenance = bridge.read_json(DATA / 'maintenance.json', {})
         return {"status": "healthy", "service": "novel-helper-manager", 'release_id':loaded_release,
             'pid':os.getpid(),'startup_id':STARTUP_ID,'started_at':STARTED_AT,
+            'root':str(bridge.COMBINED_ROOT.resolve()),'port':_LISTEN_PORT,
+            'mode':os.getenv('CHAPTER_WHALE_SERVICE_MODE','standalone'),
+            'schema_version':1,
             'maintenance':maintenance.get('state') == 'maintenance'}
 
     device_access.install_routes(app, access, STATIC)
@@ -781,6 +1093,397 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         receipts = writer_runner.reviewed_chapters(path)
         return {"chapters": [{"id": cid, "title": title, "words": len(content), "path": str(source), "reviewed": cid in receipts, "review_status":receipts.get(cid,{}).get("review",{}).get("review_decision")}
                              for source, cid, title, content in bridge.iter_source_chapters(path)]}
+
+    @app.get("/api/projects/{identity}/entities")
+    def project_entities(identity: str, chapter: int = 0):
+        path = Path(project(identity)["path"])
+        return entity_state.view(path, max(0, chapter))
+
+    @app.get("/api/projects/{identity}/precheck")
+    def project_precheck(identity: str, chapter: int = 1):
+        path = Path(project(identity)["path"])
+        try:
+            body, _sha = memory_library._chapter(path, max(1, chapter))
+        except ValueError as error:
+            raise HTTPException(404, f"章节不存在：{error}") from None
+        terms = style_rules.ignore_terms(path)
+        # 只读：查看预检不得累加指标（指标只在 revision_workflow 的实际检测里记）。
+        result = style_rules.check(body, scope="precheck", project=path, ignore_terms=terms,
+                                   record=False)
+        return {**result, "ignore_terms": terms, "metrics": style_rules.metrics(path),
+                "rules": style_rules.public()}
+
+    @app.put("/api/projects/{identity}/precheck/ignore")
+    def save_precheck_ignore(identity: str, data: StyleIgnoreInput):
+        path = Path(project(identity)["path"])
+        try:
+            return {"terms": style_rules.ignore_terms(path, data.terms)}
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.post("/api/projects/{identity}/precheck/action")
+    def precheck_action(identity: str, data: StyleActionInput):
+        path = Path(project(identity)["path"])
+        try:
+            return style_rules.record_action(path, data.rule_id, data.action, note=data.note)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.get("/api/projects/{identity}/retrieval")
+    def project_retrieval(identity: str, chapter: int = 1, query: str = ""):
+        path = Path(project(identity)["path"])
+        if chapter < 1:
+            raise HTTPException(400, "章号无效")
+        try:
+            planned = retrieval_plan.plan(path, chapter, query[:200], trace=True)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+        return {"plan": planned, "report": retrieval_plan.report(path),
+                "index": retrieval_plan.active_index(path), "ready": retrieval_plan.index_ready(path)}
+
+    @app.get("/api/projects/{identity}/evidence/impact")
+    def project_evidence_impact(identity: str, chapter: int = 1):
+        path = Path(project(identity)["path"])
+        chapter = max(1, chapter)
+        return {"chapter": chapter, "affected": invalidation.affected_facts(path, [chapter]),
+                "index": evidence_usage.reverse_index(path), "log": invalidation.summary(path),
+                "coverage": evidence_usage.coverage(path)}
+
+    @app.get("/api/projects/{identity}/readers/dictionary")
+    def readers_dictionary(identity: str):
+        project(identity)
+        return {"metrics": reader_metrics.dictionary(), "caliber": reader_metrics.CALIBER_VERSION,
+                "batches": reader_metrics.batches(Path(project(identity)["path"]))}
+
+    @app.post("/api/projects/{identity}/readers/preview")
+    def readers_preview(identity: str, data: ReaderImportInput):
+        path = Path(project(identity)["path"])
+        try:
+            rows = data.rows if data.rows is not None else reader_metrics.parse_csv(data.csv)["rows"]
+            return reader_metrics.preview(path, rows, platform_default=data.platform,
+                                         work_id=data.work_id or None)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.post("/api/projects/{identity}/readers/import")
+    def readers_import(identity: str, data: ReaderImportInput):
+        path = Path(project(identity)["path"])
+        try:
+            return reader_metrics.commit(path, filename=data.filename, token=data.token or None,
+                                         allow_partial=bool(data.allow_partial))
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.delete("/api/projects/{identity}/readers/batches/{batch}")
+    def readers_remove_batch(identity: str, batch: str):
+        path = Path(project(identity)["path"])
+        try:
+            return reader_metrics.remove_batch(path, batch)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.get("/api/projects/{identity}/readers/series")
+    def readers_series(identity: str, metric: str = "chapter_completion_rate",
+                       work_id: str = "", limit: int = 60):
+        path = Path(project(identity)["path"])
+        try:
+            return reader_metrics.series(path, metric=metric, work_id=work_id or None,
+                                         limit=max(1, min(200, limit)))
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.get("/api/projects/{identity}/readers/comments")
+    def readers_comments(identity: str, chapter: int = 1, limit: int = 5):
+        path = Path(project(identity)["path"])
+        return {"chapter": chapter,
+                "clusters": reader_metrics.cluster_comments(path, chapter, limit=max(1, min(10, limit))),
+                "trace": reader_metrics.rows_for(path, metric="comments", chapter_id=chapter)}
+
+    @app.post("/api/projects/{identity}/readers/comments")
+    def readers_add_comments(identity: str, data: ReaderCommentInput):
+        path = Path(project(identity)["path"])
+        try:
+            return reader_metrics.add_comments(path, [{"text": text} for text in data.texts],
+                                               chapter_id=data.chapter)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.post("/api/projects/{identity}/readers/observations")
+    def readers_build_observation(identity: str, data: ObservationInput):
+        path = Path(project(identity)["path"])
+        try:
+            return observation.build(path, chapter=data.chapter, metric=data.metric,
+                                     chapters=data.chapters, days=data.days,
+                                     work_id=observation.current_work_id(path))
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.get("/api/projects/{identity}/readers/observations")
+    def readers_list_observations(identity: str, status: str = "", chapter: int = 0,
+                                  work_id: str = "", touch: bool = False):
+        path = Path(project(identity)["path"])
+        book = work_id or observation.current_work_id(path)
+        return {"cards": observation.list_cards(path, status=status or None,
+                                                chapter=chapter or None, work_id=book, touch=touch),
+                "active": observation.active_cards(path, max(1, chapter), work_id=book) if chapter else []}
+
+    @app.post("/api/projects/{identity}/readers/observations/expire")
+    def readers_expire_observations(identity: str):
+        path = Path(project(identity)["path"])
+        return observation.expire_due(path)
+
+    @app.get("/api/projects/{identity}/readers/observations/{card_id}")
+    def readers_get_observation(identity: str, card_id: str):
+        path = Path(project(identity)["path"])
+        try:
+            return observation.get(path, card_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+
+    @app.get("/api/projects/{identity}/readers/observations/{card_id}/outline")
+    def readers_observation_outline(identity: str, card_id: str):
+        path = Path(project(identity)["path"])
+        try:
+            return observation.outline_diff(path, card_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from None
+
+    @app.post("/api/projects/{identity}/readers/observations/{card_id}/action")
+    def readers_observation_action(identity: str, card_id: str, data: ObservationActionInput):
+        path = Path(project(identity)["path"])
+        try:
+            if data.action == "adopt":
+                return observation.adopt(path, card_id, chapters=data.chapters)
+            if data.action == "ignore":
+                return observation.ignore(path, card_id)
+            return observation.revoke(path, card_id, reason=data.reason or "作者撤销")
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+
+    @app.get("/api/projects/{identity}/browser/status")
+    def browser_status(identity: str):
+        try:
+            return browser_target.status(Path(project(identity)["path"]))
+        except ValueError as error:
+            return JSONResponse({"code": "target_invalid", "message": str(error)},
+                                status_code=409)
+
+    @app.get("/api/projects/{identity}/browser/target")
+    def browser_get_target(identity: str):
+        try:
+            return {"target": browser_target.load_target(Path(project(identity)["path"]))}
+        except ValueError as error:
+            return JSONResponse({"code": "target_invalid", "message": str(error)},
+                                status_code=409)
+
+    @app.put("/api/projects/{identity}/browser/target")
+    def browser_put_target(identity: str, data: BrowserTargetInput):
+        path = Path(project(identity)["path"])
+        try:
+            return {"target": browser_target.save_target(path, data.model_dump())}
+        except ValueError as error:
+            return JSONResponse({"code": "invalid_target", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/browser/launch")
+    def browser_launch(identity: str, headless: bool = False):
+        path = Path(project(identity)["path"])
+        try:
+            if not browser_target.load_target(path):
+                return JSONResponse({"code": "target_missing",
+                                     "message": "还没有配置 target：先写唯一目标再启动浏览器"},
+                                    status_code=409)
+            return browser_target.launch(browser_target.current(), path, headless=headless)
+        except browser_target.AdapterNeedsHuman as error:
+            return JSONResponse({"code": "needs_human", "message": str(error)}, status_code=409)
+        except browser_target.AdapterUnavailable as error:
+            return JSONResponse({"code": "adapter_unavailable", "message": str(error)},
+                                status_code=409)
+        except OSError as error:
+            return JSONResponse({"code": "adapter_os_error", "message": str(error)},
+                                status_code=409)
+        except ValueError as error:
+            return JSONResponse({"code": "invalid_target", "message": str(error)},
+                                status_code=409)
+
+    @app.post("/api/projects/{identity}/browser/stop")
+    def browser_stop(identity: str):
+        path = Path(project(identity)["path"])
+        try:
+            result = browser_target.stop(browser_target.current(), path)
+        except (ValueError, OSError) as error:
+            return JSONResponse({"code": "invalid_request", "message": str(error)},
+                                status_code=400)
+        if not result.get("stopped"):
+            code = "adapter_unavailable" if browser_target.current() is None else "stop_failed"
+            return JSONResponse({"code": code, "message": result.get("error") or "浏览器没有停止"},
+                                status_code=409)
+        return result
+
+    @app.get("/api/projects/{identity}/browser/health")
+    def browser_health(identity: str):
+        try:
+            return browser_target.health(browser_target.current())
+        except (ValueError, OSError, RuntimeError) as error:
+            return JSONResponse({"code": "adapter_error", "message": str(error)},
+                                status_code=409)
+
+    @app.post("/api/projects/{identity}/browser/login")
+    def browser_login(identity: str, data: BrowserLoginInput):
+        path = Path(project(identity)["path"])
+        try:
+            # source="client"：客户端只能报 unknown/needs_human/cancelled，
+            # valid/expired 必须由适配器回读 profile 后写入。
+            return browser_target.record_login(path, status=data.status, account=data.account,
+                                              evidence=data.evidence, reason=data.reason,
+                                              source="client")
+        except ValueError as error:
+            return JSONResponse({"code": "invalid_login", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/browser/readonly")
+    def browser_readonly(identity: str, data: BrowserReadonlyInput):
+        path = Path(project(identity)["path"])
+        try:
+            return browser_target.verify_readonly(browser_target.current(), path,
+                                                  book_id=data.book_id, chapter=data.chapter,
+                                                  expect_body_sha256=data.body_sha256)
+        except ValueError as error:
+            return JSONResponse({"code": "invalid_request", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/browser/publish")
+    def browser_publish(identity: str, data: BrowserPublishInput):
+        path = Path(project(identity)["path"])
+        try:
+            # 不把请求体里的 authorization 当依据：授权只认 target 上服务端保存的记录。
+            report = browser_target.publish_once(
+                browser_target.current(), path, book_id=data.book_id, chapter=data.chapter,
+                body_sha256=data.body_sha256, replace=bool(data.replace))
+        except ValueError as error:
+            return JSONResponse({"code": "invalid_request", "message": str(error)},
+                                status_code=400)
+        if report["status"] in ("unavailable", "refused"):
+            return JSONResponse({"code": report["status"], "message": report["reason"]},
+                                status_code=409)
+        return report
+
+    @app.post("/api/projects/{identity}/browser/publish/reconcile")
+    def browser_publish_reconcile(identity: str, data: BrowserReconcileInput):
+        path = Path(project(identity)["path"])
+        try:
+            return browser_target.reconcile_publish(
+                path, key=data.key, book_id=data.book_id, chapter=data.chapter,
+                resolution=data.resolution, note=data.note)
+        except ValueError as error:
+            return JSONResponse({"code": "invalid_reconcile", "message": str(error)},
+                                status_code=400)
+
+    @app.get("/api/projects/{identity}/browser/capabilities")
+    def browser_capabilities(identity: str):
+        path = Path(project(identity)["path"])
+        try:
+            return {"columns": list(browser_target.COLUMNS),
+                    "row": browser_target.capability_row(path),
+                    "evidence": browser_target.capability_evidence(path)}
+        except ValueError as error:
+            return JSONResponse({"code": "target_invalid", "message": str(error)},
+                                status_code=409)
+
+    @app.get("/api/projects/{identity}/publish/platforms")
+    def publish_platforms(identity: str):
+        project(identity)
+        return {"platforms": publishing.capabilities(),
+                "target": publishing.target_platform(Path(project(identity)["path"]))}
+
+    @app.put("/api/projects/{identity}/publish/target")
+    def publish_target(identity: str, data: PublishTargetInput):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.set_target_platform(
+                path, data.platform, account=data.account,
+                platform_book_id=data.platform_book_id, book=data.book)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "invalid_target", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/publish/export")
+    def publish_export(identity: str, data: PublishExportInput):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.export_chapter(
+                path, platform=data.platform, chapter=data.chapter, title=data.title,
+                body=data.body, account=data.account,
+                platform_book_id=data.platform_book_id)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "invalid_export", "message": str(error)},
+                                status_code=400)
+
+    @app.get("/api/projects/{identity}/publish/exports")
+    def publish_exports(identity: str, platform: str = "fanqie", account: str = "",
+                        platform_book_id: str = ""):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.exports(path, platform=platform, account=account,
+                                      platform_book_id=platform_book_id)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "unknown_platform", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/publish/bind")
+    def publish_bind(identity: str, data: PublishBindInput):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.bind_book(
+                path, platform=data.platform, account=data.account,
+                platform_book_id=data.platform_book_id, title=data.title,
+                verified_via=data.verified_via,
+                observed_chapters=data.observed_chapters,
+                probe_evidence=data.probe_evidence)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "invalid_binding", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/publish/authorize")
+    def publish_authorize(identity: str, data: PublishAuthorizeInput):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.authorize(
+                path, platform=data.platform, account=data.account,
+                platform_book_id=data.platform_book_id, chapters=data.chapters,
+                note=data.note, expires_at=data.expires_at)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "invalid_authorization", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/publish/submit")
+    def publish_submit(identity: str, data: PublishSubmitInput):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.submit_chapter(
+                path, platform=data.platform, account=data.account,
+                platform_book_id=data.platform_book_id, chapter=data.chapter,
+                title=data.title, body=data.body)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "invalid_submit", "message": str(error)},
+                                status_code=400)
+
+    @app.post("/api/projects/{identity}/publish/reconcile")
+    def publish_reconcile(identity: str, data: PublishReconcileInput):
+        path = Path(project(identity)["path"])
+        try:
+            return publishing.reconcile(
+                path, platform=data.platform, account=data.account,
+                platform_book_id=data.platform_book_id, chapter=data.chapter,
+                body_sha256=data.body_sha256, resolution=data.resolution,
+                note=data.note, evidence=data.evidence)
+        except publishing.PublishError as error:
+            return JSONResponse({"code": "invalid_reconcile", "message": str(error)},
+                                status_code=400)
+
+    @app.get("/api/projects/{identity}/publish/status")
+    def publish_status(identity: str):
+        return publishing.status(Path(project(identity)["path"]))
 
     @app.get("/api/projects/{identity}/creative")
     def creative_settings(identity: str):
@@ -1090,7 +1793,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         batch=uuid.uuid4().hex
         return ops.start("generate", ["batch", "--project", item["path"], "--word-count", str(data.word_count),
                           "--max-revisions", str(data.max_revisions),"--count",str(data.count),"--batch-id",batch,
-                          "--scenes",str(data.scenes)], f"project:{identity}",{"project_id":identity,"batch_id":batch,"scenes":data.scenes})
+                          "--scenes",str(data.scenes)], f"project:{identity}",{"project_id":identity,"batch_id":batch,"scenes":data.scenes},
+                          operation_key=data.operation_key)
 
     @app.post("/api/projects/{identity}/stage")
     def stage(identity: str, data: StageInput):
@@ -1143,6 +1847,9 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if not any(Path(x["path"]).resolve() == Path(data.project).resolve() for x in store.projects()):
             raise ValueError("请先登记写作项目")
         values = data.model_dump()
+        if values.get("publication_mode") is None:
+            # 新客户端没指定就用默认 draft_only；显式传了 platform_scheduled 会由调度器拒绝。
+            values.pop("publication_mode", None)
         values["job_id"] = data.job_id or data.id or uuid.uuid4().hex[:12]
         values["disabled"] = not data.enabled
         values["volume"] = None
@@ -1160,9 +1867,212 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             values.pop("slot_quotas", None)
         if "delivery_mode" not in data.model_fields_set:
             values.pop("delivery_mode", None)
+        if "publication_mode" not in data.model_fields_set:
+            # 旧 PUT 不带这个键时必须保留任务原值，否则发布任务会被静默降级成只存稿。
+            values.pop("publication_mode", None)
+        if "schedule_buffer" not in data.model_fields_set or values.get("schedule_buffer") is None:
+            # 排期设置同理：旧客户端的一次普通保存不能把缓冲计划擦成空对象。
+            values.pop("schedule_buffer", None)
+        for key in ("platform", "account", "timezone", "daily_time", "daily_times"):
+            if key not in data.model_fields_set:
+                # 这些字段都有非空默认值；不带就表示“不改”，不能拿默认值覆盖原任务。
+                values.pop(key, None)
         if hasattr(scheduler, "update_job"):
             return scheduler.update_job(identity, values)
         raise HTTPException(503, "任务更新接口尚不可用")
+
+    # ---- 平台排期缓冲（0.6.1） ------------------------------------------------
+    from integration import platform_adapters, platform_schedule, schedule_buffer, scheduled_delivery
+
+    def _schedule_job(identity: str):
+        job = scheduler.load_scheduler()["jobs"].get(identity)
+        if not isinstance(job, dict):
+            raise HTTPException(404, "任务不存在")
+        return job
+
+    def _schedule_context(identity: str, job):
+        settings = schedule_buffer.normalize_settings(job.get("schedule_buffer"))
+        platform = str(job.get("platform") or "fanqie")
+        account, book = str(job.get("account") or ""), str(job.get("book") or "")
+        capability = platform_schedule.capability_for(platform, account, book)
+        approved = schedule_buffer.approved_candidates(Path(job["project"]))
+        store = schedule_buffer.load_store(identity)
+        last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), dict) else {}
+        remote = [row for row in (last.get("rows") or []) if isinstance(row, dict)]
+        planned = schedule_buffer.plan(job, approved=approved, remote=remote,
+                                       intents=store.get("intents") or [],
+                                       capability=capability, settings=settings)
+        return {"settings": settings, "platform": platform, "account": account, "book": book,
+                "capability": capability, "approved": approved, "store": store,
+                "planned": planned}
+
+    def _schedule_view(identity: str, job):
+        ctx = _schedule_context(identity, job)
+        state = scheduled_delivery.state_for_job(identity, job)
+        return {"job_id": identity, "settings": ctx["settings"], "platform": ctx["platform"],
+                "capability": ctx["capability"].get("capabilities") or {},
+                "capability_observed_at": ctx["capability"].get("observed_at", ""),
+                "review": schedule_buffer.review_items(identity, ctx["store"]),
+                "preview": ctx["planned"], "state": state}
+
+    @app.get("/api/jobs/{identity}/schedule")
+    def get_schedule(identity: str):
+        return _schedule_view(identity, _schedule_job(identity))
+
+    @app.post("/api/jobs/{identity}/schedule/preview")
+    def preview_schedule(identity: str):
+        # 纯计算：不写任务、不写台账、不碰平台。
+        return _schedule_view(identity, _schedule_job(identity))
+
+    @app.post("/api/jobs/{identity}/schedule/capability")
+    def set_schedule_capability(identity: str, data: ScheduleCapabilityInput):
+        job = _schedule_job(identity)
+        platform = str(job.get("platform") or "fanqie")
+        record = platform_schedule.record_capability({
+            "platform": platform,
+            "account": str(job.get("account") or ""),
+            "book_id": str(job.get("book") or ""),
+            "observed_at": data.observed_at or "",
+            "source": data.source or "author_confirmed",
+            "evidence": data.evidence,
+            "timezone": str(job.get("timezone") or "Asia/Shanghai"),
+            "capabilities": {
+                "can_read_schedule": data.can_read_schedule,
+                "can_schedule": data.can_schedule,
+                "can_confirm_schedule": data.can_confirm_schedule,
+                "can_confirm_body": data.can_confirm_body,
+                "lead_time_minutes": data.lead_time_minutes,
+                "max_scheduled": data.max_scheduled,
+                "max_chapters_per_day": data.max_chapters_per_day,
+            },
+        })
+        allowed, reason = platform_schedule.can_auto_schedule(record)
+        return {"capability": record["capabilities"], "auto_allowed": allowed, "reason": reason}
+
+    @app.post("/api/jobs/{identity}/schedule/apply")
+    def apply_schedule(identity: str, data: ScheduleBufferInput):
+        job = _schedule_job(identity)
+        if scheduler.publication_mode(job) != "platform_scheduled":
+            # 只存稿/立即发布任务没有排期语义；在这里建意图只会在切模式时被一次性补写。
+            return JSONResponse(status_code=409, content={
+                "code": "not_scheduled_job",
+                "message": "只有 publication_mode=platform_scheduled 的任务可以建排期计划"})
+        try:
+            settings = schedule_buffer.validate_settings(data.schedule_buffer)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={
+                "code": "invalid_settings", "message": str(exc)[:300]})
+        store = schedule_buffer.load_store(identity)
+        stale = False
+        if data.expected_revision is not None:
+            stale = int(data.expected_revision) != int(store.get("revision") or 0)
+        elif data.expected_updated_at:
+            # 旧客户端用时间戳做租约；空串等于“没带租约”，保持向后兼容。
+            stale = data.expected_updated_at != str(store.get("updated_at") or "")
+        if stale:
+            return JSONResponse(status_code=409, content={
+                "code": "stale_buffer",
+                "message": "排期台账已被其他窗口更新，请刷新后再改",
+                "updated_at": store.get("updated_at") or "",
+                "revision": int(store.get("revision") or 0)})
+        try:
+            updated = scheduler.update_job(identity, {"schedule_buffer": settings})
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={
+                "code": "update_rejected", "message": str(exc)[:300]})
+        # 用更新后的任务重新计算，避免拿旧字段生成计划（审计 P2-2）。
+        job = _schedule_job(identity)
+        platform = str(job.get("platform") or "fanqie")
+        account, book = str(job.get("account") or ""), str(job.get("book") or "")
+        capability = platform_schedule.capability_for(platform, account, book)
+        allowed, reason = platform_schedule.can_auto_schedule(capability)
+        approved = schedule_buffer.approved_candidates(Path(job["project"]))
+        last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), dict) else {}
+        remote = [row for row in (last.get("rows") or []) if isinstance(row, dict)]
+        planned = schedule_buffer.plan(job, approved=approved, remote=remote,
+                                       intents=store.get("intents") or [],
+                                       capability=capability, settings=settings)
+        if settings["enabled"] and not allowed:
+            # 能力未证实：设置可以保存（只读清单/本地存稿），但不生成投递意图。
+            return JSONResponse(status_code=409, content={
+                "code": "capability_unknown", "reason": reason,
+                "settings": settings, "preview": planned,
+                "message": "平台排期能力未证实：已保存设置，只交本地存稿候选"})
+        if not settings["enabled"]:
+            # 关闭补货：只保存设置，不把已有台账的 plan 覆盖成空预览（审计 P2-6）。
+            return {"settings": settings, "applied": 0, "intents": len(store.get("intents") or []),
+                    "preview": planned, "job": updated}
+        result = schedule_buffer.apply_plan(identity, job, planned, store=store)
+        return {"settings": settings, "applied": result["added"], "replaced": result["replaced"],
+                "cancelled": result["cancelled"], "blocked": result["blocked"][:5],
+                "intents": result["total"], "preview": planned, "job": updated}
+
+    @app.post("/api/jobs/{identity}/schedule/stop")
+    def stop_schedule(identity: str):
+        _schedule_job(identity)
+        return schedule_buffer.stop_replenish(identity)
+
+    @app.post("/api/jobs/{identity}/schedule/resume")
+    def resume_schedule(identity: str):
+        _schedule_job(identity)
+        return schedule_buffer.resume_replenish(identity)
+
+    @app.post("/api/jobs/{identity}/schedule/resolve")
+    def resolve_schedule(identity: str, data: ScheduleResolveInput):
+        """销账：把一条“结果未知”的意图解除，否则排期会永久停写（审计 P1-4）。"""
+        _schedule_job(identity)
+        try:
+            return schedule_buffer.resolve_review(identity, data.chapter_id,
+                                                  data.resolution, note=data.note)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={
+                "code": "invalid_resolution", "message": str(exc)[:200]})
+
+    @app.get("/api/jobs/{identity}/schedule/review")
+    def schedule_review(identity: str):
+        """只读：列出所有需要人工/对账处理的意图，界面据此给销账入口。"""
+        _schedule_job(identity)
+        return {"items": schedule_buffer.review_items(identity)}
+
+    @app.post("/api/jobs/{identity}/schedule/reconcile")
+    def reconcile_schedule(identity: str, data: ScheduleReconcileInput | None = None):
+        job = _schedule_job(identity)
+        platform = str(job.get("platform") or "fanqie")
+        account, book = str(job.get("account") or ""), str(job.get("book") or "")
+        complete = True
+        source = ""
+        rows: list = []
+        if data is not None and data.rows:
+            # 没有适配器时也能对账：作者粘贴/导入的只读清单是可验证的输入。
+            rows = list(data.rows)
+            complete = bool(data.complete)
+            source = str(data.source or "author_import")
+        else:
+            adapter = platform_adapters.get_adapter(platform)
+            if adapter is None:
+                return JSONResponse(status_code=409, content={
+                    "code": "adapter_unavailable",
+                    "message": "没有该平台的排期回读适配器；可在请求体里传 rows 用只读清单对账"})
+            raw = adapter.read_schedule(platform, account, book)
+            if isinstance(raw, dict):
+                rows = raw.get("rows") or raw.get("entries") or []
+                complete = bool(raw.get("complete", True))
+                source = str(raw.get("source") or "")
+            else:
+                rows = raw or []
+        snapshot = platform_schedule.read_snapshot(
+            rows, platform=platform, account=account, book_id=book,
+            timezone_name=str(job.get("timezone") or "Asia/Shanghai"),
+            complete=complete, source=source)
+        capability = platform_schedule.capability_for(platform, account, book)
+        result = schedule_buffer.reconcile(identity, snapshot, capability=capability)
+        return {"reconcile": result, "snapshot": {
+            "entries": len(snapshot["entries"]),
+            "needs_review": len(snapshot["needs_review"]),
+            "conflicts": len(snapshot["conflicts"]),
+            "duplicates": snapshot.get("duplicates", 0),
+            "complete": snapshot.get("complete", True),
+        }}
 
     @app.post("/api/jobs/{identity}/run")
     def run(identity: str):
@@ -1190,6 +2100,112 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.post("/api/jobs/{identity}/approve")
     def approve(identity: str, data: ApproveInput):
         return scheduler.approve_job(identity, data.for_date)
+
+    @app.get("/api/jobs/{identity}/runs")
+    def job_runs(identity: str, limit: int = 20):
+        """只读：列出任务运行记录，不启动 worker、不发通知、不碰平台。"""
+        from integration import run_report
+        document = scheduler.load_scheduler()
+        if not isinstance(document["jobs"].get(identity), dict):
+            raise HTTPException(404, "任务不存在")
+        return run_report.list_runs(identity, limit=max(1, min(int(limit or 20), 100)))
+
+    @app.get("/api/jobs/{identity}/runs/{run_id}")
+    def job_run_detail(identity: str, run_id: str):
+        """只读投影：逐章状态、费用覆盖、最近事件与可行动作。"""
+        from integration import run_report
+        document = scheduler.load_scheduler()
+        job = document["jobs"].get(identity)
+        if not isinstance(job, dict):
+            raise HTTPException(404, "任务不存在")
+        try:
+            return run_report.project_run(identity, job, run_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc).strip("'\"")) from exc
+        except ValueError as exc:
+            raise HTTPException(400, redact(str(exc))[:200]) from exc
+
+    @app.get("/api/notifications")
+    def notifications_overview(limit: int = 20):
+        """本地事件列表与发件箱；不发起任何网络请求。"""
+        from integration import notification_hooks, notifications
+        db = notification_hooks.connection()
+        try:
+            return {
+                "events": notifications.list_events(db, limit=max(1, min(int(limit or 20), 100))),
+                "outbox": notifications.list_outbox(db, state={"unknown", "failed", "dead"},
+                                                    limit=50),
+                "recipients": notifications.list_recipients(db),
+                "pending": len(notifications.list_outbox(db, state={"pending", "leased"}, limit=200)),
+            }
+        finally:
+            db.close()
+
+    @app.post("/api/notifications/recipients")
+    def add_notification_recipient(data: RecipientInput):
+        from integration import notification_hooks, notifications
+        db = notification_hooks.connection()
+        try:
+            return notifications.add_recipient(db, data.url.strip(), data.secret)
+        except notifications.UnsafeTarget as exc:
+            raise HTTPException(400, str(exc)[:300]) from exc
+        except notifications.NotificationError as exc:
+            raise HTTPException(409, str(exc)[:300]) from exc
+        finally:
+            db.close()
+
+    @app.post("/api/notifications/recipients/{recipient_id}/test")
+    def test_notification_recipient(recipient_id: str):
+        from integration import notification_hooks, notifications
+        db = notification_hooks.connection()
+        try:
+            return notifications.test_send(db, recipient_id)
+        except notifications.NotificationError as exc:
+            raise HTTPException(409, str(exc)[:300]) from exc
+        finally:
+            db.close()
+
+    @app.delete("/api/notifications/recipients/{recipient_id}")
+    def disable_notification_recipient(recipient_id: str):
+        from integration import notification_hooks, notifications
+        db = notification_hooks.connection()
+        try:
+            return notifications.disable_recipient(db, recipient_id)
+        except notifications.NotificationError as exc:
+            raise HTTPException(404, str(exc)[:200]) from exc
+        finally:
+            db.close()
+
+    @app.post("/api/notifications/outbox/{outbox_id}/requeue")
+    def requeue_notification(outbox_id: int):
+        from integration import notification_hooks, notifications
+        db = notification_hooks.connection()
+        try:
+            return notifications.requeue(db, outbox_id)
+        except notifications.NotificationError as exc:
+            raise HTTPException(409, str(exc)[:200]) from exc
+        finally:
+            db.close()
+
+    @app.post("/api/notifications/outbox/{outbox_id}/resolve")
+    def resolve_notification(outbox_id: int, data: OutboxResolveInput):
+        from integration import notification_hooks, notifications
+        db = notification_hooks.connection()
+        try:
+            return notifications.resolve_unknown(db, outbox_id, state=data.state, note=data.note)
+        except notifications.NotificationError as exc:
+            raise HTTPException(409, str(exc)[:200]) from exc
+        finally:
+            db.close()
+
+    @app.post("/api/jobs/{identity}/notifications/resolve")
+    def resolve_job_incidents(identity: str):
+        """作者确认已处理：关闭该任务打开中的故障事件（不重发章节）。"""
+        from integration import notification_hooks
+        document = scheduler.load_scheduler()
+        if not isinstance(document["jobs"].get(identity), dict):
+            raise HTTPException(404, "任务不存在")
+        return {"resolved": notification_hooks.resolve(identity)}
 
     @app.get("/api/operations/{identity}")
     def operation(identity: str):
@@ -1319,10 +2335,14 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
 def main():
     import uvicorn
+    global _LISTEN_PORT
     parser = argparse.ArgumentParser(description="小说助手本地管理界面")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--lan", action="store_true", help="允许已配对设备通过局域网或 Tailscale 访问")
     args = parser.parse_args()
+    if not 1 <= args.port <= 65535:
+        parser.error(f"--port 必须是 1-65535 的本机端口，收到 {args.port}")
+    _LISTEN_PORT = args.port
     hosts = device_access.local_addresses() if args.lan else []
     # Bind explicit private interfaces only. Never listen on a campus/public IP.
     sockets = device_access.listen_sockets(["127.0.0.1", *hosts], args.port)

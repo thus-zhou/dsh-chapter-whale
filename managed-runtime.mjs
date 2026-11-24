@@ -1,10 +1,10 @@
 import { cp, mkdir, readFile, writeFile, stat, lstat, rm, mkdtemp } from 'node:fs/promises';
-import { existsSync, createWriteStream } from 'node:fs';
+import { existsSync, createWriteStream, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { t as listTar, x as extractTar } from 'tar';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -113,6 +113,76 @@ export async function downloadRuntime(workspace, manifest) {
   return payload;
 }
 
+// 代码与运行环境是两条独立来源，任何情况下都不得混用：
+//   codeSource  —— 恒为本轻量包自己的 backend（用户刚安装/升级的那份代码）。
+//   runtimeSource —— 内置 runtime，或按发行清单下载并逐一校验过的 runtime 包。
+// 下载包即使夹带 backend 目录也不会被复制或执行，否则一次降级下载就能悄悄把
+// 新版本代码换成旧后端。
+const CODE_TREES = ['manager', 'integration', 'webnovel-writer', 'fanqie_auto_publish', 'vendor'];
+// 作者数据与登录态：升级清理永远不碰。
+const AUTHOR_DATA_TREES = ['accounts', 'books', 'integration_data', 'playwright-browsers', '.venv'];
+const PROTECTED_NAMES = new Set(['.env', '.chapter-whale-release.json', 'scheduler.json', '.publish.json',
+  '.dpapi', 'cookies.json', 'storage_state.json']);
+
+export function codeSource() {
+  if (!existsSync(join(PACKAGE_ROOT, 'backend', 'manager', 'app.py'))) {
+    throw new Error('安装包缺少后端源码（backend/manager/app.py），请重新安装完整的码章鲸发行包。');
+  }
+  return PACKAGE_ROOT;
+}
+
+export async function resolveRuntimeSource(workspace, manifest) {
+  const bundled = join(PACKAGE_ROOT, 'runtime');
+  if (existsSync(join(bundled, 'python', 'python.exe')) && existsSync(join(bundled, 'browsers'))) {
+    return { root: PACKAGE_ROOT, kind: 'bundled', buildId: manifest.buildId };
+  }
+  if (!existsSync(join(PACKAGE_ROOT, 'runtime-download.json'))) {
+    throw new Error('安装包缺少运行环境（runtime/python 与 runtime/browsers），请重新安装完整的码章鲸发行包。');
+  }
+  const payload = await downloadRuntime(workspace, manifest);
+  if (!existsSync(join(payload, 'runtime', 'browsers'))) {
+    throw new Error('下载的运行环境缺少浏览器目录，未安装。');
+  }
+  const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
+  if (actual.buildId !== manifest.buildId) throw new Error('发行包版本不匹配。');
+  return { root: payload, kind: 'downloaded', buildId: actual.buildId };
+}
+
+function withinRoot(rootDir, target) {
+  return resolve(target).startsWith(resolve(rootDir) + sep);
+}
+
+// 上一发行清单管理、本版不再分发的代码文件需要清理；只允许清理 backend 受管子树
+// 内的规范化路径，作者数据、凭据、账本、登录文件一律跳过。
+export function staleCodeFiles(rootDir, previousFiles, nextFiles) {
+  const next = new Set(nextFiles || []);
+  const stale = [];
+  for (const name of previousFiles || []) {
+    if (typeof name !== 'string' || next.has(name) || !name.startsWith('backend/')) continue;
+    const segments = name.slice('backend/'.length).split('/');
+    if (!segments.length || !CODE_TREES.includes(segments[0])) continue;
+    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..'
+      || segment.includes('\\') || segment.includes(':') || segment.includes('\0'))) continue;
+    if (segments.some((segment) => AUTHOR_DATA_TREES.includes(segment))) continue;
+    if (PROTECTED_NAMES.has(segments[segments.length - 1])) continue;
+    const target = join(rootDir, ...segments);
+    if (!withinRoot(rootDir, target)) continue;
+    stale.push(target);
+  }
+  return stale;
+}
+
+export async function removeStaleCode(rootDir, previousFiles, nextFiles) {
+  const removed = [];
+  for (const target of staleCodeFiles(rootDir, previousFiles, nextFiles)) {
+    try {
+      await rm(target, { force: true });
+      removed.push(target);
+    } catch {}
+  }
+  return removed;
+}
+
 let preparing;
 export async function prepareManaged(config) {
   if (!config.managed) return;
@@ -121,12 +191,18 @@ export async function prepareManaged(config) {
     if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('码章鲸当前支持 Windows 10/11 64 位。');
     if (!runtimeAvailable()) throw new Error('安装包缺少运行环境，请重新安装完整的码章鲸发行包。');
     const manifest = JSON.parse(await readFile(join(PACKAGE_ROOT, 'runtime-manifest.json'), 'utf8'));
+    const codeRoot = codeSource();
+    const codeFiles = Object.keys(manifest.files || {}).filter((name) => name.startsWith('backend/'));
     await mkdir(config.rootDir, { recursive: true });
     if ((await lstat(config.rootDir)).isSymbolicLink()) throw new Error('工作目录不能是符号链接。');
     const marker = join(config.rootDir, '.chapter-whale-release.json');
     let installed;
     try { installed = JSON.parse(await readFile(marker, 'utf8')); } catch {}
-    if (installed?.buildId === manifest.buildId && existsSync(config.python) && existsSync(config.entry)) {
+    // 代码与运行环境必须是同一个候选：老标记只有 buildId，按同一候选处理；
+    // 若运行时来自另一个候选，runtimeBuildId 会与代码清单不一致而强制重装。
+    const sameCandidate = installed?.buildId === manifest.buildId
+      && (installed?.runtimeBuildId ?? installed?.buildId) === manifest.buildId;
+    if (sameCandidate && existsSync(config.python) && existsSync(config.entry)) {
       const spot = await verifyInstalled(config.rootDir, manifest, ['manager', 'integration']);
       if (spot.missing.length || spot.mismatched.length) {
         config.entryExists = false;
@@ -138,28 +214,31 @@ export async function prepareManaged(config) {
     const lock = join(config.rootDir, '.install-lock');
     try { await mkdir(lock); } catch { throw new Error('另一个码章鲸实例正在准备环境，请稍后重试。'); }
     try {
-      const payload = existsSync(join(PACKAGE_ROOT, 'runtime', 'python', 'python.exe'))
-        ? PACKAGE_ROOT : await downloadRuntime(config.rootDir, manifest);
+      const runtime = await resolveRuntimeSource(config.rootDir, manifest);
       // Only code/runtime trees are replaced. Books, accounts and ledgers are never copied from a developer machine.
-      for (const name of ['manager', 'integration', 'webnovel-writer', 'fanqie_auto_publish', 'vendor']) {
+      for (const name of CODE_TREES) {
+        const source = join(codeRoot, 'backend', name);
+        if (!existsSync(source)) throw new Error(`安装包缺少后端目录 ${name}，请重新安装完整的码章鲸发行包。`);
         const destination = join(config.rootDir, name);
         if (existsSync(destination) && (await lstat(destination)).isSymbolicLink()) throw new Error('运行目录不能是符号链接。');
-        await cp(join(payload, 'backend', name), destination, { recursive: true, force: true, dereference: false });
+        await cp(source, destination, { recursive: true, force: true, dereference: false });
       }
-      await cp(join(payload, 'runtime', 'python'), join(config.rootDir, '.venv', 'Scripts'), { recursive: true });
+      await removeStaleCode(config.rootDir, installed?.codeFiles || installed?.files, codeFiles);
+      await cp(join(runtime.root, 'runtime', 'python'), join(config.rootDir, '.venv', 'Scripts'), { recursive: true });
       // Absolute workspace path avoids embeddable Python's parent-path handling;
       // omitting import site prevents loading user-global site-packages.
       await writeFile(join(config.rootDir, '.venv', 'Scripts', 'python313._pth'),
         `python313.zip\n.\nLib/site-packages\n${config.rootDir}\n`);
-      await cp(join(payload, 'runtime', 'browsers'), join(config.rootDir, 'playwright-browsers'), { recursive: true });
+      await cp(join(runtime.root, 'runtime', 'browsers'), join(config.rootDir, 'playwright-browsers'), { recursive: true });
       await mkdir(join(config.rootDir, 'integration_data'), { recursive: true });
-      const verification = await verifyInstalled(
-        config.rootDir, manifest, ['manager', 'integration', 'webnovel-writer', 'fanqie_auto_publish', 'vendor']);
+      const verification = await verifyInstalled(config.rootDir, manifest, CODE_TREES);
       if (verification.missing.length || verification.mismatched.length) {
         throw new Error(`安装后校验失败（${verification.mismatched.length} 个文件不一致，${verification.missing.length} 个缺失），未写入发行标记。`);
       }
       await writeFile(marker, JSON.stringify({
-        buildId: manifest.buildId, installedAt: new Date().toISOString(), verifiedFiles: verification.checked,
+        buildId: manifest.buildId, codeBuildId: manifest.buildId, runtimeBuildId: runtime.buildId,
+        runtimeKind: runtime.kind, installedAt: new Date().toISOString(),
+        verifiedFiles: verification.checked, codeFiles,
       }));
       config.entryExists = (await stat(config.entry)).isFile();
     } finally {
@@ -179,8 +258,85 @@ export function managedEnvironment(config) {
   for (const name of Object.keys(env)) {
     if (name.startsWith('NOVEL_HELPER_') || ['AI_API_KEY', 'AI_MODEL', 'AI_BASE_URL', 'PYTHONPATH', 'PYTHONHOME'].includes(name)) delete env[name];
   }
-  return { ...env, CHAPTER_WHALE_MANAGED: '1', NOVEL_HELPER_ROOT: config.rootDir,
+  return { ...env, CHAPTER_WHALE_MANAGED: '1', CHAPTER_WHALE_SERVICE_MODE: 'dsh_managed',
+    NOVEL_HELPER_ROOT: config.rootDir,
     NOVEL_HELPER_AI_CONFIG: join(config.rootDir, 'integration_data', 'ai_config.json'),
     NOVEL_HELPER_WEBNOVEL_HOME: join(config.rootDir, 'integration_data', 'webnovel'),
     PLAYWRIGHT_BROWSERS_PATH: join(config.rootDir, 'playwright-browsers') };
+}
+
+/* ------------------------------------------------- 工作区级运行描述（P05） */
+
+export const RUN_DESCRIPTION = join('integration_data', 'run-description.json');
+export const SERVICE_NAME = 'novel-helper-manager';
+
+export function normalizePath(value) {
+  const absolute = resolve(String(value));
+  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+}
+
+export function runDescriptionPath(rootDir) {
+  return join(rootDir, RUN_DESCRIPTION);
+}
+
+export function readRunDescription(rootDir) {
+  try {
+    const value = JSON.parse(readFileSync(runDescriptionPath(rootDir), 'utf8'));
+    return value && value.schema_version === 1 ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 原子替换运行描述：先写临时文件再 rename，避免守护进程读到半个 JSON。 */
+export function writeRunDescription(config, health = {}, options = {}) {
+  const rootDir = config.rootDir;
+  if (!rootDir) throw new Error('没有工作区，无法写入运行描述');
+  const current = readRunDescription(rootDir);
+  const payload = {
+    ...current,
+    schema_version: 1,
+    mode: options.mode || 'dsh_managed',
+    owner: options.owner || 'plugin',
+    port: Number(config.port) || null,
+    root: resolve(rootDir),
+    python: String(config.python || options.python || ''),
+    entry: String(config.entry || options.entry || ''),
+    pid: Number.isInteger(health.pid) ? health.pid : null,
+    startup_id: health.startup_id || null,
+    release_id: health.release_id || null,
+    service: health.service || SERVICE_NAME,
+    started_at: health.started_at || null,
+    updated_at: new Date().toISOString(),
+  };
+  const target = runDescriptionPath(rootDir);
+  mkdirSync(dirname(target), { recursive: true });
+  const temporary = `${target}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  renameSync(temporary, target);
+  return payload;
+}
+
+/**
+ * 判断端口上的健康响应是否属于本工作区。
+ * 返回 {ok, kind, message}，kind 与 Python 侧 run_description.compare 保持一致。
+ */
+export function compareRunDescription(description, health, rootDir, port) {
+  if (health?.service && health.service !== SERVICE_NAME) {
+    return { ok: false, kind: 'foreign', message: `端口 ${port} 上运行的不是码章鲸管理服务（${health.service}）` };
+  }
+  if (health?.root && normalizePath(health.root) !== normalizePath(rootDir)) {
+    return { ok: false, kind: 'foreign', message: `端口 ${port} 上的管理服务属于其他工作区（${health.root}）` };
+  }
+  if (!description || !description.port) return { ok: true, kind: 'none', message: '' };
+  if (Number(description.port) !== Number(port)) {
+    return { ok: false, kind: 'conflict', message: `运行描述记录端口 ${description.port}，本次使用 ${port}` };
+  }
+  if (description.root && normalizePath(description.root) !== normalizePath(rootDir)) {
+    return { ok: false, kind: 'conflict', message: '运行描述属于其他工作区' };
+  }
+  if (description.startup_id && health?.startup_id && description.startup_id !== health.startup_id) {
+    return { ok: false, kind: 'stale', message: '运行描述记录的启动实例已经退出' };
+  }
+  return { ok: true, kind: 'none', message: '' };
 }
