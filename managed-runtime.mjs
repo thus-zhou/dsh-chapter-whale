@@ -1,10 +1,10 @@
 import { cp, mkdir, readFile, writeFile, stat, lstat, rm, mkdtemp } from 'node:fs/promises';
-import { existsSync, createWriteStream, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, createWriteStream, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { t as listTar, x as extractTar } from 'tar';
-import { dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -270,9 +270,28 @@ export function managedEnvironment(config) {
 export const RUN_DESCRIPTION = join('integration_data', 'run-description.json');
 export const SERVICE_NAME = 'novel-helper-manager';
 
+/** 将存在段或最近已存在父目录解析为真实长路径，兼容 Windows 8.3 短路径与符号链接。 */
+function canonicalPath(value) {
+  let target = resolve(String(value));
+  const tail = [];
+  while (true) {
+    try {
+      const real = realpathSync.native(target).replace(/^\\\\\?\\(?=[A-Za-z]:\\)/, '');
+      return tail.length ? join(real, ...tail.reverse()) : real;
+    } catch {
+      const parent = dirname(target);
+      if (!parent || parent === target) {
+        return resolve(String(value));
+      }
+      tail.push(basename(target));
+      target = parent;
+    }
+  }
+}
+
 export function normalizePath(value) {
-  const absolute = resolve(String(value));
-  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+  const canonical = canonicalPath(value);
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
 }
 
 export function runDescriptionPath(rootDir) {
@@ -299,7 +318,7 @@ export function writeRunDescription(config, health = {}, options = {}) {
     mode: options.mode || 'dsh_managed',
     owner: options.owner || 'plugin',
     port: Number(config.port) || null,
-    root: resolve(rootDir),
+    root: canonicalPath(rootDir),
     python: String(config.python || options.python || ''),
     entry: String(config.entry || options.entry || ''),
     pid: Number.isInteger(health.pid) ? health.pid : null,

@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { c as createTar } from 'tar';
-import { validateTarListing, validateArchiveEntry, extractPackage, verifyInstalled, AUTO_UPDATE_ENABLED, updateAvailable } from '../managed-runtime.mjs';
+import { validateTarListing, validateArchiveEntry, extractPackage, verifyInstalled, AUTO_UPDATE_ENABLED, updateAvailable, normalizePath, compareRunDescription } from '../managed-runtime.mjs';
 
 test('lightweight download descriptor matches the current runtime and version', async () => {
   const read = async name => JSON.parse(await readFile(new URL('../' + name, import.meta.url), 'utf8'));
@@ -97,4 +98,14 @@ test('installed files are compared against the manifest', async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('Windows 8.3 short paths match canonical long paths in run description checks', {
+  skip: process.platform !== 'win32' || !existsSync('C:\\PROGRA~1') || !existsSync('C:\\Program Files'),
+}, () => {
+  const shortChild = 'C:\\PROGRA~1\\ChapterWhaleTest\\workspace';
+  const longChild = 'C:\\Program Files\\ChapterWhaleTest\\workspace';
+  assert.equal(normalizePath(shortChild), normalizePath(longChild));
+  const verdict = compareRunDescription(null, { service: 'novel-helper-manager', root: longChild }, shortChild, 18975);
+  assert.equal(verdict.ok, true, verdict.message);
 });
