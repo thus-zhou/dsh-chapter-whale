@@ -44,7 +44,7 @@ jobs:
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$archive"
           printf '%s  %s\n' "${expected#sha256:}" "$archive" | sha256sum --check
           integrity=$(node -e 'const fs=require("node:fs");const crypto=require("node:crypto");console.log("sha512-"+crypto.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"));' "$archive")
-          existing=$(npm view "$package@$version" dist.integrity 2>/dev/null || true)
+          existing=$(npm view "$package@$version" dist.integrity --prefer-online 2>/dev/null || true)
           if [[ -z "$existing" ]]; then
             npm publish "./$archive" --access public --tag latest --registry https://registry.npmjs.org/ --loglevel warn
           elif [[ "$existing" != "$integrity" ]]; then
@@ -52,8 +52,11 @@ jobs:
             exit 1
           fi
           for attempt in {1..12}; do
-            if [[ "$(npm view "$package@$version" dist.integrity)" == "$integrity" &&
-                  "$(npm view "$package@latest" version)" == "$version" ]]; then
+            if [[ "$(npm view "$package@$version" dist.integrity --prefer-online 2>/dev/null)" == "$integrity" &&
+                  "$(npm view "$package@latest" version --prefer-online 2>/dev/null)" == "$version" ]]; then
+              curl --fail --silent --show-error --retry 3 --max-time 60 \
+                --output registry.tgz "https://registry.npmjs.org/$package/-/$archive"
+              printf '%s  %s\n' "${expected#sha256:}" registry.tgz | sha256sum --check
               echo "$package@$version is npm latest and matches the GitHub asset."
               exit 0
             fi
