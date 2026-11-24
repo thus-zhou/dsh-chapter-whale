@@ -39,21 +39,28 @@ class WorkflowTest(unittest.TestCase):
         self.assertFalse(self.step(state, "writing")["done"])
         self.assertEqual(state["counts"]["chapters"], 0)
 
-    def test_required_fields_gate_essentials(self):
+    def test_optional_creative_fields_do_not_block_the_outline(self):
         self.brief(genre="悬疑", premise="失忆者记得死者")
         state = workflow.state(self.root)
         essentials = self.step(state, "essentials")
-        self.assertFalse(essentials["done"])
-        self.assertIn("文风", essentials["blocked_reason"])
-        self.brief(genre="悬疑", premise="失忆者记得死者", style="冷硬短句")
-        self.assertTrue(self.step(workflow.state(self.root), "essentials")["done"])
+        self.assertTrue(essentials["done"])
+        self.assertIn("文风", essentials["detail"])
+        self.assertEqual(state["next"], "direction")
 
     def test_plan_and_chapter_progress(self):
         state = workflow.state(self.root)
         self.assertFalse(self.step(state, "direction")["done"])
         self.plan(3)
-        self.assertTrue(self.step(workflow.state(self.root), "direction")["done"])
-        self.assertEqual(workflow.state(self.root)["counts"]["plan_chapters"], 3)
+        state = workflow.state(self.root)
+        self.assertEqual(state["counts"]["plan_chapters"], 3)
+        self.assertFalse(self.step(state, "direction")["done"])
+        outline_dir = self.root / "大纲"
+        outline_dir.mkdir()
+        (outline_dir / "卷一.md").write_text("# 第1章 开端\n主角醒来。\n", encoding="utf-8", newline="\n")
+        state = workflow.state(self.root)
+        self.assertTrue(self.step(state, "idea")["done"])
+        self.assertTrue(self.step(state, "direction")["done"])
+        self.assertEqual(state["next"], "writing")
         self.chapter(2)
         state = workflow.state(self.root)
         self.assertTrue(self.step(state, "writing")["done"])
@@ -82,14 +89,14 @@ class WorkflowTest(unittest.TestCase):
         after = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
         self.assertEqual(before, after)
 
-    def test_dict_shaped_plan_counts_as_planned(self):
-        """真实 A 规划按 {章号: {...}} 存储，工作台不能把它当成没规划。"""
+    def test_dict_shaped_plan_is_counted_before_an_outline_is_ready(self):
+        """A 规划可以是按章号索引的元数据，写作仍需要可识别的细纲。"""
         (self.root / ".webnovel" / "story_plan.json").write_text(json.dumps(
             {"chapters": {"1": {"title": "开端"}, "2": {"title": "转折"}}}, ensure_ascii=False),
             encoding="utf-8", newline="\n")
         state = workflow.state(self.root)
         self.assertEqual(state["counts"]["plan_chapters"], 2)
-        self.assertTrue(self.step(state, "direction")["done"])
+        self.assertFalse(self.step(state, "direction")["done"])
 
     def test_sample_count_is_reported(self):
         samples = self.root / ".webnovel" / "samples"
