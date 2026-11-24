@@ -8,7 +8,7 @@
   - 轻量包 `dsh-chapter-whale-0.7.0.tgz`：`12,441,992` 字节，SHA-256 `e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400`。
   - 完整运行时包 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`：`282,727,542` 字节，SHA-256 `bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d`。
   - 自托管索引 [market/index.json](index.json) 已同步至 `0.7.0`（`publishTimestamp: 1795514809`）。
-- npm `latest` 当前仍为 `0.5.0`：自动化尝试以 `thus_zhou` 账号推送 `0.7.0` 时触发 npm 双因素认证（`EOTP`），未强行绕过；同字节安装包已准备在 `O:\小说助手\dsh-chapter-whale-0.7.0.tgz`，待维护者带 2FA/OTP 执行 `npm publish "O:\小说助手\dsh-chapter-whale-0.7.0.tgz" --access public` 后生效，依赖 npm 索引的市场随后自动刷新。
+- npm `latest` 已更新并实测验证为 `0.7.0`（线上 tarball 与 GitHub Release `v0.7.0` 逐字节一致：`12,441,992` 字节，SHA-256 `e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400`，SHA-1 `0ba5c90fd1b44c248e144d456c1c624890275823`），依赖 npm `latest` 的自动索引市场将随抓取周期自动刷新。
 - 社区目录已合并此前 [0.4.2 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347) 与 [0.5.0 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)，现已提交 [0.7.0 更新 PR #18485](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485)（`open`）。
 - [Distribution first start 云端 Windows 首启校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45370642905)（完整包 + 轻量包在线拉取均在全新工作区启动通过）及 [Source checks 12/12 矩阵](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099) 均已通过；另有 Windows `DSH 0.2.2-rc.3` 隔离沙箱 UI 实装记录（[retest-0.7.0.md](../docs/retest-0.7.0.md)）。
 - README、[上手指南](../docs/quickstart.md) 及 [演示图集](../docs/screenshots.md) 已全面替换为 9 张无隐私的 `0.7.0` 液态玻璃实机图。按约束未修改个人桌面端 `0.4.4` 配置。

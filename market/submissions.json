@@ -1,11 +1,9 @@
 {
-  "checkedAt": "2026-11-24T18:06:49+08:00",
+  "checkedAt": "2026-11-24T18:38:00+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
-    "version": "0.5.0",
+    "version": "0.7.0",
     "tag": "latest",
-    "pendingVersion": "0.7.0",
-    "pendingStatus": "blocked-on-2fa-eotp",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
     "registryDownloadVerified": true,
     "isolatedDshInstallVerified": false,
@@ -13,12 +11,10 @@
     "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099",
     "runtimeBaseline": "0.7.0 pinned runtime (b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f); Liquid Glass v5 native UI & standalone console verified in isolated DSH 0.2.2-rc.3",
     "isolatedDshNativeLoadVerified": true,
-    "sha256": "93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb",
-    "bytes": 16754442,
-    "pendingSha256": "e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400",
-    "pendingBytes": 12441992,
-    "pendingTarball": "O:\\小说助手\\dsh-chapter-whale-0.7.0.tgz",
-    "checkedAt": "2026-11-24T18:06:49+08:00"
+    "shasum": "0ba5c90fd1b44c248e144d456c1c624890275823",
+    "sha256": "e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400",
+    "bytes": 12441992,
+    "checkedAt": "2026-11-24T18:38:00+08:00"
   },
   "markets": [
     {
@@ -80,11 +76,11 @@
     "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099",
     "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
     "catalogState": "open",
-    "npmStatus": "pending-otp",
-    "checkedAt": "2026-11-24T18:06:49+08:00",
+    "npmStatus": "published",
+    "checkedAt": "2026-11-24T18:38:00+08:00",
     "screenshots": "https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
     "screenshotCount": 9,
     "personalInstallUpdated": false,
-    "personalInstallNote": "User desktop profile (0.4.4) kept untouched; GitHub, CI, docs and market synchronization completed while npm 0.7.0 waits for 2FA OTP."
+    "personalInstallNote": "User desktop profile (0.4.4) kept untouched; GitHub, CI, npm, docs and market synchronization completed."
   }
 }
