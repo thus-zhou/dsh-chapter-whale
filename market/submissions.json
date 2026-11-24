@@ -1,11 +1,9 @@
 {
-  "checkedAt": "2026-11-24T19:23:30+08:00",
+  "checkedAt": "2026-11-24T19:45:29+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "tag": "latest",
-    "pendingVersion": "0.7.1",
-    "pendingStatus": "awaiting-maintainer-2fa-publish",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
     "registryDownloadVerified": true,
     "isolatedDshInstallVerified": false,
@@ -13,14 +11,10 @@
     "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45381664602",
     "runtimeBaseline": "0.7.1 cross-platform plugin (Windows x64 reuses 0.7.0 runtime b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f; macOS darwin auto-venv verified on macos-latest arm64)",
     "isolatedDshNativeLoadVerified": true,
-    "shasum": "0ba5c90fd1b44c248e144d456c1c624890275823",
-    "sha256": "e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400",
-    "bytes": 12441992,
-    "pendingShasum": "a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f",
-    "pendingSha256": "11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1",
-    "pendingBytes": 12445323,
-    "pendingTarball": "O:\\小说助手\\dsh-chapter-whale-0.7.1.tgz",
-    "checkedAt": "2026-11-24T19:23:30+08:00"
+    "shasum": "a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f",
+    "sha256": "11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1",
+    "bytes": 12445323,
+    "checkedAt": "2026-11-24T19:45:29+08:00"
   },
   "markets": [
     {
@@ -88,11 +82,11 @@
     "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45381664602",
     "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
     "catalogState": "open",
-    "npmStatus": "awaiting-maintainer-2fa-publish",
-    "checkedAt": "2026-11-24T19:23:30+08:00",
+    "npmStatus": "published",
+    "checkedAt": "2026-11-24T19:45:29+08:00",
     "screenshots": "https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
     "screenshotCount": 9,
     "personalInstallUpdated": false,
-    "personalInstallNote": "User desktop profile (0.4.4) kept untouched; GitHub v0.7.1 Release, Windows+macOS CI, docs and market PR synced while npm 0.7.1 tarball awaits maintainer 2FA publish."
+    "personalInstallNote": "User desktop profile (0.4.4) kept untouched; GitHub v0.7.1 Release, npm latest 0.7.1, Windows+macOS CI, docs and market PR all synced."
   }
 }
