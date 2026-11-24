@@ -326,3 +326,48 @@ test('P01 已装候选再次启动时只做校验，不重复复制', { skip: pr
   await rm(pkg.root, { recursive: true, force: true });
   await rm(workspace, { recursive: true, force: true });
 });
+
+test('cross-platform path helpers resolve Windows and macOS layouts', async () => {
+  const mod = await import(`${PACKAGE_SOURCE.href}?v=${Date.now()}`);
+  assert.match(mod.managedRoot('win32'), /ChapterWhale[\\/]workspace$/);
+  assert.match(mod.managedRoot('darwin'), /Library[\\/]Application Support[\\/]ChapterWhale[\\/]workspace$/);
+  assert.match(mod.managedPythonPath('/tmp/cw', 'win32'), /\.venv[\\/]Scripts[\\/]python\.exe$/);
+  assert.match(mod.managedPythonPath('/tmp/cw', 'darwin'), /\.venv[\\/]bin[\\/]python3$/);
+  const candidates = mod.macPythonCandidates('/Users/tester');
+  assert.ok(candidates.includes('/opt/homebrew/bin/python3'));
+  assert.ok(candidates.includes('/usr/local/bin/python3'));
+  assert.ok(candidates.includes('/Users/tester/.pyenv/shims/python3'));
+});
+
+test('P01 macOS 首装隔离 venv、清理旧代码且保留作者数据', { skip: process.platform !== 'darwin' }, async () => {
+  const pkg = await makePackage({ bundled: false });
+  await writeTree(pkg.root, {
+    'deploy/macos/requirements-macos.txt': '# empty for skip-pip venv test\n',
+  });
+  const mod = await loadModule(pkg.root);
+  const workspace = await freshDir('ws-mac');
+  const config = {
+    managed: true,
+    rootDir: workspace,
+    python: mod.managedPythonPath(workspace, 'darwin'),
+    entry: join(workspace, 'manager', 'app.py'),
+  };
+  const previousSkip = process.env.CHAPTER_WHALE_SKIP_MAC_PIP;
+  process.env.CHAPTER_WHALE_SKIP_MAC_PIP = '1';
+  try {
+    await mod.prepareManaged(config);
+    assert.ok(existsSync(config.python), '应创建 macOS .venv/bin/python3');
+    const marker = JSON.parse(await readFile(join(workspace, '.chapter-whale-release.json'), 'utf8'));
+    assert.equal(marker.runtimeKind, 'macos-venv');
+    assert.equal(marker.buildId, pkg.manifest.buildId);
+    assert.equal(config.entryExists, true);
+    await writeTree(workspace, { 'integration_data/author_note.txt': 'keep-me' });
+    await mod.prepareManaged(config);
+    assert.equal(await readFile(join(workspace, 'integration_data/author_note.txt'), 'utf8'), 'keep-me');
+  } finally {
+    if (previousSkip === undefined) delete process.env.CHAPTER_WHALE_SKIP_MAC_PIP;
+    else process.env.CHAPTER_WHALE_SKIP_MAC_PIP = previousSkip;
+    await rm(pkg.root, { recursive: true, force: true });
+    await rm(workspace, { recursive: true, force: true });
+  }
+});

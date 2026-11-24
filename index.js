@@ -32,7 +32,7 @@ import {
 } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import { managedRoot, runtimeAvailable, prepareManaged, managedEnvironment,
+import { managedRoot, managedPythonPath, runtimeAvailable, prepareManaged, managedEnvironment,
   readRunDescription, compareRunDescription, writeRunDescription } from './managed-runtime.mjs';
 import { DshModelBridge } from './dsh-model-bridge.mjs';
 
@@ -124,7 +124,7 @@ export function resolveConfig(config = {}) {
     if (!stat.isDirectory()) throw new Error(`${PLUGIN_ID}: rootDir 不是目录：${rootDir}`);
   }
 
-  const python = String(config.python || '').trim() || (rawRoot ? defaultPython(rootDir) : join(rootDir, '.venv', 'Scripts', 'python.exe'));
+  const python = String(config.python || '').trim() || (rawRoot ? defaultPython(rootDir) : managedPythonPath(rootDir));
   const entry = join(rootDir, 'manager', 'app.py');
 
   return {

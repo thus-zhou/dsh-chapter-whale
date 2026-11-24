@@ -21,7 +21,7 @@ await execute(process.execPath,
   [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'),
     'install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
   { cwd: root, windowsHide: true, timeout: 180000 });
-const { prepareManaged, managedEnvironment } = await import(pathToFileURL(join(root, 'managed-runtime.mjs')));
+const { prepareManaged, managedEnvironment, managedPythonPath } = await import(pathToFileURL(join(root, 'managed-runtime.mjs')));
 const { resolveConfig, createHandler } = await import(pathToFileURL(join(root, 'index.js')));
 const manifest = JSON.parse(await readFile(join(root, 'runtime-manifest.json'), 'utf8'));
 const reservation = createServer();
@@ -32,7 +32,7 @@ const workspace = join(isolated, 'workspace');
 await mkdir(workspace);
 const config = resolveConfig({ rootDir: workspace, port });
 Object.assign(config, { managed: true, configuredRoot: false,
-  python: join(workspace, '.venv', 'Scripts', 'python.exe') });
+  python: managedPythonPath(workspace) });
 const realFetch = globalThis.fetch;
 let downloads = 0;
 if (downloadArg && downloadArg !== '-') {

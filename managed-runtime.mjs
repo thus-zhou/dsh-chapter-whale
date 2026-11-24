@@ -1,16 +1,69 @@
 import { cp, mkdir, readFile, writeFile, stat, lstat, rm, mkdtemp } from 'node:fs/promises';
 import { existsSync, createWriteStream, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execFile, execFileSync } from 'node:child_process';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { promisify } from 'node:util';
 import { t as listTar, x as extractTar } from 'tar';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, posix, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+const execFileAsync = promisify(execFile);
+
 export const PACKAGE_ROOT = dirname(fileURLToPath(import.meta.url));
-export function managedRoot() {
-  return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'ChapterWhale', 'workspace');
+export function managedRoot(platform = process.platform) {
+  if (platform === 'win32') {
+    return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'ChapterWhale', 'workspace');
+  }
+  if (platform === 'darwin') {
+    return posix.join(process.env.HOME || homedir(), 'Library', 'Application Support', 'ChapterWhale', 'workspace');
+  }
+  return posix.join(process.env.XDG_DATA_HOME || posix.join(process.env.HOME || homedir(), '.local', 'share'), 'ChapterWhale', 'workspace');
+}
+
+export function managedPythonPath(rootDir, platform = process.platform) {
+  return platform === 'win32'
+    ? join(rootDir, '.venv', 'Scripts', 'python.exe')
+    : posix.join(rootDir, '.venv', 'bin', 'python3');
+}
+
+export function macPythonCandidates(homeDir = process.env.HOME || homedir()) {
+  const candidates = [];
+  if (process.env.CHAPTER_WHALE_MAC_PYTHON) candidates.push(process.env.CHAPTER_WHALE_MAC_PYTHON.trim());
+  for (const dir of ['/opt/homebrew/bin', '/usr/local/bin']) {
+    candidates.push(
+      `${dir}/python3.13`,
+      `${dir}/python3.12`,
+      `${dir}/python3.11`,
+      `${dir}/python3`,
+    );
+  }
+  for (const minor of ['3.13', '3.12', '3.11']) {
+    candidates.push(`/Library/Frameworks/Python.framework/Versions/${minor}/bin/python3`);
+  }
+  candidates.push(posix.join(homeDir, '.pyenv', 'shims', 'python3'));
+  candidates.push('python3');
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+export function findMacPython(candidates = macPythonCandidates()) {
+  const probe = 'import sys, venv; assert sys.version_info >= (3, 11); print(sys.executable)';
+  for (const candidate of candidates) {
+    if (candidate.startsWith('/') && !existsSync(candidate)) continue;
+    try {
+      const resolved = execFileSync(candidate, ['-c', probe], {
+        timeout: 5000,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (resolved) return resolved;
+    } catch {
+      /* continue searching Python 3.11+ candidates */
+    }
+  }
+  throw new Error('未检测到 macOS 所需的 Python 3.11+ 环境。请先执行 brew install python@3.13 或从 https://www.python.org/downloads/macos/ 安装 Python 3.11+ 后重启 DSH（或在插件配置中填写 python 路径）。');
 }
 
 // 没有签名清单与可信公钥，自动跟随新版本的能力保持关闭。
@@ -79,10 +132,13 @@ export async function verifyInstalled(rootDir, manifest, names) {
   return result;
 }
 
-export function runtimeAvailable() {
-  return (existsSync(join(PACKAGE_ROOT, 'runtime', 'python', 'python.exe'))
-    || existsSync(join(PACKAGE_ROOT, 'runtime-download.json')))
-    && existsSync(join(PACKAGE_ROOT, 'backend', 'manager', 'app.py'));
+export function runtimeAvailable(platform = process.platform) {
+  if (!existsSync(join(PACKAGE_ROOT, 'backend', 'manager', 'app.py'))) return false;
+  if (platform === 'darwin') {
+    return existsSync(join(PACKAGE_ROOT, 'deploy', 'macos', 'requirements-macos.txt'));
+  }
+  return existsSync(join(PACKAGE_ROOT, 'runtime', 'python', 'python.exe'))
+    || existsSync(join(PACKAGE_ROOT, 'runtime-download.json'));
 }
 
 export async function downloadRuntime(workspace, manifest) {
@@ -183,13 +239,105 @@ export async function removeStaleCode(rootDir, previousFiles, nextFiles) {
   return removed;
 }
 
+async function prepareDarwinManaged(config, manifest, codeRoot, codeFiles) {
+  if (process.arch !== 'arm64' && process.arch !== 'x64') {
+    throw new Error('码章鲸当前支持 Apple Silicon (arm64) 与 Intel (x86_64) macOS。');
+  }
+  const reqPath = join(PACKAGE_ROOT, 'deploy', 'macos', 'requirements-macos.txt');
+  const reqSha = createHash('sha256').update(await readFile(reqPath)).digest('hex');
+  await mkdir(config.rootDir, { recursive: true });
+  if ((await lstat(config.rootDir)).isSymbolicLink()) throw new Error('工作目录不能是符号链接。');
+  const marker = join(config.rootDir, '.chapter-whale-release.json');
+  let installed;
+  try { installed = JSON.parse(await readFile(marker, 'utf8')); } catch {}
+  const venvPy = managedPythonPath(config.rootDir, 'darwin');
+  const sameCandidate = installed?.buildId === manifest.buildId
+    && installed?.runtimeKind === 'macos-venv'
+    && installed?.requirementsSha256 === reqSha
+    && existsSync(config.python)
+    && existsSync(config.entry);
+  if (sameCandidate) {
+    const spot = await verifyInstalled(config.rootDir, manifest, ['manager', 'integration']);
+    if (spot.missing.length || spot.mismatched.length) {
+      config.entryExists = false;
+      throw new Error('已安装的后端与发行清单不一致，请重新安装完整发行包。');
+    }
+    config.entryExists = true;
+    return;
+  }
+  const lock = join(config.rootDir, '.install-lock');
+  try { await mkdir(lock); } catch { throw new Error('另一个码章鲸实例正在准备环境，请稍后重试。'); }
+  try {
+    for (const name of CODE_TREES) {
+      const source = join(codeRoot, 'backend', name);
+      if (!existsSync(source)) throw new Error(`安装包缺少后端目录 ${name}，请重新安装完整的码章鲸发行包。`);
+      const destination = join(config.rootDir, name);
+      if (existsSync(destination) && (await lstat(destination)).isSymbolicLink()) throw new Error('运行目录不能是符号链接。');
+      await cp(source, destination, { recursive: true, force: true, dereference: false });
+    }
+    await removeStaleCode(config.rootDir, installed?.codeFiles || installed?.files, codeFiles);
+    const venvDir = join(config.rootDir, '.venv');
+    let depsReady = false;
+    if (existsSync(venvPy) && installed?.requirementsSha256 === reqSha) {
+      if (process.env.CHAPTER_WHALE_SKIP_MAC_PIP === '1') {
+        depsReady = true;
+      } else {
+        try {
+          await execFileAsync(venvPy, ['-c', 'import fastapi, uvicorn, pydantic, httpx, aiohttp, filelock, tzdata, multipart, aiofiles, PIL, requests, playwright'], { timeout: 10_000 });
+          depsReady = true;
+        } catch {
+          depsReady = false;
+        }
+      }
+    }
+    if (!depsReady) {
+      if (!existsSync(venvPy)) {
+        const basePython = findMacPython();
+        await execFileAsync(basePython, ['-m', 'venv', venvDir], { timeout: 120_000 });
+      }
+      if (process.env.CHAPTER_WHALE_SKIP_MAC_PIP !== '1') {
+        await execFileAsync(venvPy, ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '-r', reqPath], {
+          timeout: 10 * 60 * 1000,
+          env: { ...process.env, PIP_DISABLE_PIP_VERSION_CHECK: '1', PIP_REQUIRE_VIRTUALENV: '0' },
+        });
+      }
+    }
+    await mkdir(join(config.rootDir, 'integration_data'), { recursive: true, mode: 0o700 });
+    const verification = await verifyInstalled(config.rootDir, manifest, CODE_TREES);
+    if (verification.missing.length || verification.mismatched.length) {
+      throw new Error(`安装后校验失败（${verification.mismatched.length} 个文件不一致，${verification.missing.length} 个缺失），未写入发行标记。`);
+    }
+    await writeFile(marker, JSON.stringify({
+      buildId: manifest.buildId, codeBuildId: manifest.buildId, runtimeBuildId: manifest.buildId,
+      runtimeKind: 'macos-venv', arch: process.arch, requirementsSha256: reqSha,
+      installedAt: new Date().toISOString(),
+      verifiedFiles: verification.checked, codeFiles,
+    }));
+    config.entryExists = (await stat(config.entry)).isFile();
+  } finally {
+    await rm(lock, { recursive: false }).catch(async () => {
+      const { rmdir } = await import('node:fs/promises');
+      await rmdir(lock);
+    });
+  }
+}
+
 let preparing;
 export async function prepareManaged(config) {
   if (!config.managed) return;
   if (preparing) return preparing;
   preparing = (async () => {
-    if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('码章鲸当前支持 Windows 10/11 64 位。');
-    if (!runtimeAvailable()) throw new Error('安装包缺少运行环境，请重新安装完整的码章鲸发行包。');
+    if (process.platform === 'darwin') {
+      if (!runtimeAvailable('darwin')) throw new Error('安装包缺少 macOS 运行环境依赖清单或后端源码，请重新安装码章鲸发行包。');
+      const manifest = JSON.parse(await readFile(join(PACKAGE_ROOT, 'runtime-manifest.json'), 'utf8'));
+      const codeRoot = codeSource();
+      const codeFiles = Object.keys(manifest.files || {}).filter((name) => name.startsWith('backend/'));
+      return await prepareDarwinManaged(config, manifest, codeRoot, codeFiles);
+    }
+    if (process.platform !== 'win32' || process.arch !== 'x64') {
+      throw new Error('码章鲸当前支持 Windows 10/11 64 位与 macOS（Apple Silicon / Intel）。');
+    }
+    if (!runtimeAvailable('win32')) throw new Error('安装包缺少运行环境，请重新安装完整的码章鲸发行包。');
     const manifest = JSON.parse(await readFile(join(PACKAGE_ROOT, 'runtime-manifest.json'), 'utf8'));
     const codeRoot = codeSource();
     const codeFiles = Object.keys(manifest.files || {}).filter((name) => name.startsWith('backend/'));
@@ -258,11 +406,26 @@ export function managedEnvironment(config) {
   for (const name of Object.keys(env)) {
     if (name.startsWith('NOVEL_HELPER_') || ['AI_API_KEY', 'AI_MODEL', 'AI_BASE_URL', 'PYTHONPATH', 'PYTHONHOME'].includes(name)) delete env[name];
   }
-  return { ...env, CHAPTER_WHALE_MANAGED: '1', CHAPTER_WHALE_SERVICE_MODE: 'dsh_managed',
+  const managedEnv = {
+    ...env,
+    CHAPTER_WHALE_MANAGED: '1',
+    CHAPTER_WHALE_SERVICE_MODE: 'dsh_managed',
     NOVEL_HELPER_ROOT: config.rootDir,
     NOVEL_HELPER_AI_CONFIG: join(config.rootDir, 'integration_data', 'ai_config.json'),
     NOVEL_HELPER_WEBNOVEL_HOME: join(config.rootDir, 'integration_data', 'webnovel'),
-    PLAYWRIGHT_BROWSERS_PATH: join(config.rootDir, 'playwright-browsers') };
+  };
+  if (process.platform === 'win32' || existsSync(join(config.rootDir, 'playwright-browsers'))) {
+    managedEnv.PLAYWRIGHT_BROWSERS_PATH = join(config.rootDir, 'playwright-browsers');
+  }
+  if (process.platform !== 'win32') {
+    managedEnv.PYTHONPATH = config.rootDir;
+    const pathParts = String(managedEnv.PATH || '').split(':').filter(Boolean);
+    for (const extra of ['/opt/homebrew/bin', '/usr/local/bin']) {
+      if (!pathParts.includes(extra)) pathParts.unshift(extra);
+    }
+    managedEnv.PATH = pathParts.join(':');
+  }
+  return managedEnv;
 }
 
 /* ------------------------------------------------- 工作区级运行描述（P05） */

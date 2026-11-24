@@ -1,14 +1,14 @@
-# 码章鲸 0.7.0 验证记录
+# 码章鲸 0.7.1 验证记录
 
-0.7.0 源码经 [PR #1](https://github.com/thus-zhou/dsh-chapter-whale/pull/1) 合入 `main`。公开发行状态以 [GitHub Releases](https://github.com/thus-zhou/dsh-chapter-whale/releases) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
+`0.7.1` 在 `0.7.0`（[PR #1](https://github.com/thus-zhou/dsh-chapter-whale/pull/1)）基础上正式开放 macOS（Apple Silicon / Intel）DSH 插件支持；后端目录与 Windows 固定运行时清单与 `0.7.0` 完全一致。公开发行状态以 [GitHub Releases](https://github.com/thus-zhou/dsh-chapter-whale/releases) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
 
-运行时归档的字节数与 SHA-256 由打包脚本写入轻量包的 `runtime-download.json`。完整包使用其中捆绑的运行时。
+Windows 轻量包复用 `v0.7.0` 固定运行时归档（字节数与 SHA-256 记录在 `runtime-download.json`）；完整包使用其中捆绑的运行时；macOS 首启基于本机 Python 3.11+ 在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 自动创建隔离环境并安装 `deploy/macos/requirements-macos.txt`。
 
 ---
 
 ## 本轮定位与许可边界
 
-- **目标版本**：`0.7.0`（将 `0.5.0` 之后在 `feat/v0.7.0` 合拢的排期缓冲、连续性与预检、读者反馈、常驻存稿服务包、单目标浏览器试点、多平台能力契约，以及 DSH 前后端联调统一收敛为一版 PR）。
+- **目标版本**：`0.7.1`（Windows x64 完整支持 + macOS Apple Silicon / Intel DSH 插件首启隔离 `.venv` 支持）。
 - **组合分发许可**：`GPL-3.0-only`（见 `package.json`、`LICENSES/GPL-3.0.txt`、`THIRD_PARTY_NOTICES.md`、`docs/license-decision.md` 方案 A）。
 - **清单摘要（`buildId`）**：`b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`（`runtime-manifest.json`，共 `3420` 个受管文件）。
 

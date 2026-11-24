@@ -1,8 +1,12 @@
-# 码章鲸常驻存稿服务 · macOS（ARM64 / Intel，原生进程，0.7.0 起）
+# 码章鲸 · macOS 说明（DSH 插件 + 常驻存稿服务）
+
+> **DSH 桌面 / Web 插件（0.7.1 起）**：`dsh-chapter-whale` 从 `0.7.1` 起已正式开放 `darwin`（Apple Silicon `arm64` / Intel `x86_64`）DSH 插件支持：在 DSH 内安装 `dsh-chapter-whale` 后，首次启动自动定位本机 Python 3.11+ 并在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 安装依赖；详见 [上手指南](../../docs/quickstart.md)。
+>
+> **无头常驻存稿服务（本目录归档）**：下方仅面向不安装 DSH、单独通过 `launchd` 运行的纯后端常驻存稿归档，不承诺容器化也不启用 DPAPI 凭据。
 
 本目录覆盖 **macOS 原生进程** 两种组合：Apple Silicon（`macos-arm64`）与 Intel（`macos-amd64`，0.7.0 起）。
-没有容器格，没有浏览器/登录格，也不承诺 DSH 桌面宿主兼容。
-本机没有在真实 macOS 上跑过验收；在补齐实机证据前，这两格都保持「待实机」。
+没有容器格，没有浏览器/登录格，也不单独打包桌面端容器镜像。
+物理机没有在真实 Intel Mac 上跑过验收；在补齐物理 Intel 实机证据前，Intel 物理机格保持「待实机」。
 
 ## 两种归档
 

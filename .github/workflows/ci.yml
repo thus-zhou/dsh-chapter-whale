@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
         python: ['3.11', '3.13']
     runs-on: ${{ matrix.os }}
     env:
@@ -48,3 +48,25 @@ jobs:
         run: python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend -v
       - name: Manager checks (offline, no model calls)
         run: python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend -v
+  macos-first-start:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Pack plugin tarball and verify macOS first-start venv
+        run: |
+          mkdir -p artifacts
+          npm pack --ignore-scripts --pack-destination artifacts
+          node scripts/verify-package.mjs artifacts/dsh-chapter-whale-*.tgz - artifacts/macos-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-first-start-result
+          path: artifacts/macos-result.json

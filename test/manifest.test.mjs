@@ -57,15 +57,17 @@ test('兼容性判断读的是 engines.dsh，不是 dsh.engines.dsh', { skip }, 
   assert.equal(misplacedIssue, undefined, '没有 engines.dsh 时宿主回退 peer 检查；这里应当仍然通过，但不能依赖它');
 });
 
-test('bundle 平台声明：win32 放行，其他平台是硬拦截', { skip }, () => {
+test('bundle 平台声明：win32 与 darwin 放行，其他平台是硬拦截', { skip }, () => {
   assert.doesNotThrow(() => boot.assertBundlePlatform(manifest.dsh.bundle.platforms, 'win32'));
-  // Non-Windows is a hard stop in dsh-app-boot (`UnsupportedBundlePlatformError`),
-  // not a warning. Asserting it here keeps the README's "Windows-only" claim honest
-  // and makes the suite pass on any CI runner regardless of its own platform.
-  if (process.platform !== 'win32') {
+  assert.doesNotThrow(() => boot.assertBundlePlatform(manifest.dsh.bundle.platforms, 'darwin'));
+  assert.throws(
+    () => boot.assertBundlePlatform(manifest.dsh.bundle.platforms, 'linux'),
+    /platform|win32|darwin/i,
+  );
+  if (process.platform !== 'win32' && process.platform !== 'darwin') {
     assert.throws(
       () => boot.assertBundlePlatform(manifest.dsh.bundle.platforms, process.platform),
-      /platform|win32/i,
+      /platform|win32|darwin/i,
     );
   }
 });

@@ -6,7 +6,7 @@
 
 ## 1. 安装并启动码章鲸
 
-当前公开包支持 Windows 10/11 x64，要求 DSH ≥ 0.2.2-rc.1。
+当前公开包（`0.7.1` 起）支持 **Windows 10/11 x64** 与 **macOS（Apple Silicon / Intel）**，要求 DSH ≥ 0.2.2-rc.1。
 
 1. 打开 DSH 的插件管理，添加 npm 包名 `dsh-chapter-whale`。
 2. 安装后重启 DSH。
@@ -20,12 +20,14 @@ dsh plugin --profile web add dsh-chapter-whale
 
 安装后重启 `dsh web`。自定义 profile 将 `web` 换成实际名称；桌面版请在应用内安装，避免装到另一个 profile。
 
-npm 包首次启动会自动下载约 274 MB 的 Python 与浏览器运行环境，校验固定大小和 SHA-256 后解包。需要能连接 GitHub；首次完成准备且环境版本未变时，后续启动不会重复下载。
+- **Windows 首次启动**：npm 包自动从 GitHub Releases 下载并校验固定的 Python 与 Chromium 运行环境（完整包则直接随包解出）；已有同 `buildId` 运行时直接复用。
+- **macOS（arm64 / Intel）首次启动**：自动检索本机 Python 3.11+（优先 `/opt/homebrew/bin/python3`、`/usr/local/bin/python3`、Python.org `/Library/Frameworks/Python.framework`、`pyenv`），在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 创建隔离虚拟环境并安装 `deploy/macos/requirements-macos.txt` 中的后端依赖。若尚未安装 Python 3.11+，请先执行 `brew install python@3.13` 后重启 DSH。若在 Mac 上需要使用浏览器发布，在终端补装一次 Chromium 即可：
+  ```sh
+  "$HOME/Library/Application Support/ChapterWhale/workspace/.venv/bin/python3" -m playwright install chromium
+  ```
+- **macOS 能力边界提示**：免费额度独立服务（OFM）强依赖 Windows DPAPI，在 macOS 上不会启用；建议直接使用「自动接入 DSH 已登录模型」或自定义 API Key。
 
-也可在 DSH 插件管理中添加从[最新 GitHub 发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载的文件。
-
-- `dsh-chapter-whale-<版本>.tgz` 与 npm 插件包相同，首次启动时下载并校验运行时。
-- `dsh-chapter-whale-runtime-win32-x64-<版本>.tgz` 内含 Python 和 Chromium，可用同一个安装入口添加。
+也可在 DSH 插件管理中添加从[最新 GitHub 发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载的 `.tgz` 文件（Windows 提供轻量包与内含运行时的完整包；macOS 直接安装 `dsh-chapter-whale-<版本>.tgz`）。
 
 首次启动时会准备运行环境，已有相同运行时的工作区可直接复用。
 
@@ -45,7 +47,7 @@ npm pack dsh-chapter-whale@latest
 dsh plugin --profile web update dsh-chapter-whale
 ```
 
-更新后重启对应的 DSH。旧版宿主升级未生效时，可在插件管理中显式添加 `dsh-chapter-whale@latest`。作品、登录信息和任务仍保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，建议更新前备份。
+更新后重启对应的 DSH。旧版宿主升级未生效时，可在插件管理中显式添加 `dsh-chapter-whale@latest`。作品、登录信息和任务保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`（Windows）或 `~/Library/Application Support/ChapterWhale/workspace`（macOS），建议更新前备份。
 
 ### 两个入口，使用同一份数据
 

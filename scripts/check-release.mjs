@@ -96,16 +96,29 @@ if (!existsSync(downloadPath)) {
   }
 } else {
   const spec = JSON.parse(readFileSync(downloadPath, 'utf8'));
-  const expectedName = `dsh-chapter-whale-runtime-win32-x64-${pkg.version}.tgz`;
+  const runtimeVersion = String(manifest.version || pkg.version);
+  const expectedName = `dsh-chapter-whale-runtime-win32-x64-${runtimeVersion}.tgz`;
   if (spec.buildId !== manifest.buildId) errors.push('runtime-download.json 的 buildId 与发行清单不一致。');
   if (!/^[a-f0-9]{64}$/.test(String(spec.sha256))) errors.push('runtime-download.json 的 sha256 格式无效。');
   if (!Number.isSafeInteger(spec.bytes) || spec.bytes <= 0 || spec.bytes > 512 * 1024 * 1024) {
     errors.push('runtime-download.json 的 bytes 不在允许范围。');
   }
-  if (!new RegExp(`^https://github\\.com/thus-zhou/dsh-chapter-whale/releases/download/v${pkg.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/${expectedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).test(String(spec.url))) {
-    errors.push(`runtime-download.json 的 URL 与版本不符，应为 v${pkg.version}/${expectedName}。`);
+  if (!new RegExp(`^https://github\\.com/thus-zhou/dsh-chapter-whale/releases/download/v${runtimeVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/${expectedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).test(String(spec.url))) {
+    errors.push(`runtime-download.json 的 URL 与版本不符，应为 v${runtimeVersion}/${expectedName}。`);
   }
   if (bundledRuntime) notes.push('包内已内置 runtime，仍然校验下载描述的一致性。');
+}
+
+const macReqPath = join(root, 'deploy', 'macos', 'requirements-macos.txt');
+if (Array.isArray(pkg?.dsh?.bundle?.platforms) && pkg.dsh.bundle.platforms.includes('darwin')) {
+  if (!existsSync(macReqPath) || !statSync(macReqPath).isFile()) {
+    errors.push('缺少 macOS 运行环境依赖清单：deploy/macos/requirements-macos.txt');
+  } else {
+    const macReqRaw = readFileSync(macReqPath);
+    if (macReqRaw.includes(0x0d) && macReqRaw.includes(0x0a) && macReqRaw.toString('utf8').includes('\r\n')) {
+      errors.push('文本文件含 CRLF，分发字节必须是 LF：deploy/macos/requirements-macos.txt');
+    }
+  }
 }
 
 if (!local && pkg.private) errors.push('package.json 仍标记为 private，禁止发布。');

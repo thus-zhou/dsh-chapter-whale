@@ -52,8 +52,8 @@
         "zh": "码章鲸 · 全自动小说写作与番茄发布"
       },
       "description": {
-        "en": "Windows x64 unattended novel writing and Fanqie publishing with configurable schedules, chapter counts and word targets, plus optional free-quota models and supported vendor logins. Bundles Python and Chromium.",
-        "zh": "Windows x64 全自动小说写作与番茄发布工作台：自定义更新时间、章数和篇幅，按任务无人值守执行，接入部分免费模型并支持部分厂商账号登录。内置 Python 后端与浏览器。"
+        "en": "Windows x64 & macOS (Apple Silicon / Intel) unattended novel writing and Fanqie publishing with configurable schedules, chapter counts and word targets, plus optional free-quota models and supported vendor logins.",
+        "zh": "Windows x64 与 macOS（Apple Silicon / Intel）全自动小说写作与番茄发布工作台：自定义更新时间、章数和篇幅，按任务无人值守执行，支持 DSH 已登录模型及多种独立渠道。"
       },
       "icon": "https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/icon.svg",
       "author": "thus-zhou",
@@ -78,8 +78,8 @@
       },
       "versions": [
         {
-          "version": "0.7.0",
-          "publishTimestamp": 1795514809,
+          "version": "0.7.1",
+          "publishTimestamp": 1795518000,
           "source": {
             "type": "npm",
             "registry": "https://registry.npmjs.org/"

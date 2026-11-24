@@ -46,3 +46,30 @@ jobs:
         with:
           name: first-start-results
           path: artifacts/*-result.json
+  macos-install:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download release plugin package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json','utf8')).version)")
+          lightAsset="dsh-chapter-whale-$version.tgz"
+          mkdir -p artifacts/light
+          gh release download "v$version" --repo thus-zhou/dsh-chapter-whale --pattern "$lightAsset" --dir artifacts/light
+          echo "CHAPTER_WHALE_LIGHT_ASSET=$lightAsset" >> "$GITHUB_ENV"
+      - name: Start the macOS plugin package in a new workspace
+        run: node scripts/verify-package.mjs "artifacts/light/$CHAPTER_WHALE_LIGHT_ASSET" - artifacts/macos-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-first-start-results
+          path: artifacts/macos-result.json

@@ -1,8 +1,8 @@
 {
   "name": "dsh-chapter-whale",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": false,
-  "description": "码章鲸：DSH 全自动小说写作与番茄发布，支持自定义日更任务、无人值守运行、部分免费模型与厂商账号登录。ChapterWhale: scheduled, unattended novel writing and Fanqie publishing for Windows x64.",
+  "description": "码章鲸：DSH 全自动小说写作与番茄发布，支持自定义日更任务、无人值守运行、部分免费模型与厂商账号登录。ChapterWhale: scheduled, unattended novel writing and Fanqie publishing for Windows x64 and macOS (Apple Silicon / Intel).",
   "type": "module",
   "license": "GPL-3.0-only",
   "author": {
@@ -103,7 +103,8 @@
     "bundle": {
       "patch": "./cordis.patch.yml",
       "platforms": [
-        "win32"
+        "win32",
+        "darwin"
       ]
     },
     "client": {

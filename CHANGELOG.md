@@ -1,3 +1,11 @@
+## [0.7.1] — 2026-11-24
+
+> 正式开放 macOS（Apple Silicon `arm64` / Intel `x86_64`）DSH 插件支持；后端源码与固定 Windows 运行时清单（`buildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`）保持不变，复用 `v0.7.0` 完整运行时大包。
+
+- **macOS (`darwin`) DSH 插件支持**：`package.json` 的 `dsh.bundle.platforms` 扩展为 `["win32", "darwin"]`；`managed-runtime.mjs` 与 `index.js` 新增 macOS 工作区（`~/Library/Application Support/ChapterWhale/workspace`）、`managedPythonPath()`、Homebrew / Python.org / `pyenv` Python 3.11+ 探测、首次启动隔离 `.venv` 创建与 `deploy/macos/requirements-macos.txt` 依赖安装及升级旧码清理。
+- **跨平台测试与云端 CI**：`scripts/verify-package.mjs`、`scripts/check-release.mjs` 与 `test/{manifest,gate,managed-runtime,release-check}.test.mjs` 补齐 macOS 路径与补丁版复用上一版运行时清单的回归测试；GitHub Actions `Source checks` 与 `Distribution first start` 新增 `macos-latest` 单测及真实 tarball 首启验证作业。
+- **文档与市场元数据同步**：更新 `README.md`、`docs/quickstart.md`、`deploy/macos/README.md`、`RELEASE_STATUS.md` 与 `market/*`（同步提供 `0.7.1` macOS ARM64 / Intel 常驻存稿归档）。
+
 ## [0.7.0]
 
 > Windows 上已用独立 DSH 环境实装。真实模型调用、真实番茄及七猫网页写入、Linux/macOS 常驻服务实机和外网 Webhook 仍待验。

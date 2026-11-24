@@ -332,11 +332,24 @@ test('首装不需要 rootDir：使用独立工作区和内置解释器', async 
   // A fresh install has no rootDir at all: the plugin must stay loaded and say
   // what to fill in, rather than throwing during apply().
   const previousLocal = process.env.LOCALAPPDATA;
-  process.env.LOCALAPPDATA = mkdtempSync(join(tmpdir(), 'chapter-whale-first-start-'));
-  const unconfigured = resolveConfig({ port: 1 });
-  rmSync(process.env.LOCALAPPDATA, { recursive: true, force: true });
-  if (previousLocal === undefined) delete process.env.LOCALAPPDATA;
-  else process.env.LOCALAPPDATA = previousLocal;
+  const previousHome = process.env.HOME;
+  const previousXdg = process.env.XDG_DATA_HOME;
+  const isolatedBase = mkdtempSync(join(tmpdir(), 'chapter-whale-first-start-'));
+  process.env.LOCALAPPDATA = isolatedBase;
+  process.env.HOME = isolatedBase;
+  process.env.XDG_DATA_HOME = isolatedBase;
+  let unconfigured;
+  try {
+    unconfigured = resolveConfig({ port: 1 });
+  } finally {
+    rmSync(isolatedBase, { recursive: true, force: true });
+    if (previousLocal === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = previousLocal;
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousXdg === undefined) delete process.env.XDG_DATA_HOME;
+    else process.env.XDG_DATA_HOME = previousXdg;
+  }
   assert.equal(unconfigured.entryExists, false);
   assert.equal(unconfigured.configuredRoot, false);
   assert.equal(unconfigured.managed, true);

@@ -158,3 +158,23 @@ test('P02 private 包只在非 --local 时被拒绝', async () => {
     assert.match(strict.out, /private/);
   });
 });
+
+test('P02 插件补丁版复用上一版 runtime-manifest 时通过校验', async () => {
+  await withPackage(async (root) => {
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.version = '0.7.1';
+    pkg.dsh = { bundle: { platforms: ['win32', 'darwin'] } };
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const manifest = JSON.parse(await readFile(join(root, 'runtime-manifest.json'), 'utf8'));
+    manifest.version = '0.7.0';
+    await writeFile(join(root, 'runtime-manifest.json'), JSON.stringify(manifest, null, 2));
+    await writeFile(join(root, 'runtime-download.json'), JSON.stringify({
+      url: 'https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz',
+      bytes: 1234, sha256: 'a'.repeat(64), buildId: manifest.buildId,
+    }));
+    await mkdir(join(root, 'deploy', 'macos'), { recursive: true });
+    await writeFile(join(root, 'deploy', 'macos', 'requirements-macos.txt'), 'fastapi>=0.115\n');
+    const result = run(root, ['--local']);
+    assert.equal(result.code, 0, result.out);
+  });
+});
