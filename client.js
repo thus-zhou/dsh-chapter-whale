@@ -1229,12 +1229,16 @@
           "\"atelier\"][data-theme=\"light\"] .cw-ai-star{background:var(--a)}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon{border:0;background:conic-gradient(from 25deg,transparent 3%,var(--a) 28%,var(--b) 55%,var(--c) 72%,transparent 96%);mask:radial-gradient(closest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));box-shadow:none}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon:nth-child(2){background:conic-gradient(from 135deg,transparent,var(--c),var(--b),transparent)}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon:nth-child(3){background:conic-gradient(from 70deg,transparent,var(--a),var(--c),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"polish\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--b),var(--c),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"review\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--a),var(--mint),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"error\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--error),transparent);animation:none}\n.nh-root[data-ui=\"atelier\"]:is([data-status=\"idle\"],[data-status=\"success\"]) :is(.cw-ai-core,.cw-ai-ribbon,.cw-ai-star){animation:none}\n.nh-root[data-ui=\"atelier\"][data-paused=\"true\"] .cw-ai-presence{opacity:.35}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-weight:350}\n@media (min-width:851px) and (max-width:1080px){.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:318px;padding-top:21px;padding-bottom:17px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{margin-top:11px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{margin-top:18px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics{padding-top:12px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{top:119px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript{margin-top:13px}}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-manuscript-card{height:330px;padding:21px 24px 17px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] main{padding-top:18px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-page-heading{margin-bottom:18px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-word-progress{margin-top:15px}\n@media (min-width:1600px){.nh-root[data-ui=\"atelier\"]{--content-pad:42px;--sidebar-w:220px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{gap:22px;padding-inline:26px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:362px;padding-inline:33px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:16px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:32px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:29px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-size:40px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{right:35px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:18px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding-inline:16px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{font-size:14px;min-height:44px}}\n@media (max-width:1250px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:185px;--content-pad:23px;--gap:18px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding-inline:18px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding-inline:10px}\n.nh-root[data-ui=\"atelier\"] .cw-brand{padding-inline:7px}\n.nh-root[data-ui=\"atelier\"] .cw-brand>span{font-size:19px}\n.nh-root[data-ui=\"atelier\"] .cw-project-picker{padding-inline:8px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{padding-inline:10px;font-size:12px;gap:10px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{padding-inline:23px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:25px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:10px;padding-inline:9px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{right:17px;width:100px;height:100px;top:138px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-",
           "size:34px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card,.nh-root[data-ui=\"atelier\"] .cw-next-card{padding-inline:20px}}\n@media (max-width:1080px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:63px;--content-pad:24px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding:13px 14px 20px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding:23px 9px 15px;min-height:620px;align-items:center;gap:28px;border-radius:22px}\n.nh-root[data-ui=\"atelier\"] .cw-brand{padding:0}\n.nh-root[data-ui=\"atelier\"] .cw-brand>span,.nh-root[data-ui=\"atelier\"] .cw-project-picker,.nh-root[data-ui=\"atelier\"] .cw-nav-label,.nh-root[data-ui=\"atelier\"] .cw-nav-live,.nh-root[data-ui=\"atelier\"] .cw-nav-count,.nh-root[data-ui=\"atelier\"] .cw-appearance-entry>span{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar nav{width:100%;gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{font-size:0;gap:0;justify-content:center;padding:10px;min-height:41px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item .cw-icon{width:18px;height:18px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar-bottom{width:100%}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry{padding:10px}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry>.cw-icon{width:18px;height:18px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:26px}\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr)}\n.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}}\n@media (max-width:850px){.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:1fr}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card{height:332px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{width:116px;height:110px;right:40px;top:125px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{max-width:82%}\n.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:1fr}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-muted{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:27px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:18px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:12px}\n.nh-root[data-ui=\"atelier\"] .cw-next-card{padding-bottom:22px}\n.nh-root[data-ui=\"atelier\"] .cw-model-connected{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-top-actions{gap:0}\n.nh-root[data-ui=\"atelier\"] .cw-vertical-divider{display:none}}\n@media (max-width:520px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:52px;--content-pad:14px;--gap:15px;--radius:18px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding:10px 8px 16px;gap:0}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding:20px 6px 12px;top:10px;height:calc(100vh - 52px);border-radius:17px}\n.nh-root[data-ui=\"atelier\"] .cw-brand-whale{width:27px;height:24px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{padding:9px;min-height:37px;border-radius:10px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item .cw-icon{width:17px;height:17px}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry{padding:9px}\n.nh-root[data-ui=\"atelier\"] .cw-topbar{height:42px}\n.nh-root[data-ui=\"atelier\"] .cw-breadcrumbs{font-size:10px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-breadcrumbs .cw-icon{width:10px;height:10px}\n.nh-root[data-ui=\"atelier\"] .cw-floating-tools{padding:2px 4px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-floating-tools .cw-avatar{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-icon-button{width:27px;height:27px}\n.nh-root[data-ui=\"atelier\"] .cw-preview-bar{padding:0 12px;font-size:9px;gap:6px}\n.nh-root[data-ui=\"atelier\"] .cw-preview-separator,.nh-root[data-ui=\"atelier\"] .cw-preview-bar>span>.cw-muted,.nh-root[data-ui=\"atelier\"] .cw-host-toggle,.nh-root[data-ui=\"atelier\"] .cw-quiet-button>span{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-preview-actions{gap:9px}\n.nh-root",
           "[data-ui=\"atelier\"] .cw-preview-bar select{font-size:10px;max-width:85px}\n.nh-root[data-ui=\"atelier\"] .cw-scenario-control{gap:4px}\n.nh-root[data-ui=\"atelier\"] main{padding-top:18px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading{gap:10px;margin-bottom:22px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading .cw-button{min-height:33px;font-size:10px;padding:7px 11px;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading .cw-button .cw-icon{width:13px;height:13px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta{gap:7px;align-items:flex-start}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>div{flex-direction:column;align-items:flex-start;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>div>strong{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-text-button{gap:4px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-text-button strong{font-size:13px}\n.nh-root[data-ui=\"atelier\"] .cw-live-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot{flex-wrap:wrap;font-size:9px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot .cw-eta{width:100%;margin-left:0}\n.nh-root[data-ui=\"atelier\"] .cw-overall-progress{padding-bottom:17px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{padding:20px 18px 16px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card{height:333px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:25px;margin-top:15px}\n.nh-root[data-ui=\"atelier\"] .cw-card-topline{gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:6px}\n.nh-root[data-ui=\"atelier\"] .cw-section-kicker{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:9px;padding:5px 8px;min-height:29px;gap:4px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button .cw-icon{width:11px;height:11px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:10px;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill>.cw-muted{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-model-reasoning{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{max-width:100%;margin-top:25px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-size:34px}\n.nh-root[data-ui=\"atelier\"] .cw-word-target{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{width:90px;height:90px;right:15px;top:134px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics{gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:16px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4{font-size:17px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px;line-height:2}\n.nh-root[data-ui=\"atelier\"] .cw-pipeline-card{padding:18px 9px 11px;border-radius:16px;margin-top:15px}\n.nh-root[data-ui=\"atelier\"] .cw-stage{padding-inline:0;gap:7px;min-height:78px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-copy strong{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-state{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-node{height:25px;width:25px;font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-flow-rail{top:12px}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card,.nh-root[data-ui=\"atelier\"] .cw-next-card{padding:18px 16px}\n.nh-root[data-ui=\"atelier\"] .cw-card-tab{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-card-tabs{gap:15px}\n.nh-root[data-ui=\"atelier\"] .cw-subtle-badge{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row{gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index{font-size:10px;width:19px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status .cw-icon{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-settings-drawer{width:calc(100vw - 22px);inset:10px 11px;border-radius:22px}\n.nh-root[data-ui=\"atelier\"] .cw-drawer-heading{padding:20px}\n.nh-root[data-ui=\"atelier\"] .cw-drawer-content{padding-inline:20px}\n.nh-root[data-ui=\"atelier\"] .",
-          "reader-dialog{padding:24px!important}\n.nh-root[data-ui=\"atelier\"] #dialog-content h2{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-text p{font-size:16px!important}\n.nh-root[data-ui=\"atelier\"] .cw-toast{font-size:10px;padding:12px 14px;max-width:calc(100vw - 35px);white-space:normal}}\n.nh-root[data-ui=\"atelier\"]{\n --nh-base:transparent;--nh-surface:rgb(var(--surface)/.9);--nh-surface2:rgb(var(--card)/.94);\n --nh-border:var(--line-strong);--nh-border-soft:var(--line);--nh-ink:var(--ink);--nh-ink2:var(--ink2);--nh-ink3:var(--muted);\n --nh-accent:var(--a);--nh-cyan:var(--accent);--nh-hover:var(--selected);--nh-ok:var(--success);--nh-warn:var(--warning);--nh-err:var(--error);\n --nh-gap:20px;--nh-pad:23px;--nh-row:37px;--nh-fs:13px;\n background:radial-gradient(ellipse at 90% 0%,#28598530,transparent 65%),rgb(var(--surface)/.9);isolation:isolate;\n font-family:\"Whale Geometric\",\"Whale Text\",\"Microsoft YaHei UI\",sans-serif;color:var(--ink);line-height:1.65;font-size:13px;\n padding:12px 15px 15px;min-width:0;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"]{background:radial-gradient(ellipse at 85% 0%,#bad2f64a,transparent 60%),rgb(var(--surface)/.9)}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"]{--nh-gap:14px;--nh-pad:18px;--nh-row:33px;--nh-fs:12px}\n.nh-root[data-ui=\"atelier\"] .nh-head{padding:8px 17px 15px;gap:14px;background:transparent;border:0;min-height:57px;flex-wrap:wrap}\n.nh-root[data-ui=\"atelier\"] .nh-head h1{font-family:\"Whale Editorial\",serif;font-size:23px;font-weight:400;letter-spacing:.04em;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-head>.nh-select{width:220px;max-width:24vw;border-radius:11px;background:var(--tint);border-color:var(--line);font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-head>.nh-sub{font-size:11px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-head>.nh-row{padding:4px 8px;border:1px solid var(--line);border-radius:25px;background:linear-gradient(135deg,#ffffff08,transparent),rgb(var(--surface)/.6);box-shadow:inset 0 1px #ffffff0c;backdrop-filter:blur(8px);flex-wrap:wrap}\n.nh-root[data-ui=\"atelier\"] .nh-live{font-size:10px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-body{flex-direction:row;gap:18px;overflow:hidden;min-height:0}\n.nh-root[data-ui=\"atelier\"] .nh-nav{display:block;width:185px;flex:0 0 185px;margin:8px 0 0;padding:23px 12px 18px;border:1px solid var(--line);border-radius:23px;background:linear-gradient(135deg,#ffffff07,transparent),rgb(var(--surface)/.6);box-shadow:inset 0 1px #ffffff0b;backdrop-filter:blur(var(--blur));overflow-y:auto}\n.nh-root[data-ui=\"atelier\"] .nh-navgroup{margin-bottom:18px}\n.nh-root[data-ui=\"atelier\"] .nh-navlabel{display:block;font-size:10px;letter-spacing:.04em;font-weight:400;padding:0 10px 7px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-navitem{display:flex;width:100%;height:auto;min-height:40px;padding:9px 10px;font-size:12px;border-radius:11px;gap:10px;margin:3px 0;color:var(--ink2);white-space:normal;font-weight:400}\n.nh-root[data-ui=\"atelier\"] .nh-navitem svg{opacity:.8;flex-shrink:0;stroke-linecap:round}\n.nh-root[data-ui=\"atelier\"] .nh-navitem[data-active=\"true\"]{background:linear-gradient(130deg,#c9dfff10,transparent),var(--selected);border-color:var(--line);color:var(--ink);box-shadow:inset 0 1px #ffffff0c}\n.nh-root[data-ui=\"atelier\"] .nh-navitem[data-active=\"true\"]:before{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-main{display:block;flex:1;min-width:0;min-height:0;max-width:none;margin:0;align-self:stretch;padding:0 8px 0 0;background:transparent;overflow-y:auto;overflow-x:hidden}\n.nh-root[data-ui=\"atelier\"] .nh-page{padding:22px 22px 28px;max-width:1500px;margin:auto}\n.nh-root[data-ui=\"atelier\"] .nh-statusbar{background:transparent;border:0;min-height:27px;padding:0 18px 7px;color:var(--muted);font-size:10px;margin-bottom:6px}\n.nh-root[data-ui=\"atelier\"] .nh-sbfill,.nh-root[data-ui=\"atelier\"] .nh-sbline{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-sbmeta{font-size:10px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-sbtext{font-size:11px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .cw-route-headin",
-          "g{padding:20px 22px 0;margin:0 auto;max-width:1500px}\n.nh-root[data-ui=\"atelier\"] .nh-card,.nh-root[data-ui=\"atelier\"] .nh-stat,.nh-root[data-ui=\"atelier\"] .nh-hero{border:1px solid var(--line);border-radius:20px;background:linear-gradient(142deg,#ffffff07,transparent 62%),rgb(var(--card)/var(--glass-opacity));box-shadow:inset 0 1px #ffffff0c,0 12px 40px #0000000d;backdrop-filter:blur(var(--blur));overflow:hidden}\n.nh-root[data-ui=\"atelier\"] .nh-cardhead{padding:17px 22px;border-color:var(--line);gap:10px;flex-wrap:wrap;background:transparent}\n.nh-root[data-ui=\"atelier\"] .nh-cardbody{padding:20px 22px}\n.nh-root[data-ui=\"atelier\"] .nh-cardtitle{font-size:14px;font-weight:500;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-cardhint{font-size:11px;line-height:1.7;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .nh-btn{font-family:inherit;border-radius:22px;border:1px solid var(--line-strong);background:linear-gradient(135deg,#ffffff09,transparent),var(--tint);color:var(--ink2);padding:8px 15px;font-size:12px;font-weight:400;min-height:36px;transition:background 450ms var(--ease),box-shadow 450ms var(--ease),transform 230ms var(--spring)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]{color:var(--button-ink);background:var(--button-bg);border-color:transparent;box-shadow:inset 0 1px #ffffff60,0 5px 16px #00000010}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"ghost\"]{border-color:transparent;background:transparent;box-shadow:none;color:var(--accent)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"danger\"]{color:var(--error);border-color:color-mix(in srgb,var(--error) 35%,transparent);background:color-mix(in srgb,var(--error) 7%,transparent)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-size=\"sm\"]{min-height:29px;padding:5px 11px;font-size:11px}\n.nh-root[data-ui=\"atelier\"] .nh-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px #00000012;background:var(--selected);color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled){background:var(--button-bg);color:var(--button-ink);box-shadow:0 3px 22px color-mix(in srgb,var(--a) 20%,transparent)}\n.nh-root[data-ui=\"atelier\"] .nh-btn:disabled{opacity:.4;cursor:default}\n.nh-root[data-ui=\"atelier\"] .nh-btn:active:not(:disabled){transform:scale(.97)}\n.nh-root[data-ui=\"atelier\"] .nh-input,.nh-root[data-ui=\"atelier\"] .nh-select{color:var(--ink);background:rgb(var(--surface)/.6);border:1px solid var(--line-strong);border-radius:10px;font-family:inherit;font-size:13px;min-height:37px;padding:8px 11px}\n.nh-root[data-ui=\"atelier\"] .nh-select option{color:var(--ink);background:rgb(var(--card))}\n.nh-root[data-ui=\"atelier\"] .nh-input::placeholder{color:var(--muted);opacity:.8}\n.nh-root[data-ui=\"atelier\"] textarea.nh-input{line-height:1.9;min-height:90px}\n.nh-root[data-ui=\"atelier\"] .nh-textarea{border:1px solid var(--line-strong);border-radius:11px;background:rgb(var(--surface)/.6);color:var(--ink);font-family:\"Whale Text\",\"Microsoft YaHei UI\",sans-serif;font-size:13px;line-height:1.9;padding:11px 13px;resize:vertical;min-height:76px}\n.nh-root[data-ui=\"atelier\"] .nh-field{gap:7px;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-fieldlabel{font-size:12px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-table{font-family:inherit;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-table th{background:var(--tint);font-size:11px;font-weight:500;color:var(--muted);padding:12px}\n.nh-root[data-ui=\"atelier\"] .nh-table td{border-color:var(--line);padding:12px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-stat{padding:18px 20px}\n.nh-root[data-ui=\"atelier\"] .nh-statvalue{font-family:\"Whale Geometric\",sans-serif;font-size:30px;font-weight:300;letter-spacing:-.03em;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-k,.nh-root[data-ui=\"atelier\"] .nh-statlabel{color:var(--muted);font-size:11px;font-weight:400;letter-spacing:.015em}\n.nh-root[data-ui=\"atelier\"] .nh-badge{font-weight:400;font-size:10px;border-radius:20px;padding:3px 8px;border-color:var(--line);background:var(--tint);color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-ton",
-          "e=\"ok\"]{color:var(--success);background:color-mix(in srgb,var(--success) 6%,transparent)}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"err\"]{color:var(--error)}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"warn\"]{color:var(--warning)}\n.nh-root[data-ui=\"atelier\"] .nh-seg{border:1px solid var(--line);border-radius:12px;background:var(--tint);padding:3px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .nh-seg button{border:0;border-radius:9px;color:var(--muted);font-size:12px;background:transparent;padding:7px 12px}\n.nh-root[data-ui=\"atelier\"] .nh-seg button[data-active=\"true\"]{background:var(--button-bg);color:var(--button-ink);box-shadow:none}\n.nh-root[data-ui=\"atelier\"] .nh-tabs{border-color:var(--line);gap:10px}\n.nh-root[data-ui=\"atelier\"] .nh-tab{border-radius:10px 10px 0 0;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-tab[data-active=\"true\"]{background:var(--selected);color:var(--ink);border-color:var(--a)}\n.nh-root[data-ui=\"atelier\"] .nh-pre{font-family:\"Whale Text\",\"Microsoft YaHei UI\",sans-serif;line-height:1.95;font-size:14px;color:var(--ink);background:rgb(var(--surface)/.55);border:1px solid var(--line);border-radius:13px;padding:16px;white-space:pre-wrap;overflow-wrap:anywhere}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-pre{font-family:\"Whale Editorial\",\"SimSun\",serif}\n.nh-root[data-ui=\"atelier\"] .nh-herotitle{font-family:\"Whale Editorial\",serif;font-size:30px;font-weight:400;color:var(--ink)}\n.nh-root[data-ui=\"atelier\"] .nh-hero{padding:30px}\n.nh-root[data-ui=\"atelier\"] .nh-hero:before,.nh-root[data-ui=\"atelier\"] .nh-hero:after{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-herosub{color:var(--ink2);font-size:13px;line-height:1.9}\n.nh-root[data-ui=\"atelier\"] .nh-herotag{font-size:10px;font-weight:400}\n.nh-root[data-ui=\"atelier\"] .nh-empty{padding:35px 18px;color:var(--muted);font-size:12px;border:1px dashed var(--line);border-radius:13px;background:transparent}\n.nh-root[data-ui=\"atelier\"] .nh-progress{height:4px;border:0;background:var(--line);border-radius:6px}\n.nh-root[data-ui=\"atelier\"] .nh-progressfill{background:linear-gradient(90deg,var(--a),var(--b),var(--c));border-radius:inherit}\n.nh-root[data-ui=\"atelier\"] .nh-scroll{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask{background:#02081280;backdrop-filter:blur(5px);padding:26px}\n.nh-root[data-ui=\"atelier\"] .nh-modal{width:850px;max-width:calc(100vw - 52px);max-height:calc(100vh - 52px);border:1px solid var(--line-strong);border-radius:24px;background:linear-gradient(135deg,#ffffff08,transparent),rgb(var(--surface)/.97);color:var(--ink);box-shadow:0 28px 90px #00000050;backdrop-filter:blur(var(--blur));outline:0}\n.nh-root[data-ui=\"atelier\"] .nh-modal>.nh-cardbody{overflow-y:auto;max-height:calc(100vh - 135px)}\n.nh-root[data-ui=\"atelier\"] .cw-appearance{max-width:570px;margin:0 auto}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask:has(.cw-appearance-modal){justify-content:flex-end;align-items:stretch;padding:12px}\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal{width:430px;height:100%;max-height:100%;max-width:calc(100vw - 24px)}\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal>.nh-cardbody{max-height:none;flex:1;min-height:0;overflow:auto}\n.nh-root[data-ui=\"atelier\"] .cw-range-label{display:grid;grid-template-columns:50px 1fr;gap:15px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty{height:100%;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;gap:8px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty .cw-ai-presence{position:relative;inset:auto;width:85px;height:75px;flex-shrink:0;z-index:0;opacity:.3}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty>p{font-family:\"Whale Editorial\",serif;font-size:18px;color:var(--ink2);margin:0}\n.nh-root[data-ui=\"atelier\"] .cw-reader-empty>span{font-size:11px;color:var(--muted)}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>span{font-size:12px;color:var(--ink2)}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot>span:last-child{margin-left:auto}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-c",
-          "ard .nh-btn{font-size:10px;min-height:27px;padding:4px 8px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:16px;font-weight:400;font-family:\"Whale Geometric\",\"Whale Text\",sans-serif}\n.nh-root[data-ui=\"atelier\"] .cw-hero-actions .nh-btn{padding:0;font-size:11px;min-height:23px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .nh-btn{padding:5px 11px;min-height:31px;font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-saved-status{max-width:58%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card .nh-btn,.nh-root[data-ui=\"atelier\"] .cw-next-card .nh-btn{font-size:10px;padding:3px 0;min-height:23px}\n.nh-root[data-ui=\"atelier\"] .cw-next-task-time strong{font-size:25px;overflow-wrap:anywhere}\n.nh-root[data-ui=\"atelier\"] .cw-dashboard[data-running=\"false\"] :is(.cw-flow-fill,.cw-ai-ribbon,.cw-ai-core,.cw-ai-star){animation:none}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence[data-active=\"false\"]{opacity:.25}\n.nh-root[data-ui=\"atelier\"] .cw-dashboard[data-tone=\"err\"] .cw-engine-pill{color:var(--error)}\n.nh-root[data-ui=\"atelier\"] .cw-dashboard[data-tone=\"ok\"] .cw-ai-star{animation:cw-complete-pulse 900ms ease-out 1;background:var(--success)}\n@keyframes cw-complete-pulse{0%{transform:scale(.6);opacity:.3}50%{transform:scale(1.4);opacity:1}100%{transform:scale(1);opacity:1}}\n.nh-root[data-ui=\"atelier\"] .nh-role-grid{gap:12px;padding:14px 0;border-color:var(--line)}\n.nh-root[data-ui=\"atelier\"] .nh-btn:focus-visible,.nh-root[data-ui=\"atelier\"] .nh-input:focus-visible,.nh-root[data-ui=\"atelier\"] .nh-select:focus-visible{outline:2px solid var(--a);outline-offset:3px}\n/* A02 开书到日更：流程步骤、状态芯片、正文摘要、日更表单与免费渠道 */\n.nh-root[data-ui=\"atelier\"] .nh-flow{display:flex;flex-direction:column;gap:var(--nh-gap)}\n.nh-root[data-ui=\"atelier\"] .nh-step{display:flex;gap:10px;align-items:flex-start}\n.nh-root[data-ui=\"atelier\"] .nh-step>section{flex:1 1 auto;min-width:0}\n.nh-root[data-ui=\"atelier\"] .nh-stepno{flex:0 0 24px;width:24px;height:24px;margin-top:12px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--nh-accent);border:1px solid var(--nh-border);background:var(--nh-surface2)}\n.nh-root[data-ui=\"atelier\"] .nh-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}\n.nh-root[data-ui=\"atelier\"] .nh-chipmeta{font-size:11px;color:var(--nh-ink3)}\n.nh-root[data-ui=\"atelier\"] .nh-chipbtn{font:inherit;font-size:12px;color:var(--nh-ink2);background:var(--nh-surface2);border:1px solid var(--nh-border-soft);border-radius:8px;padding:5px 10px;cursor:pointer;min-height:30px}\n.nh-root[data-ui=\"atelier\"] .nh-chipbtn:hover{background:var(--nh-hover)}\n.nh-root[data-ui=\"atelier\"] .nh-chipbtn[data-active=\"true\"]{color:var(--nh-accent);border-color:var(--nh-accent)}\n.nh-root[data-ui=\"atelier\"] .nh-chipbtn[data-active=\"true\"]:focus-visible{outline:2px solid var(--nh-accent);outline-offset:2px}\n.nh-root[data-ui=\"atelier\"] .nh-kv{display:flex;flex-direction:column;gap:6px}\n.nh-root[data-ui=\"atelier\"] .nh-kvrow{display:flex;gap:10px;justify-content:space-between;align-items:baseline;font-size:12px}\n.nh-root[data-ui=\"atelier\"] .nh-kvval{color:var(--nh-ink2);text-align:right;overflow-wrap:anywhere;min-width:0}\n.nh-root[data-ui=\"atelier\"] .nh-note{font-size:12px;line-height:1.7;color:var(--nh-ink2);background:var(--nh-surface2);border:1px solid var(--nh-border-soft);border-radius:8px;padding:8px 10px}\n.nh-root[data-ui=\"atelier\"] .nh-note[data-tone=\"warn\"]{color:var(--nh-warn);border-color:var(--nh-warn)}\n.nh-root[data-ui=\"atelier\"] .nh-note[data-tone=\"ok\"]{color:var(--nh-ok);border-color:var(--nh-ok)}\n.nh-root[data-ui=\"atelier\"] .nh-inline-err{font-size:12px;line-height:1.7;color:var(--nh-err);border:1px solid var(--nh-err);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}\n.nh-root[data-ui=\"atelier\"] .nh-panel{display:flex;flex-direction:column;gap:8px;border:1px solid var(--nh-border-soft);border-radius:9px;padding:10px 12px;background:var(--nh-surface)}\n.nh-root[data-ui=\"atelier\"] .nh-timegrid{display:flex;flex-wrap:wrap",
-          ";gap:8px;align-items:center}\n.nh-root[data-ui=\"atelier\"] .nh-timerow{display:flex;gap:6px;align-items:center}\n.nh-root[data-ui=\"atelier\"] .nh-timerow .nh-input{width:118px}\n.nh-root[data-ui=\"atelier\"] .nh-excerpt{font-family:\"Whale Body\",\"Microsoft YaHei UI\",sans-serif;font-size:13px;line-height:1.85;color:var(--nh-ink);background:var(--nh-surface2);border:1px solid var(--nh-border-soft);border-radius:9px;padding:10px 12px;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}\n.nh-root[data-ui=\"atelier\"] [data-reader-font=\"serif\"] .nh-excerpt{font-family:\"Whale Editorial\",\"SimSun\",serif}\n.nh-root[data-ui=\"atelier\"] .nh-issues{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:1.7;color:var(--nh-ink2)}\n.nh-root[data-ui=\"atelier\"] .nh-catalog{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}\n.nh-root[data-ui=\"atelier\"] .nh-poolrow{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border-bottom:1px dashed var(--nh-border-soft);padding-bottom:6px}\n.nh-root[data-ui=\"atelier\"] .nh-rolepick{display:flex;gap:4px;flex-wrap:wrap}\n.nh-root[data-ui=\"atelier\"] .nh-tagbtn{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--nh-ink2);border:1px solid var(--nh-border-soft);border-radius:7px;padding:2px 6px;cursor:pointer;min-height:24px}\n.nh-root[data-ui=\"atelier\"] .nh-tagbtn:focus-within{outline:2px solid var(--nh-accent);outline-offset:2px}\n.nh-root[data-ui=\"atelier\"] .nh-loginbox{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--nh-border-soft);border-radius:9px;padding:10px 12px}\n.nh-root[data-ui=\"atelier\"] .nh-qr{width:150px;height:150px;padding:6px;background:#fff;border-radius:8px;object-fit:contain}\n.nh-root[data-ui=\"atelier\"] .nh-link{font-size:12px;color:var(--nh-accent);text-decoration:underline}\n.nh-root[data-ui=\"atelier\"] .nh-link:focus-visible{outline:2px solid var(--nh-accent);outline-offset:3px}\n\n@media(max-width:850px){\n.nh-root[data-ui=\"atelier\"] .nh-step{gap:6px}\n.nh-root[data-ui=\"atelier\"] .nh-stepno{margin-top:10px}\n.nh-root[data-ui=\"atelier\"] .nh-kvrow{gap:6px}\n.nh-root[data-ui=\"atelier\"] .nh-excerpt{max-height:220px}\n}\n@media(max-width:520px){\n.nh-root[data-ui=\"atelier\"] .nh-step{gap:4px}\n.nh-root[data-ui=\"atelier\"] .nh-stepno{display:none}\n.nh-root[data-ui=\"atelier\"] .nh-kvrow{flex-direction:column;align-items:flex-start;gap:2px}\n.nh-root[data-ui=\"atelier\"] .nh-kvval{text-align:left}\n.nh-root[data-ui=\"atelier\"] .nh-timegrid{width:100%}\n.nh-root[data-ui=\"atelier\"] .nh-timerow{width:100%}\n.nh-root[data-ui=\"atelier\"] .nh-timerow .nh-input{width:100%;flex:1 1 auto}\n.nh-root[data-ui=\"atelier\"] .nh-excerpt{max-height:190px;padding:9px 10px}\n.nh-root[data-ui=\"atelier\"] .nh-panel{padding:8px 9px}\n.nh-root[data-ui=\"atelier\"] .nh-qr{width:120px;height:120px}\n}\n\n@media(max-width:1100px){.nh-root[data-ui=\"atelier\"] .nh-body{flex-direction:row}.nh-root[data-ui=\"atelier\"] .nh-nav{width:62px;flex:0 0 62px;padding:20px 8px}.nh-root[data-ui=\"atelier\"] .nh-navgroup{display:block;margin-bottom:14px}.nh-root[data-ui=\"atelier\"] .nh-navlabel,.nh-root[data-ui=\"atelier\"] .nh-navitem>span{display:none}.nh-root[data-ui=\"atelier\"] .nh-navitem{width:100%;padding:11px;justify-content:center;min-height:39px}.nh-root[data-ui=\"atelier\"] .nh-page{padding:18px 12px 24px}.nh-root[data-ui=\"atelier\"] .nh-body{gap:8px}.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:335px;padding-inline:20px}.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:14px}.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:24px}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-select{max-width:28vw}.nh-root[data-ui=\"atelier\"] .cw-section-kicker{font-size:11px}.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:7px}.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .nh-btn{padding-inline:8px;font-size:10px}}\n@",
-          "media(max-width:850px){.nh-root[data-ui=\"atelier\"] .cw-primary-grid,.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:1fr}.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-sub{display:none}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-row{gap:4px!important}.nh-root[data-ui=\"atelier\"] .nh-live{display:none}.nh-root[data-ui=\"atelier\"] .nh-formgrid{grid-template-columns:1fr!important}.nh-root[data-ui=\"atelier\"] .nh-grid{grid-template-columns:1fr!important}.nh-root[data-ui=\"atelier\"] .nh-role-grid{grid-template-columns:1fr 1fr}.nh-root[data-ui=\"atelier\"] .nh-modal-mask{padding:14px}.nh-root[data-ui=\"atelier\"] .nh-modal{max-width:calc(100vw - 28px);max-height:calc(100vh - 28px)}}\n@media(max-width:520px){.nh-root[data-ui=\"atelier\"]{padding:6px}.nh-root[data-ui=\"atelier\"] .nh-head{padding:6px 9px 10px;gap:9px}.nh-root[data-ui=\"atelier\"] .nh-head h1{font-size:20px}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-select{max-width:calc(100% - 100px)}.nh-root[data-ui=\"atelier\"] .nh-head>.nh-row{width:100%;justify-content:flex-end}.nh-root[data-ui=\"atelier\"] .nh-body{gap:3px}.nh-root[data-ui=\"atelier\"] .nh-nav{width:47px;flex-basis:47px;padding:16px 4px;border-radius:15px}.nh-root[data-ui=\"atelier\"] .nh-navitem{padding:9px;min-height:34px}.nh-root[data-ui=\"atelier\"] .nh-page{padding:15px 7px 24px}.nh-root[data-ui=\"atelier\"] .nh-main{padding:0}.nh-root[data-ui=\"atelier\"] .nh-statusbar{padding-inline:10px}.nh-root[data-ui=\"atelier\"] .nh-sbmeta{display:none}.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:25px}.nh-root[data-ui=\"atelier\"] .cw-creation-card{padding-inline:17px}.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .nh-btn{font-size:9px}.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:10px}.nh-root[data-ui=\"atelier\"] .cw-live-metrics{gap:9px}.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:13px}.nh-root[data-ui=\"atelier\"] .nh-cardhead,.nh-root[data-ui=\"atelier\"] .nh-cardbody{padding:16px}.nh-root[data-ui=\"atelier\"] .nh-modal{height:auto;max-height:calc(100vh - 28px);border-radius:20px}.nh-root[data-ui=\"atelier\"] .nh-modal>.nh-cardbody{max-height:calc(100vh - 125px)}.nh-root[data-ui=\"atelier\"] .cw-route-heading{padding-left:10px}.nh-root[data-ui=\"atelier\"] .nh-stats{grid-template-columns:1fr 1fr}.nh-root[data-ui=\"atelier\"] .nh-stat{padding:14px}.nh-root[data-ui=\"atelier\"] .nh-table{font-size:11px}.nh-root[data-ui=\"atelier\"] .nh-hero{padding:22px}.nh-root[data-ui=\"atelier\"] .nh-herotitle{font-size:26px}}\n\n/* A02 布局工具：正文区域的横排/竖排与确认行（不影响 .nh-head>.nh-row 胶囊） */\n.nh-root[data-ui=\"atelier\"] .nh-main .nh-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}\n.nh-root[data-ui=\"atelier\"] .nh-main .nh-col{display:flex;flex-direction:column;gap:12px}\n.nh-root[data-ui=\"atelier\"] .nh-ack{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}\n.nh-root[data-ui=\"atelier\"] .nh-ack input{accent-color:var(--nh-accent)}\n.nh-root[data-ui=\"atelier\"] .nh-ack input:focus-visible{outline:2px solid var(--nh-accent);outline-offset:2px}\n"
+          "reader-dialog{padding:24px!important}\n.nh-root[data-ui=\"atelier\"] #dialog-content h2{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-text p{font-size:16px!important}\n.nh-root[data-ui=\"atelier\"] .cw-toast{font-size:10px;padding:12px 14px;max-width:calc(100vw - 35px);white-space:normal}}\n/* ==========================================================================\n   码章鲸 Chapter Whale · DSH Plugin UI v5\n   Optical Liquid Glass × Gemini Fluid Aurora × Craft Editorial × Trident\n   ========================================================================== */\n\n.nh-root[data-ui=\"atelier\"] {\n  --nh-mono: ui-monospace, \"Cascadia Code\", \"JetBrains Mono\", Consolas, monospace;\n  --font-display: \"Whale Geometric\", \"Whale Text\", \"Microsoft YaHei UI\", system-ui, sans-serif;\n  --font-body: \"Whale Text\", \"Whale Geometric\", \"Microsoft YaHei UI\", sans-serif;\n  --font-serif: \"Whale Editorial\", \"Source Han Serif SC\", \"Noto Serif SC\", Georgia, serif;\n\n  /* Default v5 optical material variables (overridden inline by AppearanceContext) */\n  --glass-opacity: 0.24;\n  --blur: 18px;\n  --glass-refract: 0.85;\n  --backdrop-light: 1.00;\n  --nh-gap: 16px;\n  --nh-pad: 20px;\n  --nh-row: 36px;\n  --nh-fs: 13px;\n  --radius-lg: 26px;\n  --radius-md: 17px;\n  --radius-sm: 12px;\n  --radius-pill: 9999px;\n\n  /* Strict 4-Channel Semantic Palette (Dark default) */\n  --accent-gold: #e6b94c;\n  --accent-gold-soft: rgba(230, 185, 76, 0.14);\n  --state-active: #79b4ff;\n  --state-active-soft: rgba(121, 180, 255, 0.16);\n  --state-ok: #4be3a4;\n  --state-ok-soft: rgba(75, 227, 164, 0.13);\n  --state-warn: #ff9650;\n  --state-warn-soft: rgba(255, 150, 80, 0.15);\n  --state-danger: #ff647c;\n  --state-danger-soft: rgba(255, 100, 124, 0.15);\n\n  /* Gemini Aurora Gradient Stops */\n  --iris-1: #5a96ff;\n  --iris-2: #a882ff;\n  --iris-3: #f27dc2;\n  --iris-4: #ffc845;\n  --iris-5: #5ee7c8;\n  --a: var(--state-active);\n  --b: var(--iris-2);\n  --c: var(--iris-5);\n\n  /* WCAG AA+ Ink & Obsidian Crystal Surfaces */\n  --bg-canvas: #03050a;\n  --bg-grad-a: rgba(94, 164, 255, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(230, 185, 76, calc(0.22 * var(--backdrop-light)));\n  --bg-grad-c: rgba(166, 128, 255, calc(0.20 * var(--backdrop-light)));\n\n  --ink: #f8fafc;\n  --ink2: rgba(241, 245, 249, 0.85);\n  --muted: rgba(226, 232, 240, 0.68);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(20, 25, 36, var(--glass-opacity));\n  --nh-surface2: rgba(6, 9, 15, 0.44);\n  --nh-border: rgba(255, 255, 255, 0.20);\n  --nh-border-soft: rgba(255, 255, 255, 0.14);\n  --nh-accent: var(--state-active);\n  --nh-cyan: var(--iris-5);\n  --nh-hover: rgba(255, 255, 255, 0.08);\n  --nh-ok: var(--state-ok);\n  --nh-warn: var(--state-warn);\n  --nh-err: var(--state-danger);\n  --success: var(--state-ok);\n  --warning: var(--state-warn);\n  --error: var(--state-danger);\n  --line: rgba(255, 255, 255, 0.14);\n  --line-strong: rgba(255, 255, 255, 0.24);\n  --dotted: rgba(255, 255, 255, 0.24);\n  --tint: rgba(255, 255, 255, 0.07);\n  --selected: rgba(121, 180, 255, 0.15);\n  --button-bg: #f8fafc;\n  --button-ink: #050608;\n  --surface: 20 25 36;\n  --card: 18 22 32;\n\n  --rim-hi: rgba(255, 255, 255, 0.56);\n  --rim-mid: rgba(255, 255, 255, 0.20);\n  --rim-lo: rgba(255, 255, 255, 0.06);\n  --glass-edge: rgba(255, 255, 255, 0.22);\n  --glass-shine: rgba(255, 255, 255, 0.34);\n  --glass-bounce: rgba(145, 188, 255, 0.14);\n  --dock-outer: rgba(20, 24, 34, calc(var(--glass-opacity) + 0.18));\n  --dock-inner: rgba(255, 255, 255, 0.06);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 54%, rgba(255, 255, 255, 0.18) 100%);\n  --paper-bg: rgba(11, 13, 18, 0.90);\n  --paper-border: rgba(255, 255, 255, 0.14);\n  --shadow-glass: 0 22px 50px -20px rgba(0, 0, 0, 0.84), 0 6px 18px -6px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.06);\n\n  --ease: cubic-bezier(0.22, 1, 0.36, 1);\n  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);\n  --spring: cubic-bezier(0.22, 1.18, 0.36, 1);\n\n  position: relative;\n  isolation: isolate;\n  height: 100%;\n  m",
+          "in-height: 0;\n  display: flex;\n  flex-direction: column;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  font-family: var(--font-body);\n  font-size: var(--nh-fs);\n  line-height: 1.6;\n  overflow: hidden;\n  border-radius: 18px;\n  corner-shape: squircle;\n  /* Soft left ambient transition easing contrast against light DSH host rail */\n  box-shadow:\n    inset 24px 0 38px -22px rgba(148, 186, 240, 0.22),\n    inset 0 0 0 1px rgba(148, 163, 184, 0.14);\n}\n\n/* Light Mode Tokens */\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] {\n  --bg-canvas: #eef1f7;\n  --bg-grad-a: rgba(94, 152, 224, calc(0.38 * var(--backdrop-light)));\n  --bg-grad-b: rgba(229, 172, 102, calc(0.32 * var(--backdrop-light)));\n  --bg-grad-c: rgba(154, 130, 235, calc(0.22 * var(--backdrop-light)));\n\n  --accent-gold: #9e6d08;\n  --accent-gold-soft: rgba(158, 109, 8, 0.11);\n  --state-active: #2f5fe3;\n  --state-active-soft: rgba(47, 95, 227, 0.12);\n  --state-ok: #0d8a5f;\n  --state-ok-soft: rgba(13, 138, 95, 0.11);\n  --state-warn: #c95d12;\n  --state-warn-soft: rgba(201, 93, 18, 0.12);\n  --state-danger: #cc2945;\n  --state-danger-soft: rgba(204, 41, 69, 0.12);\n\n  --ink: #111318;\n  --ink2: rgba(17, 19, 24, 0.78);\n  --muted: rgba(17, 19, 24, 0.62);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --nh-surface2: rgba(17, 19, 24, 0.042);\n  --nh-border: rgba(17, 19, 24, 0.12);\n  --nh-border-soft: rgba(17, 19, 24, 0.10);\n  --nh-hover: rgba(17, 19, 24, 0.065);\n  --line: rgba(17, 19, 24, 0.11);\n  --line-strong: rgba(17, 19, 24, 0.18);\n  --dotted: rgba(17, 19, 24, 0.24);\n  --tint: rgba(17, 19, 24, 0.045);\n  --selected: rgba(47, 95, 227, 0.12);\n  --button-bg: #111318;\n  --button-ink: #ffffff;\n  --surface: 255 255 255;\n  --card: 255 255 255;\n\n  --rim-hi: rgba(255, 255, 255, 0.99);\n  --rim-mid: rgba(255, 255, 255, 0.65);\n  --rim-lo: rgba(17, 19, 24, 0.10);\n  --glass-edge: rgba(17, 19, 24, 0.10);\n  --glass-shine: rgba(255, 255, 255, 0.96);\n  --glass-bounce: rgba(125, 168, 255, 0.16);\n  --dock-outer: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --dock-inner: rgba(17, 19, 24, 0.05);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.70) 58%, rgba(255, 255, 255, 0.92) 100%);\n  --paper-bg: rgba(255, 255, 255, 0.92);\n  --paper-border: rgba(17, 19, 24, 0.10);\n  --shadow-glass: 0 20px 44px -18px rgba(17, 24, 39, 0.16), 0 4px 12px -4px rgba(17, 24, 39, 0.08), 0 0 0 1px rgba(17, 19, 24, 0.06);\n  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);\n}\n\n/* 3 Palettes (liquid / craft / apple, mapping legacy gemini -> liquid, ocean -> apple) */\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"] {\n  --bg-canvas: #080705;\n  --bg-grad-a: rgba(226, 174, 108, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(122, 158, 196, calc(0.22 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 29, 23, calc(var(--glass-opacity) + 0.06));\n}\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"][data-theme=\"light\"] {\n  --bg-canvas: #f5f1e9;\n  --nh-surface: rgba(255, 251, 244, calc(var(--glass-opacity) + 0.38));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"]) {\n  --bg-canvas: #050608;\n  --bg-grad-a: rgba(135, 176, 224, calc(0.30 * var(--backdrop-light)));\n  --bg-grad-b: rgba(224, 186, 138, calc(0.24 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 36, 42, var(--glass-opacity));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"])[data-theme=\"light\"] {\n  --bg-canvas: #f2f3f5;\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.40));\n}\n\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] {\n  --nh-gap: 12px;\n  --nh-pad: 15px;\n  --nh-row: 32px;\n  --nh-fs: 12.5px;\n  --radius-lg: 20px;\n  --radius-md: 14px;\n  --radius-sm: 10px;\n}\n\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::after,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *,\n.nh-root[d",
+          "ata-ui=\"atelier\"][data-motion=\"off\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *::after {\n  animation-duration: 0.01ms !important;\n  transition-duration: 0.01ms !important;\n}\n\n/* Backdrop Layer (Canvas Silk Ribbons + Optical Gradient Wash + SDF Filters) */\n.nh-root[data-ui=\"atelier\"] .cw-backdrop-layer {\n  position: absolute;\n  inset: 0;\n  z-index: 0;\n  pointer-events: none;\n  overflow: hidden;\n  border-radius: inherit;\n  corner-shape: inherit;\n}\n.nh-root[data-ui=\"atelier\"] .cw-cosmos-canvas {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  display: block;\n}\n.nh-root[data-ui=\"atelier\"] .cw-optical-wash {\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(64% 50% at 14% 8%, var(--bg-grad-a), transparent 68%),\n    radial-gradient(58% 48% at 86% 16%, var(--bg-grad-b), transparent 66%),\n    radial-gradient(48% 42% at 52% 86%, var(--bg-grad-c), transparent 72%);\n}\n\n/* Typography Discipline */\n.nh-root[data-ui=\"atelier\"] h1,\n.nh-root[data-ui=\"atelier\"] h2,\n.nh-root[data-ui=\"atelier\"] h3 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  color: var(--ink);\n  text-wrap: balance;\n}\n.nh-root[data-ui=\"atelier\"] p { text-wrap: pretty; }\n\n/* ==========================================================================\n   3-Island Floating Apple Liquid Glass Dock (Eliminates Internal Left Sidebar)\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-head {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-sticky {\n  position: relative;\n  z-index: 40;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  padding: 12px 18px 6px;\n  flex: 0 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-row {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 9px;\n  max-width: 100%;\n  width: 100%;\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n  position: relative;\n  isolation: isolate;\n  width: 42px;\n  height: 42px;\n  flex: 0 0 42px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--ink);\n  background: var(--dock-outer);\n  border: 0;\n  cursor: pointer;\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 12px 28px -12px rgba(0, 0, 0, 0.58);\n  backdrop-filter: blur(var(--blur)) saturate(2.1);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.1);\n  transition: transform 150ms var(--ease-expo), box-shadow 240ms ease;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n    backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:hover {\n  transform: translateY(-1.5px) scale(1.04);\n  box-shadow: 0 0 0 1px var(--rim-hi), inset 0 1.5px 1px var(--glass-shine), 0 14px 30px -10px rgba(0, 0, 0, 0.65);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-on {\n  box-shadow: 0 0 0 1.5px var(--state-active), inset 0 1.5px 1px var(--glass-shine), 0 10px 26px -8px rgba(121, 180, 255, 0.44);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-project-lens {\n  width: auto;\n  max-width: 210px;\n  height: 42px;\n  padding: 0 12px 0 7px;\n  border-radius: var(--radius-pill);\n  gap: 8px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-badge {\n  width: 26px;\n  height: 26px;\n  flex: 0 0 26px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-4), var(--iris-5), var(--iris-1));\n  color: #050608;\n  font-weight: 700;\n  font-size: 12px;\n  box-shadow: 0 0 12px rgba(139, 184, 255, 0.35);\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-title {\n  font-size: 12.5px;\n  font-weight: 600;\n  white-space: nowrap;\n  overflow: hidden;\n  text-over",
+          "flow: ellipsis;\n  color: var(--ink);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n  --mx: 50%;\n  --my: 20%;\n  position: relative;\n  display: flex;\n  align-items: center;\n  padding: 4px;\n  border-radius: var(--radius-pill);\n  background:\n    radial-gradient(220px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.14), transparent 70%),\n    var(--dock-outer);\n  backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  -webkit-backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 16px 36px -14px rgba(0, 0, 0, 0.60);\n  overflow-x: auto;\n  scrollbar-width: none;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n    backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule::-webkit-scrollbar { display: none; }\n.nh-root[data-ui=\"atelier\"] .cw-dock-track {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  border-radius: var(--radius-pill);\n  background: var(--dock-inner);\n  padding: 2px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-lens {\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  height: calc(100% - 4px);\n  border-radius: var(--radius-pill);\n  background: var(--lens-fill);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px rgba(0, 0, 0, 0.16),\n    0 4px 14px -4px rgba(0, 0, 0, 0.45),\n    0 0 0 1px var(--rim-mid);\n  transition: transform 0.44s var(--spring), width 0.36s var(--spring);\n  pointer-events: none;\n  z-index: 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill {\n  position: relative;\n  z-index: 1;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 30px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 0;\n  background: transparent;\n  font-size: 12.5px;\n  font-weight: 500;\n  color: var(--ink2);\n  white-space: nowrap;\n  cursor: pointer;\n  transition: color 180ms ease, transform 150ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:hover { color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill.is-active { color: var(--ink); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-pill-dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n.nh-root[data-ui=\"atelier\"] .cw-pill-badge {\n  font-size: 10px;\n  font-family: var(--nh-mono);\n  font-variant-numeric: tabular-nums;\n  padding: 1px 6px;\n  border-radius: var(--radius-pill);\n  background: var(--state-warn-soft);\n  color: var(--state-warn);\n  font-weight: 600;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-tools {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n}\n\n/* Gemini Living Breathing Halo Orb inside Dock */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb {\n  position: relative;\n  width: 22px;\n  height: 22px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb::before {\n  content: \"\";\n  position: absolute;\n  inset: -4px;\n  border-radius: 50%;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  opacity: 0.65;\n  filter: blur(5px);\n  animation: cw-spin-slow 9s linear infinite, cw-orb-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb-core {\n  position: relative;\n  width: 20px;\n  height: 20px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  border: 1px solid var(--rim-mid);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-streaming .cw-gemini-orb::before {\n  opacity: 1;\n  filter: blur(6px);\n  animation-duration: 2.2s, 1.8s;\n}\n@keyframes cw-spin-slow { to { transform: rotate(36",
+          "0deg); } }\n@keyframes cw-orb-breathe { 0%, 100% { transform: scale(0.95); opacity: 0.62; } 50% { transform: scale(1.12); opacity: 0.96; } }\n\n/* Compact Sub-Route & Service Strip */\n.nh-root[data-ui=\"atelier\"] .cw-subnav-bar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  flex-wrap: wrap;\n  width: 100%;\n  max-width: 1220px;\n  padding: 2px 4px 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subnav-pills {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill {\n  height: 28px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 12px;\n  font-weight: 500;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 140ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill.is-active {\n  color: var(--state-active);\n  border-color: var(--state-active);\n  background: var(--state-active-soft);\n}\n.nh-root[data-ui=\"atelier\"] .cw-service-cluster {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  margin-left: auto;\n  font-size: 11.5px;\n  color: var(--muted);\n}\n\n/* Popover Card (Origin-Anchored) */\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  position: absolute;\n  top: 66px;\n  left: 22px;\n  width: 310px;\n  max-width: calc(100vw - 44px);\n  z-index: 65;\n  transform-origin: top left;\n  animation: cw-pop-in 0.26s var(--ease-expo) backwards;\n}\n@keyframes cw-pop-in {\n  from { opacity: 0; filter: blur(6px); transform: translateY(-6px) scale(0.95); }\n  to { opacity: 1; filter: blur(0px); transform: translateY(0) scale(1); }\n}\n\n/* Collapse Old Vertical Left Sidebar Inside Plugin */\n.nh-root[data-ui=\"atelier\"] .nh-body {\n  position: relative;\n  z-index: 10;\n  flex: 1;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-nav {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-main {\n  flex: 1;\n  min-width: 0;\n  min-height: 0;\n  padding: 0 6px 28px;\n  background: transparent;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .nh-page {\n  padding: 10px 22px 32px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-route-heading {\n  padding: 10px 22px 2px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  margin-bottom: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  font-size: 26px;\n  margin: 0;\n}\n\n/* ==========================================================================\n   Optical Liquid Glass Cards, Squircles & Specular Rims\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-card,\n.nh-root[data-ui=\"atelier\"] .nh-stat,\n.nh-root[data-ui=\"atelier\"] .nh-hero,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card,\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  --mx: 50%;\n  --my: 15%;\n  position: relative;\n  isolation: isolate;\n  border: 0;\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  background: transparent;\n  box-shadow: var(--shadow-glass);\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::before,\n.nh-root[data-ui=\"atelier\"] .nh-stat::before,\n.nh-root[data-ui=\"atelier\"] .nh-hero::before,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n.nh-root[data-ui=\"atelier\"] .cw-popover::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -2;\n  border-radius: inherit;\n  corner-shape: inherit;\n  background:\n    radial-gradient(360px circle at var(--mx) var(--my), rgba(255, 255, 255, calc(0.13 * var(--glass-r",
+          "efract))), transparent 65%),\n    linear-gradient(132deg,\n      rgba(255, 255, 255, calc(0.15 * var(--glass-refract))) 0%,\n      rgba(255, 255, 255, 0.02) 48%,\n      rgba(255, 255, 255, calc(0.07 * var(--glass-refract))) 100%),\n    var(--nh-surface);\n  backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce);\n}\n@supports (backdrop-filter: url(#cw-lg-card-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n  .nh-root[data-ui=\"atelier\"] .cw-popover::before,\n  .nh-root[data-ui=\"atelier\"] .nh-hero::before {\n    backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::after,\n.nh-root[data-ui=\"atelier\"] .nh-stat::after,\n.nh-root[data-ui=\"atelier\"] .nh-hero::after,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::after,\n.nh-root[data-ui=\"atelier\"] .cw-popover::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  border-radius: inherit;\n  corner-shape: inherit;\n  padding: 1px;\n  background: linear-gradient(156deg, var(--rim-hi) 2%, var(--rim-mid) 44%, var(--rim-lo) 96%);\n  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  pointer-events: none;\n}\n\n.nh-root[data-ui=\"atelier\"] .nh-cardhead { padding: 16px 20px; border-bottom: 1px solid var(--line); background: transparent; }\n.nh-root[data-ui=\"atelier\"] .nh-cardbody { padding: 18px 20px; }\n.nh-root[data-ui=\"atelier\"] .nh-cardtitle { font-size: 15px; font-weight: 500; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .nh-cardhint { font-size: 12px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .nh-stat { padding: 16px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-statvalue { font-family: var(--font-display); font-size: 28px; font-weight: 300; font-variant-numeric: tabular-nums; }\n\n/* Signature Maserati Sweep Primary Buttons */\n.nh-root[data-ui=\"atelier\"] .nh-btn {\n  position: relative;\n  overflow: hidden;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  font-family: inherit;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line-strong);\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--ink);\n  padding: 0 14px;\n  height: 34px;\n  font-size: 12.5px;\n  font-weight: 500;\n  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);\n  backdrop-filter: blur(12px) saturate(1.8);\n  transition: transform 150ms var(--ease-expo), background 200ms ease, border-color 200ms ease, box-shadow 240ms ease;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn { background: rgba(255, 255, 255, 0.76); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:hover:not(:disabled) {\n  transform: translateY(-1px);\n  background: rgba(255, 255, 255, 0.16);\n  border-color: var(--rim-hi);\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.96); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:active:not(:disabled) { transform: scale(0.972); }\n\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-color: transparent;\n  font-weight: 600;\n  box-shadow: 0 4px 16px -6px rgba(0, 0, 0, 0.45);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]::after {\n  content: \"\";\n  position: absolute;\n  top: -20%; left: -45%;\n  width: 34%; height: 140%;\n  background: linear-gradient(90deg, transparent, rgba(230, 185, 76, 0.56), rgba(255, 255, 255, 0.88), transparent);\n  transform: skewX(-8deg) translateX(-160%);\n  transition: transform 0.85s var(--ease);\n  pointer-events: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled) {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  box-shadow: 0 10px 24px -10px rgba(230, 185, 76,",
+          " 0.42);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled)::after {\n  transform: skewX(-8deg) translateX(480%);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"ghost\"] {\n  border-color: transparent;\n  background: transparent;\n  box-shadow: none;\n  color: var(--state-active);\n  backdrop-filter: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"danger\"] {\n  color: var(--state-danger);\n  border-color: rgba(255, 100, 124, 0.36);\n  background: var(--state-danger-soft);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-size=\"sm\"] {\n  height: 28px;\n  padding: 0 10px;\n  font-size: 11.5px;\n}\n\n/* Badges (4-Channel Semantic Rules) */\n.nh-root[data-ui=\"atelier\"] .nh-badge {\n  border-radius: var(--radius-pill);\n  padding: 2px 9px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"ok\"] { color: var(--state-ok); border-color: rgba(75, 227, 164, 0.34); background: var(--state-ok-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"warn\"] { color: var(--state-warn); border-color: rgba(255, 150, 80, 0.36); background: var(--state-warn-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"err\"] { color: var(--state-danger); border-color: rgba(255, 100, 124, 0.36); background: var(--state-danger-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"info\"] { color: var(--state-active); border-color: rgba(121, 180, 255, 0.36); background: var(--state-active-soft); }\n\n/* Inputs & Modals */\n.nh-root[data-ui=\"atelier\"] .nh-input,\n.nh-root[data-ui=\"atelier\"] .nh-select,\n.nh-root[data-ui=\"atelier\"] .nh-textarea {\n  color: var(--ink);\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  font-family: var(--font-body);\n}\n.nh-root[data-ui=\"atelier\"] .nh-select option { background: #141924; color: #f8fafc; }\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-select option { background: #ffffff; color: #111318; }\n.nh-root[data-ui=\"atelier\"] .nh-seg {\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  background: var(--nh-surface2);\n  padding: 3px;\n  gap: 3px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-seg button[data-active=\"true\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-radius: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask { background: rgba(2, 5, 12, 0.62); backdrop-filter: blur(8px); padding: 24px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal {\n  width: 860px;\n  max-width: calc(100vw - 36px);\n  max-height: calc(100vh - 36px);\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  border: 1px solid var(--line-strong);\n  background: var(--paper-bg);\n  color: var(--ink);\n  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);\n  backdrop-filter: blur(26px) saturate(1.9);\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardbody { overflow-y: auto; max-height: calc(100vh - 135px); }\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask:has(.cw-appearance-modal) { justify-content: flex-end; align-items: stretch; padding: 12px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal { width: 410px; height: 100%; max-height: 100%; max-width: calc(100vw - 24px); }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardbody { max-height: none; flex: 1; min-height: 0; overflow: auto; }\n.nh-root[data-ui=\"atelier\"] .cw-range-label { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; font-family: var(--nh-mono); font-size: 11.5px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .cw-range-label input[type=\"range\"] { accent-color: var(--state-active); width: 100%; }\n.nh-root[data-ui=\"atelier\"] .nh-pre {\n  font-family: var(--font-body);\n  line-height: 1.92;\n  font-size: 15px;\n  color: var(--ink);\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  padding: 20px 24px;\n  white-space: pre-wrap;\n  overflow-wrap: anywhere;\n  max-width: 68ch;\n}\n.nh-root[data-ui=\"atelier\"][dat",
+          "a-reader-font=\"serif\"] .nh-pre { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.95; }\n\n/* ==========================================================================\n   Editorial-First v5 Dashboard Layout\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .cw-dashboard {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-workflow-ribbon {\n  padding: 15px 20px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 11px;\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--muted);\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow .cw-reticle { color: var(--accent-gold); }\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top h1 {\n  margin: 2px 0 0;\n  font-size: clamp(20px, 2.3vw, 26px);\n  font-weight: 300;\n  line-height: 1.22;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-strip {\n  display: grid;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill {\n  height: 36px;\n  padding: 0 11px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  font-size: 12px;\n  color: var(--ink2);\n  cursor: pointer;\n  transition: transform 150ms var(--ease-expo), border-color 200ms ease, color 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done { border-color: rgba(75, 227, 164, 0.30); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done .cw-st-ico { color: var(--state-ok); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current {\n  color: var(--ink);\n  font-weight: 600;\n  border: 1px solid transparent;\n  background:\n    linear-gradient(var(--nh-surface2), var(--nh-surface2)) padding-box,\n    linear-gradient(115deg, var(--state-active), var(--iris-2), var(--iris-5)) border-box;\n  animation: cw-stage-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current .cw-st-code { color: var(--state-active); }\n.nh-root[data-ui=\"atelier\"] .cw-st-code { font-family: var(--nh-mono); font-size: 10.5px; opacity: 0.78; margin-right: 4px; }\n@keyframes cw-stage-breathe {\n  0%, 100% { box-shadow: 0 8px 20px -14px rgba(121, 180, 255, 0.45); }\n  50% { box-shadow: 0 10px 26px -12px rgba(121, 180, 255, 0.72); }\n}\n\n/* Silky Gemini Fluid Aurora Progress Bar */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-box {\n  margin-top: 12px;\n  padding: 12px 14px 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n@keyframes cw-aurora-flow {\n  0% { background-position: 0% 50%; }\n  100% { background-position: -300% 50%; }\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-track {\n  --p: 0%;\n  position: relative;\n  height: 7px;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.08);\n  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.42);\n  overflow: visible;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .cw-gemini-track {\n  background: rgba(17, 19, 24, 0.08);\n  box-shadow: inset 0 1px 2px rgba(17, 19, 24, 0.14);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-glow {\n  position: absolute;\n  inset: -3px 0;\n  border-radius: 999px;\n  background: linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n  filter: blur(8px);\n  opacity: 0.62;\n  pointer-events: none;\n}\n.n",
+          "h-root[data-ui=\"atelier\"] .cw-gemini-fill {\n  position: absolute;\n  inset: 0;\n  border-radius: 999px;\n  background:\n    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0) 56%),\n    linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 100% 100%, 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-comet {\n  position: absolute;\n  top: 50%;\n  left: var(--p);\n  width: 13px;\n  height: 13px;\n  border-radius: 50%;\n  transform: translate(-50%, -50%);\n  background: radial-gradient(circle, #ffffff 20%, #b8d8ff 60%, rgba(125, 168, 255, 0) 78%);\n  box-shadow: 0 0 12px 3px rgba(121, 180, 255, 0.72), 0 0 20px 4px rgba(168, 130, 255, 0.45);\n  pointer-events: none;\n}\n\n/* Main Dashboard Split (Dominant Shielded Manuscript Left + Semantic Telemetry Rail Right) */\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid {\n  display: grid;\n  grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr);\n  gap: var(--nh-gap);\n  align-items: start;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card {\n  padding: 20px 22px;\n  display: flex;\n  flex-direction: column;\n  gap: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title h2,\n.nh-root[data-ui=\"atelier\"] .cw-card-title h3 {\n  margin: 0;\n  font-size: 16px;\n  font-weight: 400;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript {\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  backdrop-filter: blur(26px);\n  -webkit-backdrop-filter: blur(26px);\n  padding: 24px 26px;\n  min-height: 290px;\n  max-height: 460px;\n  overflow-y: auto;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4 {\n  font-family: var(--font-display);\n  font-size: 20px;\n  font-weight: 300;\n  margin: 0 0 14px;\n  letter-spacing: 0.02em;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p {\n  font-family: var(--font-body);\n  font-size: 15px;\n  line-height: 1.92;\n  letter-spacing: 0.015em;\n  color: var(--ink);\n  margin: 0 0 13px;\n  max-width: 68ch;\n  text-indent: 2em;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-root-skip,\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-manuscript p {\n  font-family: var(--font-serif);\n  font-size: 15.5px;\n  line-height: 1.96;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-footer {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  font-size: 12px;\n  color: var(--muted);\n}\n\n/* Right Rail Telemetry & Dotted Specs */\n.nh-root[data-ui=\"atelier\"] .cw-rail-stack {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-rail-card {\n  padding: 18px 20px;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-list {\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row {\n  display: flex;\n  align-items: baseline;\n  gap: 8px;\n  font-size: 12.5px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .k { color: var(--muted); white-space: nowrap; font-size: 11.5px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .dots { flex: 1; border-bottom: 1px dotted var(--dotted); transform: translateY(-2px); min-width: 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v { font-family: var(--nh-mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-ok { color: var(--state-ok); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-active { color: var(--state-active); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-warn { color: var(--state-warn); font-weight: 600; }\n\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row {\n  width: 100%;\n  padding: 10px 12px;",
+          "\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  text-align: left;\n  cursor: pointer;\n  color: var(--ink);\n  transition: border-color 180ms ease, background 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row:hover { border-color: var(--rim-hi); background: var(--nh-hover); }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index { font-family: var(--nh-mono); font-size: 11px; color: var(--state-active); min-width: 28px; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small { margin-left: 8px; color: var(--muted); font-size: 11px; }\n\n/* Responsive adjustments */\n@media (max-width: 960px) {\n  .nh-root[data-ui=\"atelier\"] .cw-primary-grid { grid-template-columns: 1fr; }\n  .nh-root[data-ui=\"atelier\"] .cw-stage-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n@media (max-width: 720px) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-sticky { padding: 8px 10px 4px; }\n  .nh-root[data-ui=\"atelier\"] .cw-project-lens .cw-project-title { display: none; }\n  .nh-root[data-ui=\"atelier\"] .nh-page { padding: 8px 12px 24px; }\n  .nh-root[data-ui=\"atelier\"] .nh-formgrid { grid-template-columns: 1fr !important; }\n  .nh-root[data-ui=\"atelier\"] .nh-role-grid { grid-template-columns: 1fr !important; }\n}\n"
         ].join('');
         // END GENERATED ATELIER CSS
 
@@ -1745,10 +1749,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           save: 'M2 2h9l3 3v9H2V2zm3 0v4h6V2M5 9h6v5H5V9z',
           settings: 'M2 5h12M2 11h12M5 3v4M11 9v4',
           search: 'M7 1.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11zM11 11l3 3',
+          spark: 'M8 1.2 9.7 6.3 14.8 8 9.7 9.7 8 14.8 6.3 9.7 1.2 8 6.3 6.3Z',
+          chevron: 'm4.5 6.5 3.5 3.5 3.5-3.5',
+          stop: 'M4 4h8v8H4Z',
         };
 
         function Icon(props) {
           const size = props.size || 14;
+          const d = ICON_PATHS[props.name] || ICON_PATHS.book;
           return e(
             'svg',
             {
@@ -1757,13 +1765,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               viewBox: '0 0 16 16',
               fill: 'none',
               stroke: 'currentColor',
-              strokeWidth: props.fill ? 0 : 1.35,
-              strokeLinecap: 'square',
+              strokeWidth: props.fill ? 0 : 1.5,
+              strokeLinecap: 'round',
+              strokeLinejoin: 'round',
               'aria-hidden': 'true',
             },
             props.fill
-              ? e('path', { d: ICON_PATHS[props.name], fill: 'currentColor' })
-              : e('path', { d: ICON_PATHS[props.name] }),
+              ? e('path', { d, fill: 'currentColor' })
+              : e('path', { d }),
           );
         }
 
@@ -2697,42 +2706,107 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const paragraphs = paragraphText.split(/\n+/).map(text => text.trim()).filter(Boolean).slice(0, 12);
           const primaryPage = work.tone === 'err' ? 'jobs' : !overview.ai?.configured ? 'ai' : next && next.id !== 'writing' && next.id !== 'results' ? next.action.page : 'chapters';
           const primaryLabel = work.tone === 'err' ? '处理任务' : stage.active ? '查看任务' : !overview.ai?.configured ? '连接模型' : next && next.id !== 'writing' && next.id !== 'results' ? next.action.label : '开始创作';
-          const queue = overview.queue || {};
+          const stageNames = ['规划', '初稿', '润色', '审查', '交付'];
+          const stagePages = ['outline', 'chapters', 'chapters', 'chapters', 'publish'];
+          const streamPct = stage.complete
+            ? 100
+            : stage.active
+              ? Math.max(12, Math.min(96, Math.round((timing.known ? timing.ratio : 0.36) * 100)))
+              : 0;
+          const badgeTone = work.tone === 'err' ? 'err' : work.tone === 'warn' ? 'warn' : stage.complete ? 'ok' : 'info';
           return e('div', { className: 'nh-page cw-dashboard', 'data-running': stage.active, 'data-tone': work.tone },
-            e('div', { className: 'cw-page-heading' }, e('h1', null, '工作台'), e(Button, { icon: 'plus', onClick: () => props.navigate('chapters') }, '开始创作')),
-            e('section', { className: 'cw-overall-progress', 'aria-label': '全书进度' },
-              e('div', { className: 'cw-overall-meta' }, e('div', null, e('strong', null, job && job.name || project && project.title || '创作空间'), e('span', { className: 'cw-live-pill' }, e('i'), work.tag)),
-                e('span', null, goal)),
-              target ? e('div', { className: 'cw-progress-track', role: 'progressbar', 'aria-label': '全书已完成章节', 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': Math.min(count, target) }, e('div', { className: 'cw-progress-fill', style: { width: `${ratio * 100}%` } })) : null,
-              e('div', { className: 'cw-overall-foot' }, e('span', null, work.stageLabel || '准备下一章'), e('span', null, eta))),
+            e('section', { className: 'cw-glass-card cw-workflow-ribbon', 'aria-label': '创作工作流' },
+              e('div', { className: 'cw-ribbon-top' },
+                e('div', null,
+                  e('div', { className: 'cw-eyebrow' },
+                    e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 11, fill: true })),
+                    e('span', null, `${project && project.title ? project.title : '创作空间'} · ${goal}`)),
+                  e('h1', null, current && current.title || (chapter ? `第 ${chapter} 章` : '准备下一章'))),
+                e('div', { className: 'nh-row', style: { gap: 8 } },
+                  e('span', { className: 'nh-badge', 'data-tone': badgeTone }, work.tag),
+                  e(Button, { onClick: () => props.navigate(stage.active ? 'jobs' : 'chapters') }, stage.active ? '任务详情' : '章节列表'),
+                  e(Button, { kind: 'primary', onClick: () => current ? props.onOpenChapter(chapter) : props.navigate(primaryPage) }, current ? '专注审校本章' : primaryLabel))),
+              e('div', { className: 'cw-stage-strip', role: 'group', 'aria-label': '本章 A–E 流程' },
+                stageNames.map((label, index) => {
+                  const isDone = stage.complete || index < stage.index;
+                  const isCurr = !stage.complete && index === stage.index;
+                  return e('button', {
+                    key: label,
+                    type: 'button',
+                    className: `cw-stage-pill${isDone ? ' done' : isCurr ? ' current' : ''}`,
+                    'aria-current': isCurr ? 'step' : undefined,
+                    onClick: () => props.navigate(stagePages[index]),
+                  },
+                    e('span', null, e('span', { className: 'cw-st-code' }, 'ABCDE'[index]), label),
+                    e('span', { className: 'cw-st-ico' }, isDone ? e(Icon, { name: 'check', size: 12 }) : isCurr ? '•' : ''));
+                })),
+              stage.active ? e('div', { className: 'cw-gemini-box', role: 'status' },
+                e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 } },
+                  e('span', null, `${stage.index >= 0 ? `阶段 ${'ABCDE'[stage.index]} · ${stageNames[stage.index]}` : work.stageLabel || '推进中'} — ${eta}`),
+                  e('span', { className: 'nh-mono nh-dim' }, `${streamPct}% · ${metrics.speed}`)),
+                e('div', { className: 'cw-gemini-track', style: { '--p': `${streamPct}%` } },
+                  e('div', { className: 'cw-gemini-glow' }),
+                  e('div', { className: 'cw-gemini-fill' }),
+                  e('div', { className: 'cw-gemini-comet' }))) : null),
+            work.tone === 'err' ? e('div', { className: 'nh-alertblock' }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
             e('div', { className: 'cw-primary-grid' },
-              e('section', { className: 'cw-creation-card cw-glass-card' },
-                e(AiPresence, { active: stage.active, tone: work.tone }),
-                e('div', { className: 'cw-card-topline' }, e('span', { className: 'cw-section-kicker' }, chapter ? `第 ${chapter} 章` : '当前任务'), e('div', { className: 'cw-card-top-actions' }, e('span', { className: 'cw-engine-pill' }, stage.index >= 0 ? `${'ABCDE'[stage.index]} · ${['规划', '初稿', '润色', '审查', '交付'][stage.index]}` : work.tag), e(Button, { kind: 'primary', onClick: () => props.navigate(stage.active ? 'jobs' : primaryPage) }, primaryLabel))),
-                e('h2', null, current && current.title || project && project.title || '准备开始创作'),
-                e('div', { className: 'cw-model-pill' }, e(Icon, { name: 'spark', size: 13 }), metrics.model ? `${metrics.role ? metrics.role + ' · ' : ''}${metrics.model}` : '按已保存的模型配置运行'),
-                e('div', { className: 'cw-word-progress' }, e('div', null, e('span', { className: 'cw-word-value' }, words === null ? '—' : num(words)), e('span', { className: 'cw-word-target' }, `/ ${num(wordTarget)} 字 · 已保存`)),
-                  e('div', { className: 'cw-progress-track cw-chapter-track' }, e('div', { className: 'cw-progress-fill', style: { width: words === null ? '0%' : `${Math.min(100, words / wordTarget * 100)}%` } }))),
-                e('div', { className: 'cw-live-metrics' }, ...[['用时', stage.active && timing.elapsedMs ? fmtDuration(timing.elapsedMs) : recordedMs ? fmtDuration(recordedMs) : '—'], ['最近输出速度', metrics.speed], ['本章费用', metrics.cost]].map(([label, value]) => e('div', { key: label }, e('span', null, label), e('strong', null, value)))),
-                e('div', { className: 'cw-hero-actions' }, e(Button, { kind: 'ghost', onClick: () => props.navigate('jobs') }, '任务详情'), e('span', { className: 'cw-saved-status' }, work.tone === 'err' ? work.subtitle : stage.active && !current ? '正文保存后显示' : current ? '正文已保存' : '等待创作'))),
-              e('section', { className: 'cw-manuscript-card cw-glass-card', 'aria-label': '正文预览' },
-                e('div', { className: 'cw-card-title' }, e('h3', null, '正文'), e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '专注阅读')),
-                e('div', { className: 'cw-manuscript' }, current ? e(React.Fragment, null, e('h4', null, current.title || `第 ${chapter} 章`), body.error ? e('p', null, '正文读取失败，请刷新重试。') : !savedBody ? e(Skeleton, { height: 90 }) : paragraphs.map((text, index) => e('p', { key: index }, text))) : e('div', { className: 'cw-reader-empty' }, e(AiPresence, { active: stage.active, tone: work.tone }), e('p', null, stage.active ? '本章正在创作' : '下一章，从这里开始'), e('span', null, stage.active ? '保存后可阅读正文' : '完成规划后即可开始写作'))),
-                e('div', { className: 'cw-manuscript-footer' }, e('span', null, current ? `${num(words || 0)} 字 · 已保存` : '暂无正文'), e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '阅读本章')))),
-            e('section', { className: 'cw-pipeline-card cw-glass-card', 'aria-label': '本章 A–E 流程' },
-              e('div', { className: 'cw-pipeline', style: { '--flow-progress': `${stage.complete ? 100 : Math.max(0, stage.index) * 25}%` } },
-                e('div', { className: 'cw-flow-rail', 'aria-hidden': true }, e('span', { className: 'cw-flow-fill' }), e('i', { className: 'cw-flow-front' })),
-                ...['规划', '初稿', '润色', '审查', '交付'].map((label, index) => e('button', { key: label, type: 'button', className: `cw-stage${stage.complete || index < stage.index ? ' done' : index === stage.index ? ' current' : ''}`, 'aria-current': !stage.complete && index === stage.index ? 'step' : undefined, onClick: () => props.navigate(['outline', 'chapters', 'chapters', 'chapters', 'publish'][index]) }, e('span', { className: 'cw-stage-node' }, stage.complete || index < stage.index ? e(Icon, { name: 'check', size: 12 }) : 'ABCDE'[index]), e('span', { className: 'cw-stage-copy' }, e('strong', null, label)), e('span', { className: 'cw-stage-state' }, index === stage.index ? stage.active ? '进行中' : stage.complete ? '已完成' : work.tag : ''))))),
-            work.tone === 'err' ? e('div', { className: 'nh-alertblock', style: { marginTop: 18 } }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
-            e('div', { className: 'cw-secondary-grid' },
-              e('section', { className: 'cw-chapters-card cw-glass-card' }, e('div', { className: 'cw-card-title' }, e('h3', null, '最近章节'), e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate('chapters') }, '全部章节')),
-                chapters.error ? e(Empty, null, '章节读取失败，请刷新重试') : !rows.length ? e(Empty, null, '还没有章节') : rows.slice(0, 3).map(row => e('button', { key: row.id, className: 'cw-chapter-row', type: 'button', onClick: () => props.onOpenChapter(row.id) }, e('span', { className: 'cw-chapter-index' }, row.id), e('span', { className: 'cw-chapter-row-title' }, row.title || `第 ${row.id} 章`, e('small', null, `${num(row.words)} 字`)), e('span', { className: 'cw-row-status' }, row.reviewed ? '已审查' : '待审查')))),
-              e('section', { className: 'cw-next-card cw-glass-card' }, e('div', { className: 'cw-card-title' }, e('h3', null, '下一步'), e(Icon, { name: 'clock', size: 15 })),
-                e('div', { className: 'cw-next-task-time' }, job && job.enabled ? e(React.Fragment, null, e('strong', null, (job.daily_times || [job.daily_time]).filter(Boolean).join(' / ') || '—'), e('span', null, job.timezone || '任务计划时区')) : e('strong', { style: { fontSize: 21 } }, next ? next.title : '继续你的故事')),
-                e('p', null, next ? next.blocked_reason || next.detail : job ? `${job.name || '日更任务'} · ${job.enabled ? '已启用' : '已停用'}` : '配置日更计划，安排下一次创作'),
-                e('div', { className: 'cw-schedule-tags' }, e('span', null, `${num(queue.queued || 0)} 章待发`), e('span', null, `${num(queue.published || 0)} 章已核验`)),
-                e('div', { className: 'cw-book-goal' }, e('div', null, e('span', null, '全书进度'), e('strong', null, goal)), target ? e('div', { className: 'cw-progress-track' }, e('div', { className: 'cw-progress-fill', style: { width: `${ratio * 100}%` } })) : null),
-                e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate(next ? next.action.page : 'jobs') }, next ? next.action.label : '管理日更任务'))));
+              e('section', { className: 'cw-glass-card cw-manuscript-card', 'aria-label': '正文预览' },
+                e('div', { className: 'cw-card-title' },
+                  e('div', null,
+                    e('div', { className: 'cw-eyebrow' },
+                      e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 10, fill: true })),
+                      e('span', null, 'CRAFT MANUSCRIPT · 正文直览')),
+                    e('h2', { style: { marginTop: 2 } }, current && current.title || (chapter ? `第 ${chapter} 章` : '正文预览'))),
+                  e('div', { className: 'nh-row', style: { gap: 8 } },
+                    e('span', { className: 'nh-badge', 'data-tone': current && current.reviewed ? 'ok' : current ? 'warn' : 'info' }, current ? (current.reviewed ? '已审查' : '待审查') : '未生成'),
+                    e(Button, { size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '专注阅读'))),
+                e('div', { className: 'cw-manuscript' },
+                  current
+                    ? e(React.Fragment, null,
+                        e('h4', null, current.title || `第 ${chapter} 章`),
+                        body.error ? e('p', null, '正文读取失败，请刷新重试。') : !savedBody ? e(Skeleton, { height: 110 }) : paragraphs.map((text, index) => e('p', { key: index }, text)))
+                    : e('div', { className: 'cw-reader-empty' },
+                        e(AiPresence, { active: stage.active, tone: work.tone }),
+                        e('p', null, stage.active ? '本章正在创作' : '下一章，从这里开始'),
+                        e('span', null, stage.active ? '保存后可阅读正文' : '完成规划后即可开始写作'))),
+                e('div', { className: 'cw-manuscript-footer' },
+                  e('span', null, current ? `${num(words || 0)} / ${num(wordTarget)} 字 · ${work.tone === 'err' ? work.subtitle : '正文已保存'}` : '暂无正文'),
+                  e(Button, { kind: 'ghost', size: 'sm', disabled: !current, onClick: () => props.onOpenChapter(chapter) }, '打开全文与修订'))),
+              e('div', { className: 'cw-rail-stack' },
+                e('section', { className: 'cw-glass-card cw-rail-card', 'aria-label': '章节遥测' },
+                  e('div', { className: 'cw-card-title' },
+                    e('div', null,
+                      e('div', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 10, fill: true })), e('span', null, 'CHAPTER TELEMETRY')),
+                      e('h3', { style: { marginTop: 2 } }, '章节遥测与风格状态')),
+                    e('span', { className: 'nh-badge', 'data-tone': 'info' }, metrics.model ? `${metrics.role ? metrics.role + ' · ' : ''}${metrics.model}` : '默认模型')),
+                  e('div', { className: 'cw-dotted-list' },
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '本章字数 / 目标'), e('span', { className: 'dots' }), e('span', { className: `v${words && words >= wordTarget * 0.8 ? ' is-ok' : ''}` }, `${words === null ? '—' : num(words)} / ${num(wordTarget)} 字`)),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '最近输出速度'), e('span', { className: 'dots' }), e('span', { className: 'v is-active' }, metrics.speed)),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '本阶段用时'), e('span', { className: 'dots' }), e('span', { className: 'v' }, stage.active && timing.elapsedMs ? fmtDuration(timing.elapsedMs) : recordedMs ? fmtDuration(recordedMs) : '—')),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '本章模型费用'), e('span', { className: 'dots' }), e('span', { className: 'v' }, metrics.cost)))),
+                e('section', { className: 'cw-glass-card cw-rail-card', 'aria-label': '排期与最近章节' },
+                  e('div', { className: 'cw-card-title' },
+                    e('div', null,
+                      e('div', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 10, fill: true })), e('span', null, 'QUEUE & RECENT')),
+                      e('h3', { style: { marginTop: 2 } }, next ? next.title : '排期与最近章节')),
+                    e(Button, { kind: 'ghost', size: 'sm', onClick: () => props.navigate(next ? next.action.page : 'publish') }, next ? next.action.label : '发布队列')),
+                  e('div', { className: 'cw-dotted-list' },
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '队列待发 / 已核验'), e('span', { className: 'dots' }), e('span', { className: 'v is-ok' }, `${num(queue.queued || 0)} 待发 · ${num(queue.published || 0)} 已核验`)),
+                    e('div', { className: 'cw-dotted-row' }, e('span', { className: 'k' }, '日更调度状态'), e('span', { className: 'dots' }), e('span', { className: `v${job && job.enabled ? ' is-ok' : ' is-warn'}` }, job && job.enabled ? ((job.daily_times || [job.daily_time]).filter(Boolean).join(' / ') || '已启用') : '未启用或手动'))),
+                  chapters.error
+                    ? e(Empty, null, '章节读取失败，请刷新重试')
+                    : !rows.length
+                      ? e(Empty, null, '还没有章节')
+                      : e('div', { style: { display: 'flex', flexDirection: 'column', gap: 7 } },
+                          rows.slice(0, 3).map(row => e('button', {
+                            key: row.id,
+                            className: 'cw-chapter-row',
+                            type: 'button',
+                            onClick: () => props.onOpenChapter(row.id),
+                          },
+                            e('span', { className: 'cw-chapter-index' }, row.id),
+                            e('span', { className: 'cw-chapter-row-title' }, row.title || `第 ${row.id} 章`, e('small', null, `${num(row.words)} 字`)),
+                            e('span', { className: 'nh-badge', 'data-tone': row.reviewed ? 'ok' : 'warn' }, row.reviewed ? '已审查' : '待审查'))))))));
         }
 
 
@@ -9780,17 +9854,21 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           );
         }
 
-        const APPEARANCE_KEY = 'chapter-whale-appearance-v1';
-        const APPEARANCE_DEFAULTS = { palette: 'gemini', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'sans', opacity: 86, blur: 14 };
+        const APPEARANCE_KEY = 'chapter-whale-appearance-v2';
+        const APPEARANCE_DEFAULTS = { palette: 'liquid', theme: 'auto', fx: '2', motion: 'strong', reduced: false, density: 'comfortable', readerFont: 'serif', opacity: 24, blur: 18, refract: 85, backdrop: 100 };
         const AppearanceContext = React.createContext(APPEARANCE_DEFAULTS);
         function readAppearance() {
           const result = { ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) };
           try {
             const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || '{}');
-            const options = { palette: ['gemini', 'ocean'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
+            const paletteMap = { gemini: 'liquid', ocean: 'apple' };
+            if (saved.palette && paletteMap[saved.palette]) saved.palette = paletteMap[saved.palette];
+            const options = { palette: ['liquid', 'craft', 'apple'], theme: ['auto', 'dark', 'light'], fx: ['1', '2', '3'], motion: ['off', 'soft', 'strong'], density: ['compact', 'comfortable'], readerFont: ['sans', 'serif'] };
             for (const [key, allowed] of Object.entries(options)) if (allowed.includes(saved[key])) result[key] = saved[key];
             if (typeof saved.reduced === 'boolean') result.reduced = saved.reduced;
-            for (const [key, low, high] of [['opacity', 75, 96], ['blur', 0, 18]]) if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+            for (const [key, low, high] of [['opacity', 10, 78], ['blur', 4, 32], ['refract', 10, 160], ['backdrop', 35, 175]]) {
+              if (Number.isFinite(saved[key])) result[key] = Math.max(low, Math.min(high, saved[key]));
+            }
           } catch {}
           return result;
         }
@@ -9803,19 +9881,241 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             onClick: () => onChange({ ...value, [key]: id }),
           }, label)));
           const section = (title, content) => e('section', { className: 'cw-setting-section', key: title }, e('div', { className: 'cw-setting-title' }, e('h3', null, title)), content);
-          return e(Modal, { open, onClose, title: '外观与动效', className: 'cw-appearance-modal' },
+          return e(Modal, { open, onClose, title: '光学玻璃与排版控制台', className: 'cw-appearance-modal' },
             e('div', { className: 'cw-appearance' },
-              section('配色', choose('palette', [['gemini', '蓝紫 · Gemini'], ['ocean', '海洋 · Ocean']])),
+              section('玻璃主题', choose('palette', [['liquid', '星曜极光'], ['craft', '墨玉暖金'], ['apple', '冰霜极简']])),
               section('明暗主题', choose('theme', [['auto', '跟随 DSH'], ['dark', '深色'], ['light', '浅色']])),
-              section('炫彩程度', choose('fx', [['1', '轻彩'], ['2', '绚彩'], ['3', '幻彩']])),
               section('动效强度', e(React.Fragment, null,
                 choose('motion', [['off', '静止'], ['soft', '轻柔'], ['strong', '舒展']]),
-                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
-              section('信息密度', choose('density', [['compact', '紧凑'], ['comfortable', '舒适']])),
-              section('阅读字体', choose('readerFont', [['sans', '黑体'], ['serif', '宋体']])),
-              ...[['opacity', '内容遮罩', 75, 96, '%'], ['blur', '背景模糊', 0, 18, ' px']].map(([key, label, min, max, unit]) => section(label,
+                e('label', { className: 'cw-toggle-row' }, e('span', null, e('strong', null, '减少动画 / 星空静止')), e('input', { type: 'checkbox', role: 'switch', 'aria-label': '减少动画', checked: value.reduced, onChange: event => onChange({ ...value, reduced: event.target.checked }) }), e('span', { className: 'cw-switch-visual' })))),
+              section('信息密度', choose('density', [['comfortable', '舒朗'], ['compact', '紧凑']])),
+              section('阅读字体', choose('readerFont', [['serif', '衬线书卷'], ['sans', '现代黑体']])),
+              ...[
+                ['opacity', '表面通透度', 10, 78, '%'],
+                ['blur', '玻璃模糊度', 4, 32, ' px'],
+                ['refract', '折射与色散', 10, 160, '%'],
+                ['backdrop', '光带对比度', 35, 175, '%'],
+              ].map(([key, label, min, max, unit]) => section(label,
                 e('label', { className: 'cw-range-label' }, e('span', null, `${value[key]}${unit}`), e('input', { type: 'range', 'aria-label': label, min, max, value: value[key], onChange: event => onChange({ ...value, [key]: Number(event.target.value) }) })))),
-              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } }, e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'), e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+              e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', marginTop: 20 } },
+                e(Button, { onClick: () => onChange({ ...APPEARANCE_DEFAULTS, reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) }) }, '恢复默认'),
+                e(Button, { kind: 'primary', onClick: onClose }, '完成'))));
+        }
+
+        function buildConvexBevelMap(w, h, radius, bevelPx) {
+          const off = document.createElement('canvas');
+          if (!off || typeof off.getContext !== 'function') return '';
+          off.width = w;
+          off.height = h;
+          const ctx = off.getContext('2d');
+          if (!ctx) return '';
+          const img = ctx.createImageData(w, h);
+          const data = img.data;
+          const hw = w / 2;
+          const hh = h / 2;
+          const rx = Math.max(2, hw - radius);
+          const ry = Math.max(2, hh - radius);
+          const sdRect = (px, py) => {
+            const x = Math.abs(px - hw) - rx;
+            const y = Math.abs(py - hh) - ry;
+            return Math.hypot(Math.max(x, 0), Math.max(y, 0)) + Math.min(Math.max(x, y), 0) - radius;
+          };
+          for (let py = 0; py < h; py++) {
+            for (let px = 0; px < w; px++) {
+              const idx = (py * w + px) * 4;
+              const depth = -sdRect(px + 0.5, py + 0.5);
+              let gx = 0;
+              let gy = 0;
+              if (depth >= 0 && depth < bevelPx) {
+                const ddx = sdRect(px + 1.5, py + 0.5) - sdRect(px - 0.5, py + 0.5);
+                const ddy = sdRect(px + 0.5, py + 1.5) - sdRect(px + 0.5, py - 0.5);
+                const len = Math.hypot(ddx, ddy) || 1;
+                const curve = Math.pow(1 - depth / bevelPx, 1.65);
+                gx = (ddx / len) * curve;
+                gy = (ddy / len) * curve;
+              }
+              data[idx] = Math.round(128 + gx * 124);
+              data[idx + 1] = Math.round(128 + gy * 124);
+              data[idx + 2] = 128;
+              data[idx + 3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+          return typeof off.toDataURL === 'function' ? off.toDataURL('image/png') : '';
+        }
+
+        function CosmosBackdrop(props) {
+          const canvasRef = React.useRef(null);
+          const pillMapRef = React.useRef(null);
+          const cardMapRef = React.useRef(null);
+          const pillRRef = React.useRef(null);
+          const pillGRef = React.useRef(null);
+          const pillBRef = React.useRef(null);
+          const cardRRef = React.useRef(null);
+          const cardGRef = React.useRef(null);
+          const cardBRef = React.useRef(null);
+
+          React.useEffect(() => {
+            const pMap = pillMapRef.current;
+            const cMap = cardMapRef.current;
+            if (!pMap || !cMap || typeof document.createElement !== 'function') return undefined;
+            const pillUrl = buildConvexBevelMap(260, 56, 28, 17);
+            const cardUrl = buildConvexBevelMap(260, 170, 26, 18);
+            if (pillUrl && typeof pMap.setAttribute === 'function') pMap.setAttribute('href', pillUrl);
+            if (cardUrl && typeof cMap.setAttribute === 'function') cMap.setAttribute('href', cardUrl);
+            return undefined;
+          }, []);
+
+          React.useEffect(() => {
+            const mult = Math.max(0.1, Number(props.refract || 85) / 100);
+            const pBase = Math.max(2, mult * 24);
+            const cBase = Math.max(2, mult * 15);
+            [
+              [pillRRef.current, pBase * 1.15],
+              [pillGRef.current, pBase * 0.92],
+              [pillBRef.current, pBase * 0.68],
+              [cardRRef.current, cBase * 1.12],
+              [cardGRef.current, cBase * 0.90],
+              [cardBRef.current, cBase * 0.68],
+            ].forEach(([node, val]) => {
+              if (node && typeof node.setAttribute === 'function') node.setAttribute('scale', val.toFixed(1));
+            });
+          }, [props.refract]);
+
+          React.useEffect(() => {
+            const canvas = canvasRef.current;
+            if (!canvas || typeof canvas.getContext !== 'function') return undefined;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return undefined;
+            const staticOnly = Boolean(props.reduced || props.motion === 'off' || props.hidden);
+            let stars = [];
+            let tick = 0;
+            let rafId = null;
+
+            const setup = () => {
+              const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+              const w = canvas.width = Math.max(1, canvas.offsetWidth || 960) * dpr;
+              const h = canvas.height = Math.max(1, canvas.offsetHeight || 640) * dpr;
+              const count = Math.min(96, Math.max(40, Math.floor((w * h) / 28000)));
+              stars = Array.from({ length: count }, (_, idx) => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                r: (idx % 12 === 0 ? 1.8 : 0.6 + Math.random()) * dpr,
+                twinkle: Math.random() * Math.PI * 2,
+                speed: 0.004 + Math.random() * 0.01,
+                gold: idx % 10 === 0,
+                vx: (Math.random() - 0.5) * 0.12,
+                vy: (Math.random() - 0.5) * 0.08,
+              }));
+            };
+
+            const drawRibbon = (w, h, dpr, yFrac, amp, phase, cStart, cEnd, lw) => {
+              const grad = ctx.createLinearGradient(0, 0, w, h * 0.55);
+              grad.addColorStop(0, 'transparent');
+              grad.addColorStop(0.28, cStart);
+              grad.addColorStop(0.72, cEnd);
+              grad.addColorStop(1, 'transparent');
+              ctx.save();
+              ctx.beginPath();
+              const baseY = h * yFrac;
+              ctx.moveTo(-40 * dpr, baseY + Math.sin(phase) * amp);
+              for (let t = 0; t <= 12; t++) {
+                const fx = t / 12;
+                ctx.lineTo(fx * (w + 80 * dpr) - 40 * dpr, baseY - fx * h * 0.18 + Math.sin(fx * 4.4 + phase) * amp);
+              }
+              ctx.strokeStyle = grad;
+              ctx.lineWidth = lw * dpr;
+              ctx.lineCap = 'round';
+              ctx.stroke();
+              ctx.restore();
+            };
+
+            const frame = () => {
+              const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+              const w = canvas.width;
+              const h = canvas.height;
+              const isDark = props.theme !== 'light';
+              const lm = Math.max(0.3, Number(props.backdrop || 100) / 100);
+              ctx.clearRect(0, 0, w, h);
+              if (!staticOnly) tick += 0.008;
+
+              const coolA = isDark ? `rgba(92, 162, 255, ${(0.20 * lm).toFixed(3)})` : `rgba(82, 138, 224, ${(0.22 * lm).toFixed(3)})`;
+              const warmB = isDark ? `rgba(230, 185, 76, ${(0.16 * lm).toFixed(3)})` : `rgba(218, 158, 78, ${(0.22 * lm).toFixed(3)})`;
+              const irisC = isDark ? `rgba(176, 134, 255, ${(0.16 * lm).toFixed(3)})` : `rgba(148, 118, 228, ${(0.16 * lm).toFixed(3)})`;
+
+              drawRibbon(w, h, dpr, 0.18, 46 * dpr, tick * 0.9, coolA, warmB, 76);
+              drawRibbon(w, h, dpr, 0.42, 36 * dpr, tick * 0.65 + 1.8, irisC, coolA, 50);
+              drawRibbon(w, h, dpr, 0.78, 52 * dpr, -tick * 0.5 + 3.1, warmB, irisC, 64);
+
+              ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(18, 20, 26, 0.05)';
+              ctx.lineWidth = 0.85 * dpr;
+              ctx.beginPath();
+              ctx.arc(w * 0.74, h * 0.34, Math.min(w, h) * 0.40, 0.4, 3.6);
+              ctx.stroke();
+
+              for (const s of stars) {
+                if (!staticOnly) {
+                  s.x = (s.x + s.vx + w) % w;
+                  s.y = (s.y + s.vy + h) % h;
+                  s.twinkle += s.speed;
+                }
+                const pulse = 0.55 + 0.45 * Math.sin(s.twinkle);
+                ctx.fillStyle = s.gold
+                  ? (isDark ? `rgba(230, 185, 76, ${0.42 + pulse * 0.48})` : `rgba(158, 109, 8, ${0.28 + pulse * 0.30})`)
+                  : (isDark ? `rgba(255, 255, 255, ${0.25 + pulse * 0.56})` : `rgba(30, 41, 59, ${0.14 + pulse * 0.18})`);
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+              }
+
+              if (!staticOnly && typeof requestAnimationFrame === 'function') {
+                rafId = requestAnimationFrame(frame);
+              }
+            };
+
+            setup();
+            frame();
+            const onResize = () => {
+              setup();
+              if (staticOnly) frame();
+            };
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('resize', onResize);
+            }
+            return () => {
+              if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+              if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+                window.removeEventListener('resize', onResize);
+              }
+            };
+          }, [props.theme, props.palette, props.reduced, props.motion, props.hidden, props.backdrop]);
+
+          return e(React.Fragment, null,
+            e('svg', { width: 0, height: 0, style: { position: 'absolute', pointerEvents: 'none' }, 'aria-hidden': 'true' },
+              e('defs', null,
+                e('filter', { id: 'cw-lg-pill-refract', x: '-4%', y: '-4%', width: '108%', height: '108%', colorInterpolationFilters: 'sRGB' },
+                  e('feImage', { ref: pillMapRef, id: 'cw-lg-pill-map', x: '0%', y: '0%', width: '100%', height: '100%', preserveAspectRatio: 'none', href: '', result: 'map' }),
+                  e('feDisplacementMap', { ref: pillRRef, in: 'SourceGraphic', in2: 'map', scale: '24', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispR' }),
+                  e('feColorMatrix', { in: 'dispR', type: 'matrix', values: '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'rCh' }),
+                  e('feDisplacementMap', { ref: pillGRef, in: 'SourceGraphic', in2: 'map', scale: '19', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispG' }),
+                  e('feColorMatrix', { in: 'dispG', type: 'matrix', values: '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'gCh' }),
+                  e('feDisplacementMap', { ref: pillBRef, in: 'SourceGraphic', in2: 'map', scale: '14', xChannelSelector: 'R', yChannelSelector: 'G', result: 'dispB' }),
+                  e('feColorMatrix', { in: 'dispB', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0', result: 'bCh' }),
+                  e('feBlend', { in: 'rCh', in2: 'gCh', mode: 'screen', result: 'rgCh' }),
+                  e('feBlend', { in: 'rgCh', in2: 'bCh', mode: 'screen', result: 'rgbOut' })),
+                e('filter', { id: 'cw-lg-card-refract', x: '-2%', y: '-2%', width: '104%', height: '104%', colorInterpolationFilters: 'sRGB' },
+                  e('feImage', { ref: cardMapRef, id: 'cw-lg-card-map', x: '0%', y: '0%', width: '100%', height: '100%', preserveAspectRatio: 'none', href: '', result: 'cmap' }),
+                  e('feDisplacementMap', { ref: cardRRef, in: 'SourceGraphic', in2: 'cmap', scale: '15', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cR' }),
+                  e('feColorMatrix', { in: 'cR', type: 'matrix', values: '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'crCh' }),
+                  e('feDisplacementMap', { ref: cardGRef, in: 'SourceGraphic', in2: 'cmap', scale: '12', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cG' }),
+                  e('feColorMatrix', { in: 'cG', type: 'matrix', values: '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0', result: 'cgCh' }),
+                  e('feDisplacementMap', { ref: cardBRef, in: 'SourceGraphic', in2: 'cmap', scale: '9', xChannelSelector: 'R', yChannelSelector: 'G', result: 'cB' }),
+                  e('feColorMatrix', { in: 'cB', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0', result: 'cbCh' }),
+                  e('feBlend', { in: 'crCh', in2: 'cgCh', mode: 'screen', result: 'crgCh' }),
+                  e('feBlend', { in: 'crgCh', in2: 'cbCh', mode: 'screen', result: 'cOut' })))),
+            e('div', { className: 'cw-backdrop-layer', 'aria-hidden': 'true' },
+              e('canvas', { ref: canvasRef, className: 'cw-cosmos-canvas' }),
+              e('div', { className: 'cw-optical-wash' })));
         }
         function AiPresence({ active, tone }) {
           return e('div', { className: 'cw-ai-presence', 'aria-hidden': 'true', 'data-active': active, 'data-tone': tone },
@@ -9853,6 +10153,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         }
 
 
+        const HUBS = [
+          { id: 'work', label: '工作台', groupId: 'overview', routes: ['dashboard'] },
+          { id: 'studio', label: '创作室', groupId: 'creation', routes: ['chapters', 'outline', 'brief', 'flow'] },
+          { id: 'insights', label: '记忆与洞察', groupId: 'creation', routes: ['memory', 'readers'] },
+          { id: 'publish', label: '发布与排期', groupId: 'publish', routes: ['publish', 'setup'] },
+          { id: 'ops', label: '日更与运行', groupId: 'publish', routes: ['jobs', 'operations'] },
+          { id: 'system', label: '模型与系统', groupId: 'system', routes: ['ai', 'providers', 'free', 'costs'] },
+        ];
+
         function Shell() {
           const service = useService();
           const [route, setRoute] = React.useState('dashboard');
@@ -9860,8 +10169,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const selectProject = (id) => { setSelectedProject(id); localStorage.setItem('chapter-whale-project', id); };
           const [appearance, setAppearance] = React.useState(readAppearance);
           const [appearanceOpen, setAppearanceOpen] = React.useState(false);
+          const [projectPopOpen, setProjectPopOpen] = React.useState(false);
           const [hostTheme, setHostTheme] = React.useState(hostAppearance);
+          const rootRef = React.useRef(null);
+          const trackRef = React.useRef(null);
+          const lensRef = React.useRef(null);
           const density = appearance.density;
+          const activeTheme = appearance.theme === 'auto' ? hostTheme : appearance.theme;
           React.useEffect(() => { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch {} }, [appearance]);
           React.useEffect(() => {
             const update = () => setHostTheme(hostAppearance());
@@ -9881,8 +10195,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           });
 
           const overview = usePoll(() => api('/overview'), [], POLL_MS);
-          /* The live strip needs sub-minute freshness; /api/jobs is ~4 KB, so it
-             can afford the faster cadence without hammering the service. */
           const liveJobs = usePoll(() => api('/jobs'), [], LIVE_POLL_MS);
 
           React.useEffect(() => {
@@ -9928,7 +10240,56 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             onOpenChapter: (id) => setChapter(id),
           };
 
-          const current = NAV.reduce((found, group) => found || group.items.find((item) => item.id === route), null);
+          const flatNav = NAV.flatMap((group) => group.items.map((item) => ({ ...item, groupId: group.id, groupLabel: t('nav.group.' + group.id, group.group) })));
+          const current = flatNav.find((item) => item.id === route) || null;
+          const activeHub = HUBS.find((hub) => hub.routes.includes(route)) || HUBS[0];
+
+          React.useEffect(() => {
+            const syncLens = () => {
+              const track = trackRef.current;
+              const lens = lensRef.current;
+              if (!track || !lens || typeof track.querySelector !== 'function') return;
+              const btn = track.querySelector('.cw-nav-pill.is-active');
+              if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
+              const tr = track.getBoundingClientRect();
+              const br = btn.getBoundingClientRect();
+              lens.style.width = `${br.width}px`;
+              lens.style.transform = `translateX(${br.left - tr.left - 2}px)`;
+            };
+            const timer = setTimeout(syncLens, 0);
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+              window.addEventListener('resize', syncLens);
+            }
+            return () => {
+              clearTimeout(timer);
+              if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+                window.removeEventListener('resize', syncLens);
+              }
+            };
+          }, [activeHub.id, route, ready, allProjects.length]);
+
+          React.useEffect(() => {
+            const root = rootRef.current;
+            if (!root || typeof root.addEventListener !== 'function') return undefined;
+            let rafPending = false;
+            const onMove = (event) => {
+              if (rafPending || appearance.reduced || appearance.motion === 'off') return;
+              rafPending = true;
+              requestAnimationFrame(() => {
+                rafPending = false;
+                const surf = event.target && event.target.closest && event.target.closest('.cw-glass-card, .cw-dock-capsule, .cw-popover');
+                if (surf && typeof surf.getBoundingClientRect === 'function') {
+                  const rect = surf.getBoundingClientRect();
+                  surf.style.setProperty('--mx', `${(((event.clientX - rect.left) / Math.max(1, rect.width)) * 100).toFixed(1)}%`);
+                  surf.style.setProperty('--my', `${(((event.clientY - rect.top) / Math.max(1, rect.height)) * 100).toFixed(1)}%`);
+                }
+              });
+            };
+            root.addEventListener('pointermove', onMove, { passive: true });
+            return () => {
+              if (typeof root.removeEventListener === 'function') root.removeEventListener('pointermove', onMove);
+            };
+          }, [appearance.reduced, appearance.motion]);
 
           let body;
           if (service.state.loading && !overview.data) {
@@ -9950,11 +10311,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   'div',
                   { style: { position: 'relative', zIndex: 1 } },
                   e('span', { className: 'nh-herotag', 'data-state': 'failed' }, '服务未运行'),
-                  e(
-                    'h2',
-                    { className: 'nh-herotitle' },
-                    '准备开始你的新故事',
-                  ),
+                  e('h2', { className: 'nh-herotitle' }, '准备开始你的新故事'),
                   e(
                     'p',
                     { className: 'nh-herosub' },
@@ -9963,12 +10320,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       : '首次启动将准备内置写作环境，无需安装 Python 或选择项目文件夹。',
                   ),
                   service.state.hint
-                    ? e(
-                        'div',
-                        { style: { marginTop: 12 } },
-                        e('div', { className: 'nh-k' }, '首次使用'),
-                        e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.hint)),
-                      )
+                    ? e('div', { style: { marginTop: 12 } }, e('div', { className: 'nh-k' }, '首次使用'), e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.hint)))
                     : null,
                   e(
                     'div',
@@ -9984,27 +10336,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           if (result && result.running) overview.reload(false);
                         },
                       },
-                      service.state.starting
-                        ? t('panel.starting', '正在启动…')
-                        : '开始使用码章鲸',
+                      service.state.starting ? t('panel.starting', '正在启动…') : '开始使用码章鲸',
                     ),
                     e(Button, { icon: 'refresh', onClick: () => service.refresh() }, '重新检测'),
                   ),
                   service.state.error
-                    ? e(
-                        'div',
-                        { style: { marginTop: 14 } },
-                        e('div', { className: 'nh-k' }, '错误信息'),
-                        e('pre', { className: 'nh-pre', style: { maxHeight: 180 } }, String(service.state.error)),
-                      )
+                    ? e('div', { style: { marginTop: 14 } }, e('div', { className: 'nh-k' }, '错误信息'), e('pre', { className: 'nh-pre', style: { maxHeight: 180 } }, String(service.state.error)))
                     : null,
                   service.state.logTail
-                    ? e(
-                        'div',
-                        { style: { marginTop: 12 } },
-                        e('div', { className: 'nh-k' }, `启动日志 · ${service.state.logFile || ''}`),
-                        e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.logTail)),
-                      )
+                    ? e('div', { style: { marginTop: 12 } }, e('div', { className: 'nh-k' }, `启动日志 · ${service.state.logFile || ''}`), e('pre', { className: 'nh-pre', style: { maxHeight: 220 } }, String(service.state.logTail)))
                     : null,
                 ),
               ),
@@ -10032,104 +10372,190 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             body = (!project && !['ai', 'free', 'operations', 'flow'].includes(route) ? map.setup : (map[route] || map.dashboard))();
           }
 
+          const bookTitle = project ? project.title : '创作空间';
+          const bookMark = (bookTitle || '鲸').slice(0, 1);
+          const subRoutes = activeHub.routes.map((id) => flatNav.find((item) => item.id === id)).filter(Boolean);
+
           return e(
             ToastProvider,
             null,
             e(
               'div',
-              { className: 'nh-root', 'data-ui': 'atelier', 'data-density': density,
-                'data-theme': appearance.theme === 'auto' ? hostTheme : appearance.theme, 'data-palette': appearance.palette,
-                'data-fx': appearance.fx, 'data-motion': appearance.motion, 'data-reduced': String(appearance.reduced),
-                'data-reader-font': appearance.readerFont, 'data-user-motion': 'true', 'data-hidden': String(background),
-                style: { '--glass-opacity': String(appearance.opacity / 100), '--blur': `${appearance.blur}px` } },
+              {
+                ref: rootRef,
+                className: 'nh-root',
+                'data-ui': 'atelier',
+                'data-density': density,
+                'data-theme': activeTheme,
+                'data-palette': appearance.palette,
+                'data-fx': appearance.fx,
+                'data-motion': appearance.motion,
+                'data-reduced': String(appearance.reduced),
+                'data-reader-font': appearance.readerFont,
+                'data-user-motion': 'true',
+                'data-hidden': String(background),
+                style: {
+                  '--glass-opacity': String(appearance.opacity / 100),
+                  '--blur': `${appearance.blur}px`,
+                  '--glass-refract': (appearance.refract / 100).toFixed(2),
+                  '--backdrop-light': (appearance.backdrop / 100).toFixed(2),
+                },
+                onClick: () => { if (projectPopOpen) setProjectPopOpen(false); },
+              },
+              e(CosmosBackdrop, {
+                theme: activeTheme,
+                palette: appearance.palette,
+                reduced: appearance.reduced,
+                motion: appearance.motion,
+                hidden: background,
+                refract: appearance.refract,
+                backdrop: appearance.backdrop,
+              }),
               e(
                 'header',
-                { className: 'nh-head' },
-                e(Icon, { name: 'pen', size: 15 }),
-                e('h1', null, '码章鲸'),
-                allProjects.length ? e(Select, { value: project ? project.id : '', onChange: selectProject, options: allProjects.map((item) => ({ value: item.id, label: item.title })) }) : null,
-                e('span', { className: 'nh-sub' }, current ? current.label : ''),
-                e('span', { className: 'nh-spacer' }),
+                { className: 'cw-dock-sticky' },
                 e(
                   'div',
-                  { className: 'nh-row', style: { gap: 10 } },
+                  { className: 'cw-dock-row' },
                   e(
-                    'span',
-                    { className: 'nh-live' },
-                    e('span', {
-                      className: 'nh-dot',
-                      'data-state': service.state.running ? 'ok' : 'err',
-                    }),
-                    service.state.running ? '在线' : '离线',
-                  ),
-                  e(Button, { kind: 'ghost', size: 'sm', onClick: () => setAppearanceOpen(true), icon: 'settings' }, '外观'),
-                  e(
-                    Button,
+                    'button',
                     {
-                      kind: 'ghost',
-                      size: 'sm',
-                      icon: 'refresh',
-                      busy: overview.loading,
-                      onClick: () => {
-                        overview.reload(false);
-                        service.refresh();
-                      },
+                      type: 'button',
+                      className: 'cw-lens-circle cw-project-lens',
+                      title: '切换作品上下文',
+                      onClick: (event) => { event.stopPropagation(); setProjectPopOpen((open) => !open); },
                     },
-                    t('panel.refresh', '刷新'),
+                    e('span', { className: 'cw-project-badge' }, bookMark),
+                    e('span', { className: 'cw-project-title' }, bookTitle),
+                    e(Icon, { name: 'chevron', size: 12 }),
                   ),
-                  service.state.running
-                    ? e(
-                        Button,
-                        {
-                          kind: 'ghost',
-                          size: 'sm',
-                          icon: 'stop',
-                          busy: service.state.stopping,
-                          onClick: () => service.stop(),
-                        },
-                        service.state.stopping
-                          ? t('panel.stopping', '正在停止…')
-                          : t('panel.stop', '停止服务'),
-                      )
-                    : null,
+                  e(
+                    'nav',
+                    { className: 'cw-dock-capsule', 'aria-label': t('panel.title', '码章鲸') },
+                    e(
+                      'div',
+                      { className: 'cw-dock-track', ref: trackRef },
+                      e('div', { className: 'cw-nav-lens', ref: lensRef }),
+                      HUBS.map((hub) => {
+                        const isHubActive = hub.id === activeHub.id;
+                        return e(
+                          'button',
+                          {
+                            key: hub.id,
+                            type: 'button',
+                            className: `cw-nav-pill${isHubActive ? ' is-active' : ''}`,
+                            title: t('nav.group.' + hub.groupId, hub.label),
+                            onClick: () => {
+                              setProjectPopOpen(false);
+                              if (!hub.routes.includes(route)) setRoute(hub.routes[0]);
+                            },
+                          },
+                          isHubActive ? e('span', { className: 'cw-pill-dot' }) : null,
+                          hub.label,
+                          hub.id === 'studio' && stripWork.tone === 'err' ? e('span', { className: 'cw-pill-badge' }, '!') : null,
+                        );
+                      }),
+                    ),
+                  ),
+                  e(
+                    'div',
+                    { className: 'cw-dock-tools' },
+                    e(
+                      'button',
+                      {
+                        type: 'button',
+                        className: `cw-lens-circle${stripWork.active ? ' is-streaming is-on' : ''}`,
+                        title: stripWork.active ? '正在执行 · 查看任务' : 'AI 设置与运行状态',
+                        onClick: () => setRoute(stripWork.active ? 'jobs' : 'ai'),
+                      },
+                      e(
+                        'span',
+                        { className: 'cw-gemini-orb' },
+                        e('span', { className: 'cw-gemini-orb-core' }, e(Icon, { name: 'spark', size: 11, fill: true })),
+                      ),
+                    ),
+                    e(
+                      'button',
+                      {
+                        type: 'button',
+                        className: `cw-lens-circle${appearanceOpen ? ' is-on' : ''}`,
+                        title: '光学玻璃与排版控制台',
+                        onClick: () => setAppearanceOpen(true),
+                      },
+                      e(Icon, { name: 'settings', size: 15 }),
+                    ),
+                  ),
                 ),
+                subRoutes.length > 1 || service.state.running
+                  ? e(
+                      'div',
+                      { className: 'cw-subnav-bar' },
+                      subRoutes.length > 1
+                        ? e(
+                            'div',
+                            { className: 'cw-subnav-pills' },
+                            subRoutes.map((item) => e(
+                              'button',
+                              {
+                                key: item.id,
+                                type: 'button',
+                                className: `cw-subpill${route === item.id ? ' is-active' : ''}`,
+                                onClick: () => setRoute(item.id),
+                              },
+                              e(Icon, { name: item.icon, size: 12 }),
+                              t('nav.' + item.id, item.label),
+                            )),
+                          )
+                        : e('span', null),
+                      e(
+                        'div',
+                        { className: 'cw-service-cluster' },
+                        e('span', { className: 'nh-dot', 'data-state': service.state.running ? 'ok' : 'err' }),
+                        e('span', null, service.state.running ? '在线' : '离线'),
+                        e(Button, { kind: 'ghost', size: 'sm', icon: 'refresh', busy: overview.loading, onClick: () => { overview.reload(false); service.refresh(); } }, t('panel.refresh', '刷新')),
+                        service.state.running
+                          ? e(Button, { kind: 'ghost', size: 'sm', icon: 'stop', busy: service.state.stopping, onClick: () => service.stop() }, service.state.stopping ? t('panel.stopping', '正在停止…') : t('panel.stop', '停止服务'))
+                          : null,
+                      ),
+                    )
+                  : null,
               ),
-              route !== 'dashboard' && liveJob ? e(StatusBar, {
-                work: stripWork,
-                ratio: stripRatio,
-                elapsedMs: stripElapsed,
-              }) : null,
+              projectPopOpen
+                ? e(
+                    'div',
+                    { className: 'cw-popover', onClick: (event) => event.stopPropagation() },
+                    e(
+                      'div',
+                      { className: 'nh-cardbody', style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+                      e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                        e('span', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 11, fill: true })), '切换作品'),
+                        e(Button, { kind: 'ghost', size: 'sm', icon: 'x', onClick: () => setProjectPopOpen(false) }, '')),
+                      allProjects.map((item) => e(
+                        'button',
+                        {
+                          key: item.id,
+                          type: 'button',
+                          className: 'cw-chapter-row',
+                          style: { borderColor: project && item.id === project.id ? 'var(--state-active)' : undefined },
+                          onClick: () => { selectProject(item.id); setProjectPopOpen(false); },
+                        },
+                        e('span', { className: 'cw-chapter-row-title' }, item.title, e('small', null, `${num(item.chapters)} 章`)),
+                        project && item.id === project.id ? e('span', { className: 'nh-badge', 'data-tone': 'info' }, '当前') : null,
+                      )),
+                      e(Button, { size: 'sm', icon: 'plus', onClick: () => { setProjectPopOpen(false); setRoute('setup'); } }, '管理作品与开书'),
+                    ),
+                  )
+                : null,
+              route !== 'dashboard' && liveJob ? e(StatusBar, { work: stripWork, ratio: stripRatio, elapsedMs: stripElapsed }) : null,
               e(
                 'div',
                 { className: 'nh-body' },
                 e(
-                  'nav',
-                  { className: 'nh-nav' },
-                  NAV.map((group) =>
-                    e(
-                      'div',
-                      { key: group.group, className: 'nh-navgroup' },
-                      e('div', { className: 'nh-navlabel' }, t('nav.group.' + group.id, group.group)),
-                      group.items.map((item) =>
-                        e(
-                          'button',
-                          {
-                            key: item.id,
-                            type: 'button',
-                            className: 'nh-navitem',
-                            'aria-label': t('nav.' + item.id, item.label),
-                            title: t('nav.' + item.id, item.label),
-                            'data-active': route === item.id ? 'true' : 'false',
-                            onClick: () => setRoute(item.id),
-                          },
-                          e(Icon, { name: item.icon, size: 14 }),
-                          e('span', null, t('nav.' + item.id, item.label)),
-                        ),
-                      ),
-                    ),
-                  ),
+                  'main',
+                  { className: 'nh-main' },
+                  route !== 'dashboard' && ready ? e('div', { className: 'cw-page-heading cw-route-heading' }, e('h1', null, current ? t('nav.' + route, current.label) : t('panel.title', '码章鲸'))) : null,
+                  e(AppearanceContext.Provider, { value: appearance }, body),
                 ),
-                e('main', { className: 'nh-main' }, route !== 'dashboard' && ready ? e('div', { className: 'cw-page-heading cw-route-heading' }, e('h1', null, current ? t('nav.' + route, current.label) : '码章鲸')) : null, e(AppearanceContext.Provider, { value: appearance }, body)),
               ),
               e(AppearancePanel, { open: appearanceOpen, onClose: () => setAppearanceOpen(false), value: appearance, onChange: setAppearance }),
               e(ChapterModal, {
