@@ -1,0 +1,67 @@
+name: Publish verified ChapterWhale 0.7.0 to npm
+on:
+  push:
+    branches:
+      - release-staging/v0.7.0-19c099d
+    paths:
+      - .github/workflows/chapter-whale-release-staging.yml
+permissions: {}
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify and publish the release archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          package=dsh-chapter-whale
+          version=0.7.0
+          archive="$package-$version.tgz"
+          registry=https://registry.npmjs.org/
+          integrity='sha512-pqc4u6T6Be35ieWTOFpAUoJEelx3dmMMPSZO4/E8bMPcaDj97GWfhVnCb9di7qogF8MxalFpW8xLeQcrggYqtA=='
+          npm --version
+          if existing="$(npm view "$package@$version" dist.integrity --registry "$registry" --prefer-online 2> npm-view.err)"; then
+            test "$existing" = "$integrity"
+          else
+            if ! grep -q E404 npm-view.err; then
+              cat npm-view.err >&2
+              exit 1
+            fi
+            gh release download "v$version" --repo "$GITHUB_REPOSITORY" --pattern "$archive"
+            printf '%s  %s\n' '9a98e27b4a9413d6009bfe9c174960266b07d97579b9429573db758e75297627' "$archive" | sha256sum --check
+            npm publish "./$archive" --access public --tag latest --registry "$registry" --loglevel warn
+          fi
+          for attempt in {1..6}; do
+            if [ "$(npm view "$package@$version" dist.integrity --registry "$registry" --prefer-online 2>/dev/null)" = "$integrity" ] &&
+               [ "$(npm view "$package@latest" version --registry "$registry" --prefer-online 2>/dev/null)" = "$version" ]; then
+              echo "Verified $package@$version as npm latest with the expected integrity."
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+  cleanup:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Remove the completed staging branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = release-staging/v0.7.0-19c099d
+          head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq '.object.sha')"
+          test "$head" = "$GITHUB_SHA"
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$GITHUB_REF_NAME" --silent
