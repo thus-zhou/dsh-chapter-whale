@@ -1,19 +1,18 @@
 # 插件市场投稿与收录记录
 
-更新日期：2026-11-24（0.7.1 开放 macOS DSH 插件支持）。当前插件版本为 `0.7.1`（Windows x64 与 macOS Apple Silicon / Intel 双平台），Windows 固定运行时 `buildId` 沿用 `b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`（macOS 首启自动建 `.venv`）。
+更新日期：2026-11-24（0.7.2 修复多书隔离、新书引导、发布预检与排期恢复）。当前插件版本为 `0.7.2`（Windows x64 与 macOS Apple Silicon / Intel 双平台），代码清单 `buildId` 为 `f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3`，Windows 固定运行时归档复用 `v0.7.0`（`runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`；macOS 首启自动建 `.venv`）。
 
-本轮 `0.7.1` 同步状态：
+本轮 `0.7.2` 同步状态：
 
-- [GitHub Release v0.7.1](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.1) 已发布为 Latest：
-  - 跨平台插件包 `dsh-chapter-whale-0.7.1.tgz`：`12,445,323` 字节，SHA-1 `a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f`，SHA-256 `11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1`。
-  - macOS Apple Silicon 常驻服务 `dsh-chapter-whale-service-macos-arm64-0.7.1.tar.gz`：`4,353,007` 字节，SHA-256 `c0d0316e0e2f719d8d7f4bb495001299afcf9016844722e0b3c7b3ed4022613f`。
-  - macOS Intel 常驻服务 `dsh-chapter-whale-service-macos-amd64-0.7.1.tar.gz`：`4,353,007` 字节，SHA-256 `06e95ded47f20a12c825038c86f31f0e993c475635ecdbdee999132a36d36750`。
-  - Windows 完整运行时大包沿用 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 的 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`（`282,727,542` 字节，SHA-256 `bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d`）。
-  - 自托管索引 [market/index.json](index.json) 已同步至 `0.7.1`（`publishTimestamp: 1795518000`）。
-- npm `latest` 已发布为 `0.7.1`（`https://www.npmjs.com/package/dsh-chapter-whale`），公开 registry 下载校验与 GitHub Release `v0.7.1` 逐字节一致（`12,445,323` 字节，SHA-1 `a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f`，SHA-256 `11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1`），基于 npm 索引的第三方市场将按 `latest` 自动刷新。
-- 社区目录已同步更新 [PR #18485](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485) 至 `0.7.1`（`open`，Windows x64 + macOS）。
-- [Distribution first start 双平台首发校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45382801913)（`windows-install` 完整包 + 轻量包，`macos-install` ARM64 真实 `.tgz` 解包并拉起独立工作区 `.venv` 服务）及 [Source checks 10/10 矩阵](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45381664602)（含 Windows / Ubuntu / `macos-latest` 与 `macos-first-start`）均已通过；另有 Windows `DSH 0.2.2-rc.3` 隔离沙箱 UI 实装记录（[retest-0.7.0.md](../docs/retest-0.7.0.md)）。
-- README、[上手指南](../docs/quickstart.md)、[macOS 说明](../deploy/macos/README.md) 及 [演示图集](../docs/screenshots.md) 已同步。按约束未修改个人桌面端 `0.4.4` 配置。
+- [GitHub Release v0.7.2](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.2) 已发布为 Latest：
+  - 跨平台插件包 `dsh-chapter-whale-0.7.2.tgz`：`12,459,335` 字节，SHA-1 `d4f6005cd6db3e8fd8235bfbd4b422f3e4607366`，SHA-256 `53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b`。
+  - 校验清单 `SHA256SUMS.txt`：`95` 字节，SHA-256 `b8b94e4514507126577d83564585d69071947efce2c3a62d5333ecc26c6e2914`。
+  - Windows 完整运行时大包沿用 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 的 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`（`282,727,542` 字节，SHA-256 `bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d`），始终安装 `0.7.2` 包内后端代码。
+  - 自托管索引 [market/index.json](index.json) 已同步至 `0.7.2`（`publishTimestamp: 1795525080`），社区 JSON 条目 [losebird-entry.json](losebird-entry.json) 与 [catalog-entry.yml](catalog-entry.yml) 均已同步至 `0.7.2`。
+- npm `latest` 已发布为 `0.7.2`（`https://www.npmjs.com/package/dsh-chapter-whale`，含 SLSA provenance attestation），公开 registry 下载校验与 GitHub Release `v0.7.2` 逐字节一致（`12,459,335` 字节，SHA-1 `d4f6005cd6db3e8fd8235bfbd4b422f3e4607366`，SHA-256 `53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b`）；基于 npm 索引的第三方市场（`Open Plugin Market`、`DSH Plugin Hub`、`2BingLing`、`bradeGithub`、`LivXue`）按 `latest` 自动同步刷新。
+- 社区目录已同步更新 [PR #18485](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485) 至 `0.7.2`（`open`，Windows x64 + macOS）。
+- [Distribution first start 双平台首发校验 #45400377607](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607)（`windows-install` + `macos-install`）及 [Source checks #45401789212](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212)（Windows / Ubuntu / `macos-latest` 与 `macos-first-start`）均已通过；另有 Windows `DSH 0.2.2-rc.3` 隔离沙箱 UI 实装记录（[retest-0.7.0.md](../docs/retest-0.7.0.md)）。
+- README、[上手指南](../docs/quickstart.md)、[状态记录](../RELEASE_STATUS.md)、[macOS 说明](../deploy/macos/README.md) 及 [演示图集](../docs/screenshots.md) 已同步。按约束未修改个人桌面端 `0.5.0` 配置。
 
 以下表格保留首次投稿的历史记录，不代表已重新核对所有第三方市场的当前缓存。
 
@@ -25,10 +24,10 @@
 
 | 市场 / 目录 | 状态 | 入口 |
 | --- | --- | --- |
-| awesome-dsh-plugin / dshmarket | 首次申请已合并；新版本见上方记录 | [申请或市场](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316) |
+| awesome-dsh-plugin / dshmarket | 首次申请已合并；0.7.2 更新在 PR #18485 | [申请或市场](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316) |
 | losebird DSH Plugin Market | 历史申请已关闭；当前收录状态待核对 | [申请或市场](https://github.com/losebird/dsh-plugin-market/pull/90) |
-| Open Plugin Market / dshopen.org | 已投稿，待审核 | [申请或市场](https://github.com/polang233/dsh-plugin-index/issues/430) |
-| DSH Plugin Hub / dsh-plugin.org | 已投稿，待审核 | [申请或市场](https://github.com/dshplugin/dsh-plugin-hub/issues/738) |
+| Open Plugin Market / dshopen.org | 已收录（issue #430 已关闭）；按 npm latest 自动同步 | [申请或市场](https://github.com/polang233/dsh-plugin-index/issues/430) |
+| DSH Plugin Hub / dsh-plugin.org | 已收录（issue #738 已关闭）；稳定版按 npm latest 冷却期后自动同步 | [申请或市场](https://github.com/dshplugin/dsh-plugin-hub/issues/738) |
 | 2BingLing DSH Market / dsh.market | 已在公开目录中核对到条目 | [申请或市场](https://github.com/2BingLing/dsh-market/issues/373) |
 | bradeGithub DSH Plugins Marketplace | 已在公开目录中核对到条目 | [申请或市场](https://github.com/bradeGithub/DSH-Plugins-Marketplace) |
 | LivXue DSH Plugin Shop | 已满足自动发现条件，待刷新 | [申请或市场](https://github.com/LivXue/dsh-plugin-shop) |

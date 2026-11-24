@@ -1,20 +1,21 @@
 {
-  "checkedAt": "2026-11-24T19:45:29+08:00",
+  "checkedAt": "2026-11-24T21:23:26+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "tag": "latest",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
     "registryDownloadVerified": true,
+    "provenanceVerified": true,
     "isolatedDshInstallVerified": false,
-    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45382801913",
-    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45381664602",
-    "runtimeBaseline": "0.7.1 cross-platform plugin (Windows x64 reuses 0.7.0 runtime b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f; macOS darwin auto-venv verified on macos-latest arm64)",
+    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212",
+    "runtimeBaseline": "0.7.2 cross-platform plugin (code buildId f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3; Windows x64 reuses v0.7.0 runtime b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f; macOS darwin auto-venv verified on macos-latest arm64)",
     "isolatedDshNativeLoadVerified": true,
-    "shasum": "a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f",
-    "sha256": "11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1",
-    "bytes": 12445323,
-    "checkedAt": "2026-11-24T19:45:29+08:00"
+    "shasum": "d4f6005cd6db3e8fd8235bfbd4b422f3e4607366",
+    "sha256": "53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b",
+    "bytes": 12459335,
+    "checkedAt": "2026-11-24T21:23:26+08:00"
   },
   "markets": [
     {
@@ -65,28 +66,25 @@
     }
   ],
   "currentUpdate": {
-    "version": "0.7.1",
-    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.1",
-    "buildId": "b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f",
-    "pluginAssetBytes": 12445323,
-    "pluginAssetSha1": "a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f",
-    "pluginAssetSha256": "11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1",
-    "macosArm64ServiceBytes": 4353007,
-    "macosArm64ServiceSha256": "c0d0316e0e2f719d8d7f4bb495001299afcf9016844722e0b3c7b3ed4022613f",
-    "macosAmd64ServiceBytes": 4353007,
-    "macosAmd64ServiceSha256": "06e95ded47f20a12c825038c86f31f0e993c475635ecdbdee999132a36d36750",
+    "version": "0.7.2",
+    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.2",
+    "buildId": "f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3",
+    "runtimeAssetBuildId": "b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f",
+    "pluginAssetBytes": 12459335,
+    "pluginAssetSha1": "d4f6005cd6db3e8fd8235bfbd4b422f3e4607366",
+    "pluginAssetSha256": "53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b",
     "windowsRuntimeRelease": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0",
     "windowsRuntimeBytes": 282727542,
     "windowsRuntimeSha256": "bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d",
-    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45382801913",
-    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45381664602",
+    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212",
     "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
     "catalogState": "open",
     "npmStatus": "published",
-    "checkedAt": "2026-11-24T19:45:29+08:00",
+    "checkedAt": "2026-11-24T21:23:26+08:00",
     "screenshots": "https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
     "screenshotCount": 9,
     "personalInstallUpdated": false,
-    "personalInstallNote": "User desktop profile (0.4.4) kept untouched; GitHub v0.7.1 Release, npm latest 0.7.1, Windows+macOS CI, docs and market PR all synced."
+    "personalInstallNote": "User desktop profile (0.5.0) kept untouched; GitHub v0.7.2 Release, npm latest 0.7.2 (with SLSA provenance), Windows+macOS CI, README/docs and market entries synced."
   }
 }

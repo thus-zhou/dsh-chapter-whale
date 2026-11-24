@@ -1,25 +1,25 @@
 # 码章鲸 0.7.2 验证记录
 
-本轮修复多书上下文隔离、新书引导、发布预检和排期恢复。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Releases](https://github.com/thus-zhou/dsh-chapter-whale/releases) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
+本轮修复多书上下文隔离、新书引导、发布预检和排期恢复。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Release v0.7.2](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.2) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准（npm `latest = 0.7.2` 已通过 SLSA provenance 与公开下载字节校验：`12,459,335` 字节，SHA-256 `53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b`，与 GitHub 发行包完全一致）。
 
-Windows 轻量包从 v0.7.0 归档取用固定的 Python 和浏览器运行时，后端采用 v0.7.2 包内代码。macOS 首启基于 Python 3.11+ 自动创建隔离环境。平台安装验证结果见 [Distribution first start](https://github.com/thus-zhou/dsh-chapter-whale/actions/workflows/distribution.yml)。
+Windows 轻量包从 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 归档取用固定的 Python 和浏览器运行时（`runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`），始终安装 `v0.7.2` 包内后端代码（`buildId=f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3`）。macOS 首启基于 Python 3.11+ 自动创建隔离 `.venv`。`0.7.2` 平台安装与多环境校验均已通过：[Distribution first start #45400377607](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607)（`windows-install` + `macos-install`）与 [Source checks #45401789212](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212)。
 
 本轮发布前执行了 Node 测试、100 项后端定向回归测试和托管运行环境完整性校验。真实番茄网页发布与既有 DSH 桌面个人工作区原地升级仍待验证。
 
 ---
 
 ## 0.7.1 历史记录
-`0.7.1` 在 `0.7.0`（[PR #1](https://github.com/thus-zhou/dsh-chapter-whale/pull/1)）基础上正式开放 macOS（Apple Silicon / Intel）DSH 插件支持；后端目录与 Windows 固定运行时清单与 `0.7.0` 完全一致。公开发行状态以 [GitHub Releases](https://github.com/thus-zhou/dsh-chapter-whale/releases) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
+`0.7.1` 在 `0.7.0`（[PR #1](https://github.com/thus-zhou/dsh-chapter-whale/pull/1)）基础上正式开放 macOS（Apple Silicon / Intel）DSH 插件支持；后端目录与 Windows 固定运行时清单与 `0.7.0` 完全一致。
 
-Windows 轻量包复用 `v0.7.0` 固定运行时归档（字节数与 SHA-256 记录在 `runtime-download.json`）；完整包使用其中捆绑的运行时；macOS 首启基于本机 Python 3.11+ 在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 自动创建隔离环境并安装 `deploy/macos/requirements-macos.txt`。
+Windows 轻量包复用 `v0.7.0` 固定运行时归档（字节数与 SHA-256 记录在 `runtime-download.json`）；macOS 首启基于本机 Python 3.11+ 在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 自动创建隔离环境并安装 `deploy/macos/requirements-macos.txt`。
 
 ---
 
 ## 本轮定位与许可边界
 
-- **目标版本**：`0.7.1`（Windows x64 完整支持 + macOS Apple Silicon / Intel DSH 插件首启隔离 `.venv` 支持）。
+- **目标版本**：`0.7.2`（Windows x64 完整支持 + macOS Apple Silicon / Intel DSH 插件首启隔离 `.venv` 支持）。
 - **组合分发许可**：`GPL-3.0-only`（见 `package.json`、`LICENSES/GPL-3.0.txt`、`THIRD_PARTY_NOTICES.md`、`docs/license-decision.md` 方案 A）。
-- **清单摘要（`buildId`）**：`b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`（`runtime-manifest.json`，共 `3420` 个受管文件）。
+- **清单摘要（`buildId`）**：`f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3`（`runtime-manifest.json`，复用的 `v0.7.0` Windows 运行时归档 `runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`）。
 
 ---
 

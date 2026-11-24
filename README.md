@@ -8,7 +8,7 @@
 
 Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.2
 
-> Windows 上已使用独立 DSH 环境实装；macOS 插件首发安装与离线/服务启动验证将在 GitHub Actions `macos-latest` 跑通，真实番茄及七猫页面、真实模型调用、物理机 Intel Mac 与外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
+> Windows 上已使用独立 DSH 环境实装；macOS 插件首发安装与独立工作区 `.venv` 服务启动已在 GitHub Actions `macos-latest` 跑通，真实番茄及七猫页面、真实模型调用、物理机 Intel Mac 与外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
 
 **安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载插件 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：创建作品，使用 DSH 已登录模型开始写作，需要发布时再登录番茄。
 
@@ -16,6 +16,13 @@ Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档
 - **macOS（arm64 / x64）**：需本机已安装 Python 3.11+（`brew install python@3.13` 或 Python 官网安装包），首次启动自动在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 创建隔离环境并安装依赖；若需在 Mac 上启用浏览器发布，按[上手指南](docs/quickstart.md)安装 Chromium 一次即可。作品与账号数据留在独立工作区，卸载插件不会删除。
 
 ![码章鲸 0.7.0：液态玻璃工作台、全自动小说写作与番茄发布](assets/screenshots/02-dashboard.jpg)
+
+## 0.7.2 修复与改进
+
+- **多书隔离与版本校验**：修复新建和切换作品时串用旧书大纲、前提、章节或界面草稿的问题；大纲读取与更新按作品与版本校验，切书时自动清理上一作品表单状态并忽略过期请求。
+- **新书上手引导**：DSH 原生面板与 Web 工作台均提供新书引导，按步骤提示配置模型、准备大纲并开始写作。
+- **发布预检与排期恢复**：修复发布准备、预检与排队之间的目标一致性；重跑任务校验操作参数与作品，未过期的漏跑排期可在当日恢复。
+- **跨平台运行时策略**：Windows 轻量包复用经完整性校验的 `v0.7.0` Python 与浏览器运行时，并始终安装 `0.7.2` 包内后端代码；macOS 首启继续基于 Python 3.11+ 自动创建隔离 `.venv`。
 
 ## 0.7.0 界面与核心更新
 
@@ -148,16 +155,16 @@ npm pack dsh-chapter-whale@latest
 在 DSH 插件管理中添加对应版本的下载包地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-0.7.0.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.2/dsh-chapter-whale-0.7.2.tgz
 ```
 
-`dsh-chapter-whale-0.7.0.tgz` 是轻量包，首次启动时会下载并校验运行时。`dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz` 随包提供 Python 和 Chromium。已有相同 `buildId` 的运行时可直接复用。
+`dsh-chapter-whale-0.7.2.tgz` 是跨平台轻量插件包（Windows 首次启动自动下载并校验 `v0.7.0` 固定运行时归档 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`，始终安装 `0.7.2` 包内后端代码；macOS 首次启动基于本机 Python 3.11+ 创建隔离 `.venv`）。已有相同运行时的工作区直接复用，不重复下载。
 
 <details>
 <summary>使用命令行安装</summary>
 
 ```powershell
-dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-0.7.0.tgz
+dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.2/dsh-chapter-whale-0.7.2.tgz
 ```
 
 这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；首次启动按固定 buildId 和摘要核对运行时。插件版本与运行时版本分别记录。
@@ -176,7 +183,7 @@ dsh plugin --profile web update dsh-chapter-whale
 
 ### 2. 创建作品，连接模型和账号
 
-在「开始创作与账号」填写书名与故事想法，再连接自己的模型。需要使用厂商账号渠道时，按完整管理页的授权流程操作。准备发布时，登录自己的番茄作家账号，并在平台创建对应作品。
+在「开始创作与账号」填写书名与故事想法，再连接自己的模型（`0.7.2` 新书上手引导会依次提示配置模型、准备大纲并开始写作，切书时自动隔离各作品草稿与大纲）。需要使用厂商账号渠道时，按完整管理页的授权流程操作。准备发布时，登录自己的番茄作家账号，并在平台创建对应作品。
 
 ### 3. 建立日更任务
 

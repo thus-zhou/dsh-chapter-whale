@@ -200,11 +200,15 @@ DSH 已登录或已配置模型时，码章鲸会自动接入；首次使用会�
 备份以下工作区，里面包含本机作品、账号和配置：
 
 ```text
+# Windows
 %LOCALAPPDATA%\ChapterWhale\workspace
+
+# macOS
+~/Library/Application Support/ChapterWhale/workspace
 ```
 
 不要把这个目录中的账号登录态、密钥配置或私人作品提交到公开仓库。反馈问题时，请提供脱敏后的错误提示或截图。
 
 ---
 
-[下载完整发行包](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) · [返回项目首页](../README.md)
+[下载最新发行包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest) · [返回项目首页](../README.md)
