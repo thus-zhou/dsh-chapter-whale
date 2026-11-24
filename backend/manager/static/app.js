@@ -77,6 +77,9 @@ const announced = new Map();
 const pages = {dashboard:"工作台",projects:"作品管理",creative:"创作工作台",accounts:"发布账号",jobs:"日更任务",queue:"发布队列",logs:"运行日志",ai:"AI 设置",costs:"成本分析",diagnostics:"系统诊断"};
 const briefLabels={genre:"题材与基调",audience:"目标读者",premise:"核心故事与卖点",characters:"人物与关系",style:"语言与文风",perspective:"叙事视角",pacing:"剧情节奏与章末钩子",world:"世界观与边界",ending:"主线与结局方向",avoid:"禁止内容与写作雷区",requirements:"其他明确要求"};
 let creativeId="", creativeDoc=null, creativeDirty=false, creativeBusy=false, creativeLoading=false;
+const createdBooks = new Map();
+let rememberedBook = "";
+try { rememberedBook = localStorage.getItem("novel-helper-active-project") || ""; } catch {}
 let modelFormRevision=0, creativeAutoAttempted=false, rolesDirty=false, studioTab="brief", modelOptions=[], rolesSignature="", studioSignature="";
 const roleLabels={A:["规划","总纲 · 弧线 · 伏笔 · 示范分析"],B:["初稿","按章节细纲生成正文"],C:["润色","重点章 · 对话 · 去 AI 腔"],D:["审查","设定 · 成长 · 伏笔回收"],E:["执行","沟通 · 决策 · 调度 · 发布工具"]};
 const projectById = id => state.projects.find(p=>p.id===id);
@@ -131,13 +134,36 @@ function renderProjects() {
  $("projects-list").innerHTML=items.length?items.map(p=>`<article class="project-card"><div class="project-main"><div class="project-top"><span class="pill pill-neutral">${esc(p.genre)}</span><span class="muted">${p.ready?"大纲已就绪":"待完善大纲"}</span></div><h2 class="project-title">${esc(p.title)}</h2><p class="project-path">${esc(p.path)}</p>${p.error?`<p class="error-inline">${esc(p.error)}</p>`:""}<div class="project-metrics"><span><strong>${fmt(p.chapters)}</strong> 章</span><span><strong>${fmt(p.words)}</strong> 字</span><span>${fmt(p.outline_count)} 份大纲</span></div><div class="form-actions">${button("creative",p.id,"创作沟通")}${button("chapters",p.id,expanded.has(p.id)?"收起章节":"章节书架")}${button("outline",p.id,"编辑大纲")}${button("generate",p.id,"生成下一章","button-primary")}</div></div><div id="chapters-${esc(p.id)}" class="project-chapters" ${expanded.has(p.id)?"":"hidden"}>${expanded.has(p.id)?chapterRows(p.id):""}</div></article>`).join(""):empty(query?"没有匹配的作品":"你的书架，等待第一个故事","可以创建一个作品，也可以登记已有写作项目。","create-project","新建作品");
 }
 
+function renderBookStart(){
+ const host=$("book-start");
+ const book=creativeId && projectById(creativeId);
+ host.hidden=!book || book.chapters>0 || !creativeDoc;
+ if(host.hidden)return;
+ const operation=state.operations.find(o=>o.project_id===book.id && ["plan","generate"].includes(o.kind));
+ const issue=operation?.status==="failed" ? esc(operation.error || "任务失败，可处理后重试。") : "";
+ const working=operation && active(operation.status);
+ host.innerHTML=`<strong>开书 · 《${esc(book.title)}》</strong>
+    <p>${working?"任务进行中，可在运行日志查看进度。":book.ready?"首章细纲已就绪。试写后可在章节书架查看正文和审查。":"填写创作约定，再生成或粘贴包含第1章的细纲。"}</p>
+    ${issue?`<p role="alert" class="error-inline">${issue}</p>`:""}
+    <div class="form-actions">${book.ready?button("try-first-chapter",book.id,"试写第一章","button-primary",working?"disabled":""):button("open-first-outline",book.id,"准备首章细纲","button-primary")}
+    ${!state.ai.configured?`<a href="#ai">检查写作模型</a>`:""}</div>`;
+}
+
 function renderCreativeNavigation(){
  const select=$("creative-project"), previous=select.value;
  const markup=options(state.projects,"id","title","请选择作品");
- if(select.innerHTML!==markup){select.innerHTML=markup;select.value=creativeId || previous;}
+ if(select.innerHTML!==markup)select.innerHTML=markup;
+ select.value=creativeId || previous;
  select.disabled=creativeBusy || creativeLoading;
- if(location.hash==="#creative" && !creativeId && state.projects.length && !creativeLoading && !creativeAutoAttempted){creativeAutoAttempted=true;loadCreative(state.projects[0].id).catch(e=>toast(e.message,true));}
+ if(location.hash==="#creative" && !creativeId && state.projects.length && !creativeLoading && !creativeAutoAttempted){
+  creativeAutoAttempted=true;
+  const book=rememberedBook ? projectById(rememberedBook) : state.projects[0];
+  if(book) loadCreative(book.id).catch(e=>toast(e.message,true));
+ }
  $("creative-empty").hidden=!!creativeDoc;$("creative-workspace").hidden=!creativeDoc;
+ const generate = document.querySelector("[data-action=studio-generate]");
+ generate.disabled = !creativeDoc || creativeLoading || creativeBusy;
+ renderBookStart();
 }
 function renderCreativeDocument(){
  if(!creativeDoc)return;
@@ -158,16 +184,41 @@ function renderCreativeDocument(){
  $("learning-guide").textContent=learning?.guide || "";
  $("learning-coverage").textContent=learning?`${learning.mode==="full"?"逐段":"代表段落"} · ${learning.segments} 段`:"";
 }
-async function loadCreative(id){
+function confirmCreativeSwitch(){
+ return !creativeDirty || confirm("当前作品有未保存的创作约定。放弃修改并继续？");
+}
+
+async function loadCreative(id, { confirmed = false } = {}){
  if(creativeBusy || creativeLoading)throw new Error("请等待当前创作沟通完成");
  if(!id){$("creative-project").value=creativeId;return;}
- if(creativeDirty && !confirm("有尚未保存的创作约定。放弃这些修改并载入？")){ $("creative-project").value=creativeId;return; }
+ if(!confirmed && !confirmCreativeSwitch()){ $("creative-project").value=creativeId;return; }
+ if (id !== creativeId) {
+  creativeDoc=null;creativeDirty=false;studioSignature="";
+  for (const key of ["samples-list","story-plan","memory-list","memory-summary"]) $(key).textContent="";
+  $("creative-message").value="";
+  $("creative-chat-status").hidden=true;
+  $("sample-file").value="";
+  $("sample-file-name").textContent="选择 TXT，或拖入这里";
+  $("plan-form").elements.count.value=projectById(id)?.chapters ? 5 : 1;
+  setStudioTab("brief");
+ }
+ creativeId=id;
+ rememberedBook=id;
+ try { localStorage.setItem("novel-helper-active-project",id); } catch {}
  creativeLoading=true;creativeLock(true);
- try{const doc=await api(`/api/projects/${url(id)}/creative`);creativeId=id;creativeDoc=doc;creativeDirty=false;$("creative-project").value=id;renderCreativeDocument();await loadStudio();}
- finally{creativeLoading=false;creativeLock(false);renderCreativeNavigation();}
+ renderCreativeNavigation();
+ try {
+  creativeDoc=await api(`/api/projects/${url(id)}/creative`);
+  creativeDirty=false;
+  renderCreativeDocument();
+  await loadStudio();
+ } finally {
+  creativeLoading=false;creativeLock(false);renderCreativeNavigation();
+ }
 }
 function creativeLock(value){
  creativeBusy=value;$("creative-project").disabled=value;
+ document.querySelector("[data-action=studio-generate]").disabled=value || !creativeDoc;
  for(const el of $("creative-workspace").querySelectorAll("button,input,textarea"))el.disabled=value;
 }
 
@@ -179,6 +230,7 @@ function setStudioTab(tab){
 async function loadStudio(){
  if(!creativeId)return;
  const id=creativeId;const [samples,plan]=await Promise.all([api(`/api/projects/${url(id)}/samples`),api(`/api/projects/${url(id)}/plan`)]);
+ if(id!==creativeId)return;
  if(window.NovelMemory && (studioTab==="memory" || window.NovelMemory.project!==id))await window.NovelMemory.load(id);
  if(id!==creativeId)return;
  const signature=JSON.stringify({id,samples,plan});if(studioSignature===signature)return;studioSignature=signature;
@@ -246,7 +298,13 @@ function render() {
 async function refresh() {
  if(syncing)return; syncing=true;
  const aiRevision=aiConfigRevision;
- try { const next=await api("/api/overview"); if(aiRevision!==aiConfigRevision)next.ai=state.ai; state={...state,...next}; render();
+ try {
+  const next=await api("/api/overview");
+  if(aiRevision!==aiConfigRevision)next.ai=state.ai;
+  for (const book of next.projects) createdBooks.delete(book.id);
+  next.projects=[...next.projects,...createdBooks.values()];
+  state={...state,...next};
+  render();
   $("connection-text").textContent="创作服务已连接"; $("connection-dot").classList.add("online"); $("connection-banner").hidden=true;
   $("sync-label").textContent=`已同步 ${new Date().toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit"})}`;
   let chapterChanged=false,studioChanged=false;
@@ -290,16 +348,64 @@ function queuePayload() {const form=$("queue-form");return {project_id:form.elem
 const actions = {
  "close-dialog":()=>closeDialog(),
  "close-operation":()=>{$("operation-dialog").close();detailId=null;if(!$("action-dialog").open)document.body.classList.remove("modal-open");},
- "create-project":()=>openDialog("给新故事，一个名字",`<form class="dialog-form"><label>作品名称<input name="title" required maxlength="90" placeholder="你的下一本小说"></label><label>题材<input name="genre" value="玄幻" required maxlength="90"></label><label>第一卷大纲 <span class="label-note">可先留空</span><textarea name="outline" placeholder="## 第1章 初见&#10;本章目标、冲突与结尾钩子。&#10;&#10;## 第2章 夜雨&#10;下一章的情节。"></textarea></label><p class="field-help">作品保存在 O 盘 books 目录。可先到“创作沟通”商量怎么写，再补上含明确章节号的大纲。</p>${formEnd("创建作品")}`,async data=>{const project=await api("/api/projects/create","POST",Object.fromEntries(data));closeDialog();toast("作品已创建，可以开始沟通");await refresh();location.hash="creative";await loadCreative(project.id);}),
+ "create-project":()=>{
+  if(creativeBusy || creativeLoading)throw new Error("请等待当前创作沟通完成");
+  if(!confirmCreativeSwitch())return;
+  openDialog("新建作品",`<form class="dialog-form">
+   <label>作品名称<input name="title" required maxlength="90"></label>
+   <label>题材（可选）<input name="genre" maxlength="90"></label>
+   <label>一句话创意（可选）<textarea name="premise" maxlength="3000" placeholder="主角想做什么？"></textarea></label>
+   <label>已有章节细纲（可选）<textarea name="outline" placeholder="## 第1章 章节标题"></textarea></label>
+   ${formEnd("创建作品")}`,async data=>{
+    const book=await api("/api/projects/create","POST",Object.fromEntries(data));
+    createdBooks.set(book.id,book);
+    state.projects=[...state.projects.filter(item=>item.id!==book.id),book];
+    closeDialog();toast("作品已创建");
+    const loadingBook=loadCreative(book.id,{confirmed:true});
+    location.hash="creative";
+    await loadingBook;
+    if(book.ready || data.get("premise")?.trim() || data.get("outline")?.trim())setStudioTab("planning");
+    await refresh();
+  });
+ },
  "register-project":()=>openDialog("登记已有写作项目",`<form class="dialog-form"><label>项目绝对路径<input name="path" required placeholder="O:\\我的小说项目"></label><p class="field-help">项目应包含 .webnovel/state.json、正文和大纲目录。登记不会覆盖原文件。</p>${formEnd("登记作品")}`,async data=>{await api("/api/projects","POST",{path:data.get("path").trim()});closeDialog();toast("作品已登记");location.hash="projects";await refresh();}),
  "login":el=>loginDialog(el.dataset.id || ""),
  "confirm-login":async el=>{operationStarted(await api(`/api/accounts/${url(el.dataset.id)}/confirm-login`,"POST",{}));},
  "chapters":async el=>{const id=el.dataset.id;location.hash="projects";if(expanded.has(id))expanded.delete(id);else expanded.add(id);renderProjects();if(expanded.has(id))await loadChapters(id);},
  "preview":async el=>{const c=await api(`/api/projects/${url(el.dataset.id)}/chapters/${el.dataset.chapter}`);openDialog(`第${c.id}章 · ${c.title || "正文"}`,`<div class="dialog-content"><div class="form-actions">${button("review",el.dataset.id,"最终审查","button-secondary",`data-chapter="${c.id}"`)}${button("polish-chapter",el.dataset.id,"润色并审查","button-primary",`data-chapter="${c.id}"`)}</div></div><pre class="chapter-preview">${esc(c.content)}</pre>`);},
  "review":async el=>{operationStarted(await api(`/api/projects/${url(el.dataset.id)}/chapters/${el.dataset.chapter}/review`,"POST",{}));},
- "outline":async el=>{const id=el.dataset.id;const outline=await api(`/api/projects/${url(id)}/outline`);openDialog("故事的大纲",`<form class="dialog-form"><p class="field-help">${outline.editable?"保存前会自动备份原大纲。":"此项目有多份大纲。这里只读展示，请按卷编辑原文件。"}</p><textarea name="content" ${outline.editable?"":"readonly"}>${esc(outline.content)}</textarea>${outline.editable?formEnd("保存大纲"):'</form>'}`,outline.editable?async data=>{await api(`/api/projects/${url(id)}/outline`,"PUT",{content:data.get("content")});closeDialog();toast("大纲已保存，原稿已备份");await refresh();}:null);},
- "generate":el=>{const id=el.dataset.id;openDialog("开始创作",`<form class="dialog-form"><p class="dialog-description">${esc(projectById(id)?.title)}</p><div class="pipeline-strip">${Object.entries(roleLabels).slice(0,4).map(([r,[label]])=>`<span><b>${r}</b>${label}</span>`).join("")}</div><div class="form-grid"><label>本次章节数<input type="number" name="count" value="1" min="1" max="30" required></label><label>每章目标字数<input type="number" name="word_count" value="3500" min="500" max="10000" required></label></div><details class="quiet-details"><summary>高级设置</summary><label>最多修订轮数<input type="number" name="max_revisions" value="2" min="0" max="5" required></label></details><p class="field-help">D 通过或 E 明确授权后保存，不立即发布。多模型启用后，缺少细纲时由 A 补齐。</p>${formEnd("开始创作")}`,async data=>{operationStarted(await api(`/api/projects/${url(id)}/generate`,"POST",{count:Number(data.get("count")),word_count:Number(data.get("word_count")),max_revisions:Number(data.get("max_revisions"))}));closeDialog();});},
- "studio-generate":()=>{if(!creativeId)throw new Error("请先选择作品");return actions.generate({dataset:{id:creativeId}});},
+ "outline":async el=>{
+  const id=el.dataset.id, activeBook=creativeId;
+  const outline=await api(`/api/projects/${url(id)}/outline`);
+  if (activeBook!==creativeId) return;
+  if (outline.project_id!==id)throw new Error("大纲未绑定到当前作品，请刷新后重试");
+  const help=outline.editable?"以「第1章」这样的标题标明章节。":"此处合并预览各卷。请在作品目录里按卷编辑。";
+  openDialog(`《${projectById(id)?.title || "作品"}》的大纲`,`<form class="dialog-form">
+   <p class="field-help">${help}</p><textarea name="content" ${outline.editable?"":"readonly"}>${esc(outline.content)}</textarea>${outline.editable?formEnd("保存大纲"):"</form>"}`,
+   outline.editable?async data=>{
+    await api(`/api/projects/${url(id)}/outline`,"PUT",{project_id:id,revision:outline.revision,content:data.get("content")});
+    closeDialog();toast("大纲已保存");await refresh();
+   }:null);
+ },
+ "open-first-outline":()=>{setStudioTab("planning");},
+ "try-first-chapter":async el=>{
+  const id=el.dataset.id;
+  if(id!==creativeId || !creativeDoc || creativeDirty || !projectById(id)?.ready)throw new Error("请先保存本书约定和首章细纲");
+  operationStarted(await api(`/api/projects/${url(id)}/generate`,"POST",{count:1}));
+  expanded.add(id);
+  location.hash="projects";
+  await loadChapters(id);
+  renderProjects();
+ },
+ "generate":async el=>{
+  const id=el.dataset.id, book=projectById(id);
+  if(book && !book.chapters && !book.ready){
+   await loadCreative(id);
+   if(creativeId===id && creativeDoc){location.hash="creative";setStudioTab("planning");}
+   return;
+  }
+  openDialog("开始创作",`<form class="dialog-form"><p class="dialog-description">${esc(projectById(id)?.title)}</p><div class="pipeline-strip">${Object.entries(roleLabels).slice(0,4).map(([r,[label]])=>`<span><b>${r}</b>${label}</span>`).join("")}</div><div class="form-grid"><label>本次章节数<input type="number" name="count" value="1" min="1" max="30" required></label><label>每章目标字数<input type="number" name="word_count" value="3500" min="500" max="10000" required></label></div><details class="quiet-details"><summary>高级设置</summary><label>最多修订轮数<input type="number" name="max_revisions" value="2" min="0" max="5" required></label></details><p class="field-help">D 通过或 E 明确授权后保存，不立即发布。多模型启用后，缺少细纲时由 A 补齐。</p>${formEnd("开始创作")}`,async data=>{operationStarted(await api(`/api/projects/${url(id)}/generate`,"POST",{count:Number(data.get("count")),word_count:Number(data.get("word_count")),max_revisions:Number(data.get("max_revisions"))}));closeDialog();});},
+ "studio-generate":()=>{if(!creativeId || !creativeDoc || creativeBusy || creativeDirty)throw new Error("请载入作品并保存创作约定");return actions.generate({dataset:{id:creativeId}});},
  "studio-outline":()=>{if(!creativeId)throw new Error("请先选择作品");return actions.outline({dataset:{id:creativeId}});},
  "polish-chapter":async el=>{const op=await api(`/api/projects/${url(el.dataset.id)}/chapters/${el.dataset.chapter}/polish`,"POST",{});closeDialog();operationStarted(op);},
  "resume-batch":async el=>{const op=await api(`/api/projects/${url(el.dataset.id)}/batches/${url(el.dataset.batch)}/resume`,"POST",{});$("operation-dialog").close();detailId=null;document.body.classList.remove("modal-open");operationStarted(op);},
@@ -327,14 +433,15 @@ const actions = {
   if(!creativeDoc || creativeBusy)throw new Error("请先选择作品并等待当前操作完成");
   const brief=Object.fromEntries(new FormData($("brief-form")));if(!Object.values(brief).some(v=>v.trim()))throw new Error("先填写几条简略想法，再让 AI 润色");
   creativeLock(true);
-  try{const result=await api(`/api/projects/${url(creativeId)}/creative/expand`,"POST",{brief,revision:creativeDoc.revision},80000);
-   openDialog("AI 润色预览",`<form class="dialog-form"><dl class="brief-preview">${Object.entries(result.brief).filter(([,v])=>v).map(([k,v])=>`<dt>${esc(briefLabels[k])}</dt><dd>${esc(v)}</dd>`).join("")}</dl>${formEnd("采用并保存")}`,async()=>{creativeLock(true);try{await saveBrief(result.brief);closeDialog();}finally{creativeLock(false);}});
+  const id=creativeId;
+  try{const result=await api(`/api/projects/${url(id)}/creative/expand`,"POST",{brief,revision:creativeDoc.revision},80000);
+   openDialog("AI 润色预览",`<form class="dialog-form"><dl class="brief-preview">${Object.entries(result.brief).filter(([,v])=>v).map(([k,v])=>`<dt>${esc(briefLabels[k])}</dt><dd>${esc(v)}</dd>`).join("")}</dl>${formEnd("采用并保存")}`,async()=>{if(id!==creativeId)throw new Error("请切回原作品再采用建议");creativeLock(true);try{await saveBrief(result.brief);closeDialog();}finally{creativeLock(false);}});
   }finally{creativeLock(false);}
  },
  "learn-sample":async el=>{if(!creativeDoc || creativeDirty)throw new Error("请先保存创作约定");operationStarted(await api(`/api/projects/${url(creativeId)}/samples/${url(el.dataset.id)}/learn`,"POST",{revision:creativeDoc.revision,full:el.dataset.full==="1"}));},
  "scan-role":async el=>{const role=el.dataset.id,form=$("roles-form");const input=form.elements[`${role}-model`];const result=await api("/api/ai/models","POST",{role,base_url:form.elements[`${role}-base_url`].value.trim() || state.ai.base_url,api_key:form.elements[`${role}-api_key`].value},40000);modelOptions=[...new Set([...modelOptions,...result.models])];updateRoleOptions();input.focus();toast(`读到 ${result.count} 个模型，可在模型栏选择`);},
  "test-roles":async()=>{const op=await api("/api/ai/roles/test","POST",{});operationStarted(op);await showOperation(op.id);},
- "reload-creative":async()=>{const id=creativeId || $("creative-project").value || state.projects[0]?.id;if(id)await loadCreative(id);},
+ "reload-creative":async()=>{const id=creativeId || $("creative-project").value;if(id)await loadCreative(id);},
  "apply-creative":async()=>{
   if(creativeBusy)throw new Error("请等待当前沟通完成");
   if(creativeDirty)throw new Error("请先保存左侧修改，再采用建议，避免覆盖未保存内容");
@@ -365,7 +472,25 @@ actions['device-logout']=async()=>{await api('/api/access/logout','POST',{});loc
 document.addEventListener("click",e=>{const el=e.target.closest("[data-action]");if(el && !el.disabled){const fn=actions[el.dataset.action];if(fn)busy(el,()=>fn(el));}});
 $("queue-form").addEventListener("input",()=>{queueDirty=true;});
 $("queue-project").addEventListener("change",()=>{const p=projectById($("queue-project").value);if(p)$("queue-book").value=p.title;});
-$("queue-form").onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;const p=queuePayload();if(!p.account){toast("请选择已登录账号",true);return;}openDialog("确认这次发布",`<form class="dialog-form"><div class="confirmation-summary"><dl class="detail-grid"><dt>作品</dt><dd>${esc(p.book)}</dd><dt>账号</dt><dd>${esc(p.account)}</dd><dt>章节数</dt><dd>队列中的前 ${p.count} 章</dd><dt>AI 声明</dt><dd>使用 AI：是</dd></dl></div><p class="field-help">将向番茄平台提交现有队列。若平台状态无法确认，系统会停止并保留记录。</p>${formEnd("确认并发布")}`,async()=>{operationStarted(await api("/api/publish","POST",p));closeDialog();});};
+$("queue-form").onsubmit=e=>{
+ e.preventDefault();
+ if(!e.target.reportValidity())return;
+ const selection=queuePayload();
+ if(!selection.account){toast("请选择已登录账号",true);return;}
+ busy(e.submitter,async()=>{
+  const preview=await api("/api/publish/preview","POST",selection);
+  openDialog("确认发布已入队章节",`<form class="dialog-form"><dl class="detail-grid">
+   <dt>本地作品</dt><dd>${esc(projectById(preview.project_id)?.title)}</dd>
+   <dt>平台书名</dt><dd>${esc(preview.book)}</dd>
+   <dt>账号</dt><dd>${esc(preview.account)}</dd>
+   <dt>章号</dt><dd>${preview.chapters.map(fmt).join("、")}</dd>
+  </dl>${formEnd("确认并发布")}`,async()=>{
+   operationStarted(await api("/api/publish","POST",{project_id:preview.project_id,book:preview.book,account:preview.account,
+     count:preview.chapters.length,preview_revision:preview.revision,ai_used:true}));
+   closeDialog();
+  });
+ });
+};
 $("ai-form").addEventListener("input",()=>{aiDirty=true;});
 for(const id of ["ai-base-url","ai-key"])$(id).addEventListener("input",()=>{modelFormRevision++;$("ai-model-select").disabled=true;$("ai-model-select").innerHTML='<option value="">地址或密钥已变化，请重新读取</option>';$("models-result").textContent="请读取当前接口的模型列表，或手动填写模型 ID。";});
 $("ai-model-select").onchange=e=>{if(e.target.value){$("ai-model").value=e.target.value;aiDirty=true;}};
@@ -379,8 +504,8 @@ $("roles-form").addEventListener("input",()=>{rolesDirty=true;});$("multi-model"
  $("roles-form").onsubmit=e=>{e.preventDefault();busy(e.target.querySelector('[type="submit"]'),async()=>{const roles={};for(const role of Object.keys(roleLabels))roles[role]={model:e.target.elements[`${role}-model`].value,base_url:e.target.elements[`${role}-base_url`].value,api_key:e.target.elements[`${role}-api_key`].value};state.ai=await api("/api/ai/roles","PUT",{multi_model:$("multi-model").checked,polish_mode:$("polish-mode").value,review_policy:$("review-policy").value,roles});aiConfigRevision++;for(const role of Object.keys(roleLabels))e.target.elements[`${role}-api_key`].value="";rolesDirty=false;rolesSignature="";toast("模型分工已保存");await refresh();});};
 $("sample-file").onchange=e=>{$("sample-file-name").textContent=e.target.files[0]?.name || "选择 TXT，或拖入这里";};
 const drop=$('sample-file').closest('.file-drop');drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragging');};drop.ondragleave=()=>drop.classList.remove('dragging');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('dragging');if(e.dataTransfer.files.length){$("sample-file").files=e.dataTransfer.files;$("sample-file").dispatchEvent(new Event('change'));}};
-$("sample-form").onsubmit=e=>{e.preventDefault();busy(e.target.querySelector('[type="submit"]'),async()=>{if(!creativeDoc || creativeDirty)throw new Error("请先选择作品并保存约定");const file=$("sample-file").files[0];if(!file || !file.name.toLowerCase().endsWith('.txt') || file.size>5*1024*1024)throw new Error("请选择不超过 5 MB 的 TXT");const id=creativeId,revision=creativeDoc.revision,full=$("sample-mode").value==="full";const body=new FormData();body.append("file",file);const response=await fetch(`/api/projects/${url(id)}/samples`,{method:"POST",headers:{"X-Novel-Helper":"1"},body});const uploaded=await response.json();if(!response.ok)throw new Error(uploaded.detail || "上传失败");operationStarted(await api(`/api/projects/${url(id)}/samples/${url(uploaded.id)}/learn`,"POST",{revision,full}));$("sample-file").value="";$("sample-file-name").textContent="选择 TXT，或拖入这里";await loadStudio();});};
-$("plan-form").onsubmit=e=>{e.preventDefault();busy(e.target.querySelector('[type="submit"]'),async()=>{if(!creativeId || creativeDirty)throw new Error("请先选择作品并保存约定");operationStarted(await api(`/api/projects/${url(creativeId)}/plan`,"POST",{count:Number(e.target.elements.count.value)}));});};
+$("sample-form").onsubmit=e=>{e.preventDefault();busy(e.target.querySelector('[type="submit"]'),async()=>{if(!creativeDoc || creativeDirty)throw new Error("请先选择作品并保存约定");const file=$("sample-file").files[0];if(!file || !file.name.toLowerCase().endsWith('.txt') || file.size>5*1024*1024)throw new Error("请选择不超过 5 MB 的 TXT");const id=creativeId,revision=creativeDoc.revision,full=$("sample-mode").value==="full";const body=new FormData();body.append("file",file);const response=await fetch(`/api/projects/${url(id)}/samples`,{method:"POST",headers:{"X-Novel-Helper":"1"},body});const uploaded=await response.json();if(!response.ok)throw new Error(uploaded.detail || "上传失败");operationStarted(await api(`/api/projects/${url(id)}/samples/${url(uploaded.id)}/learn`,"POST",{revision,full}));if(id!==creativeId)return;$("sample-file").value="";$("sample-file-name").textContent="选择 TXT，或拖入这里";await loadStudio();});};
+$("plan-form").onsubmit=e=>{e.preventDefault();busy(e.target.querySelector('[type="submit"]'),async()=>{if(!creativeId || !creativeDoc || creativeBusy || creativeDirty)throw new Error("请先选择作品并保存约定");operationStarted(await api(`/api/projects/${url(creativeId)}/plan`,"POST",{count:Number(e.target.elements.count.value)}));});};
 $("brief-form").addEventListener("input",()=>{creativeDirty=true;$("creative-save-state").textContent="有未保存修改";});
 $("brief-form").onsubmit=e=>{e.preventDefault();if(!creativeDoc || creativeBusy)return;const brief=Object.fromEntries(new FormData(e.target));busy(null,async()=>{creativeLock(true);try{await saveBrief(brief);}finally{creativeLock(false);}});};
 $("creative-chat-form").onsubmit=e=>{e.preventDefault();if(!creativeDoc || creativeBusy)return;

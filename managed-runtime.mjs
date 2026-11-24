@@ -145,6 +145,7 @@ export async function downloadRuntime(workspace, manifest) {
   const spec = JSON.parse(await readFile(join(PACKAGE_ROOT, 'runtime-download.json'), 'utf8'));
   if (!/^https:\/\/github\.com\/thus-zhou\/dsh-chapter-whale\/releases\/download\/[^/]+\/[^/]+\.tgz$/.test(spec.url)
       || !/^[a-f0-9]{64}$/.test(spec.sha256) || spec.buildId !== manifest.buildId
+      || (spec.runtimeAssetBuildId !== undefined && !/^[a-f0-9]{64}$/.test(spec.runtimeAssetBuildId))
       || !Number.isSafeInteger(spec.bytes) || spec.bytes < 1 || spec.bytes > 512 * 1024 * 1024) {
     throw new Error('发行下载信息无效，请重新安装码章鲸。');
   }
@@ -165,7 +166,20 @@ export async function downloadRuntime(workspace, manifest) {
   await extractPackage(archive, staging);
   const payload = join(staging, 'package');
   const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
-  if (actual.buildId !== manifest.buildId || !existsSync(join(payload, 'runtime', 'python', 'python.exe'))) throw new Error('发行包版本不匹配。');
+  if (actual.buildId !== (spec.runtimeAssetBuildId ?? manifest.buildId)
+      || !existsSync(join(payload, 'runtime', 'python', 'python.exe'))) {
+    throw new Error('发行包版本不匹配。');
+  }
+  if (spec.runtimeAssetBuildId) {
+    // Older archives may be reused only for the exact same runtime files.
+    // prepareManaged always copies the current backend from PACKAGE_ROOT.
+    const entries = (info) => Object.entries(info.files || {}).filter(([name]) => name.startsWith('runtime/'));
+    const expected = entries(manifest);
+    if (!expected.length || expected.length !== entries(actual).length
+        || expected.some(([name, hash]) => actual.files?.[name] !== hash)) {
+      throw new Error('旧运行环境包与当前运行环境文件清单不一致。');
+    }
+  }
   return payload;
 }
 
@@ -200,7 +214,6 @@ export async function resolveRuntimeSource(workspace, manifest) {
     throw new Error('下载的运行环境缺少浏览器目录，未安装。');
   }
   const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
-  if (actual.buildId !== manifest.buildId) throw new Error('发行包版本不匹配。');
   return { root: payload, kind: 'downloaded', buildId: actual.buildId };
 }
 
@@ -346,10 +359,11 @@ export async function prepareManaged(config) {
     const marker = join(config.rootDir, '.chapter-whale-release.json');
     let installed;
     try { installed = JSON.parse(await readFile(marker, 'utf8')); } catch {}
-    // 代码与运行环境必须是同一个候选：老标记只有 buildId，按同一候选处理；
-    // 若运行时来自另一个候选，runtimeBuildId 会与代码清单不一致而强制重装。
+    const bundled = existsSync(join(PACKAGE_ROOT, 'runtime', 'python', 'python.exe'))
+      && existsSync(join(PACKAGE_ROOT, 'runtime', 'browsers'));
+    const runtimeSpec = bundled ? null : JSON.parse(await readFile(join(PACKAGE_ROOT, 'runtime-download.json'), 'utf8'));
     const sameCandidate = installed?.buildId === manifest.buildId
-      && (installed?.runtimeBuildId ?? installed?.buildId) === manifest.buildId;
+      && (installed?.runtimeBuildId ?? installed?.buildId) === (runtimeSpec?.runtimeAssetBuildId ?? manifest.buildId);
     if (sameCandidate && existsSync(config.python) && existsSync(config.entry)) {
       const spot = await verifyInstalled(config.rootDir, manifest, ['manager', 'integration']);
       if (spot.missing.length || spot.mismatched.length) {

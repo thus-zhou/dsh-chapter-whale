@@ -42,6 +42,13 @@ class WorkflowApiTests(unittest.TestCase):
                          ["idea", "essentials", "direction", "samples", "writing", "results"])
         self.assertTrue(all(step["action"]["page"] for step in state["steps"]))
 
+    def test_existing_outline_can_skip_optional_brief_and_ai_planning(self):
+        folder = self.project / "大纲"
+        folder.mkdir()
+        (folder / "卷一.md").write_text("## 第1章 开局\n开篇冲突", encoding="utf-8")
+        state = self.client.get(f"/api/projects/{self.identity}/workflow", headers=self.headers).json()
+        self.assertEqual(state["next"], "writing")
+
     def test_progress_reflects_brief_plan_and_chapter(self):
         (self.project / ".webnovel" / "creative_brief.json").write_text(json.dumps(
             {"brief": {"genre": "悬疑", "premise": "失忆者记得死者", "style": "冷硬短句"}}, ensure_ascii=False),

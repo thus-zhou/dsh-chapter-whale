@@ -90,6 +90,19 @@ class DueJobsRecoveryTest(unittest.TestCase):
                         last_attempt_slot="2026-11-20@08:00", last_attempt_date="2026-11-20"))
         self.assertEqual(len(scheduler.due_jobs(self.now)), 1)
 
+    def test_failed_morning_recovers_in_second_slot_of_same_day(self):
+        job = _job(daily_times=["08:00", "17:00"], cycle={"status": "failed"}, last_status="failed",
+                   last_attempt_slot="2026-11-21@08:00", last_attempt_date="2026-11-21")
+        self.write(job)
+        self.assertEqual(scheduler.due_jobs(self.now), [])
+        evening = self.now.replace(hour=17, minute=1)
+        due = scheduler.due_jobs(evening)
+        self.assertEqual([row["id"] for row in due], ["tide"])
+        self.assertTrue(due[0]["recovering"])
+        self.assertEqual(due[0]["next_due"], "2026-11-21T17:00:00+08:00")
+        self.write({**job, "last_attempt_slot": "2026-11-21@17:00"})
+        self.assertEqual(scheduler.due_jobs(evening), [])
+
     def test_attempted_this_slot_is_not_repeated(self):
         self.write(_job(cycle={"status": "failed"}, last_status="failed",
                         last_attempt_slot="2026-11-21@08:00", last_attempt_date="2026-11-21"))

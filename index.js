@@ -269,6 +269,7 @@ const WRITE_ROUTES = [
   'POST /api/accounts/login',
   'POST /api/accounts/:name/confirm-login',
   'POST /api/publish',
+  'POST /api/publish/preview',
   'POST /api/jobs',
   'PUT /api/jobs/:identity',
   'POST /api/jobs/:identity/run',

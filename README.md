@@ -1,12 +1,12 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**0.7.1（GPL-3.0-only）：在 0.7.0 液态玻璃界面与全量创作/发布核心之上，正式开放 macOS（Apple Silicon / Intel）DSH 插件支持与独立 `.venv` 自动初始化。**
+**0.7.2（GPL-3.0-only）：修复新建和切换作品时大纲、草稿串书的问题，完善新书上手引导，并修复发布预检与排期恢复。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，在 Windows 上也可接入部分免费模型渠道。
 
 **[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.1
+Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.2
 
 > Windows 上已使用独立 DSH 环境实装；macOS 插件首发安装与离线/服务启动验证将在 GitHub Actions `macos-latest` 跑通，真实番茄及七猫页面、真实模型调用、物理机 Intel Mac 与外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
 
@@ -218,7 +218,7 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 
 **支持什么系统和平台？**
 
-当前 `0.7.1` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
+当前 `0.7.2` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
 
 ## 许可证与第三方组件
 
@@ -234,6 +234,6 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前版本为 `0.7.1`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
+包名为 `dsh-chapter-whale`，当前版本为 `0.7.2`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
 
-**[查看 0.7.1 发布状态与验证边界 →](RELEASE_STATUS.md)**
+**[查看 0.7.2 发布状态与验证边界 →](RELEASE_STATUS.md)**

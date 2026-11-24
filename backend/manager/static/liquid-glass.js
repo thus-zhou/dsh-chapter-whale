@@ -584,14 +584,23 @@
     });
   }
 
+  let insightsRequest = 0;
+  const insightsProjectId = () => (typeof creativeId === "string" && creativeId)
+    || lastOverview.projects?.[0]?.id;
+
   async function loadInsightsData() {
     const body = document.getElementById("insights-body");
     if (!body) return;
     document.querySelectorAll("#insights-sub-btns [data-isub]").forEach((b) => {
       b.classList.toggle("button-primary", b.dataset.isub === insightsSub);
     });
-    const proj = lastOverview.projects?.[0];
+    const id = insightsProjectId();
+    const request = ++insightsRequest;
+    const isCurrent = () => request === insightsRequest && id === insightsProjectId();
+    const proj = typeof projectById === "function" ? projectById(id) : lastOverview.projects?.find((p) => p.id === id);
+    body.textContent = "正在读取本书的洞察…";
     if (!proj) {
+      if (!isCurrent()) return;
       body.innerHTML = `<article class="cw-lg-card cw-pad"><p class="muted">请先在「创作室 → 作品书架」登记或创建小说项目，然后查看该作品的记忆与洞察数据。</p></article>`;
       return;
     }
@@ -605,6 +614,7 @@
         const pts = series.points || [];
         const cards = obs.cards || obs.items || obs.observations || [];
         const lim = Array.isArray(series.limitations) && series.limitations.length ? series.limitations[0] : "";
+        if (!isCurrent()) return;
         body.innerHTML = `
           <div class="cw-grid-2">
             <article class="cw-lg-card cw-pad">
@@ -643,6 +653,7 @@
         `;
         body.querySelectorAll("[data-obs-act]").forEach((btn) => {
           btn.onclick = async () => {
+            if (!isCurrent()) return;
             btn.disabled = true;
             try {
               await getJson(`/api/projects/${pid}/readers/observations/${encodeURIComponent(btn.dataset.obsId)}/action`, {
@@ -659,6 +670,7 @@
           };
         });
       } catch (err) {
+        if (!isCurrent()) return;
         body.innerHTML = `<article class="cw-lg-card cw-pad"><p class="muted">读取读者洞察失败：${esc(err.message)}</p></article>`;
       }
       return;
@@ -667,6 +679,7 @@
       try {
         const data = await getJson(`/api/projects/${pid}/entities`);
         const entities = data.items || data.entities || [];
+        if (!isCurrent()) return;
         body.innerHTML = `<article class="cw-lg-card cw-pad">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <h2 style="font-size:16px">实体状态锁定 ·《${esc(proj.title)}》</h2>
@@ -680,6 +693,7 @@
           }).join("")}</div>` : `<p class="muted">尚未提取实体状态记录。</p>`}
         </article>`;
       } catch (err) {
+        if (!isCurrent()) return;
         body.innerHTML = `<article class="cw-lg-card cw-pad"><p class="muted">读取实体失败：${esc(err.message)}</p></article>`;
       }
       return;
@@ -690,6 +704,7 @@
       const plan = ret.plan || ret || {};
       const suppliedCount = Array.isArray(plan.supplied) ? plan.supplied.length : (plan.counts?.supplied ?? 0);
       const candidateCount = plan.counts?.candidates ?? suppliedCount;
+      if (!isCurrent()) return;
       body.innerHTML = `<article class="cw-lg-card cw-pad">
         <h2 style="font-size:16px">第 ${ch} 章上下文检索规划</h2>
         <div class="cw-web-dotted-grid">
@@ -700,6 +715,7 @@
         </div>
       </article>`;
     } catch (err) {
+      if (!isCurrent()) return;
       body.innerHTML = `<article class="cw-lg-card cw-pad"><p class="muted">读取检索规划失败：${esc(err.message)}</p></article>`;
     }
   }
@@ -714,11 +730,17 @@
     loadQueueExtensions();
   }
 
+  let queueRequest = 0;
   async function loadQueueExtensions() {
     const host = document.getElementById("cw-queue-ext");
     if (!host) return;
-    const proj = lastOverview.projects?.[0];
-    const job = lastOverview.jobs?.[0];
+    const selected = () => document.getElementById("queue-project")?.value;
+    const id = selected();
+    const request = ++queueRequest;
+    const proj = lastOverview.projects?.find((item) => item.id === id);
+    const job = proj && lastOverview.jobs?.find((item) => item.project_id
+      ? item.project_id === id : item.project === proj.path);
+    host.textContent = id ? "正在读取本书的发布配置…" : "";
     let schedHtml = `<p class="muted">暂无日更排期任务；请在「日更与运行」中配置定时任务后查看缓冲覆盖。</p>`;
     let platHtml = `<p class="muted">需先选定作品以读取多平台契约与浏览器试点状态。</p>`;
     if (job) {
@@ -765,6 +787,7 @@
         `;
       } catch {}
     }
+    if (request !== queueRequest || selected() !== id) return;
     host.innerHTML = `
       <div class="cw-grid-2">
         <article class="cw-lg-card cw-pad"><h2 style="font-size:16px">0.6.1 排期缓冲与复核契约</h2>${schedHtml}</article>
@@ -776,8 +799,9 @@
   async function loadStudioPrecheck() {
     const host = document.getElementById("cw-studio-precheck-card");
     if (!host) return;
-    const projId = document.getElementById("creative-project")?.value || lastOverview.projects?.[0]?.id;
-    const proj = lastOverview.projects?.find((p) => p.id === projId) || lastOverview.projects?.[0];
+    const selected = () => document.getElementById("creative-project")?.value;
+    const projId = selected();
+    const proj = typeof projectById === "function" ? projectById(projId) : lastOverview.projects?.find((p) => p.id === projId);
     if (!proj) {
       host.innerHTML = `<div class="panel-header"><div><span class="eyebrow">STYLE & CONTINUITY PRECHECK</span><h2>0.7.0 风格预检与忽略词条</h2></div></div><div class="cw-pad"><p class="muted">选定已有章节的作品后可拉取风格预检规则命中明细。</p></div>`;
       return;
@@ -786,6 +810,7 @@
     const pid = encodeURIComponent(proj.id);
     try {
       const data = await getJson(`/api/projects/${pid}/precheck?chapter=${ch}`);
+      if (selected() !== projId) return;
       const issues = data.findings || data.issues || data.alerts || [];
       const terms = Array.isArray(data.ignore_terms) ? data.ignore_terms : [];
       host.innerHTML = `
@@ -819,6 +844,7 @@
       `;
       host.querySelectorAll("[data-pc-action]").forEach((btn) => {
         btn.onclick = async () => {
+          if (selected() !== projId) return;
           const item = issues[Number(btn.dataset.pcIdx)];
           const ruleId = item?.rule_id || item?.rule || "";
           if (!/^[a-z_]+\.[a-z_]+$/.test(ruleId)) {
@@ -842,6 +868,7 @@
       });
       host.querySelectorAll("[data-pc-rm-term]").forEach((btn) => {
         btn.onclick = async () => {
+          if (selected() !== projId) return;
           const next = terms.filter((t) => t !== btn.dataset.pcRmTerm);
           try {
             await getJson(`/api/projects/${pid}/precheck/ignore`, {
@@ -857,6 +884,7 @@
         };
       });
       const submitIgnoreTerm = async () => {
+        if (selected() !== projId) return;
         const input = document.getElementById("cw-web-ignore-input");
         const val = input?.value.trim();
         if (!val) return;
@@ -871,6 +899,7 @@
           showLgNotice(`已添加忽略词「${val}」`);
           loadStudioPrecheck();
         } catch (err) {
+      if (selected() !== projId) return;
           if (addBtn) addBtn.disabled = false;
           showLgNotice(`添加失败：${err.message}`, true);
         }
@@ -895,6 +924,7 @@
     card.id = "cw-studio-precheck-card";
     card.style.marginTop = "22px";
     pageCreative.appendChild(card);
+    document.getElementById("queue-project")?.addEventListener("change", loadQueueExtensions);
     document.getElementById("creative-project")?.addEventListener("change", () => setTimeout(loadStudioPrecheck, 120));
     loadStudioPrecheck();
   }

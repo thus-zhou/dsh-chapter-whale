@@ -78,18 +78,24 @@ def state(project):
     chapters = _chapters(root)
     samples = _samples(root)
     latest = chapters[-1] if chapters else 0
+    chapter = writer_runner.next_chapter_id(root)
+    outline_ready = bool(writer_runner._find_outline(root, chapter))
+    started = bool(chapters)
+    has_idea = bool(str(brief.get("premise") or "").strip())
     report, status = _report(root, latest)
     quality = (report or {}).get("report") or {}
 
     steps = [
-        _step("idea", "输入创意", bool(str(brief.get("premise") or "").strip()),
-              "一句话创意已填写" if brief.get("premise") else "先写一句这本书要讲什么", "brief", "去填写"),
-        _step("essentials", "补充必要信息", len(filled) == len(REQUIRED),
-              f"已填写 {'、'.join(filled)}" if filled else "题材、创意、文风三项必填",
-              "brief", "补充", "" if len(filled) == len(REQUIRED) else f"还缺：{'、'.join(missing)}"),
-        _step("direction", "确认方向", plan_count > 0,
-              f"已有 {plan_count} 章规划" if plan_count else "还没有规划，可以先让 A 生成大纲",
-              "outline", "去规划", "" if plan_count else "确认方向后再开始写作，避免整章返工"),
+        _step("idea", "输入创意", has_idea or outline_ready or started,
+              "可从已有细纲继续" if outline_ready or started else
+              "一句话创意已填写" if has_idea else "先写一句这本书要讲什么，或导入首章细纲", "brief", "去填写"),
+        _step("essentials", "补充创作约定", True,
+              f"可选补充：{'、'.join(missing)}" if missing else f"已填写 {'、'.join(filled)}",
+              "brief", "补充"),
+        _step("direction", "准备首章细纲", outline_ready or started,
+              "已有可识别的细纲" if outline_ready else f"已有 {len(chapters)} 章正文" if started
+              else f"可粘贴大纲或生成第 {chapter} 章细纲",
+              "outline", "去规划"),
         _step("samples", "可选样本", True,
               f"已上传 {len(samples)} 份示范样本" if samples else "可以跳过；上传示范能让文风更接近你的写法",
               "brief", "上传样本"),
@@ -103,7 +109,7 @@ def state(project):
     next_step = next((item for item in steps if not item["done"]), None)
     return {
         "schema_version": SCHEMA,
-        "chapter": writer_runner.next_chapter_id(root),
+        "chapter": chapter,
         "steps": steps,
         "next": next_step["id"] if next_step else "done",
         "counts": {"chapters": len(chapters), "samples": len(samples), "plan_chapters": plan_count,

@@ -39,6 +39,7 @@ class JobsApiTests(unittest.TestCase):
         self.patches = [
             patch.object(module, "DATA", self.root),
             patch.object(module, "AI_PATH", self.ai_path),
+            patch.object(module, "public_ai", return_value={"configured": True}),
             patch.object(module.secret_store, "codec", lambda: fake_pair()),
             patch.object(scheduler, "SCHEDULER_PATH", self.scheduler_path),
             patch.object(scheduler, "RUNS_ROOT", self.runs_root),
@@ -85,6 +86,67 @@ class JobsApiTests(unittest.TestCase):
         operations = [item for item in module.Store(self.root / "manager.db").operations()
                       if item["kind"] == "generate"]
         self.assertEqual(len(operations), 1)
+
+    def test_operation_key_cannot_switch_project_or_parameters(self):
+        first = self.register()
+        created = self.client.post("/api/projects/create", json={"title": "第二本"}, headers=self.headers)
+        self.assertEqual(created.status_code, 200, created.text)
+        second = created.json()["id"]
+        body = {"count": 1, "operation_key": "trial-scoped-0001"}
+        started = self.client.post(f"/api/projects/{first}/generate", json=body, headers=self.headers)
+        self.assertEqual(started.status_code, 200, started.text)
+        for identity, request in ((second, body), (first, {**body, "count": 2})):
+            response = self.client.post(f"/api/projects/{identity}/generate", json=request, headers=self.headers)
+            self.assertEqual(response.status_code, 409, response.text)
+
+    def test_new_book_keeps_idea_and_uses_project_owned_revision(self):
+        old_id = self.register()
+        old_outline = self.project / "大纲" / "卷一.md"
+        old_outline.write_text("## 第1章 旧书", encoding="utf-8")
+        old = self.client.get(f"/api/projects/{old_id}/outline", headers=self.headers).json()
+        created = self.client.post("/api/projects/create", json={"title": "新书", "premise": "寻找失落城市"},
+                                   headers=self.headers)
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertFalse(created.json()["ready"])
+        new_id = created.json()["id"]
+        creative = self.client.get(f"/api/projects/{new_id}/creative", headers=self.headers).json()
+        self.assertEqual(creative["brief"]["premise"], "寻找失落城市")
+        endpoint = f"/api/projects/{new_id}/outline"
+        blank = self.client.get(endpoint, headers=self.headers).json()
+        self.assertEqual(blank["content"], "")
+        self.assertEqual(self.client.put(endpoint, json=old, headers=self.headers).status_code, 409)
+        saved = self.client.put(endpoint, json={**blank, "content": "## 第1章 新书"}, headers=self.headers)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertNotEqual(saved.json()["revision"], blank["revision"])
+        self.assertEqual(self.client.put(endpoint, json=blank, headers=self.headers).status_code, 409)
+        self.assertEqual(old_outline.read_text(encoding="utf-8"), "## 第1章 旧书")
+        books = self.client.get("/api/projects", headers=self.headers).json()
+        self.assertTrue(next(book for book in books if book["id"] == new_id)["ready"])
+
+    def test_publish_preview_captures_canonical_book_and_rejects_queue_changes(self):
+        identity = self.register()
+        binding = self.project / ".webnovel" / "platform_binding.json"
+        binding.write_text(json.dumps({"book": "已绑定书名"}, ensure_ascii=False), encoding="utf-8")
+        account_file = self.root / "account.json"
+        account_file.write_text("{}", encoding="utf-8")
+        plan = {"project": str(self.project), "book": "已绑定书名", "account": "fixture",
+                "chapters": [{"chapter_id": 7, "source_sha256": "source", "file_sha256": "first"}]}
+        selection = {"project_id": identity, "book": "输入书名", "account": "fixture", "count": 3}
+        with patch.object(bridge, "account_state_path", return_value=account_file), \
+             patch.object(bridge, "validate_queue_origin", return_value=plan), \
+             patch.object(module.Operations, "start", return_value={"id": "publication"}) as worker:
+            response = self.client.post("/api/publish/preview", json=selection, headers=self.headers)
+            self.assertEqual(response.status_code, 200, response.text)
+            preview = response.json()
+            self.assertEqual((preview["book"], preview["chapters"]), ("已绑定书名", [7]))
+            worker.assert_not_called()
+            body = {**selection, "book": preview["book"], "count": 1, "preview_revision": preview["revision"]}
+            plan["chapters"][0]["file_sha256"] = "changed"
+            self.assertEqual(self.client.post("/api/publish", json=body, headers=self.headers).status_code, 409)
+            worker.assert_not_called()
+            plan["chapters"][0]["file_sha256"] = "first"
+            self.assertEqual(self.client.post("/api/publish", json=body, headers=self.headers).status_code, 200)
+            self.assertIn(preview["revision"], worker.call_args.args[1])
 
     def test_different_keys_create_separate_operations_and_bad_keys_are_rejected(self):
         identity = self.register()

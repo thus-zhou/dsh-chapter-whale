@@ -99,6 +99,9 @@ if (!existsSync(downloadPath)) {
   const runtimeVersion = String(manifest.version || pkg.version);
   const expectedName = `dsh-chapter-whale-runtime-win32-x64-${runtimeVersion}.tgz`;
   if (spec.buildId !== manifest.buildId) errors.push('runtime-download.json 的 buildId 与发行清单不一致。');
+  if (spec.runtimeAssetBuildId !== undefined && !/^[a-f0-9]{64}$/.test(spec.runtimeAssetBuildId)) {
+    errors.push('runtime-download.json 的 runtimeAssetBuildId 格式无效。');
+  }
   if (!/^[a-f0-9]{64}$/.test(String(spec.sha256))) errors.push('runtime-download.json 的 sha256 格式无效。');
   if (!Number.isSafeInteger(spec.bytes) || spec.bytes <= 0 || spec.bytes > 512 * 1024 * 1024) {
     errors.push('runtime-download.json 的 bytes 不在允许范围。');

@@ -427,8 +427,12 @@ def next_due(job: Dict[str, Any], now: Optional[datetime] = None) -> Optional[st
         return None
     current = now.astimezone(ZoneInfo(job.get("timezone", "Asia/Shanghai"))) if now else _now_for_job(job)
     day=current.date().isoformat();completed=completed_slots(job,day)
+    attempted = str(job.get("last_attempt_slot") or "")
     for value in job_times(job):
-        if day+"@"+value not in completed:
+        slot = day + "@" + value
+        if job.get("last_status") != "awaiting_approval" and attempted.startswith(day + "@") and slot <= attempted:
+            continue
+        if slot not in completed:
             hh,mm=map(int,value.split(":"))
             return current.replace(hour=hh,minute=mm,second=0,microsecond=0).isoformat()
     if job.get('delivery_mode')=='serial' and job.get('daily_word_goals',{}).get(day):
@@ -765,8 +769,15 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
               "generated": [], "verification": "platform_receipt_and_body_hash"}
     from integration.model_roles import routing_snapshot
     record['routing_snapshot']=routing_snapshot()
+    dispatch_time = _now_for_job(job)
+    dispatch_due = next_due(job, dispatch_time)
+    dispatch_slot = slot
+    if dispatch_due and datetime.fromisoformat(dispatch_due) <= dispatch_time:
+        dispatch_slot = today + "@" + datetime.fromisoformat(dispatch_due).strftime("%H:%M")
+    elif str(job.get("last_attempt_slot", "")).startswith(today + "@"):
+        dispatch_slot = job["last_attempt_slot"]
     _update_run(job_id, {"last_attempt_date": today, "last_attempt_at": bridge.now_iso(),
-                        "last_status": "running","last_attempt_slot":slot,"last_message":""})
+                        "last_status": "running", "last_attempt_slot": dispatch_slot, "last_message": ""})
     try:
         if cycle.get('local_only') is True:
             # Explicit author-approved offline completion keeps the original

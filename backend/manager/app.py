@@ -173,12 +173,27 @@ class Operations:
 
     def start(self, kind: str, args: list[str], identity: str, metadata: dict | None = None,
               operation_key: str | None = None):
+        signature = None
+        if operation_key:
+            from hashlib import sha256
+            request_args = list(args)
+            if kind == "generate" and "--batch-id" in request_args:
+                position = request_args.index("--batch-id")
+                del request_args[position:position + 2]
+            signature = sha256(json.dumps(request_args).encode()).hexdigest()
+
+        def reused(existing):
+            if (existing.get("identity") != identity or existing.get("kind") != kind
+                    or existing.get("request_signature", signature) != signature):
+                raise HTTPException(409, "操作键已用于另一作品、操作或参数，请重新提交")
+            return {**existing, "deduplicated": True}
+
         with self.lock:
             # 稳定操作键先于任何派发检查：刷新、双击或丢应答后的重试都回到同一条记录。
             if operation_key:
                 existing = self.store.operation_by_key(operation_key)
                 if existing:
-                    return {**existing, "deduplicated": True}
+                    return reused(existing)
             if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':
                 raise HTTPException(409,'正在维护升级，暂不派发新操作；完成后可继续原任务')
             active = self.store.operations(active_only=True)
@@ -188,6 +203,7 @@ class Operations:
                        "created_at": bridge.now_iso(), "status": "queued", "log_tail": "", **(metadata or {})}
             if operation_key:
                 payload["operation_key"] = operation_key
+                payload["request_signature"] = signature
             try:
                 self.store.save_operation(payload)
             except sqlite3.IntegrityError:
@@ -195,7 +211,7 @@ class Operations:
                 existing = self.store.operation_by_key(operation_key)
                 if not existing:
                     raise
-                return {**existing, "deduplicated": True}
+                return reused(existing)
             thread = threading.Thread(target=self._execute, args=(payload["id"], args), daemon=True)
             thread.start()
         return payload
@@ -357,10 +373,16 @@ class NewProject(BaseModel):
     title: str = Field(min_length=1, max_length=90)
     genre: str = Field(default="玄幻", max_length=90)
     outline: str = Field(default="", max_length=500000)
+    premise: str = Field(default="", max_length=3000)
 
 
 class ContentInput(BaseModel):
     content: str = Field(max_length=500000)
+
+
+class OutlineInput(ContentInput):
+    project_id: str | None = None
+    revision: str | None = None
 
 
 class GenerateInput(BaseModel):
@@ -607,6 +629,7 @@ class PublishInput(BaseModel):
     book: str = Field(min_length=1, max_length=96)
     count: int = Field(default=1, ge=1, le=50)
     ai_used: bool = True
+    preview_revision: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class JobInput(BaseModel):
@@ -838,6 +861,12 @@ def project_summary(item: dict):
         chapters = []
         problem = problem or "正文文件存在重复或读取错误，请检查作品目录"
     outlines = list((path / "大纲").glob("*.md"))
+    next_outline_ready = False
+    if outlines and not problem:
+        try:
+            next_outline_ready = bool(writer_runner._find_outline(path, writer_runner.next_chapter_id(path)))
+        except (OSError, ValueError, RuntimeError):
+            problem = "无法读取作品细纲或章节进度"
     import hashlib
     revision=hashlib.sha256()
     for entry in sorted([x[0] for x in chapters]+[path/'.webnovel/writer_receipts.json']):
@@ -848,7 +877,7 @@ def project_summary(item: dict):
             "genre": info.get("genre") or state.get("genre", "未设定"),
             "chapters": len(chapters), "words": sum(len(x[3]) for x in chapters),
             "chapters_revision":revision.hexdigest()[:16],
-            "outline_count": len(outlines), "ready": path.is_dir() and bool(outlines) and not problem,
+            "outline_count": len(outlines), "ready": next_outline_ready and not problem,
             "exists": path.is_dir(), "error": problem}
 
 
@@ -1084,6 +1113,12 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         bridge.write_json_atomic(path / ".webnovel" / "state.json", {
             "project_info": {"title": title, "genre": data.genre}, "current_chapter": 0,
             "protagonist_state": {}, "initialized": True, "created_at": bridge.now_iso()})
+        if data.premise.strip():
+            _, service = ai_tools.services()
+            doc = service.read_document(path)
+            doc.update(brief=service.validate_brief({"premise": data.premise.strip(), "genre": data.genre}),
+                       revision=doc["revision"] + 1)
+            writer_runner.atomic_json(path / ".webnovel" / "creative_brief.json", doc)
         identity = store.register(path)
         return project_summary(project(identity))
 
@@ -1760,30 +1795,40 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             raise ValueError("请先完成 AI 设置")
         return ops.start("review", ["review", "--project", item["path"], "--chapter", str(chapter)], f"project:{identity}")
 
+    def read_outline(identity, path):
+        from hashlib import sha256
+        files = sorted((path / "大纲").glob("*.md"))
+        contents = [(p.name, p.read_bytes()) for p in files]
+        revision = sha256(json.dumps(
+            [(name, sha256(body).hexdigest()) for name, body in contents]
+        ).encode()).hexdigest()
+        return {"project_id": identity, "revision": revision, "editable": len(files) <= 1,
+                "content": "\n\n".join(body.decode("utf-8-sig") for _, body in contents),
+                "files": [name for name, _ in contents]}
+
     @app.get("/api/projects/{identity}/outline")
     def outline(identity: str):
-        folder = Path(project(identity)["path"]) / "大纲"
-        files = sorted(folder.glob("*.md"))
-        # Editing a multi-file outline as a concatenation would duplicate chapters.
-        return {"content": "\n\n".join(p.read_text(encoding="utf-8") for p in files), "editable": len(files) <= 1,
-                "files": [p.name for p in files]}
+        return read_outline(identity, Path(project(identity)["path"]))
 
     @app.put("/api/projects/{identity}/outline")
-    def save_outline(identity: str, data: ContentInput):
+    def save_outline(identity: str, data: OutlineInput):
         path = Path(project(identity)["path"])
-        files = sorted((path / "大纲").glob("*.md"))
-        if len(files) > 1:
-            raise HTTPException(409, "多文件大纲请在写作系统中按卷编辑，避免合并造成重复")
-        target = files[0] if files else path / "大纲" / "卷一.md"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        # The writer uses this same OS lock for context collection and save.
+        if data.project_id is not None and data.project_id != identity:
+            raise HTTPException(409, "大纲属于另一部作品，请切回对应作品")
         with writer_runner.file_lock(path / ".webnovel" / "writer.lock"):
+            current = read_outline(identity, path)
+            if not current["editable"]:
+                raise HTTPException(409, "多文件大纲请在写作系统中按卷编辑，避免合并造成重复")
+            if data.revision is not None and data.revision != current["revision"]:
+                raise HTTPException(409, "大纲已更新，请重新载入再保存")
+            target = path / "大纲" / (current["files"][0] if current["files"] else "卷一.md")
+            target.parent.mkdir(parents=True, exist_ok=True)
             if target.exists():
                 backup = DATA / "backups" / f"{identity}-{uuid.uuid4().hex}-outline.md"
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 backup.write_bytes(target.read_bytes())
             bridge._write_text_atomic(target, data.content)
-        return {"success": True}
+            return {**read_outline(identity, path), "success": True}
 
     @app.post("/api/projects/{identity}/generate")
     def generate(identity: str, data: GenerateInput):
@@ -1799,12 +1844,15 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.post("/api/projects/{identity}/stage")
     def stage(identity: str, data: StageInput):
         item = project(identity)
-        args = ["stage", "--project", item["path"], "--book", data.book]
+        book = platform_book(item) or data.book.strip()
+        if not book:
+            raise ValueError("请填写平台书名")
+        args = ["stage", "--project", item["path"], "--book", book]
         for cid in data.chapters or []:
             if cid <= 0:
                 raise ValueError("章节号必须大于 0")
             args.extend(["--chapter", str(cid)])
-        return ops.start("stage", args, f"project:{identity}")
+        return ops.start("stage", args, f"project:{identity}", {"project_id": identity, "book": book})
 
     @app.get("/api/accounts")
     def accounts():
@@ -1825,19 +1873,41 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def confirm(name: str):
         return ops.confirm_login(name)
 
-    @app.post("/api/publish")
-    def publish(data: PublishInput):
+    def publish_destination(data):
         item = project(data.project_id)
         if not bridge.account_state_path(data.account).is_file():
             raise ValueError("请先登录所选番茄账号")
         book = platform_book(item) or data.book.strip()
         if not book:
             raise ValueError("请填写平台书名")
-        return ops.start("publish", ["publish", "--project", item["path"], "--book", book,
-            "--account", data.account, "--count", str(data.count), "--ai-used", "1" if data.ai_used else "0"],
-            f"project:{data.project_id}", {"book": book, "account": data.account})
+        return item, book
 
-    @app.get("/api/jobs")
+    def queued_publish_preview(data, item, book):
+        plan = bridge.validate_queue_origin(book, Path(item["path"]), data.account)
+        chapters = plan["chapters"][:data.count]
+        return {"project_id": data.project_id, "account": plan["account"], "book": plan["book"],
+                "chapters": [chapter["chapter_id"] for chapter in chapters],
+                "revision": bridge.publish_plan_revision(plan, chapters)}
+
+    @app.post("/api/publish/preview")
+    def preview_publish(data: PublishInput):
+        return queued_publish_preview(data, *publish_destination(data))
+
+    @app.post("/api/publish")
+    def publish(data: PublishInput):
+        item, book = publish_destination(data)
+        args = ["publish", "--project", item["path"], "--book", book, "--account", data.account,
+                "--count", str(data.count), "--ai-used", "1" if data.ai_used else "0"]
+        if data.preview_revision:
+            preview = queued_publish_preview(data, item, book)
+            if preview["revision"] != data.preview_revision or preview["book"] != data.book:
+                raise HTTPException(409, "发布目标或章节已变化，请重新预览并确认")
+            args.extend(["--preview-revision", data.preview_revision])
+        elif book != data.book.strip():
+            raise HTTPException(409, f"已绑定《{book}》，请核对平台书名后再发布")
+        return ops.start("publish", args, f"project:{data.project_id}",
+                         {"book": book, "account": data.account, "project_id": data.project_id})
+
     def list_jobs():
         return [scheduler._job_summary(identity, job) | {"max_revisions": job.get("max_revisions", 2)}
                 for identity, job in scheduler.load_scheduler()["jobs"].items() if isinstance(job, dict)]

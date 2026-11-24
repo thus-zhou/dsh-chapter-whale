@@ -862,6 +862,13 @@ def _run_publish_process(command: List[str], timeout: float):
     )
 
 
+def publish_plan_revision(plan, chapters):
+    targets = [[item["chapter_id"], item["source_sha256"], item["file_sha256"]] for item in chapters]
+    return hashlib.sha256(json.dumps(
+        [plan["project"], plan["book"], plan["account"], targets], ensure_ascii=False
+    ).encode("utf-8")).hexdigest()
+
+
 def run_publish(
     book: str,
     count: Optional[int] = None,
@@ -871,6 +878,7 @@ def run_publish(
     reconcile_only: bool = False,
     reconcile_chapters: Optional[Set[int]] = None,
     invocation_id: Optional[str] = None,
+    preview_revision: Optional[str] = None,
 ) -> int:
     """Compatible int exit code; use latest_publish_report for success evidence.
 
@@ -904,6 +912,8 @@ def run_publish(
                     plan["chapters"] = plan["chapters"][:count] if count is not None else plan["chapters"]
                 elif not reconcile_only:
                     raise ValueError("没有待发章节")
+                if preview_revision and publish_plan_revision(plan, plan["chapters"]) != preview_revision:
+                    raise ValueError("发布队列已变化，请重新预览并确认")
                 manifest = load_manifest()
                 manifest["books"][plan["queue_book"]]["account"] = identity
                 save_manifest(manifest)

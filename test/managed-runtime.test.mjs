@@ -140,6 +140,32 @@ test('P01 代码来源恒为本包 backend，内置 runtime 时运行环境同�
   await rm(pkg.root, { recursive: true, force: true });
 });
 
+test('发布版运行环境可供新后端复用，运行时文件清单仍须逐项匹配', async () => {
+  const payload = await makePayload({ buildId: 'a'.repeat(64) });
+  const pkg = await makePackage({ bundled: false });
+  const workspaceRoot = await freshDir('reuse');
+  const workspace = join(workspaceRoot, 'workspace');
+  const mod = await loadModule(pkg.root);
+  try {
+    const manifest = await manifestFor(CODE, pkg.manifest.buildId, true);
+    await writeDownloadSpec(pkg.root, payload, {
+      buildId: manifest.buildId,
+      runtimeAssetBuildId: payload.buildId,
+    });
+    await withFetch(payload.bytes, async () => {
+      const runtime = await mod.resolveRuntimeSource(workspace, manifest);
+      assert.equal(runtime.buildId, payload.buildId);
+      assert.equal(mod.codeSource(), pkg.root);
+      manifest.files['runtime/python/python.exe'] = 'changed';
+      await assert.rejects(mod.resolveRuntimeSource(workspace, manifest), /运行环境文件清单不一致/);
+    });
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+    await rm(pkg.root, { recursive: true, force: true });
+    await rm(payload.stage, { recursive: true, force: true });
+  }
+});
+
 test('P01 轻量包内置 runtime 时安装成功并写入候选标记', { skip: process.platform !== 'win32' }, async () => {
   const pkg = await makePackage({ bundled: true });
   const mod = await loadModule(pkg.root);

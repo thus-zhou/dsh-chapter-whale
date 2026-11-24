@@ -2001,64 +2001,63 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         }
 
         function usePoll(fetcher, deps, interval) {
-          const [data, setData] = React.useState(null);
-          const [error, setError] = React.useState(null);
-          const [loading, setLoading] = React.useState(true);
-          const mounted = React.useRef(true);
-          const busy = React.useRef(false);
+          const scope = React.useMemo(() => ({ pending: null, active: true, revision: 0 }), deps || []);
+          const current = React.useRef(scope);
+          current.current = scope;
+          const [result, setResult] = React.useState(null);
+          const visible = result?.scope === scope ? result : { data: null, error: null, loading: true };
+
+          const update = React.useCallback((patch) => {
+            if (!scope.active || current.current !== scope) return;
+            setResult((old) => {
+              const previous = old?.scope === scope ? old : { data: null, error: null, loading: true };
+              return { ...previous, ...patch(previous), scope };
+            });
+          }, [scope]);
+
+          const run = React.useCallback((quiet) => {
+            if (scope.pending) return scope.pending;
+            if (!quiet) update(() => ({ loading: true }));
+            const revision = scope.revision;
+            scope.pending = Promise.resolve().then(fetcher)
+              .then((data) => {
+                if (scope.revision === revision) update(() => ({ data, error: null, loading: false }));
+              })
+              .catch((error) => {
+                if (scope.revision === revision) update(() => ({ error: String(error.message || error), loading: false }));
+              })
+              .finally(() => { scope.pending = null; });
+            return scope.pending;
+          }, [scope, update]);
 
           React.useEffect(() => {
-            mounted.current = true;
-            return () => {
-              mounted.current = false;
-            };
-          }, []);
-
-          const run = React.useCallback(
-            async (quiet) => {
-              if (busy.current) return;
-              busy.current = true;
-              if (!quiet) setLoading(true);
-              try {
-                const value = await fetcher();
-                if (mounted.current) {
-                  setData(value);
-                  setError(null);
-                }
-              } catch (caught) {
-                if (mounted.current) setError(String(caught.message || caught));
-              } finally {
-                busy.current = false;
-                if (mounted.current) setLoading(false);
-              }
-            },
-            deps || [],
-          );
-
-          React.useEffect(() => {
+            scope.active = true;
             run(false);
-          }, [run]);
+            return () => { scope.active = false; };
+          }, [scope, run]);
 
           React.useEffect(() => {
             if (!interval) return undefined;
-            const timer = setInterval(() => {
-              if (document.hidden) return;
-              run(true);
-            }, interval);
+            const timer = setInterval(() => { if (!document.hidden) run(true); }, interval);
             return () => clearInterval(timer);
           }, [run, interval]);
 
-          /* Coming back to a hidden tab refreshes once instead of replaying
-             every missed tick. */
           React.useEffect(() => {
-            const onVisible = () => {
-              if (!document.hidden) run(true);
-            };
+            const onVisible = () => { if (!document.hidden) run(true); };
             document.addEventListener('visibilitychange', onVisible);
             return () => document.removeEventListener('visibilitychange', onVisible);
           }, [run]);
 
-          return { data, error, loading, reload: run, setData };
+          const reload = (quiet) => {
+            const pending = scope.pending;
+            if (!pending) return run(quiet);
+            return pending.then(() => scope.active && current.current === scope ? run(quiet) : undefined);
+          };
+          const setData = (value) => {
+            scope.revision++;
+            update((old) => ({ data: typeof value === 'function' ? value(old.data) : value, error: null, loading: false }));
+          };
+          return { ...visible, reload, setData };
         }
 
         /* ========================================================= components */
@@ -2635,6 +2634,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [title, setTitle] = React.useState('');
           const [genre, setGenre] = React.useState('玄幻');
           const [outline, setOutline] = React.useState('');
+          const [premise, setPremise] = React.useState('');
           const [account, setAccount] = React.useState('我的番茄账号');
           const [busy, setBusy] = React.useState(false);
           const [message, setMessage] = React.useState('');
@@ -2655,10 +2655,12 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               e('div', { className: 'nh-formgrid' },
                 e(Field, { label: '书名' }, e(TextInput, { value: title, onChange: setTitle, placeholder: '给新故事起个名字' })),
                 e(Field, { label: '题材' }, e(TextInput, { value: genre, onChange: setGenre, placeholder: '玄幻、都市、悬疑……' }))),
-              e(Field, { label: '故事想法或已有大纲' }, e('textarea', { className: 'nh-input', rows: 5, value: outline, placeholder: '主角是谁，想得到什么，又会遇到什么阻碍？', onChange: (event) => setOutline(event.target.value) })),
+              e(Field, { label: '一句话创意（可选）' }, e(TextInput, { value: premise, onChange: setPremise, placeholder: '主角想做什么，会遇到什么阻碍？' })),
+              e(Field, { label: '已有章节细纲（可选）' }, e('textarea', { className: 'nh-input', rows: 5, value: outline, placeholder: '## 第1章 章节标题', onChange: (event) => setOutline(event.target.value) })),
               e(Button, { kind: 'primary', busy, disabled: !title.trim(), onClick: () => run(async () => {
-                const project = await api('/projects/create', { method: 'POST', body: { title, genre, outline } });
-                setTitle(''); setMessage('作品已创建，可进入大纲与规划。'); props.selectProject(project.id);
+                const project = await api('/projects/create', { method: 'POST', body: { title, genre, outline, premise } });
+                setTitle(''); setGenre('玄幻'); setOutline(''); setPremise('');
+                props.openCreatedProject(project, Boolean(premise.trim() || outline.trim()));
               }) }, '创建作品')),
             e(Card, { title: '02 / 连接写作模型', hint: props.overview.ai && props.overview.ai.configured ? '已配置' : '待配置' },
               e('p', null, '自动使用 DSH 已登录的模型。在 AI 设置中可切换模型，或分别设置 A–E 分工。'),
@@ -3049,17 +3051,19 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           kind: 'primary',
                           icon: 'pen',
                           busy: busy.generate,
-                          onClick: () =>
-                            act('生成', `/projects/${project.id}/generate`, {
+                          onClick: () => {
+                            if (!project.chapters && !project.ready) { props.navigate('outline'); return; }
+                            return act('生成', `/projects/${project.id}/generate`, {
                               word_count: Number(props.studio.wordCount) || 3500,
                               max_revisions: Number.isFinite(Number(props.studio.maxRevisions))
                       ? Number(props.studio.maxRevisions)
                       : 1,
                               count: Number(props.studio.count) || 1,
                               scenes: Number(props.studio.scenes) || 0,
-                            }),
+                            });
+                          },
                         },
-                        '开始生成',
+                        !project.chapters && !project.ready ? '准备首章细纲' : '开始生成',
                       ),
                       Number(props.studio.scenes) > 0
                         ? e(
@@ -3866,24 +3870,48 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           React.useEffect(() => setPlatformBook(project ? project.title : ''), [project && project.id]);
           const [count, setCount] = React.useState('1');
           const [busy, setBusy] = React.useState(false);
-          const [confirm, setConfirm] = React.useState(false);
-
-          const doPublish = async () => {
-            setConfirm(false);
+          const [confirm, setConfirm] = React.useState(null);
+          const previewPublish = async () => {
             setBusy(true);
             try {
-              await api('/publish', {
-                method: 'POST',
-                body: {
-                  project_id: project.id,
-                  account: account.name,
-                  book: platformBook.trim(),
-                  count: Number(count) || 1,
-                  ai_used: true,
-                },
+              const preview = await api('/publish/preview', { method: 'POST', body: {
+                project_id: project.id, account: account.name, book: platformBook.trim(), count: Number(count),
+              } });
+              setConfirm(preview);
+            } catch (error) {
+              toast.push(error.message, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          const stage = async () => {
+            setBusy(true);
+            try {
+              await api(`/projects/${project.id}/stage`, {
+                method: 'POST', body: { book: platformBook.trim() },
               });
+              toast.push('已提交入队任务，请在队列或运行记录中查看结果', 'ok');
+              props.refreshOverview();
+            } catch (error) {
+              toast.push(error.message, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          const doPublish = async () => {
+            if (!confirm || busy) return;
+            setBusy(true);
+            try {
+              await api('/publish', { method: 'POST', body: {
+                project_id: confirm.project_id, account: confirm.account, book: confirm.book,
+                count: confirm.chapters.length, preview_revision: confirm.revision, ai_used: true,
+              } });
+              setConfirm(null);
               toast.push('已提交发布任务，正在后台执行', 'ok');
             } catch (error) {
+              setConfirm(null);
               toast.push(`发布失败：${error.message}`, 'err');
             } finally {
               setBusy(false);
@@ -3963,7 +3991,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   e(
                     Field,
                     { label: ' ' },
-                    e(Button, { kind: 'primary', icon: 'send', busy, disabled: !project || !account || !account.logged_in || !platformBook.trim(), onClick: () => setConfirm(true) }, '入队并发布'),
+                    e('div', { className: 'nh-row', style: { gap: 8 } },
+                      e(Button, { busy, disabled: !project || !platformBook.trim(), onClick: stage }, '加入队列'),
+                      e(Button, { kind: 'primary', icon: 'send', busy, disabled: !project || !account?.logged_in || !platformBook.trim() || !Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > 50, onClick: previewPublish }, '预览并发布')),
                   ),
                 ),
                 e(
@@ -3974,22 +4004,22 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               ),
             ),
             e(Modal, {
-              open: confirm,
+              open: Boolean(confirm),
               title: '确认真实发布？',
-              onClose: () => setConfirm(false),
+              onClose: () => { if (!busy) setConfirm(null); },
               children: e(
                 'div',
                 null,
                 e(
                   'p',
                   { style: { marginTop: 0, fontSize: 13, lineHeight: 1.7 } },
-                  `将把 ${count} 章正文提交到番茄账号「${account ? account.name : '—'}」的《${platformBook}》。请核对正文、账号与作品；确认后会执行真实发布。`,
+                  confirm ? `将第 ${confirm.chapters.join('、')} 章发布到番茄账号「${confirm.account}」的《${confirm.book}》。` : '',
                 ),
                 e(
                   'div',
                   { className: 'nh-row', style: { gap: 8, justifyContent: 'flex-end', marginTop: 16 } },
-                  e(Button, { onClick: () => setConfirm(false) }, '取消'),
-                  e(Button, { kind: 'primary', onClick: doPublish }, '确认发布'),
+                  e(Button, { disabled: busy, onClick: () => setConfirm(null) }, '取消'),
+                  e(Button, { kind: 'primary', busy, disabled: !confirm, onClick: doPublish }, '确认发布'),
                 ),
               ),
             }),
@@ -5873,6 +5903,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const submit = async () => {
             if (!project || !record || busy) return;
+            if (!project.chapters && !project.ready) { navigate?.('outline'); return; }
             setBusy(true);
             setError('');
             try {
@@ -5997,7 +6028,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   e(
                     'div',
                     { className: 'nh-row' },
-                    e(Button, { kind: 'primary', icon: 'pen', busy, onClick: submit, disabled: !project }, '试写一章'),
+                    project && !project.chapters && !project.ready
+                      ? e(Button, { kind: 'primary', onClick: () => navigate?.('outline') }, '准备首章细纲')
+                      : e(Button, { kind: 'primary', icon: 'pen', busy, onClick: submit, disabled: !project }, '试写一章'),
                     active
                       ? e(Button, { icon: 'x', onClick: cancel }, '取消（Esc）')
                       : e(Button, { icon: 'refresh', onClick: startFresh, disabled: !project }, '换一个新的操作'),
@@ -7135,7 +7168,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           };
           const ofm = usePoll(() => api('/free-model/status'), [], POLL_MS);
           const ofmStatus = ofm.data || null;
-          const [creating, setCreating] = React.useState({ title: '', genre: '', outline: '' });
+          const [creating, setCreating] = React.useState({ title: '', genre: '', premise: '', outline: '' });
           const [busyCreate, setBusyCreate] = React.useState(false);
           const [createError, setCreateError] = React.useState('');
           const [createOpen, setCreateOpen] = React.useState(!project);
@@ -7155,14 +7188,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   title: String(creating.title).trim(),
                   genre: String(creating.genre || '').trim(),
                   outline: String(creating.outline || ''),
+                  premise: String(creating.premise || ''),
                 },
               });
-              const identity = (answer && (answer.id || (answer.project && answer.project.id))) || '';
-              if (identity) selectProject(identity);
+              if (!answer?.id) throw new Error('创建结果缺少作品 ID，请刷新书架后重试');
               toast.push('新作品已创建', 'ok');
-              setCreating({ title: '', genre: '', outline: '' });
+              setCreating({ title: '', genre: '', premise: '', outline: '' });
               setCreateOpen(false);
-              refreshOverview();
+              props.openCreatedProject(answer, Boolean(creating.premise.trim() || creating.outline.trim()));
             } catch (caught) {
               setCreateError(String(caught.message || caught));
             } finally {
@@ -7278,10 +7311,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           { className: 'nh-formgrid' },
                           e(Field, { label: '书名（必填）' }, e(TextInput, { value: creating.title, onChange: (value) => setCreating({ ...creating, title: value }) })),
                           e(Field, { label: '题材' }, e(TextInput, { value: creating.genre, onChange: (value) => setCreating({ ...creating, genre: value }), placeholder: '都市 / 玄幻 / 悬疑…' })),
+                          e(Field, { label: '一句话创意（可选）' }, e(TextInput, { value: creating.premise, onChange: (value) => setCreating({ ...creating, premise: value }) })),
                         ),
                         e(
                           Field,
-                          { label: '一句话大纲（可选）' },
+                          { label: '已有章节细纲（可选）' },
                           e('textarea', {
                             className: 'nh-textarea',
                             rows: 3,
@@ -8702,7 +8736,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const { overview } = props;
           const toast = useToast();
           const project = (overview.projects || [])[0];
-          const [draft, setDraft] = React.useState(null);
+          const draftKey = 'brief:' + project?.id;
+          const [draft, updateDraft] = React.useState(() => props.drafts?.get(draftKey) || null);
+          const setDraft = (value) => { props.drafts?.set(draftKey, value); updateDraft(value); };
           const [busy, setBusy] = React.useState(false);
 
           const creative = usePoll(
@@ -8713,17 +8749,20 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           React.useEffect(() => {
             if (creative.data && !draft) {
-              setDraft({ revision: creative.data.revision, brief: { ...(creative.data.brief || {}) } });
+              updateDraft({ revision: creative.data.revision, brief: { ...(creative.data.brief || {}) } });
             }
           }, [creative.data, draft]);
 
           const save = async () => {
             setBusy(true);
             try {
-              await api(`/projects/${project.id}/creative`, {
+              if (!project || !draft || !creative.data) return;
+              const saved = await api(`/projects/${project.id}/creative`, {
                 method: 'PUT',
                 body: { brief: draft.brief, revision: draft.revision },
               });
+              props.drafts?.delete(draftKey);
+              updateDraft({ revision: saved.revision, brief: saved.brief });
               toast.push('创作约定已保存', 'ok');
               creative.reload(true);
             } catch (error) {
@@ -8741,7 +8780,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               {
                 title: '创作约定',
                 hint: draft ? `revision ${draft.revision}` : '',
-                actions: e(Button, { kind: 'primary', size: 'sm', icon: 'save', busy, onClick: save }, '保存'),
+                actions: e(Button, { kind: 'primary', size: 'sm', icon: 'save', busy, disabled: !draft || !creative.data, onClick: save }, '保存'),
               },
               draft
                 ? e(
@@ -8755,6 +8794,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           className: 'nh-textarea',
                           style: { minHeight: 62 },
                           value: draft.brief[pair[0]] || '',
+                          disabled: busy,
                           onChange: (event) =>
                             setDraft({ ...draft, brief: { ...draft.brief, [pair[0]]: event.target.value } }),
                         }),
@@ -8947,26 +8987,33 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         /* ---------------------------------------------------------- 大纲规划 */
 
         function OutlinePage(props) {
-          const { overview } = props;
+          const project = (props.overview.projects || [])[0];
           const toast = useToast();
-          const project = (overview.projects || [])[0];
-          const [text, setText] = React.useState(null);
+          const draftKey = 'outline:' + project?.id;
+          const [draft, setDraft] = React.useState(() => props.drafts?.get(draftKey) || null);
           const [busy, setBusy] = React.useState(false);
-
           const outline = usePoll(
             () => (project ? api(`/projects/${project.id}/outline`) : Promise.resolve(null)),
-            [project && project.id],
-            0,
+            [project?.id], POLL_MS,
           );
+          const data = outline.data?.project_id === project?.id ? outline.data : null;
 
-          React.useEffect(() => {
-            if (outline.data && text === null) setText(outline.data.content || '');
-          }, [outline.data, text]);
+          const edit = (content) => {
+            if (!data?.editable) return;
+            const value = { project_id: project.id, revision: draft?.revision ?? data.revision, content };
+            props.drafts?.set(draftKey, value);
+            setDraft(value);
+          };
 
           const save = async () => {
+            if (!data?.editable || draft?.project_id !== project?.id || busy) return;
             setBusy(true);
             try {
-              await api(`/projects/${project.id}/outline`, { method: 'PUT', body: { content: text } });
+              const saved = await api(`/projects/${project.id}/outline`, { method: 'PUT', body: draft });
+              props.drafts?.delete(draftKey);
+              setDraft(null);
+              outline.setData(saved);
+              props.refreshOverview();
               toast.push('大纲已保存', 'ok');
             } catch (error) {
               toast.push(`保存失败：${error.message}`, 'err');
@@ -8976,9 +9023,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           };
 
           const generate = async () => {
+            if (!data || draft || busy) return;
             setBusy(true);
             try {
-              await api(`/projects/${project.id}/plan`, { method: 'POST', body: { count: 5 } });
+              await api(`/projects/${project.id}/plan`, { method: 'POST', body: { count: project.chapters ? 5 : 1 } });
+              props.refreshOverview();
               toast.push('已提交规划任务', 'ok');
             } catch (error) {
               toast.push(`规划失败：${error.message}`, 'err');
@@ -8987,33 +9036,65 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          const files = (outline.data && outline.data.files) || [];
+          return e('div', { className: 'nh-page' }, e(Card, {
+            title: '大纲与规划',
+            hint: project?.title,
+            actions: e('div', { className: 'nh-row', style: { gap: 7 } },
+              e(Button, { size: 'sm', icon: 'cpu', busy, disabled: !data || Boolean(draft) || (!project.chapters && project.ready), onClick: generate }, project?.chapters ? '生成规划' : '生成首章细纲'),
+              e(Button, { size: 'sm', kind: 'primary', icon: 'save', busy, disabled: !data?.editable || !draft, onClick: save }, '保存')),
+          },
+            outline.error ? e('p', { role: 'alert' }, outline.error) : null,
+            !data && !outline.error ? e(Skeleton, {}) : null,
+            data && !data.editable ? e('p', { className: 'nh-note' }, '此处合并预览各卷。请在作品目录里按卷编辑。') : null,
+            data && draft && draft.revision !== data.revision ? e('div', { className: 'nh-row' },
+              e('span', { role: 'alert' }, '大纲已更新，当前草稿仍保留。'),
+              e(Button, { disabled: busy, onClick: () => {
+                if (!confirm('放弃本书的未保存草稿，重新载入？')) return;
+                props.drafts?.delete(draftKey); setDraft(null); outline.reload(false);
+              } }, '重新载入')) : null,
+            data ? e('textarea', { className: 'nh-textarea', style: { minHeight: 420 },
+              value: draft?.content ?? data.content, readOnly: !data.editable || busy,
+              placeholder: '## 第1章 章节标题\n本章目标、冲突与结尾钩子',
+              onChange: (event) => edit(event.target.value) }) : null));
+        }
 
-          return e(
-            'div',
-            { className: 'nh-page' },
-            e(
-              Card,
-              {
-                title: '大纲与规划',
-                hint: `${files.length} 个文件`,
-                actions: e(
-                  'div',
-                  { className: 'nh-row', style: { gap: 7 } },
-                  e(Button, { size: 'sm', icon: 'cpu', busy, onClick: generate }, '生成规划'),
-                  e(Button, { size: 'sm', kind: 'primary', icon: 'save', busy, onClick: save }, '保存'),
-                ),
-              },
-              text === null
-                ? e('div', null, e(Skeleton, {}), e(Skeleton, {}))
-                : e('textarea', {
-                    className: 'nh-textarea',
-                    style: { minHeight: 420 },
-                    value: text,
-                    onChange: (event) => setText(event.target.value),
-                  }),
-            ),
-          );
+        function BookStart(props) {
+          const { project, overview, navigate, refreshOverview } = props;
+          const toast = useToast();
+          const [submitting, setSubmitting] = React.useState(false);
+          const operation = (overview.operations || []).find((item) =>
+            item.project_id === project.id && ['plan', 'generate'].includes(item.kind));
+          const pending = operation && ['queued', 'running', 'waiting'].includes(operation.status);
+          let label = '准备首章细纲';
+          let description = '先写一句创意，或粘贴含「第1章」标题的细纲。';
+          let action = () => navigate('outline');
+          if (project.ready) {
+            label = '试写第一章';
+            description = '首章细纲已就绪。生成后在章节列表查看正文和审查。';
+            action = async () => {
+              if (submitting || pending) return;
+              if (props.drafts?.has('outline:' + project.id) || props.drafts?.has('brief:' + project.id)) {
+                toast.push('请先保存本书的大纲和创作约定', 'err');
+                return;
+              }
+              setSubmitting(true);
+              try {
+                await api(`/projects/${project.id}/generate`, { method: 'POST', body: { count: 1 } });
+                refreshOverview();
+                navigate('chapters');
+              } catch (error) {
+                toast.push(error.message, 'err');
+              } finally {
+                setSubmitting(false);
+              }
+            };
+          }
+          return e(Card, { title: `开书 · 《${project.title}》`, hint: pending ? '任务进行中' : description },
+            operation?.status === 'failed' ? e('p', { role: 'alert' }, operation.error || '上次任务失败，可修正后重试。') : null,
+            e('div', { className: 'nh-row', style: { gap: 8 } },
+              e(Button, { kind: 'primary', busy: submitting || Boolean(pending), onClick: action }, label),
+              e(Button, { onClick: () => navigate('brief') }, '填写创作约定'),
+              !overview.ai?.configured ? e(Button, { onClick: () => navigate('ai') }, '检查写作模型') : null));
         }
 
         /* ---------------------------------------------------------- 操作历史 */
@@ -10145,7 +10226,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function matchesProject(job, project) {
           if (!job || !project) return false;
           const normalize = path => String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-          return String(job.project_id || '') === String(project.id) || Boolean(job.project && project.path && normalize(job.project) === normalize(project.path));
+          if (job.project_id) return String(job.project_id) === String(project.id);
+          return Boolean(job.project && project.path && normalize(job.project) === normalize(project.path));
         }
         function chapterMetrics(data, last) {
           const rows = (data && data.recent) || [];
@@ -10172,8 +10254,22 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function Shell() {
           const service = useService();
           const [route, setRoute] = React.useState('dashboard');
-          const [selectedProject, setSelectedProject] = React.useState(() => localStorage.getItem('chapter-whale-project') || '');
-          const selectProject = (id) => { setSelectedProject(id); localStorage.setItem('chapter-whale-project', id); };
+          const [selectedProject, setSelectedProject] = React.useState(() => {
+            try { return localStorage.getItem('chapter-whale-project') || ''; } catch { return ''; }
+          });
+          const [createdProject, setCreatedProject] = React.useState(null);
+          const drafts = React.useRef(new Map());
+          const selectProject = (id) => {
+            setChapter(null);
+            setSelectedProject(id);
+            try { localStorage.setItem('chapter-whale-project', id); } catch {}
+          };
+          const openCreatedProject = (project, hasMaterial) => {
+            setCreatedProject(project);
+            selectProject(project.id);
+            setRoute(project.ready || hasMaterial ? 'outline' : 'brief');
+            overview.reload(true);
+          };
           const [appearance, setAppearance] = React.useState(readAppearance);
           const [appearanceOpen, setAppearanceOpen] = React.useState(false);
           const [projectPopOpen, setProjectPopOpen] = React.useState(false);
@@ -10210,8 +10306,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           }, [service.refresh]);
 
           const ready = service.state.running && overview.data;
-          const allProjects = overview.data ? (overview.data.projects || []) : [];
-          const project = allProjects.find((item) => item.id === selectedProject) || allProjects[0] || null;
+          const listedProjects = overview.data?.projects || [];
+          const nowListed = listedProjects.some((item) => item.id === createdProject?.id);
+          const allProjects = createdProject && !nowListed ? [...listedProjects, createdProject] : listedProjects;
+          const project = selectedProject
+            ? allProjects.find((item) => item.id === selectedProject) || null
+            : allProjects[0] || null;
+          React.useEffect(() => { if (nowListed) setCreatedProject(null); }, [nowListed]);
           const selectedOverview = overview.data ? { ...overview.data, projects: project ? [project, ...allProjects.filter((item) => item.id !== project.id)] : [], jobs: (overview.data.jobs || []).filter(item => matchesProject(item, project)) } : null;
 
           const jobs = liveJobs.data || (overview.data && overview.data.jobs) || [];
@@ -10230,6 +10331,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const pageProps = {
             overview: selectedOverview || { projects: [], jobs: [], operations: [], queue: {}, diagnostics: {} },
             selectProject,
+            openCreatedProject,
+            drafts: drafts.current,
             navigate: setRoute,
             job: liveJob,
             refreshOverview: () => overview.reload(true),
@@ -10368,23 +10471,30 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             body = e('div', { className: 'nh-page' }, e(Empty, null, '加载总览失败'));
           } else {
             const map = {
-              flow: () => e(FlowPage, pageProps),
+              flow: () => e(FlowPage, { ...pageProps, key: project?.id || 'empty' }),
               setup: () => e(SetupPage, pageProps),
               dashboard: () => e(DashboardPage, { ...pageProps, key: project ? project.id : 'empty' }),
-              chapters: () => e(ChaptersPage, pageProps),
-              memory: () => e(MemoryPage, pageProps),
-              brief: () => e(BriefPage, pageProps),
-              outline: () => e(OutlinePage, pageProps),
-              readers: () => e(ReadersPage, pageProps),
-              publish: () => e(PublishPage, pageProps),
-              jobs: () => e(JobsPage, pageProps),
+              chapters: () => e(ChaptersPage, { ...pageProps, key: project?.id || 'empty' }),
+              memory: () => e(MemoryPage, { ...pageProps, key: project?.id || 'empty' }),
+              brief: () => e(BriefPage, { ...pageProps, key: project?.id || 'empty' }),
+              outline: () => e(OutlinePage, { ...pageProps, key: project?.id || 'empty' }),
+              readers: () => e(ReadersPage, { ...pageProps, key: project?.id || 'empty' }),
+              publish: () => e(PublishPage, { ...pageProps, key: project?.id || 'empty' }),
+              jobs: () => e(JobsPage, { ...pageProps, key: project?.id || 'empty' }),
               ai: () => e(AIPage, pageProps),
               providers: () => e(PricingPage, pageProps),
-              free: () => e(FreeChannelsPage, pageProps),
+              free: () => e(FreeChannelsPage, { ...pageProps, key: project?.id || 'empty' }),
               costs: () => e(CostsPage, pageProps),
               operations: () => e(OperationsPage, pageProps),
             };
-            body = (!project && !['ai', 'free', 'operations', 'flow'].includes(route) ? map.setup : (map[route] || map.dashboard))();
+            if (selectedProject && !project && !['ai', 'operations', 'setup', 'flow'].includes(route)) {
+              body = e(Card, { title: '当前作品暂不可用' },
+                e(Button, { onClick: () => overview.reload(false) }, '刷新作品'),
+                e(Button, { onClick: () => setProjectPopOpen(true) }, '切换作品'),
+                e(Button, { onClick: () => setRoute('setup') }, '新建作品'));
+            } else {
+              body = (!project && !['ai', 'free', 'operations', 'flow'].includes(route) ? map.setup : (map[route] || map.dashboard))();
+            }
           }
 
           const bookTitle = project ? project.title : '创作空间';
@@ -10569,11 +10679,16 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   'main',
                   { className: 'nh-main' },
                   route !== 'dashboard' && ready ? e('div', { className: 'cw-page-heading cw-route-heading' }, e('h1', null, current ? t('nav.' + route, current.label) : t('panel.title', '码章鲸'))) : null,
-                  e(AppearanceContext.Provider, { value: appearance }, body),
+                  e(AppearanceContext.Provider, { value: appearance },
+                    project && !project.chapters && ['dashboard', 'flow', 'brief', 'outline', 'chapters'].includes(route)
+                      ? e(BookStart, { ...pageProps, project, key: project.id })
+                      : null,
+                    body),
                 ),
               ),
               e(AppearancePanel, { open: appearanceOpen, onClose: () => setAppearanceOpen(false), value: appearance, onChange: setAppearance }),
               e(ChapterModal, {
+                key: project?.id || 'empty',
                 open: chapter !== null,
                 chapter,
                 projectId: project ? project.id : null,

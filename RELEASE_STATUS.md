@@ -1,5 +1,14 @@
-# 码章鲸 0.7.1 验证记录
+# 码章鲸 0.7.2 验证记录
 
+本轮修复多书上下文隔离、新书引导、发布预检和排期恢复。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Releases](https://github.com/thus-zhou/dsh-chapter-whale/releases) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
+
+Windows 轻量包从 v0.7.0 归档取用固定的 Python 和浏览器运行时，后端采用 v0.7.2 包内代码。macOS 首启基于 Python 3.11+ 自动创建隔离环境。平台安装验证结果见 [Distribution first start](https://github.com/thus-zhou/dsh-chapter-whale/actions/workflows/distribution.yml)。
+
+本轮发布前执行了 Node 测试、100 项后端定向回归测试和托管运行环境完整性校验。真实番茄网页发布与既有 DSH 桌面个人工作区原地升级仍待验证。
+
+---
+
+## 0.7.1 历史记录
 `0.7.1` 在 `0.7.0`（[PR #1](https://github.com/thus-zhou/dsh-chapter-whale/pull/1)）基础上正式开放 macOS（Apple Silicon / Intel）DSH 插件支持；后端目录与 Windows 固定运行时清单与 `0.7.0` 完全一致。公开发行状态以 [GitHub Releases](https://github.com/thus-zhou/dsh-chapter-whale/releases) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
 
 Windows 轻量包复用 `v0.7.0` 固定运行时归档（字节数与 SHA-256 记录在 `runtime-download.json`）；完整包使用其中捆绑的运行时；macOS 首启基于本机 Python 3.11+ 在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 自动创建隔离环境并安装 `deploy/macos/requirements-macos.txt`。

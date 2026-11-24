@@ -76,6 +76,14 @@ try {
   await prepareManaged(config);
   const marker = JSON.parse(await readFile(join(workspace, '.chapter-whale-release.json'), 'utf8'));
   assert.equal(marker.buildId, manifest.buildId);
+  if (marker.runtimeKind === 'downloaded') {
+    const spec = JSON.parse(await readFile(join(root, 'runtime-download.json'), 'utf8'));
+    if (spec.runtimeAssetBuildId) {
+      assert.equal(marker.runtimeBuildId, spec.runtimeAssetBuildId);
+      assert.equal(marker.codeBuildId, manifest.buildId);
+      result.checks.push('downloaded runtime and installed backend retain separate pinned build IDs');
+    }
+  }
   result.checks.push('actual package prepareManaged and complete backend hash verification');
   const started = await api('/_service', {});
   assert.equal(started.running, true, JSON.stringify(started));

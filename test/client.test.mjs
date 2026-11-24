@@ -32,6 +32,57 @@ test('工作台的创作流程与章节标签仍在', () => {
   assert.match(source, /className: 'nh-seg'/);
 });
 
+test('切书时旧请求不会更新新书，也不会阻塞新请求', async () => {
+  const states = [];
+  const refs = [];
+  const memo = [];
+  const effects = [];
+  let indexes;
+  const same = (a, b) => a && a.length === b.length && a.every((item, i) => Object.is(item, b[i]));
+  const React = {
+    useState(initial) {
+      const i = indexes.state++;
+      if (!(i in states)) states[i] = initial;
+      return [states[i], (next) => { states[i] = next(states[i]); }];
+    },
+    useRef(value) {
+      const i = indexes.ref++;
+      return refs[i] ??= { current: value };
+    },
+    useMemo(make, deps) {
+      const i = indexes.memo++;
+      if (!same(memo[i]?.deps, deps)) memo[i] = { deps, value: make() };
+      return memo[i].value;
+    },
+    useCallback(fn, deps) { return this.useMemo(() => fn, deps); },
+    useEffect(fn, deps) {
+      const i = indexes.effect++;
+      if (same(effects[i]?.deps, deps)) return;
+      effects[i]?.cleanup?.();
+      effects[i] = { deps, cleanup: fn() };
+    },
+  };
+  const begin = source.indexOf('        function usePoll(');
+  const end = source.indexOf('        /* ========================================================= components', begin);
+  const usePoll = vm.runInNewContext('(' + source.slice(begin, end).trim() + ')', {
+    React, document: { addEventListener() {}, removeEventListener() {} },
+  });
+  const render = (id, fetcher) => {
+    indexes = { state: 0, ref: 0, memo: 0, effect: 0 };
+    return usePoll(fetcher, [id], 0);
+  };
+  let resolveOld;
+  const old = new Promise((resolve) => { resolveOld = resolve; });
+  render('old', () => old);
+  const fetchNew = () => Promise.resolve('new outline');
+  assert.equal(render('new', fetchNew).data, null);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(render('new', fetchNew).data, 'new outline');
+  resolveOld('old outline');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(render('new', fetchNew).data, 'new outline');
+});
+
 const noop = () => {};
 const fakeNode = () => ({
   style: { setProperty: noop, removeProperty: noop },

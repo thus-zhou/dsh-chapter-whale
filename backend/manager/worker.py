@@ -104,6 +104,7 @@ def main():
     parser.add_argument("--ai-used", choices=["0", "1"], default="1")
     parser.add_argument("--serial-step", action="store_true")
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--preview-revision")
     parser.add_argument("--scenes", type=int, default=0)
     args = parser.parse_args()
     try:
@@ -151,7 +152,8 @@ def main():
             os.environ["NOVEL_HELPER_AI_USED"] = args.ai_used
             # Explicit publication consumes only the existing queue. It must never
             # silently enqueue all older chapters when the user selects a book.
-            code = bridge.run_publish(args.book, count=args.count, account=args.account, project=Path(args.project))
+            code = bridge.run_publish(args.book, count=args.count, account=args.account, project=Path(args.project),
+                                      preview_revision=args.preview_revision)
             report = bridge.latest_publish_report(args.book, args.account)
             result = {"status": "success" if code == 0 and report.get("verified_success") else "failed", "exit_code": code,
                       "publication": report, "queue": bridge.sync_manifest(), "book": args.book, "account": args.account}
