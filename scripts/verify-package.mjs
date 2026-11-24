@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -17,9 +18,13 @@ const execute = promisify(execFile);
 const isolated = await mkdtemp(join(tmpdir(), 'cw-package-'));
 await extractPackage(resolve(archiveArg), isolated);
 const root = join(isolated, 'package');
+const npmCli = [
+  join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'),
+  join(dirname(dirname(process.execPath)), 'lib/node_modules/npm/bin/npm-cli.js'),
+].find((candidate) => existsSync(candidate));
+assert.ok(npmCli, 'Cannot locate npm-cli.js alongside Node');
 await execute(process.execPath,
-  [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'),
-    'install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
+  [npmCli, 'install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
   { cwd: root, windowsHide: true, timeout: 180000 });
 const { prepareManaged, managedEnvironment, managedPythonPath } = await import(pathToFileURL(join(root, 'managed-runtime.mjs')));
 const { resolveConfig, createHandler } = await import(pathToFileURL(join(root, 'index.js')));
