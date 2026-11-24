@@ -1,17 +1,19 @@
 # 插件市场投稿与收录记录
 
-更新日期：2026-11-24（0.7.0 同步更新）。当前插件版本为 `0.7.0`，固定运行时 `buildId` 为 `b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`。
+更新日期：2026-11-24（0.7.1 开放 macOS DSH 插件支持）。当前插件版本为 `0.7.1`（Windows x64 与 macOS Apple Silicon / Intel 双平台），Windows 固定运行时 `buildId` 沿用 `b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`（macOS 首启自动建 `.venv`）。
 
-本轮 `0.7.0` 同步状态：
+本轮 `0.7.1` 同步状态：
 
-- [GitHub Release v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 已更新：
-  - 轻量包 `dsh-chapter-whale-0.7.0.tgz`：`12,441,992` 字节，SHA-256 `e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400`。
-  - 完整运行时包 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`：`282,727,542` 字节，SHA-256 `bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d`。
-  - 自托管索引 [market/index.json](index.json) 已同步至 `0.7.0`（`publishTimestamp: 1795514809`）。
-- npm `latest` 已更新并实测验证为 `0.7.0`（线上 tarball 与 GitHub Release `v0.7.0` 逐字节一致：`12,441,992` 字节，SHA-256 `e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400`，SHA-1 `0ba5c90fd1b44c248e144d456c1c624890275823`），依赖 npm `latest` 的自动索引市场将随抓取周期自动刷新。
-- 社区目录已合并此前 [0.4.2 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347) 与 [0.5.0 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)，现已提交 [0.7.0 更新 PR #18485](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485)（`open`）。
-- [Distribution first start 云端 Windows 首启校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45370642905)（完整包 + 轻量包在线拉取均在全新工作区启动通过）及 [Source checks 12/12 矩阵](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099) 均已通过；另有 Windows `DSH 0.2.2-rc.3` 隔离沙箱 UI 实装记录（[retest-0.7.0.md](../docs/retest-0.7.0.md)）。
-- README、[上手指南](../docs/quickstart.md) 及 [演示图集](../docs/screenshots.md) 已全面替换为 9 张无隐私的 `0.7.0` 液态玻璃实机图。按约束未修改个人桌面端 `0.4.4` 配置。
+- [GitHub Release v0.7.1](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.1) 已发布为 Latest：
+  - 跨平台插件包 `dsh-chapter-whale-0.7.1.tgz`：`12,445,323` 字节，SHA-1 `a5ffabf7b82eb9fa16b3cb344ff0337e135eb19f`，SHA-256 `11a49cb187f2ac3edd54462d0cedfcfe562f2c20ec2d73c141397f0b2ce5d2e1`。
+  - macOS Apple Silicon 常驻服务 `dsh-chapter-whale-service-macos-arm64-0.7.1.tar.gz`：`4,353,007` 字节，SHA-256 `c0d0316e0e2f719d8d7f4bb495001299afcf9016844722e0b3c7b3ed4022613f`。
+  - macOS Intel 常驻服务 `dsh-chapter-whale-service-macos-amd64-0.7.1.tar.gz`：`4,353,007` 字节，SHA-256 `06e95ded47f20a12c825038c86f31f0e993c475635ecdbdee999132a36d36750`。
+  - Windows 完整运行时大包沿用 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 的 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`（`282,727,542` 字节，SHA-256 `bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d`）。
+  - 自托管索引 [market/index.json](index.json) 已同步至 `0.7.1`（`publishTimestamp: 1795518000`）。
+- npm `latest` 当前为 `0.7.0`；`0.7.1` 待发布压缩包已准备好（`O:\小说助手\dsh-chapter-whale-0.7.1.tgz`），待维护者通过 2FA 执行 `npm publish "O:\小说助手\dsh-chapter-whale-0.7.1.tgz" --access public` 推送为 `latest`。
+- 社区目录已同步更新 [PR #18485](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485) 至 `0.7.1`（`open`，Windows x64 + macOS）。
+- [Distribution first start 双平台首发校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45382801913)（`windows-install` 完整包 + 轻量包，`macos-install` ARM64 真实 `.tgz` 解包并拉起独立工作区 `.venv` 服务）及 [Source checks 10/10 矩阵](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45381664602)（含 Windows / Ubuntu / `macos-latest` 与 `macos-first-start`）均已通过；另有 Windows `DSH 0.2.2-rc.3` 隔离沙箱 UI 实装记录（[retest-0.7.0.md](../docs/retest-0.7.0.md)）。
+- README、[上手指南](../docs/quickstart.md)、[macOS 说明](../deploy/macos/README.md) 及 [演示图集](../docs/screenshots.md) 已同步。按约束未修改个人桌面端 `0.4.4` 配置。
 
 以下表格保留首次投稿的历史记录，不代表已重新核对所有第三方市场的当前缓存。
 
