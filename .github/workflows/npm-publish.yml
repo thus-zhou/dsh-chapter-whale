@@ -1,0 +1,63 @@
+name: Publish verified release to npm
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published GitHub release tag
+        required: true
+        type: string
+
+concurrency:
+  group: chapter-whale-npm-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify the GitHub asset and publish those bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          package=dsh-chapter-whale
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${RELEASE_TAG#v}"
+          archive="$package-$version.tgz"
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          if [[ "$RELEASE_TAG" != "$latest" ]]; then
+            echo "Only the latest stable GitHub release can be published as npm latest." >&2
+            exit 1
+          fi
+          expected=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq ".assets[] | select(.name == \"$archive\" and .state == \"uploaded\") | .digest")
+          [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ ]]
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$archive"
+          printf '%s  %s\n' "${expected#sha256:}" "$archive" | sha256sum --check
+          integrity=$(node -e 'const fs=require("node:fs");const crypto=require("node:crypto");console.log("sha512-"+crypto.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"));' "$archive")
+          existing=$(npm view "$package@$version" dist.integrity 2>/dev/null || true)
+          if [[ -z "$existing" ]]; then
+            npm publish "./$archive" --access public --tag latest --registry https://registry.npmjs.org/ --loglevel warn
+          elif [[ "$existing" != "$integrity" ]]; then
+            echo "The npm version exists with a different package digest." >&2
+            exit 1
+          fi
+          for attempt in {1..12}; do
+            if [[ "$(npm view "$package@$version" dist.integrity)" == "$integrity" &&
+                  "$(npm view "$package@latest" version)" == "$version" ]]; then
+              echo "$package@$version is npm latest and matches the GitHub asset."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Could not verify the registry version and digest." >&2
+          exit 1
