@@ -1,24 +1,31 @@
 {
-  "checkedAt": "2026-11-15T09:50:58.113094+08:00",
+  "checkedAt": "2026-11-24T18:06:49+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
     "version": "0.5.0",
     "tag": "latest",
+    "pendingVersion": "0.7.0",
+    "pendingStatus": "blocked-on-2fa-eotp",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
     "registryDownloadVerified": true,
     "isolatedDshInstallVerified": false,
-    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723929446",
-    "runtimeBaseline": "0.4.2 pinned runtime; 0.5.0 native UI loaded in DSH 0.2.2-rc.1 isolated profile",
+    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45370642905",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099",
+    "runtimeBaseline": "0.7.0 pinned runtime (b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f); Liquid Glass v5 native UI & standalone console verified in isolated DSH 0.2.2-rc.3",
     "isolatedDshNativeLoadVerified": true,
     "sha256": "93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb",
     "bytes": 16754442,
-    "checkedAt": "2026-11-15T23:25:00+08:00"
+    "pendingSha256": "e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400",
+    "pendingBytes": 12441992,
+    "pendingTarball": "O:\\小说助手\\dsh-chapter-whale-0.7.0.tgz",
+    "checkedAt": "2026-11-24T18:06:49+08:00"
   },
   "markets": [
     {
       "market": "awesome-dsh-plugin / dshmarket",
       "status": "submitted",
       "url": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316",
+      "latestUpdatePr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
       "method": "catalog-pr"
     },
     {
@@ -62,14 +69,22 @@
     }
   ],
   "currentUpdate": {
-    "version": "0.5.0",
-    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0",
-    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398",
+    "version": "0.7.0",
+    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0",
+    "buildId": "b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f",
+    "lightAssetBytes": 12441992,
+    "lightAssetSha256": "e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400",
+    "fullAssetBytes": 282727542,
+    "fullAssetSha256": "bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d",
+    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45370642905",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099",
+    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485",
     "catalogState": "open",
-    "checkedAt": "2026-11-15T23:25:00+08:00",
+    "npmStatus": "pending-otp",
+    "checkedAt": "2026-11-24T18:06:49+08:00",
     "screenshots": "https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
     "screenshotCount": 9,
     "personalInstallUpdated": false,
-    "personalInstallNote": "User requested GitHub, npm and market synchronization only."
+    "personalInstallNote": "User desktop profile (0.4.4) kept untouched; GitHub, CI, docs and market synchronization completed while npm 0.7.0 waits for 2FA OTP."
   }
 }

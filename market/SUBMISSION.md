@@ -1,18 +1,17 @@
 # 插件市场投稿与收录记录
 
-> **历史记录（0.5.0 当次投稿）**：本文件记录的是 0.5.0 那一次投稿与核对，不随每个版本更新。
-> 当前仓库处于 `0.7.0` PR 候选整理阶段，尚未发布到 npm / GitHub Release，也未向各第三方插件市场发起新一轮收录或版本同步。
-> 若要重新投稿，需按当前版本重跑打包与校验，并另起一份记录。
+更新日期：2026-11-24（0.7.0 同步更新）。当前插件版本为 `0.7.0`，固定运行时 `buildId` 为 `b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`。
 
-更新日期：2026-11-15（0.5.0 投稿时）。当时插件版本为 0.5.0，固定运行时版本为 0.4.2。两者按同一 buildId 和归档摘要核对。
+本轮 `0.7.0` 同步状态：
 
-本轮状态：
-
-- [GitHub 0.5.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.5.0) 已标记为 Latest；自定义市场索引同步到 0.5.0。
-- npm `latest` 为 0.5.0；公开下载包与 GitHub 资产、本地验收包一致：16,754,442 字节，SHA-256 `93da62981dd261e9e81b6a8a7138e27e908c05d62db295cf31451261a10ef0cb`。
-- 社区目录已合并此前的 [0.4.2 更新 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347)，[更新 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)现已改为 0.5.0，并附新版演示图入口，仍待维护者合并。
-- [实际发行包 Windows 首次启动检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723929446)和[源码检查](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/43723834223)通过。当前轻量包完成线上运行时下载、校验、启动与写作引擎导入；0.5.0 原生界面另在 DSH 0.2.2-rc.1 独立环境验证。
-- README、上手指南及[演示图文档](../docs/screenshots.md)已替换为九张新版界面图，市场资料引用同一套图。按用户要求不更新个人本机插件。
+- [GitHub Release v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 已更新：
+  - 轻量包 `dsh-chapter-whale-0.7.0.tgz`：`12,441,992` 字节，SHA-256 `e0d04900981130f00554d48e25f529f91d7eb2bb43e5d071b57e66e840a8f400`。
+  - 完整运行时包 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`：`282,727,542` 字节，SHA-256 `bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d`。
+  - 自托管索引 [market/index.json](index.json) 已同步至 `0.7.0`（`publishTimestamp: 1795514809`）。
+- npm `latest` 当前仍为 `0.5.0`：自动化尝试以 `thus_zhou` 账号推送 `0.7.0` 时触发 npm 双因素认证（`EOTP`），未强行绕过；同字节安装包已准备在 `O:\小说助手\dsh-chapter-whale-0.7.0.tgz`，待维护者带 2FA/OTP 执行 `npm publish "O:\小说助手\dsh-chapter-whale-0.7.0.tgz" --access public` 后生效，依赖 npm 索引的市场随后自动刷新。
+- 社区目录已合并此前 [0.4.2 #15347](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15347) 与 [0.5.0 #15398](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15398)，现已提交 [0.7.0 更新 PR #18485](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18485)（`open`）。
+- [Distribution first start 云端 Windows 首启校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45370642905)（完整包 + 轻量包在线拉取均在全新工作区启动通过）及 [Source checks 12/12 矩阵](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45359715099) 均已通过；另有 Windows `DSH 0.2.2-rc.3` 隔离沙箱 UI 实装记录（[retest-0.7.0.md](../docs/retest-0.7.0.md)）。
+- README、[上手指南](../docs/quickstart.md) 及 [演示图集](../docs/screenshots.md) 已全面替换为 9 张无隐私的 `0.7.0` 液态玻璃实机图。按约束未修改个人桌面端 `0.4.4` 配置。
 
 以下表格保留首次投稿的历史记录，不代表已重新核对所有第三方市场的当前缓存。
 
