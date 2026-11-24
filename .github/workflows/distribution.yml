@@ -21,22 +21,25 @@ jobs:
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $runtimeVersion = (Get-Content runtime-manifest.json -Raw | ConvertFrom-Json).version
+          $runtimeDownload = Get-Content runtime-download.json -Raw | ConvertFrom-Json
+          $fullAsset = [IO.Path]::GetFileName(([uri]$runtimeDownload.url).AbsolutePath)
+          $lightAsset = "dsh-chapter-whale-$version.tgz"
           New-Item -ItemType Directory artifacts/full, artifacts/light | Out-Null
-          gh release download "v$runtimeVersion" --repo thus-zhou/dsh-chapter-whale --pattern "dsh-chapter-whale-$runtimeVersion.tgz" --dir artifacts/full
+          gh release download "v$runtimeVersion" --repo thus-zhou/dsh-chapter-whale --pattern $fullAsset --dir artifacts/full
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh release download "v$version" --repo thus-zhou/dsh-chapter-whale --pattern "dsh-chapter-whale-$version.tgz" --dir artifacts/light
+          gh release download "v$version" --repo thus-zhou/dsh-chapter-whale --pattern $lightAsset --dir artifacts/light
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "CHAPTER_WHALE_FULL_ASSET=$fullAsset" >> $env:GITHUB_ENV
+          "CHAPTER_WHALE_LIGHT_ASSET=$lightAsset" >> $env:GITHUB_ENV
       - name: Start the actual full package in a new workspace
         shell: pwsh
         run: |
-          $runtimeVersion = (Get-Content runtime-manifest.json -Raw | ConvertFrom-Json).version
-          node scripts/verify-package.mjs "artifacts/full/dsh-chapter-whale-$runtimeVersion.tgz" - artifacts/full-result.json
+          node scripts/verify-package.mjs "artifacts/full/$env:CHAPTER_WHALE_FULL_ASSET" - artifacts/full-result.json
           exit $LASTEXITCODE
       - name: Start the lightweight package using the live GitHub download
         shell: pwsh
         run: |
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          node scripts/verify-package.mjs "artifacts/light/dsh-chapter-whale-$version.tgz" - artifacts/light-result.json
+          node scripts/verify-package.mjs "artifacts/light/$env:CHAPTER_WHALE_LIGHT_ASSET" - artifacts/light-result.json
           exit $LASTEXITCODE
       - uses: actions/upload-artifact@v4
         if: always()

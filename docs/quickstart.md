@@ -22,13 +22,12 @@ dsh plugin --profile web add dsh-chapter-whale
 
 npm 包首次启动会自动下载约 278 MB 的 Python 与浏览器运行环境，校验固定大小和 SHA-256 后解包。需要能连接 GitHub；首次完成准备且环境版本未变时，后续启动不会重复下载。
 
-也可从 GitHub 下载与 npm 相同的插件包，在 DSH 插件管理中添加该文件：
+也可在 DSH 插件管理中添加从[最新 GitHub 发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载的文件。
 
-```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.5.0/dsh-chapter-whale-0.5.0.tgz
-```
+- `dsh-chapter-whale-<版本>.tgz` 与 npm 插件包相同，首次启动时下载并校验运行时。
+- `dsh-chapter-whale-runtime-win32-x64-<版本>.tgz` 内含 Python 和 Chromium，可用同一个安装入口添加。
 
-两种安装方式均在首次启动时准备运行环境，不需要单独安装 Python 或浏览器。0.5.0 复用经过摘要校验的 0.4.2 后端运行时，已有相同环境时不会重复下载。
+首次启动时会准备运行环境，已有相同运行时的工作区可直接复用。
 
 ### 从 npm 下载文件与后续更新
 

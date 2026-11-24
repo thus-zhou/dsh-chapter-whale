@@ -1,7 +1,8 @@
-## [0.7.0] — 2026-11-23
+## [0.7.0]
 
-> 本版统一收敛 `0.5.0` 之后的功能演进与 DSH 前后端联调成果，作为 `feat/v0.7.0` PR 候选交付；真实模型调用、真实番茄/七猫网页写入、物理 Linux/macOS 实机与外网 Webhook 在本轮均未实测，所有新增边界已在代码与文档中明确标为「候选 / 只读 / 待实机」。
+> Windows 上已用独立 DSH 环境实装。真实模型调用、真实番茄及七猫网页写入、Linux/macOS 常驻服务实机和外网 Webhook 仍待验。
 
+- **液态玻璃界面**：重做 DSH 插件与独立控制台，加入三套玻璃主题、深浅模式和四项实时光学调整。修复外观面板裁切和服务启动前的轮询错误。
 - **许可证与代码运行时分离**：确立 `GPL-3.0-only` 组合分发边界（`package.json`、`LICENSES/`、`THIRD_PARTY_NOTICES.md`、`docs/license-decision.md`）；插件随包携带 `backend/` 源码并与下载运行时分离，升级只替换清单内代码；`check-release.mjs` 强制全仓文本 LF 与分发字节校验；凭据与守护进程升级为工作区运行描述加单实例健康核对。
 - **DSH 插件桥与全量原生面板**：补全 `index.js` `WRITE_ROUTES` 全部 29 条非 GET 写路由白名单，新增 `backend/manager/*.py` 与白名单的防漂移测试；修复 `index.js` `makeTool()` 与 `client.js` `api()` 对后端统一 `{"code", "message"}` 错误体的解析；修复 `ScheduleCard` / `JobsPage` 对 `publication_mode`、`platform`、`account`、`schedule_buffer` 的保存与切换覆盖缺陷；在 `PublishPage`、`JobsPage`、`MemoryPage`、`ChapterModal`（新增「预检」标签）与独立侧栏「读者反馈」页（`ReadersPage`）全量接入 `0.7.0` 接口。
 - **模型桥与费用/流式可靠性**：派发前同步宿主模型；按 DISJOINT 用量契约兼容多提供方不重复累计缓存；流式响应 16 MiB 有界缓冲、首块与总时限、断开/超时/截断只产出单一明确终态。

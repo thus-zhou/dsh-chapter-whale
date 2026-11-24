@@ -1,6 +1,6 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**0.7.0（PR 候选版 · GPL-3.0-only）：整合番茄主流程与排期缓冲状态机、长篇连续性与风格预检、读者反馈观察卡、常驻存稿服务包及多平台能力契约。**
+**0.7.0（GPL-3.0-only）：重做 DSH 和独立控制台界面，整合番茄排期缓冲、长篇连续性与风格预检、读者反馈观察卡、常驻存稿服务包及多平台能力契约。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，也可以接入部分免费模型，通过支持的厂商账号渠道完成授权。
 
@@ -8,7 +8,7 @@
 
 Windows 10/11 x64（DSH 主插件）· Linux / macOS 常驻存稿服务归档（待实机）· DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.0
 
-> **状态与边界说明**：`0.7.0` 当前处于开发分支 PR 收口阶段，**尚未发布正式 GitHub Release 或 npm `latest`**；线上最新公开版本仍以发布页与 [RELEASE_STATUS.md](RELEASE_STATUS.md) 为准。排期缓冲、七猫导出/只读绑定、单目标浏览器试点、Linux/macOS 常驻归档与 Webhook 外发等新增能力目前仅通过本机离线单元测试与本地回环代理冒烟验证，**真实番茄/七猫页面、真实模型调用与跨平台实机测试均未在本轮实测**，界面中已明确标注「候选 / 未实连 / 待实机」。
+> Windows 上已使用独立 DSH 环境实装 0.7.0。真实番茄及七猫页面、实际模型调用、Linux/macOS 常驻服务实机和外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
 
 **安装三步**：① 在 DSH 插件管理中添加 npm 包名 `dsh-chapter-whale`，或从[最新发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)下载插件 `.tgz` → ② 安装后重启 DSH → ③ 侧栏打开「码章鲸」：创建作品，使用 DSH 已登录模型开始写作，需要发布时再登录番茄。
 
@@ -16,12 +16,11 @@ Windows 10/11 x64（DSH 主插件）· Linux / macOS 常驻存稿服务归档（
 
 ![码章鲸：全自动写作与发布、可自定义任务、部分免费模型与厂商账号登录](assets/screenshots/02-dashboard.jpg)
 
-## 0.5.0 界面更新
+## 0.7.0 界面更新
 
-- 深浅主题跟随 DSH；蓝紫与海洋两套配色，三档炫彩与动效。
-- 通透面板、悬浮工具栏和新的中文字体；正文可切换黑体、宋体。
-- 工作台集中显示当前任务、已保存正文、A–E 阶段与最近章节。
-- 外观、信息密度和减少动画设置自动保存在本机。
+- DSH 插件与独立控制台使用液态玻璃界面。三套主题支持深浅模式，可调通透度、模糊度、折射色散和光带对比度。
+- 工作台集中显示当前任务、已保存正文、A–E 阶段与最近章节。阅读区可切换黑体、宋体。
+- 外观、信息密度和减少动画设置保存在本机。上方图片为 0.5.0 的界面记录。
 
 ## 把每天要做的更新，交给一个任务
 
@@ -142,7 +141,7 @@ npm pack dsh-chapter-whale@latest
 
 然后把生成的 `.tgz` 文件交给 DSH 插件管理安装。`npm pack` 只下载插件包，首次启动仍需要下载运行环境。
 
-**通过 GitHub 安装最新版**：正式发版后可在下方获取 `0.7.0` 轻量插件包（首次启动按清单下载并校验固定运行时）或完整运行时归档；当前开发分支状态见 [RELEASE_STATUS.md](RELEASE_STATUS.md)。
+**通过 GitHub 安装**：在[发布页](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)选择轻量插件包或包含运行时的完整安装包。
 
 在 DSH 插件管理中添加对应版本的下载包地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
@@ -150,7 +149,7 @@ npm pack dsh-chapter-whale@latest
 https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-0.7.0.tgz
 ```
 
-`0.7.0` 轻量插件包约 **17 MB**，代码随当前包携带；完整版固定运行时约 **287 MB**（已有相同 `buildId` 运行时的工作目录可直接复用）。也提供单独的 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz` 完整运行时包。
+`dsh-chapter-whale-0.7.0.tgz` 是轻量包，首次启动时会下载并校验运行时。`dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz` 随包提供 Python 和 Chromium。已有相同 `buildId` 的运行时可直接复用。
 
 <details>
 <summary>使用命令行安装</summary>
