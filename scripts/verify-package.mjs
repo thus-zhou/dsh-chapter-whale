@@ -35,9 +35,13 @@ const port = reservation.address().port;
 await new Promise(done => reservation.close(done));
 const workspace = join(isolated, 'workspace');
 await mkdir(workspace);
+const pythonBin = typeof managedPythonPath === 'function'
+  ? managedPythonPath(workspace)
+  : (process.platform === 'win32'
+    ? join(workspace, '.venv', 'Scripts', 'python.exe')
+    : join(workspace, '.venv', 'bin', 'python3'));
 const config = resolveConfig({ rootDir: workspace, port });
-Object.assign(config, { managed: true, configuredRoot: false,
-  python: managedPythonPath(workspace) });
+Object.assign(config, { managed: true, configuredRoot: false, python: pythonBin });
 const realFetch = globalThis.fetch;
 let downloads = 0;
 if (downloadArg && downloadArg !== '-') {
