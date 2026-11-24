@@ -93,6 +93,7 @@ class FreePoolClient:
     def __init__(self,role,config,factory):
         self.role=role;self.config=copy.deepcopy(config);self.factory=factory
         self.model='auto';self.max_retries=1;self.timeout=600;self.last_response_meta={}
+        self.last_finish_reason=None
         self.base_url=config['providers']['free-pool']['base_url']
         self._thinking_disabled = ContextVar('free_pool_thinking_disabled', default=False)
 
@@ -169,8 +170,13 @@ class FreePoolClient:
                     with self._thinking_scope(client):
                         async for chunk in client.chat_stream(messages,temperature=temperature,max_tokens=max_tokens):
                             if str(chunk).startswith('[ERROR]'):raise RuntimeError(str(chunk))
-                            emitted=emitted or bool(chunk);yield chunk
+                            emitted=emitted or bool(str(chunk or '').strip())
+                            yield chunk
+                    if not emitted:
+                        from .failure_info import EmptyModelStream
+                        raise EmptyModelStream('模型流未返回可见正文，尝试其他免费渠道或备选')
                 recovered(project,row['model_id'])
+                self.last_finish_reason=getattr(client,'last_finish_reason',None)
                 self.last_response_meta=getattr(client,'last_response_meta',{});return
             except Exception as exc:
                 info=details(exc)

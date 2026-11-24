@@ -35,7 +35,10 @@ def _job(document: Dict[str, Any], job_id: str) -> Dict[str, Any]:
 def _queue_entry(job: Dict[str, Any], chapter: int):
     """Return (queue file, journal data) for one queued chapter, if any."""
     from fanqie_auto_publish.publication_safety import journal_path, read_json_strict
-    _, _, folder = bridge.find_queue_book(job["book"])
+    try:
+        _, _, folder = bridge.find_queue_book(job["book"])
+    except ValueError:
+        return None, None
     queued = bridge.queued_chapters(folder)
     source = queued.get(chapter)
     if source is None:

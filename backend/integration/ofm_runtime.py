@@ -16,6 +16,7 @@
 ``credential_codec.py`` 必须完成一次当前用户 DPAPI 的加解密往返。失败时 Node 侧凭据仓库
 根本拿不到控制权，旧密文保持原样——Node 的保存路径同样是“先加密成功，才原子落盘”。
 """
+import getpass
 import json
 import hashlib
 import os
@@ -204,7 +205,7 @@ def ensure_started(start=False):
         python,codec=credential_runtime()
         # New independent directory only. Do not touch the user's dsh directory.
         if HOME.resolve()!=HOME.absolute() or HOME.is_symlink():raise ValueError('凭据目录不可为链接')
-        user=os.environ.get('USERNAME')
+        user=os.environ.get('USERNAME') or getpass.getuser()
         result=subprocess.run(['icacls',str(HOME),'/inheritance:r','/grant:r',f'{user}:(OI)(CI)F'],capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
         if result.returncode:raise ValueError('无法限制独立凭据目录权限，尚未启动')
         # Fail before the upstream JsonStore can replace a damaged file.
@@ -222,9 +223,11 @@ def ensure_started(start=False):
         subprocess.Popen([node,str(ROOT/'integration/ofm_service.mjs')],cwd=str(ROOT),env=env,
             stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW)
-        if start:bridge.write_json_atomic(CONTROL,{'enabled':True,'updated_at':bridge.now_iso()})
         for _ in range(25):
-            try:return health()
+            try:
+                ready_info=health()
+                if start:bridge.write_json_atomic(CONTROL,{'enabled':True,'updated_at':bridge.now_iso()})
+                return ready_info
             except (OSError,ValueError,subprocess.SubprocessError):time.sleep(.5)
         raise ValueError('独立渠道服务未就绪，未更改正式模型；请检查运行环境或占用')
 

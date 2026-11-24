@@ -398,6 +398,8 @@ def run(
         if root is not None:
             s.SCHEDULER_PATH, s.RUNS_ROOT = original
         return 2
+    _STOP["requested"] = False
+    _STOP["signal"] = ""
     cycles = 0
     counts = {"claimed": 0, "skipped": 0, "failed": 0, "blocked": 0}
     state = "idle"
@@ -414,15 +416,14 @@ def run(
                 config["status"] if not config["ok"] else volume["status"])
             _safe(write_heartbeat, base, state=state, degraded=degraded)
             if degraded:
-                error = _safe(write_checkpoint, base, {
+                _safe(write_checkpoint, base, {
                     "state": "degraded", "reason": config["reason"] or volume["reason"],
                     "cycles": cycles, **counts, "recovered": recovered})
                 state = "degraded"
                 if once or (max_cycles and cycles + 1 >= max_cycles):
                     return 0
                 cycles += 1
-                if not error:
-                    _wait(max(1.0, float(interval)))
+                _wait(max(1.0, float(interval)), sleep=sleep)
                 continue
             state = "polling"
             try:
@@ -450,7 +451,7 @@ def run(
                 break
             if _STOP["requested"]:
                 break
-            _wait(max(1.0, float(interval)))
+            _wait(max(1.0, float(interval)), sleep=sleep)
         state = "stopped"
         _safe(write_checkpoint, base, {"state": "stopped", "cycles": cycles, **counts,
                                        "signal": _STOP["signal"],
@@ -463,12 +464,12 @@ def run(
             s.SCHEDULER_PATH, s.RUNS_ROOT = original
 
 
-def _wait(seconds: float) -> None:
+def _wait(seconds: float, sleep: Callable[[float], None] = time.sleep) -> None:
     """分片等待：信号到来后最多再等一片，不会被 PEP475 睡满整段。"""
     remaining = max(0.0, float(seconds))
     while remaining > 0 and not _STOP["requested"]:
         step = min(0.2, remaining)
-        time.sleep(step)
+        sleep(step)
         remaining -= step
 
 
@@ -505,7 +506,7 @@ def _recover_pending(base: Path) -> int:
     return fixed
 
 
-BACKUP_TREES = ("works", "integration_data", "logs")
+BACKUP_TREES = ("books", "works", "integration_data", "logs")
 
 
 def _sqlite_files(root: Path) -> Iterable[Path]:

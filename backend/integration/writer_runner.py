@@ -535,13 +535,14 @@ async def _generate_and_review(
         reviews.append(review)
 
     if minimum_words and body_chars(content,chapter_id)<minimum_words:
-        content=await ensure_length(content)
+        content=normalize_title(await ensure_length(content))
         preserve('polished',content)
         review=await executor.execute_review(chapter_id,content)
         reviews.append(review)
     checked=await ensure_counts(content)
     if body_digest(checked)!=body_digest(content):
-        content=checked
+        content=normalize_title(checked)
+        preserve('polished',content)
         review=await executor.execute_review(chapter_id,content)
         reviews.append(review)
     _record_review_attempt(project_root,chapter_id,content,review)

@@ -185,6 +185,7 @@ class ProviderClient:
                         raise EmptyModelStream('模型流未返回可见正文，尝试已配置且预算允许的备选')
                 self._remember(index,client);return
             except Exception as exc:
-                self._failed(index,binding,details(exc))
-                if details(exc).get('failure_kind')=='recovery_cooldown' or index>0 and details(exc).get('failure_kind')=='free_pool_wait':raise
-                if emitted or index==len(self._options())-1 or details(exc).get('retryable') is False:raise
+                detail=details(exc)
+                self._failed(index,binding,detail)
+                if detail.get('failure_kind')=='recovery_cooldown' or index>0 and detail.get('failure_kind')=='free_pool_wait':raise
+                if emitted or index==len(self._options())-1 or not (detail.get('retryable') is True or detail.get('failure_kind') in {'authentication','configuration_or_access'}):raise

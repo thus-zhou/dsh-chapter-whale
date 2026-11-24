@@ -249,5 +249,38 @@ class ScheduledDeliveryTests(unittest.TestCase):
         self.assertEqual(len(adapter.calls), 1)
 
 
+class FreshCyclePreservationTest(unittest.TestCase):
+    def test_scheduled_delivery_preserves_draft_step_fresh_cycle(self):
+        from integration import draft_delivery, scheduler as s_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "integration_data"
+            with patch.dict(os.environ, {"NOVEL_HELPER_DATA": str(data_dir)}):
+                job_data = job(id="daily-fresh", project=tmp)
+                cycle = {}
+                seen = {}
+
+                def fake_draft_step(jid, jdata, cyc, quota, rec, force, **kwargs):
+                    seen["input_cycle"] = dict(cyc)
+                    fresh = {"run_date": "2026-11-22", "slot": rec.get("slot"), "status": "success", "target_ids": [10]}
+                    return {"status": "success", "cycle": fresh, "target_ids": [10]}
+
+                with patch.object(draft_delivery, "step", side_effect=fake_draft_step), \
+                     patch.object(sb, "approved_candidates", return_value=[]), \
+                     patch.object(s_mod, "_update_run"):
+                    result = sd.step(
+                        "daily-fresh",
+                        job_data,
+                        cycle,
+                        {"chapters_per_run": 1, "word_count": 3000},
+                        {"slot": "2026-11-22@08:00"},
+                        False,
+                    )
+                self.assertEqual(seen.get("input_cycle"), {})
+                self.assertEqual(cycle.get("run_date"), "2026-11-22")
+                self.assertEqual(result["cycle"]["run_date"], "2026-11-22")
+
+
 if __name__ == "__main__":
     unittest.main()

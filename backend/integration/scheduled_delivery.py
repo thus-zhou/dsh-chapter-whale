@@ -192,13 +192,18 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
     capability = ps.capability_for(platform, account, book)
     auto_ok, auto_reason = ps.can_auto_schedule(capability)
     store = sb.load_store(job_id)
+
+    # 先把本机写到“已审定未变”；这步不碰平台。
+    # 注意：不得在调用前改写 cycle，否则空新批次会被误判为旧批次残留而丢失 run_date/slot。
+    base = draft_delivery.step(job_id, job, cycle, quota, record, force,
+                               mode="platform_scheduled", verification=SCHEDULED_VERIFICATION)
+    active_cycle = base.get("cycle") if isinstance(base.get("cycle"), dict) else cycle
+    if active_cycle is not cycle and isinstance(active_cycle, dict):
+        cycle.clear()
+        cycle.update(active_cycle)
     # 上一轮可能留下 scheduled_verified；本轮若一条都没确认，状态必须往下走，不能粘住。
     cycle["remote_state"] = "not_attempted"
     cycle["schedule_status"] = ""
-
-    # 先把本机写到“已审定未变”；这步不碰平台。
-    base = draft_delivery.step(job_id, job, cycle, quota, record, force,
-                               mode="platform_scheduled", verification=SCHEDULED_VERIFICATION)
     if base.get("status") == "blocked" and base.get("reason_code") == "model_unavailable":
         return _patch_record(base, {"status": "blocked", "reason": auto_reason or "模型不可用"},
                              "not_attempted")
@@ -210,7 +215,8 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
     # 上一轮对账看到的“平台已占章”要参与本轮去重，否则平台侧已排的章会被再排一次。
     last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), Mapping) else {}
     remote_rows = [row for row in (last.get("rows") or []) if isinstance(row, Mapping)]
-    planned = sb.plan(job, approved=approved, remote=remote_rows, intents=store.get("intents") or [],
+    planned = sb.plan({**job, "job_id": job_id}, approved=approved, remote=remote_rows,
+                      intents=store.get("intents") or [],
                       capability=capability, settings=settings)
     info: Dict[str, Any] = {
         "status": "preview_only", "capability": capability.get("capabilities") or {},

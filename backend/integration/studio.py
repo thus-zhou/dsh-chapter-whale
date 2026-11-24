@@ -314,6 +314,9 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         Executor,get_ai=writer._load_webnovel_services();ai=get_ai();config=roles.load_config()
         if roles.enabled(config):ai=roles.RoleRouter(config,ai)
         executor=Executor(project,ai)
+        if not min_words:
+            from .length_policy import minimum as minimum_length
+            min_words = int(minimum_length(project, chapter) or 0)
         if min_words:
             executor.polish_token_budget=24000
         contract=bridge.creative_contract_hash(project)

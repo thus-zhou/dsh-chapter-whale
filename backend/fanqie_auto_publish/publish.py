@@ -760,14 +760,14 @@ class FanqieDOM:
                     self._click_publish_button_synthetically()
                 except Exception:
                     pass
-            self.page.wait_for_timeout(200)
+            (self.editor or self.page).wait_for_timeout(200)
         if seen["rejection"]:
             self.platform_message = seen["rejection"]
             raise PublicationBlocked("platform_rejected_submission")
         # 公告浮层可能在点击之后才弹出并盖住面板；先清理一次已识别公告，
         # 再给剩余时间。仍不消失则按“结果不明”处理，绝不重复点击提交。
         try:
-            self.dismiss_onboarding(self.page)
+            self.dismiss_onboarding(self.editor or self.page)
             self.publish_button.wait_for(state="hidden", timeout=5000)
         except Exception as exc:
             if seen["rejection"]:
@@ -1036,6 +1036,8 @@ def select_plan(args):
         name = "一二三四五六七八九十"[volume - 1] if volume <= 10 else str(volume)
         destination /= f"第{name}卷"
     archived_ids = {parse_chapter(p)["chapter_id"] for p in (Path(UPLOADED_DIR) / folder.name).rglob("*.txt")}
+    if getattr(args, "plan", None) and getattr(args, "reconcile_only", False):
+        return args.book or folder.name, files, destination, volume
     if archived_ids.intersection(ids[:count]):
         raise PublicationBlocked("chapter_already_archived")
     return args.book or folder.name, files[:count], destination, volume

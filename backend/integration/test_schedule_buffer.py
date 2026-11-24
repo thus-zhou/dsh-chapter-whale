@@ -349,6 +349,28 @@ class BufferPlanTest(unittest.TestCase):
         self.assertEqual(candidates[0]["version_sha256"], SHA[1])
 
 
+    def test_chapters_per_slot_expands_slots_and_distinguishes_capacity_gap(self):
+        planned = sb.plan(
+            _job(),
+            now=_at("2026-11-20T07:00:00"),
+            approved=_approved(4),
+            capability={"capabilities": {**CAP["capabilities"], "max_chapters_per_day": 6}},
+            settings=self.settings(slots=["08:00"], chapters_per_slot=2, target_days=1),
+        )
+        self.assertEqual([entry["planned_at"] for entry in planned["entries"]],
+                         ["2026-11-20T08:00:00+08:00", "2026-11-20T08:00:00+08:00"])
+        self.assertEqual(planned["coverage"]["gap_reason"], "")
+
+        capped = sb.plan(
+            _job(),
+            now=_at("2026-11-20T07:00:00"),
+            approved=_approved(4),
+            capability={"capabilities": {**CAP["capabilities"], "max_scheduled": 2, "max_chapters_per_day": 6}},
+            settings=self.settings(slots=["08:00", "12:00", "18:00"], chapters_per_slot=1, target_days=1),
+        )
+        self.assertEqual(capped["coverage"]["gap_reason"], "达到平台在排总量上限")
+
+
 class ReconcileTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

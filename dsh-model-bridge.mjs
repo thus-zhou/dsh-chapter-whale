@@ -76,8 +76,8 @@ export class DshModelBridge {
       totalMs: positive(options.totalMs, TOTAL_MS),
       heartbeatMs: positive(options.heartbeatMs, HEARTBEAT_MS),
     };
-    /** Live heartbeat handle; null whenever no stream is waiting (tests assert this). */
-    this.heartbeat = null;
+    /** Live heartbeat handles; getter keeps backwards compatibility for single-stream checks. */
+    this.heartbeats = new Set();
     this.server = createServer((req, res) => this.handle(req, res));
     this.ready = new Promise((resolve, reject) => {
       this.server.once('error', reject);
@@ -89,6 +89,10 @@ export class DshModelBridge {
     });
     // Injection can disappear before the first UI request consumes ready.
     this.ready.catch(() => {});
+  }
+
+  get heartbeat() {
+    return this.heartbeats.size ? this.heartbeats.values().next().value : null;
   }
 
   async refresh() {
@@ -197,8 +201,7 @@ export class DshModelBridge {
     let deadline = null;
     let terminal = false;
     const clearTimers = () => {
-      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
-      this.heartbeat = null;
+      if (heartbeat) { clearInterval(heartbeat); this.heartbeats.delete(heartbeat); heartbeat = null; }
       if (firstChunk) { clearTimeout(firstChunk); firstChunk = null; }
       if (deadline) { clearTimeout(deadline); deadline = null; }
     };
@@ -275,7 +278,7 @@ export class DshModelBridge {
         heartbeat = setInterval(() => {
           if (!res.writableEnded && !res.destroyed) res.write(': working\n\n');
         }, limits.heartbeatMs);
-        this.heartbeat = heartbeat;
+        this.heartbeats.add(heartbeat);
         heartbeat.unref?.();
       }
       firstChunk = setTimeout(() => stop('first_chunk_timeout'), limits.firstChunkMs);
@@ -320,7 +323,8 @@ export class DshModelBridge {
       const tool_calls = toolCalls.size ? [...toolCalls.values()] : undefined;
       const diagnostic = { truncated, finish: finish.kind, buffered_chars: buffered };
       if (body.stream) {
-        terminate({ choices: [{ ...choice, delta: { content, reasoning_content: reasoning, tool_calls } }],
+        terminate({ model: body.model,
+          choices: [{ ...choice, delta: { content, reasoning_content: reasoning, tool_calls } }],
           ...(usageFrame ? { usage: usageFrame } : {}), x_chapter_whale: diagnostic });
       } else {
         json(res, 200, { model: body.model,
@@ -328,6 +332,12 @@ export class DshModelBridge {
           ...(usageFrame ? { usage: usageFrame } : {}), x_chapter_whale: diagnostic });
       }
     } catch (error) {
+      if (error?.message === 'request-too-large' && !res.headersSent && !res.destroyed) {
+        return json(res, 413, { error: { message: '请求体超过 8MB 上限', status: 413, code: 'DSH_MODEL_REQUEST_TOO_LARGE' } });
+      }
+      if (error instanceof SyntaxError && !res.headersSent && !res.destroyed) {
+        return json(res, 400, { error: { message: '请求 JSON 格式无效', status: 400, code: 'DSH_MODEL_BAD_REQUEST' } });
+      }
       const reason = stopReason;
       const code = reason === 'first_chunk_timeout' ? 'DSH_MODEL_FIRST_CHUNK_TIMEOUT'
         : reason === 'generation_timeout' ? 'DSH_MODEL_TIMEOUT'

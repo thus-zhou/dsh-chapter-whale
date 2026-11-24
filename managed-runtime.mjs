@@ -153,34 +153,39 @@ export async function downloadRuntime(workspace, manifest) {
   await mkdir(cache, { recursive: true });
   const staging = await mkdtemp(join(cache, 'download-'));
   const archive = join(staging, 'runtime.tgz');
-  const response = await fetch(spec.url, { signal: AbortSignal.timeout(15 * 60 * 1000) });
-  if (!response.ok || !response.body) throw new Error('运行环境下载失败，请检查网络后重试。');
-  const hash = createHash('sha256');
-  let bytes = 0;
-  await pipeline(Readable.fromWeb(response.body), new Transform({ transform(chunk, encoding, done) {
-    bytes += chunk.length;
-    if (bytes > spec.bytes) return done(new Error('下载文件超过发行清单大小'));
-    hash.update(chunk); done(null, chunk);
-  } }), createWriteStream(archive, { flags: 'wx' }));
-  if (bytes !== spec.bytes || hash.digest('hex') !== spec.sha256) throw new Error('运行环境校验失败，未执行下载的文件。请重试安装。');
-  await extractPackage(archive, staging);
-  const payload = join(staging, 'package');
-  const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
-  if (actual.buildId !== (spec.runtimeAssetBuildId ?? manifest.buildId)
-      || !existsSync(join(payload, 'runtime', 'python', 'python.exe'))) {
-    throw new Error('发行包版本不匹配。');
-  }
-  if (spec.runtimeAssetBuildId) {
-    // Older archives may be reused only for the exact same runtime files.
-    // prepareManaged always copies the current backend from PACKAGE_ROOT.
-    const entries = (info) => Object.entries(info.files || {}).filter(([name]) => name.startsWith('runtime/'));
-    const expected = entries(manifest);
-    if (!expected.length || expected.length !== entries(actual).length
-        || expected.some(([name, hash]) => actual.files?.[name] !== hash)) {
-      throw new Error('旧运行环境包与当前运行环境文件清单不一致。');
+  try {
+    const response = await fetch(spec.url, { signal: AbortSignal.timeout(15 * 60 * 1000) });
+    if (!response.ok || !response.body) throw new Error('运行环境下载失败，请检查网络后重试。');
+    const hash = createHash('sha256');
+    let bytes = 0;
+    await pipeline(Readable.fromWeb(response.body), new Transform({ transform(chunk, encoding, done) {
+      bytes += chunk.length;
+      if (bytes > spec.bytes) return done(new Error('下载文件超过发行清单大小'));
+      hash.update(chunk); done(null, chunk);
+    } }), createWriteStream(archive, { flags: 'wx' }));
+    if (bytes !== spec.bytes || hash.digest('hex') !== spec.sha256) throw new Error('运行环境校验失败，未执行下载的文件。请重试安装。');
+    await extractPackage(archive, staging);
+    const payload = join(staging, 'package');
+    const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
+    if (actual.buildId !== (spec.runtimeAssetBuildId ?? manifest.buildId)
+        || !existsSync(join(payload, 'runtime', 'python', 'python.exe'))) {
+      throw new Error('发行包版本不匹配。');
     }
+    if (spec.runtimeAssetBuildId) {
+      // Older archives may be reused only for the exact same runtime files.
+      // prepareManaged always copies the current backend from PACKAGE_ROOT.
+      const entries = (info) => Object.entries(info.files || {}).filter(([name]) => name.startsWith('runtime/'));
+      const expected = entries(manifest);
+      if (!expected.length || expected.length !== entries(actual).length
+          || expected.some(([name, hash]) => actual.files?.[name] !== hash)) {
+        throw new Error('旧运行环境包与当前运行环境文件清单不一致。');
+      }
+    }
+    return payload;
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true }).catch(() => {});
+    throw error;
   }
-  return payload;
 }
 
 // 代码与运行环境是两条独立来源，任何情况下都不得混用：
@@ -211,10 +216,11 @@ export async function resolveRuntimeSource(workspace, manifest) {
   }
   const payload = await downloadRuntime(workspace, manifest);
   if (!existsSync(join(payload, 'runtime', 'browsers'))) {
+    await rm(dirname(payload), { recursive: true, force: true }).catch(() => {});
     throw new Error('下载的运行环境缺少浏览器目录，未安装。');
   }
   const actual = JSON.parse(await readFile(join(payload, 'runtime-manifest.json'), 'utf8'));
-  return { root: payload, kind: 'downloaded', buildId: actual.buildId };
+  return { root: payload, kind: 'downloaded', buildId: actual.buildId, stagingDir: dirname(payload) };
 }
 
 function withinRoot(rootDir, target) {
@@ -252,6 +258,53 @@ export async function removeStaleCode(rootDir, previousFiles, nextFiles) {
   return removed;
 }
 
+const STALE_LOCK_MS = 60_000;
+
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== 'ESRCH';
+  }
+}
+
+async function isStaleInstallLock(lockDir) {
+  try {
+    const owner = JSON.parse(await readFile(join(lockDir, 'owner.json'), 'utf8'));
+    if (Number.isInteger(owner?.pid)) return !isPidAlive(owner.pid);
+  } catch {
+    /* legacy or incomplete lock without owner.json */
+  }
+  try {
+    const info = await stat(lockDir);
+    return (Date.now() - info.mtimeMs) > STALE_LOCK_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function acquireInstallLock(lockDir) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await mkdir(lockDir);
+      await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, startedAt: Date.now() })).catch(() => {});
+      return;
+    } catch (error) {
+      if (error?.code === 'EEXIST' && attempt === 0 && await isStaleInstallLock(lockDir)) {
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {});
+        continue;
+      }
+      throw new Error('另一个码章鲸实例正在准备环境，请稍后重试。');
+    }
+  }
+}
+
+async function releaseInstallLock(lockDir) {
+  await rm(lockDir, { recursive: true, force: true }).catch(() => {});
+}
+
 async function prepareDarwinManaged(config, manifest, codeRoot, codeFiles) {
   if (process.arch !== 'arm64' && process.arch !== 'x64') {
     throw new Error('码章鲸当前支持 Apple Silicon (arm64) 与 Intel (x86_64) macOS。');
@@ -279,7 +332,7 @@ async function prepareDarwinManaged(config, manifest, codeRoot, codeFiles) {
     return;
   }
   const lock = join(config.rootDir, '.install-lock');
-  try { await mkdir(lock); } catch { throw new Error('另一个码章鲸实例正在准备环境，请稍后重试。'); }
+  await acquireInstallLock(lock);
   try {
     for (const name of CODE_TREES) {
       const source = join(codeRoot, 'backend', name);
@@ -328,10 +381,7 @@ async function prepareDarwinManaged(config, manifest, codeRoot, codeFiles) {
     }));
     config.entryExists = (await stat(config.entry)).isFile();
   } finally {
-    await rm(lock, { recursive: false }).catch(async () => {
-      const { rmdir } = await import('node:fs/promises');
-      await rmdir(lock);
-    });
+    await releaseInstallLock(lock);
   }
 }
 
@@ -362,8 +412,9 @@ export async function prepareManaged(config) {
     const bundled = existsSync(join(PACKAGE_ROOT, 'runtime', 'python', 'python.exe'))
       && existsSync(join(PACKAGE_ROOT, 'runtime', 'browsers'));
     const runtimeSpec = bundled ? null : JSON.parse(await readFile(join(PACKAGE_ROOT, 'runtime-download.json'), 'utf8'));
+    const expectedRuntimeBuildId = runtimeSpec?.runtimeAssetBuildId ?? manifest.buildId;
     const sameCandidate = installed?.buildId === manifest.buildId
-      && (installed?.runtimeBuildId ?? installed?.buildId) === (runtimeSpec?.runtimeAssetBuildId ?? manifest.buildId);
+      && (installed?.runtimeBuildId ?? installed?.buildId) === expectedRuntimeBuildId;
     if (sameCandidate && existsSync(config.python) && existsSync(config.entry)) {
       const spot = await verifyInstalled(config.rootDir, manifest, ['manager', 'integration']);
       if (spot.missing.length || spot.mismatched.length) {
@@ -374,9 +425,17 @@ export async function prepareManaged(config) {
       return;
     }
     const lock = join(config.rootDir, '.install-lock');
-    try { await mkdir(lock); } catch { throw new Error('另一个码章鲸实例正在准备环境，请稍后重试。'); }
+    await acquireInstallLock(lock);
+    let runtimeStagingDir = null;
     try {
-      const runtime = await resolveRuntimeSource(config.rootDir, manifest);
+      const reuseExistingRuntime = !bundled
+        && (installed?.runtimeBuildId ?? installed?.buildId) === expectedRuntimeBuildId
+        && existsSync(config.python)
+        && existsSync(join(config.rootDir, 'playwright-browsers'));
+      const runtime = reuseExistingRuntime
+        ? { root: config.rootDir, kind: installed?.runtimeKind || 'downloaded', buildId: expectedRuntimeBuildId, reused: true }
+        : await resolveRuntimeSource(config.rootDir, manifest);
+      runtimeStagingDir = runtime.stagingDir || null;
       // Only code/runtime trees are replaced. Books, accounts and ledgers are never copied from a developer machine.
       for (const name of CODE_TREES) {
         const source = join(codeRoot, 'backend', name);
@@ -386,12 +445,14 @@ export async function prepareManaged(config) {
         await cp(source, destination, { recursive: true, force: true, dereference: false });
       }
       await removeStaleCode(config.rootDir, installed?.codeFiles || installed?.files, codeFiles);
-      await cp(join(runtime.root, 'runtime', 'python'), join(config.rootDir, '.venv', 'Scripts'), { recursive: true });
+      if (!runtime.reused) {
+        await cp(join(runtime.root, 'runtime', 'python'), join(config.rootDir, '.venv', 'Scripts'), { recursive: true });
+        await cp(join(runtime.root, 'runtime', 'browsers'), join(config.rootDir, 'playwright-browsers'), { recursive: true });
+      }
       // Absolute workspace path avoids embeddable Python's parent-path handling;
       // omitting import site prevents loading user-global site-packages.
       await writeFile(join(config.rootDir, '.venv', 'Scripts', 'python313._pth'),
         `python313.zip\n.\nLib/site-packages\n${config.rootDir}\n`);
-      await cp(join(runtime.root, 'runtime', 'browsers'), join(config.rootDir, 'playwright-browsers'), { recursive: true });
       await mkdir(join(config.rootDir, 'integration_data'), { recursive: true });
       const verification = await verifyInstalled(config.rootDir, manifest, CODE_TREES);
       if (verification.missing.length || verification.mismatched.length) {
@@ -404,11 +465,10 @@ export async function prepareManaged(config) {
       }));
       config.entryExists = (await stat(config.entry)).isFile();
     } finally {
-      await rm(lock, { recursive: false }).catch(async () => {
-        // fs.rm intentionally refuses nonempty lock directories.
-        const { rmdir } = await import('node:fs/promises');
-        await rmdir(lock);
-      });
+      if (runtimeStagingDir) {
+        await rm(runtimeStagingDir, { recursive: true, force: true }).catch(() => {});
+      }
+      await releaseInstallLock(lock);
     }
   })();
   try { return await preparing; } finally { preparing = null; }
@@ -416,7 +476,11 @@ export async function prepareManaged(config) {
 
 export function managedEnvironment(config) {
   const env = { ...process.env, PYTHONUTF8: '1', PYTHONUNBUFFERED: '1' };
-  if (!config.managed) return env;
+  if (!config.managed) {
+    if (config.rootDir) env.NOVEL_HELPER_ROOT = config.rootDir;
+    env.CHAPTER_WHALE_SERVICE_MODE = 'dsh_managed';
+    return env;
+  }
   for (const name of Object.keys(env)) {
     if (name.startsWith('NOVEL_HELPER_') || ['AI_API_KEY', 'AI_MODEL', 'AI_BASE_URL', 'PYTHONPATH', 'PYTHONHOME'].includes(name)) delete env[name];
   }

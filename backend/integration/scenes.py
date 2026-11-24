@@ -64,7 +64,12 @@ def _split_outline(outline, count):
     if len(parts) <= count:
         return (parts + [""] * count)[:count]
     size = max(1, len(parts) // count)
-    return ["".join(parts[i * size:(i + 1) * size])[:400] for i in range(count)]
+    chunks = []
+    for index in range(count):
+        start = index * size
+        end = len(parts) if index == count - 1 else (index + 1) * size
+        chunks.append("".join(parts[start:end])[:400])
+    return chunks
 
 
 def _card(index, purpose, target, *, characters=None, facts=None, calm=False, must_follow=""):
@@ -134,12 +139,21 @@ def store(project, chapter, planned):
 
 def load(project, chapter):
     folder = _folder(project)
-    files = sorted(folder.glob(f"{int(chapter):04d}-*.json"))
-    if not files:
+    prefix = f"{int(chapter):04d}-"
+    current_hash = plan_hash(project)
+    preferred = folder / f"{prefix}{current_hash[:16]}.json"
+    candidates = [
+        path for path in folder.glob(f"{prefix}*.json")
+        if re.fullmatch(rf"{int(chapter):04d}-[0-9a-f]{{16}}\.json", path.name)
+    ]
+    chosen = preferred if preferred.is_file() else (
+        max(candidates, key=lambda path: (path.stat().st_mtime_ns, path.name)) if candidates else None
+    )
+    if chosen is None:
         return None
-    payload = json.loads(files[-1].read_text(encoding="utf-8"))
-    payload["stale"] = payload.get("plan_hash") != plan_hash(project)
-    payload["path"] = str(files[-1])
+    payload = json.loads(chosen.read_text(encoding="utf-8"))
+    payload["stale"] = payload.get("plan_hash") != current_hash
+    payload["path"] = str(chosen)
     return payload
 
 

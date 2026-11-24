@@ -91,6 +91,8 @@ def load_store(job_id: str, path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 def save_store(job_id: str, store: Mapping[str, Any], path: Optional[Path] = None) -> Path:
+    import uuid
+    from fanqie_auto_publish.publication_safety import replace_with_retry
     target = Path(path) if path else store_path(job_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(store or {})
@@ -98,9 +100,12 @@ def save_store(job_id: str, store: Mapping[str, Any], path: Optional[Path] = Non
     payload["schema"] = SCHEMA_VERSION
     payload["updated_at"] = _now_iso()
     payload["revision"] = int(payload.get("revision") or 0) + 1
-    temp = target.with_suffix(target.suffix + ".tmp")
-    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(target)
+    temp = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        replace_with_retry(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
     return target
 
 
@@ -260,7 +265,8 @@ def plan(job: Mapping[str, Any], *, now: Optional[datetime] = None, approved: It
     max_scheduled = caps.get("max_scheduled")
     daily_limit = caps.get("max_chapters_per_day")
 
-    store_intents = list(intents if intents is not None else load_store(str(job.get("job_id") or "")).get("intents") or [])
+    resolved_job_id = str(job.get("job_id") or job.get("id") or "")
+    store_intents = list(intents if intents is not None else load_store(resolved_job_id).get("intents") or [])
     occupied = _intent_chapters(store_intents)
     # 在排总量要算上“已核验但还没发布”的章：它们同样占着平台档位；
     # 但本地 planned 还没交出去，不算平台占用。
@@ -314,7 +320,7 @@ def plan(job: Mapping[str, Any], *, now: Optional[datetime] = None, approved: It
 
     slots = _slot_times(job, settings)
     result: Dict[str, Any] = {
-        "job_id": str(job.get("job_id") or ""),
+        "job_id": resolved_job_id,
         "platform": platform,
         "account": account,
         "book_id": book,
@@ -349,7 +355,8 @@ def plan(job: Mapping[str, Any], *, now: Optional[datetime] = None, approved: It
 
     # 候选时刻：从 now + lead 之后的第一个未来时段起，按“有效天数”计数，
     # 不按日历日计数——23:30 时明早 08:00 必须仍然算在目标天数里。
-    per_day = max(1, int(settings["chapters_per_slot"])) * len(slots)
+    chapters_per_slot = max(1, int(settings["chapters_per_slot"]))
+    per_day = chapters_per_slot * len(slots)
     if isinstance(daily_limit, int) and not isinstance(daily_limit, bool):
         per_day = min(per_day, max(0, daily_limit))
     horizon_days = int(settings["target_days"])
@@ -358,11 +365,18 @@ def plan(job: Mapping[str, Any], *, now: Optional[datetime] = None, approved: It
     cursor_date: date = start.date()
     scanned = 0
     while scanned < horizon_days + 2 and len({m.date() for m in moments}) < horizon_days:
+        day_added = 0
         for label in slots:
+            if day_added >= per_day:
+                break
             hour, minute = (int(part) for part in label.split(":")[:2])
             moment = datetime.combine(cursor_date, time(hour, minute), tzinfo=start.tzinfo)
             if moment >= start:
-                moments.append(moment)
+                for _ in range(chapters_per_slot):
+                    if day_added >= per_day:
+                        break
+                    moments.append(moment)
+                    day_added += 1
         cursor_date += timedelta(days=1)
         scanned += 1
     # 只保留“有效天数”窗口：把已过去的时段剔除后再截取天数。
@@ -395,22 +409,21 @@ def plan(job: Mapping[str, Any], *, now: Optional[datetime] = None, approved: It
             "planned_at": planned_at,
             "planned_at_utc": moment.astimezone(timezone.utc).isoformat(timespec="seconds"),
             "slot": key,
-            "key": ps.schedule_intent_key(job.get("job_id") or "", platform, account, book,
+            "key": ps.schedule_intent_key(resolved_job_id, platform, account, book,
                                           item["chapter_id"], item["version_sha256"]),
         })
         day_counts[key] = day_counts.get(key, 0) + 1
 
     gap_at = ""
     gap_reason = ""
-    if selected:
-        consumed = len(entries)
-        gap_at = moments[consumed].isoformat(timespec="seconds") if consumed < len(moments) else \
-            (moments[-1] + timedelta(days=1)).isoformat(timespec="seconds") if moments else ""
-        gap_reason = f"已审定稿件不足：还差 {len(selected)} 章才能填满目标缓冲 {horizon_days} 天"
-    elif remaining_capacity is not None and len(entries) >= remaining_capacity:
+    if remaining_capacity is not None and len(entries) >= remaining_capacity and (selected or len(entries) < len(moments)):
         gap_reason = "达到平台在排总量上限"
         gap_at = (moments[len(entries)].isoformat(timespec="seconds")
                   if len(entries) < len(moments) else "")
+    elif selected:
+        if len(entries) < len(moments):
+            gap_at = moments[len(entries)].isoformat(timespec="seconds")
+            gap_reason = "达到平台每日排期上限"
     elif len(entries) < len(moments):
         # 稿件已排完但目标缓冲仍未填满：缺口从下一个空档开始，不能装作已覆盖。
         gap_at = moments[len(entries)].isoformat(timespec="seconds")

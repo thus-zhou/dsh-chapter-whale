@@ -3,8 +3,10 @@ import copy
 from integration import providers, model_roles, bridge, writer_runner
 
 
-def install(app, load, config_path):
+def install(app, load, config_path, *, costs_db=None):
+    from fastapi import HTTPException
     from manager import role_checks
+    cost_db_path = costs_db or (config_path.parent / 'costs.sqlite3')
     role_checks.install(app,load,config_path)
     def write_config(doc):
         bridge.write_json_atomic(config_path, doc)
@@ -68,15 +70,25 @@ def install(app, load, config_path):
         providers.resolve(doc,binding)
         probe=copy.deepcopy(doc);probe.update(multi_model=False,default_binding=binding)
         client=model_roles.service('E',probe);client.timeout=90
-        with costs.scope(stage='probe'):
-            text=await asyncio.wait_for(client.chat([{'role':'user','content':'仅回复：连接成功'}],max_tokens=1024),timeout=120)
-        return {'status':'ok','provider_id':identity,'model_id':binding['model_id'],'content_received':bool(text.strip())}
+        try:
+            with costs.scope(stage='probe'):
+                text=await asyncio.wait_for(client.chat([{'role':'user','content':'仅回复：连接成功'}],max_tokens=1024),timeout=120)
+        except TimeoutError as exc:
+            raise HTTPException(504, '模型探测超时，请检查接口连通性或稍后重试') from exc
+        except (ValueError, KeyError, RuntimeError):
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f'模型连接测试失败：{str(exc)[:300] or type(exc).__name__}') from exc
+        received = bool(isinstance(text, str) and text.strip())
+        if not received:
+            raise HTTPException(502, '模型未返回有效文本，请检查模型配置或额度')
+        return {'status':'ok','provider_id':identity,'model_id':binding['model_id'],'content_received':True}
     @app.post('/api/ai/providers/{identity}/reprice')
     def reprice(identity:str):
         from integration import costs
         item=load().get('providers',{}).get(identity)
         if not item:raise KeyError('供应商不存在')
-        return {'recalculated':costs.reprice_provider(config_path.parent/'costs.sqlite3',item)}
+        return {'recalculated':costs.reprice_provider(cost_db_path,item)}
     @app.put('/api/ai/bindings')
     def bindings(payload:dict):
         if set(payload)-{'default_binding','roles','multi_model','polish_mode','review_policy'}:raise ValueError('模型绑定包含未知字段')
@@ -117,7 +129,7 @@ def install(app, load, config_path):
 
     @app.get('/api/ai/free-channels')
     def free_listing():
-        return free_channels.snapshot(load(),config_path.parent/'costs.sqlite3')
+        return free_channels.snapshot(load(),cost_db_path)
 
     @app.post('/api/ai/free-channels/scan')
     def free_scan(payload:dict):

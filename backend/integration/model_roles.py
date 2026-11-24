@@ -247,12 +247,17 @@ async def json_call(role,prompt,config=None,max_tokens=6000,timeout=120,response
                 continue
             from .failure_info import InvalidStructuredOutput
             raise InvalidStructuredOutput(f"模型 {role} 返回的内容不是完整有效的 JSON，一次格式纠偏后仍无效，原有文件未被覆盖") from exc
+        except costs.BudgetExceeded:
+            raise
         except ValueError as exc:
             if str(exc).startswith(f'模型 {role} 达到输出 Token 上限'):
                 raise
             raise ValueError(f"模型 {role} 未返回有效结果，原有文件未被覆盖") from exc
+        except TimeoutError as exc:
+            raise ValueError(f"模型 {role} 请求超时，原有文件未被覆盖") from exc
         except Exception as exc:
-            raise ValueError(f"模型 {role} 未返回有效结果或请求超时，原有文件未被覆盖") from exc
+            suffix = "或请求超时" if ("timeout" in str(exc).lower() or "超时" in str(exc)) else ""
+            raise ValueError(f"模型 {role} 未返回有效结果{suffix}，原有文件未被覆盖") from exc
     raise ValueError(f"模型 {role} 达到输出 Token 上限（{requested_budget}），结构化结果被截断；原有文件未被覆盖")
 
 

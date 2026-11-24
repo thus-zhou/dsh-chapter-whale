@@ -439,3 +439,39 @@ test('P04 宿主报错（已发头）：只发一个失败终态，不含半章'
   assert.doesNotMatch(text, /不该出现的半章|secret-token/);
   assert.equal(frames(text).filter((f) => f === 'data: [DONE]').length, 1);
 });
+
+test('P04 并发心跳与非法 JSON 校验：双流共存不互相清零，坏 JSON 返回 400', async (t) => {
+  let concurrent = 0;
+  let maxConcurrent = 0;
+  let sawMultipleHeartbeats = false;
+  const { bridge, post } = await bridgeFixture(t, {
+    limits: { heartbeatMs: 15 },
+    async *stream() {
+      concurrent += 1;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      await delay(50);
+      if (bridge.heartbeats.size >= 2 && bridge.heartbeat !== null) {
+        sawMultipleHeartbeats = true;
+      }
+      concurrent -= 1;
+      yield { type: 'text-delta', text: 'ok' };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    },
+  });
+  const [r1, r2] = await Promise.all([post({ stream: true }), post({ stream: true })]);
+  await Promise.all([r1.text(), r2.text()]);
+  assert.equal(maxConcurrent, 2);
+  assert.equal(sawMultipleHeartbeats, true, '并发流应各自持有独立心跳定时器');
+  assert.equal(bridge.heartbeats.size, 0);
+  assert.equal(bridge.heartbeat, null);
+
+  const badJson = await fetch(`${bridge.url}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${bridge.token}`,
+      'content-type': 'application/json',
+    },
+    body: '{bad-json',
+  });
+  assert.equal(badJson.status, 400);
+});

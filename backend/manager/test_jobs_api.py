@@ -207,5 +207,24 @@ class JobsApiTests(unittest.TestCase):
             self.assertIn(traversal.status_code, {400, 404}, traversal.text)
 
 
+    def test_get_jobs_list_and_memory_input_accepts_empty_clue_state_and_superseded(self):
+        from manager import app as app_module
+
+        res = self.client.get("/api/jobs", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.json(), list)
+
+        model = app_module.MemoryItemInput(
+            revision=0,
+            category="fact",
+            title="主线设定",
+            content="第一卷地点是青港",
+            clue_state="",
+            status="superseded",
+        )
+        self.assertEqual(model.clue_state, "")
+        self.assertEqual(model.status, "superseded")
+
+
 if __name__ == "__main__":
     unittest.main()

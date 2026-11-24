@@ -397,3 +397,20 @@ test('P01 macOS 首装隔离 venv、清理旧代码且保留作者数据', { ski
     await rm(workspace, { recursive: true, force: true });
   }
 });
+
+test('P0 回归：死进程遗留的 .install-lock 被自动回收，环境正常完成准备', { skip: process.platform !== 'win32' }, async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const pkg = await makePackage();
+  const mod = await loadModule(pkg.root);
+  const workspace = await freshDir('ws-stale-lock');
+  await mkdir(join(workspace, '.install-lock'), { recursive: true });
+  await writeFile(
+    join(workspace, '.install-lock', 'owner.json'),
+    JSON.stringify({ pid: 99999999, createdAt: 1 }),
+  );
+  await mod.prepareManaged(configFor(workspace));
+  assert.ok(!existsSync(join(workspace, '.install-lock')));
+  assert.ok(existsSync(join(workspace, 'manager', 'app.py')));
+  await rm(pkg.root, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true });
+});

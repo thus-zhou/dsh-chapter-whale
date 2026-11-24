@@ -115,7 +115,9 @@ def discover(base_url, key, saved, registered=False):
         headers["Authorization"] = "Bearer " + secret
     try:
         deadline = time.monotonic() + 20
-        with httpx.Client(timeout=15, follow_redirects=False, trust_env=True) as client:
+        host = (urlsplit(base_url).hostname or "").lower()
+        is_loopback = host in {"127.0.0.1", "localhost", "::1"}
+        with httpx.Client(timeout=15, follow_redirects=False, trust_env=not is_loopback) as client:
             with client.stream("GET", endpoint, headers=headers) as response:
                 status = response.status_code
                 if status != 200:

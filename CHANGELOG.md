@@ -1,3 +1,10 @@
+## [0.7.3] · 2026-11-25
+
+- **宿主桥与生命周期可靠性**：修复 Windows `.venv\Scripts\python.exe` 启动包装器与子解释器 PID 不一致导致的 `POST /novel-helper/api/_stop` 误报 `409` 与孤儿进程残留（新增 `ownsService` 与进程树终止）；放行 `/novel-helper/api/_stop` 路由；同工作区过期 `run-description.json` 自动刷新避免重启卡死；修复 `.install-lock` 死进程锁回收、`tokenMatches` 多字节 UTF-8 比较以及 `DshModelBridge` 并发心跳与错误码映射。
+- **后端管理服务与写作排期引擎**：补全 `GET /api/jobs` 接口、清理重复角色测试路由、修复单模型 `provider_schema=1` 存稿阻断、`scheduler` 对 `continuing` 周期的同时段/跨时段恢复、`schedule_buffer` 多章时段展开与容量缺口判定、`scheduled_delivery` 周期保留、回环接口跳过系统代理、`publish.py` `select_plan` 参数兼容及常驻服务退化空转修复。
+- **前端工作台（DSH 原生 + 独立 Web 界面）**：修复 `client.js` GET 请求带 body、`useService` 轮询覆盖状态、记忆编辑 422、角色测试未校验 `result.status` 及章节/任务页交互状态，并统一独立 Web 界面错误解包、`max_revisions` 上限（0–3）与总览事件同步。
+- **跨平台运行时策略**：Windows 轻量包复用经过完整性校验的 `v0.7.0` Python 与浏览器运行时，始终安装 `0.7.3` 包内后端代码（`buildId=5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46`）；macOS 首启继续创建隔离 `.venv`。
+
 ## [0.7.2] · 2026-11-24
 
 - 修复新建和切换作品时串用旧书大纲、前提、章节或界面草稿的问题。大纲读取和更新均按作品与版本校验。

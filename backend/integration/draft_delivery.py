@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -30,8 +31,22 @@ def _require_model() -> Optional[str]:
         config = model_roles.load_config()
     except Exception:
         return "模型配置无法读取；请先在侧栏重新选择模型或填入接口后重试。"
+    ready = False
     try:
-        ready = bool(model_roles.enabled(config))
+        if model_roles.enabled(config):
+            ready = True
+        elif isinstance(config, dict) and config.get("provider_schema") == 1:
+            conn = model_roles.connection("B", config)
+            model_id = str(conn.get("model") or "").strip()
+            has_auth = bool(
+                str(conn.get("api_key") or "").strip()
+                or conn.get("protocol") in {"free_pool", "ofm_standalone"}
+            )
+            ready = bool(model_id and has_auth)
+        elif isinstance(config, dict):
+            key = str(config.get("api_key") or os.getenv("AI_API_KEY", "")).strip()
+            model_id = str(config.get("model") or os.getenv("AI_MODEL", "")).strip()
+            ready = bool(key and "your-" not in key and "here" not in key and model_id)
     except Exception:
         ready = False
     if not ready:

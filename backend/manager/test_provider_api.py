@@ -45,3 +45,33 @@ class ProviderApiTests(unittest.TestCase):
         response=self.client.put('/api/ai/providers/'+doc['default_binding']['provider_id'],headers=self.headers,json={'pricing':{'same':{'input':'-1','output':'2'}}})
         self.assertEqual(response.status_code,400,response.text)
         self.assertEqual(path.read_bytes(),original)
+
+    def test_provider_probe_handles_timeout_and_empty_without_500(self):
+        from unittest.mock import patch
+        from integration import model_roles
+
+        self.initialize()
+        created = self.client.post(
+            '/api/ai/providers',
+            headers=self.headers,
+            json={'name': 'probe-p', 'base_url': 'https://probe.invalid/v1', 'api_key': 'KEY-PROBE'},
+        ).json()
+        pid = created['id']
+
+        class _TimeoutClient:
+            timeout = 30
+            async def chat(self, *args, **kwargs):
+                raise TimeoutError('timed out')
+
+        class _EmptyClient:
+            timeout = 30
+            async def chat(self, *args, **kwargs):
+                return ''
+
+        with patch.object(model_roles, 'service', return_value=_TimeoutClient()):
+            res_timeout = self.client.post(f'/api/ai/providers/{pid}/test', headers=self.headers, json={'model_id': 'm1'})
+        self.assertEqual(res_timeout.status_code, 504)
+
+        with patch.object(model_roles, 'service', return_value=_EmptyClient()):
+            res_empty = self.client.post(f'/api/ai/providers/{pid}/test', headers=self.headers, json={'model_id': 'm1'})
+        self.assertEqual(res_empty.status_code, 502)

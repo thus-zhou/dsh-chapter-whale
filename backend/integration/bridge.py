@@ -551,13 +551,14 @@ def stage_project(
 
 
 def _write_text_atomic(path: Path, content: str):
+    from fanqie_auto_publish.publication_safety import replace_with_retry
     temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     try:
         with temporary.open("x", encoding="utf-8", newline="\n") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        temporary.replace(path)
+        replace_with_retry(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -670,7 +671,7 @@ def find_queue_book(book: str) -> Tuple[int, str, Path]:
     wanted = book.strip()
     safe_wanted = safe_dir_name(wanted)
     for index, (name, path) in enumerate(candidates, 1):
-        if wanted == name or wanted == safe_wanted:
+        if wanted == name or safe_wanted == name:
             return index, name, path
         record = load_manifest().get("books", {}).get(name, {})
         if isinstance(record, dict) and wanted == str(record.get("display_name", "")):
@@ -959,7 +960,8 @@ def run_publish(
             child.update(requested_book=book, account=identity, subprocess_exit_code=int(completed.returncode),executor_stage=gate,invocation_id=invocation_id)
             if [item.get("chapter_id") for item in child.get("chapters", [])] != [item["chapter_id"] for item in plan["chapters"]]:
                 child["exit_code"] = 2
-                child["reason"] = "publisher_plan_report_mismatch"
+                if completed.returncode == 0 or not child.get("reason"):
+                    child["reason"] = "publisher_plan_report_mismatch"
             if completed.returncode != 0:
                 child["exit_code"] = 2
             atomic_json(report_path, child)

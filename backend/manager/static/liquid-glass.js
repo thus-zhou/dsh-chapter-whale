@@ -938,6 +938,14 @@
     mountQueueExtensions();
     syncDockState();
     refreshOverviewCache();
+    window.addEventListener("chapter-whale:overview", (e) => {
+      if (e && e.detail) {
+        lastOverview = e.detail;
+        syncDockState();
+        if (currentRoute() === "insights") loadInsightsData();
+        if (currentRoute() === "queue") loadQueueExtensions();
+      }
+    });
     window.addEventListener("hashchange", () => {
       syncDockState();
       if (currentRoute() === "queue") loadQueueExtensions();

@@ -132,3 +132,98 @@ test('_stop 绝不动别人起的 manager：返回 409 且进程仍在', async (
     await manager.close();
   }
 });
+
+test('P0 回归：/novel-helper/api/_stop 路由放行，多字节 UTF-8 令牌不抛 RangeError，陈旧 run-description 自动刷新', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { writeRunDescription, SERVICE_NAME } = await import('../managed-runtime.mjs');
+  const workspace = mkdtempSync(join(tmpdir(), 'cw-stop-reg-'));
+  let port = 0;
+  const fakePortServer = createServer((req, res) => {
+    if (req.url === '/api/health') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        service: SERVICE_NAME,
+        root: workspace,
+        port,
+        startup_id: 'startup-new-2',
+        pid: process.pid,
+      }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  });
+  await new Promise((resolve) => fakePortServer.listen(0, '127.0.0.1', resolve));
+  port = fakePortServer.address().port;
+
+  // Write stale startup_id for the same workspace rootDir + port
+  writeRunDescription({ rootDir: workspace, port }, {
+    root: workspace,
+    port,
+    startup_id: 'startup-old-1',
+    pid: 99999999,
+  });
+
+  const config = resolveConfig({ rootDir: workspace, port, managed: false });
+  const handle = createHandler(config, TOKEN);
+  const hostServer = createServer(handle);
+  await new Promise((resolve) => hostServer.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${hostServer.address().port}`;
+  const base = `${origin}/novel-helper/api`;
+
+  try {
+    // Multi-byte UTF-8 token with same char length as TOKEN must return 401 cleanly (no RangeError)
+    const badStatus = await new Promise((resolve, reject) => {
+      const res = {
+        statusCode: 0,
+        setHeader() {},
+        writeHead(status) { res.statusCode = status; },
+        end() { resolve(res.statusCode); },
+      };
+      Promise.resolve(handle({
+        method: 'GET',
+        url: '/novel-helper/api/_service',
+        headers: {
+          host: '127.0.0.1',
+          'x-novel-helper-token': '中'.repeat(TOKEN.length),
+        },
+        socket: { remoteAddress: '127.0.0.1' },
+      }, res)).catch(reject);
+    });
+    assert.equal(badStatus, 401);
+
+    // Stale startup_id matching same normalized root recovers via /_service and refreshes run-description.json
+    const svcRes = await fetch(`${base}/_service`, {
+      method: 'GET',
+      headers: { 'x-novel-helper-token': TOKEN },
+    });
+    assert.equal(svcRes.status, 200);
+    const svcData = await svcRes.json();
+    assert.equal(svcData.running, true);
+    assert.ok(!svcData.foreign);
+    const refreshed = JSON.parse(readFileSync(join(workspace, 'integration_data', 'run-description.json'), 'utf8'));
+    assert.equal(refreshed.startup_id, 'startup-new-2');
+
+    // Close fakePortServer first so _stop sees an idle managed endpoint and returns 200 (not 403 route rejection)
+    fakePortServer.closeAllConnections?.();
+    await new Promise((resolve) => fakePortServer.close(() => resolve()));
+
+    const stopRes = await fetch(`${base}/_stop`, {
+      method: 'POST',
+      headers: {
+        'x-novel-helper-token': TOKEN,
+        origin,
+      },
+    });
+    assert.equal(stopRes.status, 200);
+  } finally {
+    hostServer.closeAllConnections?.();
+    fakePortServer.closeAllConnections?.();
+    await new Promise((resolve) => hostServer.close(() => resolve()));
+    if (fakePortServer.listening) {
+      await new Promise((resolve) => fakePortServer.close(() => resolve()));
+    }
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});

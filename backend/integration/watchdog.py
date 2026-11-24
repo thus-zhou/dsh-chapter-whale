@@ -18,7 +18,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
 
 from . import bridge, run_description, writer_runner
 from .serial_service import ensure_started, LOCK as SERIAL_LOCK, STATE as SERIAL_STATE
@@ -54,7 +54,8 @@ def service_port(root=None, description=None):
 def manager_health(port):
     """读取健康响应；连接失败返回 None，错误服务返回其响应体。"""
     try:
-        with urlopen(f"http://127.0.0.1:{port}/api/health", timeout=HEALTH_TIMEOUT) as response:
+        opener = build_opener(ProxyHandler({}))
+        with opener.open(f"http://127.0.0.1:{port}/api/health", timeout=HEALTH_TIMEOUT) as response:
             return json.load(response)
     except (OSError, ValueError):
         return None
@@ -103,9 +104,13 @@ def start_manager(root, port, python=""):
     out = open(log_dir / f"{stamp}.manager.out.log", "ab")
     err = open(log_dir / f"{stamp}.manager.err.log", "ab")
     try:
+        env = dict(os.environ)
+        env["NOVEL_HELPER_ROOT"] = str(Path(root).resolve())
+        env["PYTHONUTF8"] = "1"
+        env["CHAPTER_WHALE_SERVICE_MODE"] = "standalone"
         child = subprocess.Popen(
             [python, "-X", "utf8", "-u", str(MANAGER_ENTRY), "--port", str(port)],
-            cwd=str(root), stdout=out, stderr=err, stdin=subprocess.DEVNULL,
+            cwd=str(root), env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     finally:

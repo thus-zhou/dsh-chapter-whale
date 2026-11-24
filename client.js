@@ -1850,9 +1850,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             cache: 'no-store',
             credentials: 'same-origin',
           };
-          if (options && options.form !== undefined) {
+          const hasBody = String(init.method || 'GET').toUpperCase() !== 'GET' && String(init.method || 'GET').toUpperCase() !== 'HEAD';
+          if (hasBody && options && options.form !== undefined) {
             init.body = options.form;
-          } else if (options && options.body !== undefined) {
+          } else if (hasBody && options && options.body !== undefined) {
             init.headers['content-type'] = 'application/json';
             init.body = JSON.stringify(options.body);
           }
@@ -1938,11 +1939,21 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const refresh = React.useCallback(async () => {
             try {
               const data = await api('/_service');
-              if (mounted.current) setState({ loading: false, ...data });
+              if (mounted.current) {
+                setState((current) =>
+                  current.starting || current.stopping
+                    ? { ...current, ...data, loading: false }
+                    : { loading: false, ...data },
+                );
+              }
               return data;
             } catch (error) {
               if (mounted.current) {
-                setState({ loading: false, running: false, error: String(error.message || error) });
+                setState((current) =>
+                  current.starting || current.stopping
+                    ? { ...current, loading: false, error: String(error.message || error) }
+                    : { loading: false, running: false, error: String(error.message || error) },
+                );
               }
               return null;
             }
@@ -2835,8 +2846,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               )
             : rows;
 
-          const act = async (label, path, body) => {
-            setBusy((current) => ({ ...current, [label]: true }));
+          const act = async (label, path, body, busyKey) => {
+            const key = busyKey || label;
+            setBusy((current) => ({ ...current, [key]: true }));
             try {
               await api(path, { method: 'POST', body: body || {} });
               toast.push(`${label} 已提交`, 'ok');
@@ -2844,7 +2856,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             } catch (error) {
               toast.push(`${label} 失败：${error.message}`, 'err');
             } finally {
-              setBusy((current) => ({ ...current, [label]: false }));
+              setBusy((current) => ({ ...current, [key]: false }));
             }
           };
 
@@ -2959,7 +2971,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                       kind: 'ghost',
                                       busy: busy[`review-${row.id}`],
                                       onClick: () =>
-                                        act('重新审查', `/projects/${project.id}/chapters/${row.id}/review`),
+                                        act('重新审查', `/projects/${project.id}/chapters/${row.id}/review`, undefined, `review-${row.id}`),
                                     },
                                     '审查',
                                   ),
@@ -2970,7 +2982,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                       kind: 'ghost',
                                       busy: busy[`polish-${row.id}`],
                                       onClick: () =>
-                                        act('修订预览', `/projects/${project.id}/chapters/${row.id}/revision`),
+                                        act('修订预览', `/projects/${project.id}/chapters/${row.id}/revision`, undefined, `polish-${row.id}`),
                                     },
                                     '修订预览',
                                   ),
@@ -3060,7 +3072,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       : 1,
                               count: Number(props.studio.count) || 1,
                               scenes: Number(props.studio.scenes) || 0,
-                            });
+                            }, 'generate');
                           },
                         },
                         !project.chapters && !project.ready ? '准备首章细纲' : '开始生成',
@@ -3709,7 +3721,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               e(Stat, { label: '登录状态', value: login.status || 'unknown', foot: login.source ? `来源 ${login.source}` : '尚未回读' }),
               e(Stat, { label: 'Journal 条目', value: num(statusData.journal || 0), unit: '条' }),
               e(Stat, { label: '运行范围', value: (statusData.target && statusData.target.scope) || '未配置', foot: (statusData.target && statusData.target.platform) || '—' }),
-              e(Stat, { label: '适配器健康', value: healthPoll.data && healthPoll.data.ok ? '就绪' : '未连接', foot: healthPoll.error ? healthPoll.error.message : '仅诊断探测' }),
+              e(Stat, { label: '适配器健康', value: healthPoll.data && healthPoll.data.ok ? '就绪' : '未连接', foot: healthPoll.error ? (typeof healthPoll.error === 'string' ? healthPoll.error : healthPoll.error.message || String(healthPoll.error)) : '仅诊断探测' }),
             ),
             e(
               Card,
@@ -4339,22 +4351,30 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             setBusy(true);
             try {
               const revision = (memory.data && memory.data.revision) || 0;
+              const payload = {
+                ...draft,
+                revision,
+                source_chapter: Number(draft.source_chapter) || 0,
+                due_chapter: Number(draft.due_chapter) || 0,
+                valid_to: Number(draft.valid_to) || 0,
+                clue_state: draft.category === 'foreshadow' ? (draft.clue_state || 'planned') : (draft.clue_state || ''),
+              };
               if (draft.id && draft.correct) {
                 await api(`/projects/${project.id}/memory/items/${draft.id}/correct`, {
                   method: 'PUT',
-                  body: { ...draft, revision, reason: draft.correction_reason || '' },
+                  body: { ...payload, reason: draft.correction_reason || '' },
                 });
                 toast.push('已保存为作者更正，原证据保留', 'ok');
               } else if (draft.id) {
                 await api(`/projects/${project.id}/memory/items/${draft.id}`, {
                   method: 'PUT',
-                  body: { ...draft, revision },
+                  body: payload,
                 });
                 toast.push('记忆已更新', 'ok');
               } else {
                 await api(`/projects/${project.id}/memory/items`, {
                   method: 'POST',
-                  body: { ...draft, revision },
+                  body: payload,
                 });
                 toast.push('记忆已新增', 'ok');
               }
@@ -4632,7 +4652,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             status: 'active',
                             source_chapter: 0,
                             due_chapter: 0,
-                            clue_state: 'planned',
+                            clue_state: '',
                             valid_to: 0,
                             story_time: '',
                           }),
@@ -5006,6 +5026,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             { value: 'active', label: '生效' },
                             { value: 'conflict', label: '冲突' },
                             { value: 'archived', label: '归档' },
+                            { value: 'superseded', label: '已被更正' },
                           ],
                         }),
                       ),
@@ -6260,7 +6281,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         }
 
         function ScheduleCard(props) {
-          const { project, jobs, schedulerEnabled, refreshOverview, ai } = props;
+          const { project, jobs, allJobs, schedulerEnabled, refreshOverview, ai } = props;
           const toast = useToast();
           const existing = (jobs || []).find((item) => matchesProject(item, project)) || null;
           const [form, setForm] = React.useState(() => scheduleDraft(existing, project));
@@ -6270,12 +6291,16 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [schedulerAck, setSchedulerAck] = React.useState(false);
 
           React.useEffect(() => {
+            setSavedJob(null);
+          }, [project && project.id]);
+
+          React.useEffect(() => {
             setForm(scheduleDraft(existing, project));
           }, [project && project.id, existing ? existing.id : '', existing ? existing.publication_mode : '', existing ? existing.platform : '']);
 
           const job = savedJob || existing;
           const patch = (value) => setForm((current) => ({ ...current, ...value }));
-          const enabledJobs = (jobs || []).filter((item) => item.enabled);
+          const enabledJobs = (allJobs || jobs || []).filter((item) => item.enabled);
           const affected = enabledJobs.length
             ? enabledJobs
             : job
@@ -6815,7 +6840,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             mark(key, true);
             setError('');
             try {
-              const answer = await api(path, { method, body: body === undefined ? {} : body });
+              const verb = String(method || 'GET').toUpperCase();
+              const allowBody = verb !== 'GET' && verb !== 'HEAD';
+              const answer = await api(path, { method, ...(allowBody ? { body: body === undefined ? {} : body } : {}) });
               return answer;
             } catch (caught) {
               setError(String(caught.message || caught));
@@ -7411,6 +7438,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               e(ScheduleCard, {
                 project,
                 jobs,
+                allJobs: props.allJobs || jobs,
                 schedulerEnabled,
                 refreshOverview,
                 ai,
@@ -7506,8 +7534,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             });
             setCapForm({
               observed_at: data.capability_observed_at || cap.observed_at || new Date().toISOString(),
-              source: cap.source || 'manual_observation',
-              evidence: cap.evidence || '',
+              source: data.capability_source || cap.source || 'manual_observation',
+              evidence: data.capability_evidence || cap.evidence || '',
               can_read_schedule: Boolean(cap.can_read_schedule),
               can_schedule: Boolean(cap.can_schedule),
               can_confirm_schedule: Boolean(cap.can_confirm_schedule),
@@ -8005,10 +8033,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           'div',
                           { key: rec.id, className: 'nh-panel' },
                           e('div', { className: 'nh-row', style: { justifyContent: 'space-between', gap: 8 } },
-                            e('span', { className: 'nh-mono nh-wrap', style: { fontSize: 12 } }, rec.url || rec.id),
+                            e('div', { className: 'nh-row', style: { gap: 6, flexWrap: 'wrap' } },
+                              e('span', { className: 'nh-mono nh-wrap', style: { fontSize: 12 } }, rec.masked || rec.url || rec.id),
+                              e(Badge, { tone: rec.enabled === false ? 'mute' : 'ok' }, rec.enabled === false ? '已停用' : '启用'),
+                            ),
                             e('div', { className: 'nh-row', style: { gap: 6 } },
-                              e(Button, { size: 'sm', kind: 'ghost', busy: busy === `test-${rec.id}`, onClick: () => callNotif(`test-${rec.id}`, '发送测试事件', `/notifications/recipients/${encodeURIComponent(rec.id)}/test`, { method: 'POST', body: {} }) }, '测试'),
-                              e(Button, { size: 'sm', kind: 'ghost', busy: busy === `del-${rec.id}`, onClick: () => callNotif(`del-${rec.id}`, '删除接收端', `/notifications/recipients/${encodeURIComponent(rec.id)}`, { method: 'DELETE' }) }, '删除'),
+                              e(Button, { size: 'sm', kind: 'ghost', disabled: rec.enabled === false, busy: busy === `test-${rec.id}`, onClick: () => callNotif(`test-${rec.id}`, '发送测试事件', `/notifications/recipients/${encodeURIComponent(rec.id)}/test`, { method: 'POST', body: {} }) }, '测试'),
+                              e(Button, { size: 'sm', kind: 'ghost', disabled: rec.enabled === false, busy: busy === `del-${rec.id}`, onClick: () => callNotif(`del-${rec.id}`, '停用接收端', `/notifications/recipients/${encodeURIComponent(rec.id)}`, { method: 'DELETE' }) }, rec.enabled === false ? '已停用' : '停用'),
                             ),
                           ),
                         ),
@@ -8059,8 +8090,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           e(
                             'div',
                             { key: ev.id || idx, className: 'nh-kvrow' },
-                            e('span', { className: 'nh-mono' }, ev.kind || ev.type || ev.event || 'event'),
-                            e('span', { className: 'nh-kvval' }, ev.message || ev.title || ev.created_at || ''),
+                            e('span', { className: 'nh-mono' }, ev.event_type || ev.kind || ev.type || ev.event || 'event'),
+                            e('span', { className: 'nh-kvval' }, (ev.payload && (ev.payload.message || ev.payload.summary || ev.payload.reason || ev.payload.book)) || ev.message || ev.title || ev.occurred_at || ev.created_at || ''),
                           ),
                         ),
                       )
@@ -8188,8 +8219,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 body,
               });
               toast.push('任务配置已保存', 'ok');
+              await Promise.resolve(refreshOverview());
               setDraft((current) => (current ? { ...current, _jobId: '' } : null));
-              refreshOverview();
             } catch (error) {
               toast.push(`保存失败：${error.message}`, 'err');
             } finally {
@@ -8424,13 +8455,19 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           };
 
           const testRole = async (role) => {
+            if (!draft) return;
             setBusy((current) => ({ ...current, ['test' + role]: true }));
             try {
-              const own = role === 'default' ? draft.default_binding : draft.roles[role];
-              const binding = own.provider_id ? own : { ...draft.default_binding, reasoning_effort: own.reasoning_effort || draft.default_binding.reasoning_effort };
+              const own = (role === 'default' ? draft.default_binding : (draft.roles && draft.roles[role])) || {};
+              const base = draft.default_binding || {};
+              const binding = own.provider_id ? own : { ...base, reasoning_effort: own.reasoning_effort || base.reasoning_effort || 'auto' };
               const provider = providerList.find((p) => p.id === binding.provider_id);
               const tested = { provider_id: binding.provider_id, model_id: binding.model_id, reasoning_effort: binding.reasoning_effort || 'auto' };
               const result = await api(`/ai/roles/${role}/test`, { method: 'POST', body: { binding: tested, provider_revision: provider && provider.revision } });
+              if (result && result.status && result.status !== 'ok') {
+                toast.push(`${role === 'default' ? '通用模型' : role} 测试未通过：${result.message || result.detail || result.status}`, 'err');
+                return;
+              }
               toast.push(`${role === 'default' ? '通用模型' : role} 测试通过：${(result && result.model_id) || 'OK'}`, 'ok');
               providers.reload(true);
             } catch (error) {
@@ -8515,7 +8552,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           { className: 'nh-col', style: { gap: 14 } },
                           e('div', { className: 'nh-row', style: { gap: 10, flexWrap: 'wrap' } },
                             e(Button, { size: 'sm', busy: busy.host, onClick: refreshHost }, '使用 DSH 当前模型'),
-                            e('span', { className: 'nh-k' }, hostModels.error ? hostModels.error.message : hostModels.data && hostModels.data.available
+                            e('span', { className: 'nh-k' }, hostModels.error ? (typeof hostModels.error === 'string' ? hostModels.error : hostModels.error.message || String(hostModels.error)) : hostModels.data && hostModels.data.available
                               ? `DSH 已连接 · ${hostModels.data.models.length} 个模型` : '在 DSH 中登录后刷新模型'),
                           ),
                           e('label', { className: 'nh-row', style: { gap: 8 } },
@@ -9360,8 +9397,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (!props.open || !props.projectId || !props.chapter) return undefined;
             let alive = true;
             setLoading(true);
+            setData(null);
             setQuality(null);
+            setRevision(null);
+            setBench(null);
             setPrecheck(null);
+            setVersionBody(null);
+            setPrecheckNote('');
+            setIgnoreDraft('');
             api(`/projects/${props.projectId}/chapters/${props.chapter}`)
               .then((value) => {
                 if (alive) setData(value);
@@ -9816,7 +9859,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                               'div',
                                               { className: 'nh-row', style: { gap: 6 } },
                                               e(Badge, { tone: item.severity === 'warn' ? 'warn' : 'mute' }, item.severity || 'advisory'),
-                                              item.paragraph != null ? e(Badge, { tone: 'mute' }, `第 ${item.paragraph} 段`) : null,
+                                              item.paragraph != null && Number.isFinite(Number(item.paragraph)) ? e(Badge, { tone: 'mute' }, `第 ${Number(item.paragraph) + 1} 段`) : null,
                                             ),
                                           ),
                                           item.quote ? e('div', { className: 'nh-muted', style: { marginTop: 4 } }, `片段：${item.quote}`) : null,
@@ -10315,7 +10358,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           React.useEffect(() => { if (nowListed) setCreatedProject(null); }, [nowListed]);
           const selectedOverview = overview.data ? { ...overview.data, projects: project ? [project, ...allProjects.filter((item) => item.id !== project.id)] : [], jobs: (overview.data.jobs || []).filter(item => matchesProject(item, project)) } : null;
 
-          const jobs = liveJobs.data || (overview.data && overview.data.jobs) || [];
+          const liveList = Array.isArray(liveJobs.data) ? liveJobs.data : (liveJobs.data && liveJobs.data.jobs) || null;
+          const jobs = liveList || (overview.data && overview.data.jobs) || [];
           const liveJob = jobs.find(item => matchesProject(item, project)) || null;
           const stripWork = workHeadline(liveJob);
           const stripTarget = stripWork.target || 100;
@@ -10330,6 +10374,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const pageProps = {
             overview: selectedOverview || { projects: [], jobs: [], operations: [], queue: {}, diagnostics: {} },
+            allJobs: jobs,
             selectProject,
             openCreatedProject,
             drafts: drafts.current,
@@ -10487,13 +10532,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               costs: () => e(CostsPage, pageProps),
               operations: () => e(OperationsPage, pageProps),
             };
-            if (selectedProject && !project && !['ai', 'operations', 'setup', 'flow'].includes(route)) {
+            if (selectedProject && !project && !['ai', 'operations', 'setup', 'flow', 'providers', 'costs', 'free'].includes(route)) {
               body = e(Card, { title: '当前作品暂不可用' },
                 e(Button, { onClick: () => overview.reload(false) }, '刷新作品'),
                 e(Button, { onClick: () => setProjectPopOpen(true) }, '切换作品'),
                 e(Button, { onClick: () => setRoute('setup') }, '新建作品'));
             } else {
-              body = (!project && !['ai', 'free', 'operations', 'flow'].includes(route) ? map.setup : (map[route] || map.dashboard))();
+              body = (!project && !['ai', 'free', 'operations', 'flow', 'providers', 'costs'].includes(route) ? map.setup : (map[route] || map.dashboard))();
             }
           }
 

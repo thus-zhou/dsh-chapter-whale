@@ -505,7 +505,15 @@ test('v5 液态玻璃重整、DashboardPage 无异常渲染与 standalone Web AP
   // 4. Standalone liquid-glass.js syntax & corrected API contract keys
   const webLgSrc = fsMod.readFileSync(new URL('../backend/manager/static/liquid-glass.js', import.meta.url), 'utf8');
   new vmMod.Script(webLgSrc, { filename: 'backend/manager/static/liquid-glass.js' });
-  for (const snippet of ['data.findings', 'data-pc-action="ignored"', 'obs.cards', 'plan.supplied', 'visibilitychange']) {
+  for (const snippet of ['data.findings', 'data-pc-action="ignored"', 'obs.cards', 'plan.supplied', 'visibilitychange', 'chapter-whale:overview']) {
     assertMod.ok(webLgSrc.includes(snippet), `liquid-glass.js includes ${snippet}`);
   }
+
+  // 5. Regression guards for GET body handling, role test status check, 1-based precheck paragraph, and max_revisions bound
+  assertMod.match(source, /hasBody\s*&&\s*options\s*&&\s*options\.body\s*!==\s*undefined/);
+  assertMod.match(source, /result\.status\s*!==\s*'ok'/);
+  assertMod.match(source, /Number\(item\.paragraph\)\s*\+\s*1/);
+  const staticAppSrc = fsMod.readFileSync(new URL('../backend/manager/static/app.js', import.meta.url), 'utf8');
+  assertMod.doesNotMatch(staticAppSrc, /name="max_revisions"[^>\n]*max="5"/);
+  assertMod.ok(staticAppSrc.includes('chapter-whale:overview'));
 });

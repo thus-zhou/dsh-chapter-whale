@@ -428,9 +428,10 @@ def next_due(job: Dict[str, Any], now: Optional[datetime] = None) -> Optional[st
     current = now.astimezone(ZoneInfo(job.get("timezone", "Asia/Shanghai"))) if now else _now_for_job(job)
     day=current.date().isoformat();completed=completed_slots(job,day)
     attempted = str(job.get("last_attempt_slot") or "")
+    cycle_status = (job.get("cycle") or {}).get("status")
     for value in job_times(job):
         slot = day + "@" + value
-        if job.get("last_status") != "awaiting_approval" and attempted.startswith(day + "@") and slot <= attempted:
+        if job.get("last_status") != "awaiting_approval" and cycle_status != "continuing" and attempted.startswith(day + "@") and slot <= attempted:
             continue
         if slot not in completed:
             hh,mm=map(int,value.split(":"))
@@ -452,7 +453,7 @@ def retryable(job: Dict[str, Any], slot: str) -> bool:
     跨时段重试才符合「只补缺步」——强杀留下的 running 不会永久停更。
     """
     status = (job.get("cycle") or {}).get("status")
-    if status not in {"running", "failed", "needs_revision"}:
+    if status not in {"running", "continuing", "failed", "needs_revision"}:
         return False
     attempted = str(job.get("last_attempt_slot") or "")
     return bool(attempted) and attempted != slot
@@ -478,13 +479,14 @@ def due_jobs(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
         # run-once action, not a daemon loop which blindly repeats side effects.
         slot=today+"@"+datetime.fromisoformat(due).strftime("%H:%M")
         recovering = retryable(job, slot)
-        if job.get("cycle") and job["cycle"].get("status") not in {"success",None} and job.get("last_status")!="awaiting_approval" and not recovering:
+        cycle_status = (job.get("cycle") or {}).get("status")
+        if cycle_status not in {"success", "continuing", None} and job.get("last_status") != "awaiting_approval" and not recovering:
             continue
         late_goal=False
         if job.get('delivery_mode')=='serial' and (job.get('cycle') or {}).get('status') in {None,'success'} and job.get('daily_word_goals',{}).get(today):
             from integration.daily_word_goal import progress
             goal=progress(job,today);late_goal=goal['confirmed_words']<goal['target'] and not goal['unknown_word_counts']
-        if not late_goal and not recovering and (job.get("last_attempt_slot")==slot or not job.get("last_attempt_slot") and job.get("last_attempt_date")==today) and job.get("last_status")!="awaiting_approval":
+        if not late_goal and not recovering and cycle_status != "continuing" and (job.get("last_attempt_slot")==slot or not job.get("last_attempt_slot") and job.get("last_attempt_date")==today) and job.get("last_status")!="awaiting_approval":
             continue
         result.append(_job_summary(job_id, job) | {"next_due": due, "recovering": bool(recovering)})
     return result
@@ -517,6 +519,7 @@ def _job_summary(job_id: str, job: Dict[str, Any]) -> Dict[str, Any]:
         "name": job.get("name", job_id),
         "enabled": bool(job.get("enabled", True)),
         "project": job.get("project"),
+        "platform": job.get("platform") or "fanqie",
         "book": job.get("book"),
         "account": job.get("account"),
         "daily_time": job.get("daily_time"),
@@ -710,7 +713,13 @@ def run_once(job_id: str, force: bool = False) -> Dict[str, Any]:
         from .model_roles import execution_snapshot
         with execution_snapshot(), writer_runner.file_lock(bridge.RUNTIME_ROOT / "scheduler-execution.lock"):
             candidate = load_scheduler()["jobs"].get(job_id)
-            if isinstance(candidate, dict) and candidate.get("project") and candidate.get("book") and (candidate.get("enabled", True) or force):
+            if (
+                isinstance(candidate, dict)
+                and is_publish_job(candidate)
+                and candidate.get("project")
+                and candidate.get("book")
+                and (candidate.get("enabled", True) or force)
+            ):
                 # This is the bridge book lock, not the writer project lock.
                 # Bridge nested calls share its reentrant implementation.
                 with bridge.book_runtime(Path(candidate["project"]), candidate["book"]):

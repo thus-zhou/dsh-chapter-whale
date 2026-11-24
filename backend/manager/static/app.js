@@ -66,7 +66,7 @@ const iconPaths = {
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${iconPaths[name] || iconPaths.file}</svg>`;
 function icons(root=document) { root.querySelectorAll("[data-icon]").forEach(el => { el.innerHTML=icon(el.dataset.icon); }); }
 function badge(status) { const cls = ["success","reviewed","generated"].includes(status) ? "pill-success" : ["failed","interrupted","review_failed","partial"].includes(status) ? "pill-danger" : "pill-neutral"; return `<span class="pill ${cls}">${esc(statusNames[status] || status || "尚未运行")}</span>`; }
-function empty(title, description) { return `<div class="empty-state"><div class="empty-icon">${icon("book")}</div><h3>${esc(title)}</h3><p>${esc(description)}</p></div>`; }
+function empty(title, description, action, actionLabel) { return `<div class="empty-state"><div class="empty-icon">${icon("book")}</div><h3>${esc(title)}</h3><p>${esc(description)}</p>${action && actionLabel ? `<div class="form-actions">${button(action,"",actionLabel,"button-primary")}</div>` : ""}</div>`; }
 function button(action, id, text, cls="button-secondary", extra="") { return `<button class="button ${cls}" data-action="${action}" data-id="${esc(id)}" ${extra}>${esc(text)}</button>`; }
 let state = {projects:[], accounts:[], jobs:[], operations:[], queue:{books:[]}, diagnostics:{checks:[]}, ai:{}, settings:{}};
 let loaded=false, syncing=false, aiDirty=false, queueDirty=false, detailId=null, aiConfigRevision=0;
@@ -91,7 +91,16 @@ async function api(path, method="GET", data, timeout=20000) {
   const response=await fetch(path,{method,signal:controller.signal,headers:{...(method!=="GET" ? {"X-Novel-Helper":"1","Content-Type":"application/json"}: {})},...(data!==undefined ? {body:JSON.stringify(data)}:{})});
   const payload=await response.json();
   if(response.status===401) {location.assign('/pair'); throw new Error('设备登录已失效，请重新配对');}
-  if(!response.ok) { const detail=payload.detail; throw new Error(typeof detail==="string" ? detail : Array.isArray(detail) ? detail.map(x=>`${x.loc?.slice(1).join(" / ")}: ${x.msg}`).join("；") : "请求失败"); }
+  if(!response.ok) {
+   const detail=payload.detail;
+   const msg=typeof detail==="string" ? detail
+    : Array.isArray(detail) ? detail.map(x=>`${x.loc?.slice(1).join(" / ")}: ${x.msg}`).join("；")
+    : (typeof payload.message==="string" && payload.message)
+     || (payload.error && typeof payload.error.message==="string" && payload.error.message)
+     || (typeof payload.error==="string" && payload.error)
+     || "请求失败";
+   throw new Error(msg);
+  }
   return payload;
  } catch(error) { if(error.name==="AbortError") throw new Error("请求超时，请检查本地服务和运行日志"); throw error; }
  finally { clearTimeout(timer); }
@@ -304,6 +313,7 @@ async function refresh() {
   for (const book of next.projects) createdBooks.delete(book.id);
   next.projects=[...next.projects,...createdBooks.values()];
   state={...state,...next};
+  window.dispatchEvent(new CustomEvent("chapter-whale:overview", { detail: state }));
   render();
   $("connection-text").textContent="创作服务已连接"; $("connection-dot").classList.add("online"); $("connection-banner").hidden=true;
   $("sync-label").textContent=`已同步 ${new Date().toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit"})}`;
@@ -340,7 +350,7 @@ function jobDialog(job=null) {
  if(!state.projects.length){toast("请先新建或登记作品",true);return;}
  if(!state.accounts.some(a=>a.logged_in)){toast("请先在发布账号页完成登录",true);return;}
  const j=job || {name:"日更任务",daily_time:"08:00",timezone:"Asia/Shanghai",chapters_per_run:1,word_count:3500,max_revisions:2,approval_mode:"unattended",enabled:false};
- openDialog(job?"编辑日更":"安排日更",`<form class="dialog-form"><div class="form-grid"><label class="full">任务名称<input name="name" value="${esc(j.name)}" required maxlength="96"></label><label class="full">作品<select name="project" required>${options(state.projects,"path","title","请选择作品")}</select></label><label class="full">番茄书名<input name="book" value="${esc(j.book || "")}" required maxlength="96"></label><label class="full">账号<select name="account" required>${options(state.accounts.filter(a=>a.logged_in),"name","name","请选择账号")}</select></label><label class="full">每日更新时间<input name="daily_times_text" value="${esc((j.daily_times?.length?j.daily_times:[j.daily_time]).join(", "))}" required placeholder="08:00, 18:00"><small>逗号分隔，最多 8 个时间点；每个时段独立计数。</small></label><label>每次章节数<input type="number" name="chapters_per_run" min="1" max="50" value="${j.chapters_per_run}" required></label><label>每章字数<input type="number" name="word_count" min="500" max="10000" value="${j.word_count}" required></label><label>时区<input name="timezone" value="${esc(j.timezone)}" required></label><label>修订轮数<input type="number" name="max_revisions" min="0" max="5" value="${j.max_revisions ?? 2}" required></label><input type="hidden" name="approval_mode" value="unattended"><p class="field-help full">自动写作、审查、同步记忆、发布并核验，无需逐章或按日期批准。</p><label class="check-label full"><input type="checkbox" name="enabled" ${j.enabled?"checked":""}>启用任务</label></div>${formEnd()}`,async(data,form)=>{const payload=Object.fromEntries(data);payload.daily_times=payload.daily_times_text.split(/[,，、\s]+/).filter(Boolean);delete payload.daily_times_text;payload.daily_time=payload.daily_times[0];for(const key of ["word_count","chapters_per_run","max_revisions"])payload[key]=Number(payload[key]);payload.enabled=form.elements.enabled.checked;await api(job?`/api/jobs/${url(job.id)}`:"/api/jobs",job?"PUT":"POST",payload);closeDialog();toast("日更已保存");await refresh();});
+ openDialog(job?"编辑日更":"安排日更",`<form class="dialog-form"><div class="form-grid"><label class="full">任务名称<input name="name" value="${esc(j.name)}" required maxlength="96"></label><label class="full">作品<select name="project" required>${options(state.projects,"path","title","请选择作品")}</select></label><label class="full">番茄书名<input name="book" value="${esc(j.book || "")}" required maxlength="96"></label><label class="full">账号<select name="account" required>${options(state.accounts.filter(a=>a.logged_in),"name","name","请选择账号")}</select></label><label class="full">每日更新时间<input name="daily_times_text" value="${esc((j.daily_times?.length?j.daily_times:[j.daily_time]).join(", "))}" required placeholder="08:00, 18:00"><small>逗号分隔，最多 8 个时间点；每个时段独立计数。</small></label><label>每次章节数<input type="number" name="chapters_per_run" min="1" max="50" value="${j.chapters_per_run}" required></label><label>每章字数<input type="number" name="word_count" min="500" max="10000" value="${j.word_count}" required></label><label>时区<input name="timezone" value="${esc(j.timezone)}" required></label><label>修订轮数<input type="number" name="max_revisions" min="0" max="3" value="${j.max_revisions ?? 2}" required></label><input type="hidden" name="approval_mode" value="unattended"><p class="field-help full">自动写作、审查、同步记忆、发布并核验，无需逐章或按日期批准。</p><label class="check-label full"><input type="checkbox" name="enabled" ${j.enabled?"checked":""}>启用任务</label></div>${formEnd()}`,async(data,form)=>{const payload=Object.fromEntries(data);payload.daily_times=payload.daily_times_text.split(/[,，、\s]+/).filter(Boolean);delete payload.daily_times_text;payload.daily_time=payload.daily_times[0];for(const key of ["word_count","chapters_per_run","max_revisions"])payload[key]=Number(payload[key]);payload.enabled=form.elements.enabled.checked;await api(job?`/api/jobs/${url(job.id)}`:"/api/jobs",job?"PUT":"POST",payload);closeDialog();toast("日更已保存");await refresh();});
  const form=$("action-dialog").querySelector("form");form.elements.project.value=j.project || "";form.elements.account.value=j.account || "";form.elements.approval_mode.value="unattended";
  form.elements.project.onchange=()=>{const p=state.projects.find(p=>p.path===form.elements.project.value);if(p && !form.elements.book.value)form.elements.book.value=p.title;};
 }
@@ -404,7 +414,7 @@ const actions = {
    if(creativeId===id && creativeDoc){location.hash="creative";setStudioTab("planning");}
    return;
   }
-  openDialog("开始创作",`<form class="dialog-form"><p class="dialog-description">${esc(projectById(id)?.title)}</p><div class="pipeline-strip">${Object.entries(roleLabels).slice(0,4).map(([r,[label]])=>`<span><b>${r}</b>${label}</span>`).join("")}</div><div class="form-grid"><label>本次章节数<input type="number" name="count" value="1" min="1" max="30" required></label><label>每章目标字数<input type="number" name="word_count" value="3500" min="500" max="10000" required></label></div><details class="quiet-details"><summary>高级设置</summary><label>最多修订轮数<input type="number" name="max_revisions" value="2" min="0" max="5" required></label></details><p class="field-help">D 通过或 E 明确授权后保存，不立即发布。多模型启用后，缺少细纲时由 A 补齐。</p>${formEnd("开始创作")}`,async data=>{operationStarted(await api(`/api/projects/${url(id)}/generate`,"POST",{count:Number(data.get("count")),word_count:Number(data.get("word_count")),max_revisions:Number(data.get("max_revisions"))}));closeDialog();});},
+  openDialog("开始创作",`<form class="dialog-form"><p class="dialog-description">${esc(projectById(id)?.title)}</p><div class="pipeline-strip">${Object.entries(roleLabels).slice(0,4).map(([r,[label]])=>`<span><b>${r}</b>${label}</span>`).join("")}</div><div class="form-grid"><label>本次章节数<input type="number" name="count" value="1" min="1" max="30" required></label><label>每章目标字数<input type="number" name="word_count" value="3500" min="500" max="10000" required></label></div><details class="quiet-details"><summary>高级设置</summary><label>最多修订轮数<input type="number" name="max_revisions" value="2" min="0" max="3" required></label></details><p class="field-help">D 通过或 E 明确授权后保存，不立即发布。多模型启用后，缺少细纲时由 A 补齐。</p>${formEnd("开始创作")}`,async data=>{operationStarted(await api(`/api/projects/${url(id)}/generate`,"POST",{count:Number(data.get("count")),word_count:Number(data.get("word_count")),max_revisions:Number(data.get("max_revisions"))}));closeDialog();});},
  "studio-generate":()=>{if(!creativeId || !creativeDoc || creativeBusy || creativeDirty)throw new Error("请载入作品并保存创作约定");return actions.generate({dataset:{id:creativeId}});},
  "studio-outline":()=>{if(!creativeId)throw new Error("请先选择作品");return actions.outline({dataset:{id:creativeId}});},
  "polish-chapter":async el=>{const op=await api(`/api/projects/${url(el.dataset.id)}/chapters/${el.dataset.chapter}/polish`,"POST",{});closeDialog();operationStarted(op);},

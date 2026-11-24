@@ -1,3 +1,6 @@
-# 常驻存稿服务的最小依赖：服务本体只用标准库，这里只补时区数据库。
+# 常驻存稿服务依赖：补全调度写作器（writer_runner -> ai_service / state_manager）及时区库。
 # 固定版本；离线构建时改成本地 wheel 目录，见 Dockerfile 注释。
 tzdata==2026.5
+httpx==0.28.1
+aiohttp==3.13.5
+filelock==3.25.2

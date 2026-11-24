@@ -66,7 +66,11 @@
   current=await call('/status');$('free-start').hidden=current.running;$('free-active').hidden=!current.running;
   $('free-pool-rule').textContent='免费轮换 → 明确配置的付费备选。'+(current.resource_policy?.fallback_cost_limit_cny===null?'费用不设上限；':current.resource_policy?.fallback_cost_limit_cny!==undefined?'每书每天额外≤20元，预算耗尽后等待恢复；':'费用策略以模型分工中的生效设置为准；')+'额外恢复仍共用每日6次上限。';
   $('free-service-status').textContent=current.running?`独立服务运行中 · ${current.endpoint} · 不依赖 dsh`:'独立服务未启动。点击启动后可在此网页登录账号；不会读取或迁移 dsh 登录态。';
-  if(!loaded){members=structuredClone(current.pool_members||[]);renderMembers();const projects=await api('/api/projects');$('free-pool-project').innerHTML='<option value="">选择作品</option>'+projects.map(p=>`<option value="${esc(p.path)}">${esc(p.title||p.name||p.path)}</option>`).join('');loaded=true;}
+  if(!loaded){members=structuredClone(current.pool_members||[]);renderMembers();loaded=true;}
+  const select=$('free-pool-project'), previous=select.value;
+  const projects=await api('/api/projects');
+  select.innerHTML='<option value="">选择作品</option>'+projects.map(p=>`<option value="${esc(p.path)}">${esc(p.title||p.name||p.path)}</option>`).join('');
+  if(previous && projects.some(p=>p.path===previous)) select.value=previous;
   await refresh();
  }
  function filterChannels(){const search=$('free-channel-search').value.trim().toLowerCase(),connected=$('free-channel-filter').value==='connected';let count=0;for(const card of $('free-channel-grid').children){card.hidden=!card.dataset.search.includes(search)||(connected&&card.dataset.connected!=='true');if(!card.hidden)count++;}$('free-channel-empty').hidden=count>0||!$('free-channel-detail').hidden;}

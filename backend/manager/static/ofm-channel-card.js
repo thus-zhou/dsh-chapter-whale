@@ -17154,7 +17154,7 @@ async function Bm(I, la, Ue, E) {
       body: JSON.stringify({ method: aa, payload: Le }),
       signal: AbortSignal.any([J.signal, AbortSignal.timeout(ma)])
     }), Ia = await ga.json();
-    if (!ga.ok || !Ia.ok) throw Error(Ia.detail || Ia.error?.message || "渠道操作未完成");
+    if (!ga.ok || !Ia.ok) throw Error(Ia.detail || Ia.message || Ia.error?.message || "渠道操作未完成");
     return Ia.value;
   };
   return be.render(_c.createElement(Qc.ChannelCard, { channel: oa, status: Ue, rpc: Me, t: Mm, onChanged: E, onError: (aa, Le) => {

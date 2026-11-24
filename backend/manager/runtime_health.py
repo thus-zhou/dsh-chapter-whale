@@ -36,7 +36,8 @@ class BodyLimitMiddleware:
         count=0;chunks=[]
         while True:
             message=await receive()
-            if message['type']=='http.disconnect':return
+            if message['type']=='http.disconnect':
+                return await send({'type':'http.response.start','status':499,'headers':[(b'content-length',b'0')]})
             count+=len(message.get('body',b''))
             if count>self.limit:
                 return await JSONResponse(

@@ -205,12 +205,12 @@ def normalize_row(row: Mapping[str, Any], *, platform: str, account: str = "",
     # “2026-11-22 08:00”这种带空格、不带时区的写法。
     timezone_assumed = False
     if isinstance(planned_raw, str) and planned_raw.strip() and planned is not None:
+        raw_time = str(planned_raw).strip()
         try:
-            parsed_raw = datetime.fromisoformat(str(planned_raw).strip().replace("Z", "+00:00"))
-        except ValueError:
-            parsed_raw = None
-        if parsed_raw is not None:
+            parsed_raw = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
             timezone_assumed = parsed_raw.tzinfo is None
+        except ValueError:
+            timezone_assumed = not bool(re.search(r"(?:Z|[+-]\d{2}:?\d{2})$", raw_time, re.IGNORECASE))
     if state == STATE_SCHEDULED and planned is None:
         reasons.append("已排期行缺少可解析的计划时刻")
     if planned is not None and timezone_assumed:
@@ -350,13 +350,18 @@ def load_capabilities(path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 def save_capabilities(document: Mapping[str, Any], path: Optional[Path] = None) -> Path:
+    import uuid
+    from fanqie_auto_publish.publication_safety import replace_with_retry
     target = Path(path) if path else capabilities_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = {"schema": SCHEMA_VERSION,
                "records": dict((document or {}).get("records") or {})}
-    temp = target.with_suffix(target.suffix + ".tmp")
-    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(target)
+    temp = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        replace_with_retry(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
     return target
 
 

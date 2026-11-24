@@ -1,8 +1,8 @@
-# 码章鲸 0.7.2 验证记录
+# 码章鲸 0.7.3 验证记录
 
-本轮修复多书上下文隔离、新书引导、发布预检和排期恢复。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Release v0.7.2](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.2) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准（npm `latest = 0.7.2` 已通过 SLSA provenance 与公开下载字节校验：`12,459,335` 字节，SHA-256 `53051abc86c3e4379aba9de6aec208cbafed6d61c19fb46aeb84bc2e7341c95b`，与 GitHub 发行包完全一致）。
+本轮完成全量代码审计与多处阻塞及高危缺陷修复（启停与重启恢复、单模型存稿、排期与恢复、本地代理绕过、前后端界面契约与错误处理）。完整变更见 [更新日志](CHANGELOG.md)。公开发行状态以 [GitHub Release v0.7.3](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.3) 和 [npm 版本列表](https://www.npmjs.com/package/dsh-chapter-whale?activeTab=versions) 为准。
 
-Windows 轻量包从 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 归档取用固定的 Python 和浏览器运行时（`runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`），始终安装 `v0.7.2` 包内后端代码（`buildId=f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3`）。macOS 首启基于 Python 3.11+ 自动创建隔离 `.venv`。`0.7.2` 平台安装与多环境校验均已通过：[Distribution first start #45400377607](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45400377607)（`windows-install` + `macos-install`）与 [Source checks #45401789212](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45401789212)。
+Windows 轻量包从 [v0.7.0](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0) 归档取用固定的 Python 和浏览器运行时（`runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`），始终安装 `v0.7.3` 包内后端代码（`buildId=5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46`）。macOS 首启基于 Python 3.11+ 自动创建隔离 `.venv`。
 
 本轮发布前执行了 Node 测试、100 项后端定向回归测试和托管运行环境完整性校验。真实番茄网页发布与既有 DSH 桌面个人工作区原地升级仍待验证。
 
@@ -17,9 +17,9 @@ Windows 轻量包复用 `v0.7.0` 固定运行时归档（字节数与 SHA-256 �
 
 ## 本轮定位与许可边界
 
-- **目标版本**：`0.7.2`（Windows x64 完整支持 + macOS Apple Silicon / Intel DSH 插件首启隔离 `.venv` 支持）。
+- **目标版本**：`0.7.3`（Windows x64 完整支持 + macOS Apple Silicon / Intel DSH 插件首启隔离 `.venv` 支持）。
 - **组合分发许可**：`GPL-3.0-only`（见 `package.json`、`LICENSES/GPL-3.0.txt`、`THIRD_PARTY_NOTICES.md`、`docs/license-decision.md` 方案 A）。
-- **清单摘要（`buildId`）**：`f3a5f8cbe3bfa70ef1d03604f2647d1f1184d6acabd20b18470cd51a9b8916e3`（`runtime-manifest.json`，复用的 `v0.7.0` Windows 运行时归档 `runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`）。
+- **清单摘要（`buildId`）**：`5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46`（`runtime-manifest.json`，复用的 `v0.7.0` Windows 运行时归档 `runtimeAssetBuildId=b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f`）。
 
 ---
 
@@ -40,9 +40,9 @@ Windows 轻量包复用 `v0.7.0` 固定运行时归档（字节数与 SHA-256 �
 
 ## 本轮本地实跑验证快照
 
-- **JS / 桥接 / UI / 门禁测试（`npm test`）**：**102 pass / 0 fail**（含 `client.test.mjs`、`gate.test.mjs` 路由防漂移扫描、`p04-bridge.test.mjs`、`market.test.mjs`、`manifest.test.mjs`、`managed-runtime.test.mjs`、`release-check.test.mjs`）。
-- **后端集成离线测试（`python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend`）**：**707 OK（skipped=4）**，0 失败。
-- **后端管理端离线测试（`python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend`）**：**151 OK**，0 失败。
+- **JS / 桥接 / UI / 门禁测试（`npm test`）**：**110 pass / 0 fail / 1 skipped**（macOS 用例在 Windows 跳过；含 `client.test.mjs`、`stop.test.mjs`、`gate.test.mjs`、`p04-bridge.test.mjs`、`market.test.mjs`、`manifest.test.mjs`、`managed-runtime.test.mjs`、`release-check.test.mjs`）。
+- **后端集成离线测试（`python -B -X utf8 -m unittest discover -s backend/integration -p "test_*.py" -t backend`）**：**713 OK（skipped=4）**，0 失败。
+- **后端管理端离线测试（`python -B -X utf8 -m unittest discover -s backend/manager -p "test_*.py" -t backend`）**：**157 OK**，0 失败。
 - **本地回环代理 E2E 冒烟（`index.js` `createHandler()` + `manager/app.py`，`start_dispatcher=False`，真实模型 = 0，真实外写 = 0）**：**9/9 阶段全通**（`_session` 握手 → 创建项目 → 创建并保存 `platform_scheduled` 任务 → `schedule` 能力/预览/应用/启停/待核对 → `entities`/`precheck`/`ignore`/`action`/`retrieval`/`evidence/impact` → `readers` 字典/预览/导入/评论/观察卡/撤销批次 → `browser/target`+`status` → `publish/platforms` + 七猫导出 + 七猫 `submit` 被拒且 `writes=0` → `runs`/`notifications` → `422 invalid_request` 统一错误体透传）。
 - **清单与服务归档构建校验**：
   - `runtime-manifest.json`：`3420` 文件，LF 一致性校验与 `pack-bundle.py` 通过，生成 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz` 与 `runtime-download.json`。

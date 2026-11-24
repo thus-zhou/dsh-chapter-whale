@@ -9,14 +9,23 @@ from . import bridge,writer_runner
 
 def restart_stale_coordinator(root,state,now=None):
     if os.name!='nt':return False
-    value=writer_runner.strict_json(Path(state),{})
+    try:
+        value=writer_runner.strict_json(Path(state),{})
+    except (OSError, ValueError):
+        return False
     if not isinstance(value,dict) or value.get('active_job') or value.get('child_pid'):return False
     pid=value.get('pid');started=value.get('started_at');checked=value.get('checked_at')
     if type(pid) is not int or pid<=0 or not started or not checked:return False
     current=now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current=current.replace(tzinfo=timezone.utc)
     try:
         started_at=datetime.fromisoformat(started)
         checked_at=datetime.fromisoformat(checked)
+        if started_at.tzinfo is None:
+            started_at=started_at.replace(tzinfo=timezone.utc)
+        if checked_at.tzinfo is None:
+            checked_at=checked_at.replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
         # 描述损坏或来自旧版本：只读跳过，绝不据此停止任何进程。
         return False

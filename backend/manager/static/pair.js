@@ -8,7 +8,7 @@ document.getElementById("pair-form").addEventListener("submit", async event => {
     const response = await fetch("/api/access/pair", {method:"POST", signal:controller.signal,
       headers:{"Content-Type":"application/json", "X-Novel-Helper":"1"}, body:JSON.stringify(Object.fromEntries(new FormData(form)))});
     const result = await response.json();
-    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "请输入 8 位配对码");
+    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : (typeof result.message === "string" ? result.message : "请输入 8 位配对码"));
     location.replace("/");
   } catch (reason) {
     error.textContent = reason.name === "AbortError" ? "连接超时，请确认电脑在线" : reason.message;

@@ -752,6 +752,7 @@ def _candidate_rows(review, body, chapter):
             title = _text(entry.get("title"), 120)
             content = _text(entry.get("content"), 2000)
             quote = _text(entry.get("quote"), 800)
+            entities = _entities(entry.get("entities"))
         except ValueError:
             dropped.append({"index": index, "reason": "field_invalid"})
             continue
@@ -764,7 +765,7 @@ def _candidate_rows(review, body, chapter):
             continue
         claim = entry.get("claim") if entry.get("claim") in {"body_fact", "speculation"} else "body_fact"
         kept.append({"title": title, "content": content, "quote": quote, "claim": claim,
-                     "entities": _entities(entry.get("entities"))})
+                     "entities": entities})
     return kept, dropped
 
 

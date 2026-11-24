@@ -30,10 +30,10 @@ import {
   readdirSync,
   statSync,
 } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { managedRoot, managedPythonPath, runtimeAvailable, prepareManaged, managedEnvironment,
-  readRunDescription, compareRunDescription, writeRunDescription } from './managed-runtime.mjs';
+  readRunDescription, compareRunDescription, writeRunDescription, normalizePath } from './managed-runtime.mjs';
 import { DshModelBridge } from './dsh-model-bridge.mjs';
 
 const PLUGIN_ID = 'dsh-chapter-whale';
@@ -464,10 +464,25 @@ async function probe(config, signal) {
     const running = body?.service === 'novel-helper-manager';
     if (running) {
       // 只认本工作区的实例：同端口上别的项目、别的发布服务都不是“我们的管理器”。
-      const verdict = compareRunDescription(readRunDescription(config.rootDir), body, config.rootDir, config.port);
+      // 但若只是上次记录的 startup_id 已过期（进程重启）或用户切换端口，应刷新描述而不是误判为外来进程。
+      const currentDesc = readRunDescription(config.rootDir);
+      const verdict = compareRunDescription(currentDesc, body, config.rootDir, config.port);
       if (!verdict.ok) {
-        return { running: false, foreign: true, kind: verdict.kind, health: body,
-          error: verdict.message, hint };
+        const sameRoot = !body?.root || normalizePath(body.root) === normalizePath(config.rootDir);
+        const recoverable = verdict.kind === 'stale' || (verdict.kind === 'conflict' && sameRoot);
+        if (recoverable) {
+          try {
+            writeRunDescription(config, body, {
+              mode: body?.mode || currentDesc.mode || 'dsh_managed',
+              owner: currentDesc.owner || 'plugin',
+            });
+          } catch {
+            /* keep probe non-fatal if disk is read-only */
+          }
+        } else {
+          return { running: false, foreign: true, kind: verdict.kind, health: body,
+            error: verdict.message, hint };
+        }
       }
     }
     return { running, health: body, hint };
@@ -487,10 +502,59 @@ async function probe(config, signal) {
 let startingPromise = null;
 /** The manager process *this* Host process spawned, if any. */
 let spawnedChild = null;
+/** Ownership metadata captured when this Host session's spawned manager became healthy. */
+let spawnedMeta = null;
 
-/** True only for the pid we started; a manager someone else launched is left alone. */
-function ownsPid(pid) {
-  return Number.isInteger(pid) && spawnedChild?.pid === pid && spawnedChild.exitCode === null;
+/** True only for the manager instance this Host process started (including Windows venv launcher children). */
+function ownsService(pid, health, config) {
+  if (!Number.isInteger(pid) || !spawnedChild || spawnedChild.exitCode !== null) return false;
+  if (spawnedChild.pid === pid) return true;
+  if (!spawnedMeta || spawnedMeta.child !== spawnedChild) return false;
+  if (spawnedMeta.rootDir !== normalizePath(config.rootDir) || spawnedMeta.port !== config.port) return false;
+  if (spawnedMeta.startupId && health?.startup_id && spawnedMeta.startupId !== health.startup_id) return false;
+  return spawnedMeta.healthPid === pid;
+}
+
+function terminateSpawnedTree(child, healthPid) {
+  if (!child) return;
+  if (process.platform === 'win32') {
+    const pids = [child.pid];
+    if (Number.isInteger(healthPid) && healthPid !== child.pid) pids.push(healthPid);
+    for (const target of pids) {
+      if (!Number.isInteger(target) || target <= 0) continue;
+      try {
+        spawnSync('taskkill', ['/PID', String(target), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+          timeout: 5000,
+        });
+      } catch {
+        /* fallback below */
+      }
+    }
+    try {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    } catch {
+      /* already exited */
+    }
+    return;
+  }
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      /* already exited */
+    }
+  }
+  if (Number.isInteger(healthPid) && healthPid !== child.pid) {
+    try {
+      process.kill(healthPid, 'SIGTERM');
+    } catch {
+      /* already exited */
+    }
+  }
 }
 
 /** Report a rejected spawn/telemetry promise instead of letting it become an unhandled rejection. */
@@ -502,6 +566,7 @@ function swallow(promise, onError) {
 async function ensureStarted(config, signal) {
   const current = await probe(config, signal);
   if (current.running) return { started: false, ...current };
+  if (current.foreign) return { started: false, ...current };
   if (!config.autoStart) return { started: false, ...current, autoStart: false };
   if (startingPromise) return startingPromise;
 
@@ -546,7 +611,10 @@ async function ensureStarted(config, signal) {
         spawnError = error;
       });
       child.once('exit', () => {
-        if (spawnedChild === child) spawnedChild = null;
+        if (spawnedChild === child) {
+          spawnedChild = null;
+          spawnedMeta = null;
+        }
       });
       spawnedChild = child;
       child.unref();
@@ -579,6 +647,13 @@ async function ensureStarted(config, signal) {
       }
       const state = await probe(config, signal);
       if (state.running) {
+        spawnedMeta = {
+          child,
+          healthPid: Number.isInteger(state.health?.pid) ? state.health.pid : child.pid,
+          startupId: state.health?.startup_id || null,
+          rootDir: normalizePath(config.rootDir),
+          port: config.port,
+        };
         // 只有确认健康且属于本工作区后，才声明“插件持有这个实例”。
         let description = null;
         try {
@@ -630,7 +705,7 @@ async function stopService(config, signal) {
   if (!Number.isInteger(pid)) {
     return { stopped: false, running: true, code: 'no-pid', detail: '健康检查没有返回 pid，无法判断归属' };
   }
-  if (!ownsPid(pid)) {
+  if (!ownsService(pid, state.health, config)) {
     return {
       stopped: false,
       running: true,
@@ -640,7 +715,7 @@ async function stopService(config, signal) {
     };
   }
   try {
-    spawnedChild.kill('SIGTERM');
+    terminateSpawnedTree(spawnedChild, pid);
   } catch (error) {
     return { stopped: false, running: true, pid, error: String(error?.message || error) };
   }
@@ -648,7 +723,13 @@ async function stopService(config, signal) {
   while (Date.now() < deadline) {
     await delay(350);
     const after = await probe(config, signal).catch(() => ({ running: true }));
-    if (!after.running) return { stopped: true, running: false, pid };
+    if (!after.running) {
+      if (spawnedChild) {
+        spawnedChild = null;
+        spawnedMeta = null;
+      }
+      return { stopped: true, running: false, pid };
+    }
     if (signal?.aborted) return { stopped: false, running: true, pid, aborted: true };
   }
   return {
@@ -704,7 +785,15 @@ async function forward(request, response, config, context, targetPath, search) {
   if (!SAFE_METHODS.has(method)) headers['x-novel-helper'] = '1';
 
   let body;
-  if (!SAFE_METHODS.has(method)) body = await readBody(request, config.maxBodyBytes);
+  if (!SAFE_METHODS.has(method)) {
+    try {
+      body = await readBody(request, config.maxBodyBytes);
+    } catch (error) {
+      const detail = String(error?.message || error || '读取请求体失败');
+      sendJson(response, detail.includes('超过') ? 413 : 400, { detail });
+      return;
+    }
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
@@ -745,8 +834,11 @@ async function forward(request, response, config, context, targetPath, search) {
 /* ------------------------------------------------------------------- routes */
 
 function tokenMatches(actual, expected) {
-  if (typeof actual !== 'string' || actual.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+  if (typeof actual !== 'string') return false;
+  const actualBuf = Buffer.from(actual);
+  const expectedBuf = Buffer.from(expected);
+  if (actualBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(actualBuf, expectedBuf);
 }
 
 /**
@@ -840,7 +932,8 @@ export function createHandler(config, token) {
       return;
     }
 
-    const isStop = segments.length === 1 && segments[0] === '_stop';
+    const isStop = (segments.length === 1 && segments[0] === '_stop')
+      || (segments.length === 2 && segments[0] === 'api' && segments[1] === '_stop');
     if (isStop) {
       if (method !== 'POST') {
         sendJson(response, 405, { detail: '只支持 POST' });
@@ -1161,7 +1254,7 @@ export function apply(ctx, config = {}) {
     // Opt-in: a plugin reload during a publish run must not SIGTERM the worker.
     ctx.effect(
       () => () => {
-        if (spawnedChild && spawnedChild.exitCode === null) spawnedChild.kill('SIGTERM');
+        if (spawnedChild && spawnedChild.exitCode === null) terminateSpawnedTree(spawnedChild, spawnedMeta?.healthPid);
       },
       'novel-helper: stop on dispose',
     );

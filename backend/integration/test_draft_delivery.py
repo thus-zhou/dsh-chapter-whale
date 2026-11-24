@@ -276,5 +276,33 @@ class DraftDeliveryTest(unittest.TestCase):
         self.assertGreater(value["confirmed_words"], 0)
 
 
+class SingleModelRequireModelTest(unittest.TestCase):
+    def test_single_model_provider_schema_v1_is_accepted(self):
+        cfg = {
+            "provider_schema": 1,
+            "multi_model": False,
+            "default_binding": {"provider_id": "p1", "model_id": "m1"},
+            "roles": {"B": {"provider_id": "", "model_id": ""}},
+        }
+        with patch.object(model_roles, "enabled", return_value=False), \
+             patch.object(model_roles, "load_config", return_value=cfg), \
+             patch.object(model_roles, "connection", return_value={"model": "m1", "api_key": "sk-test"}):
+            self.assertIsNone(draft_delivery._require_model())
+
+    def test_unconfigured_provider_schema_v1_is_rejected(self):
+        cfg = {
+            "provider_schema": 1,
+            "multi_model": False,
+            "default_binding": {"provider_id": "", "model_id": ""},
+            "roles": {},
+        }
+        with patch.object(model_roles, "enabled", return_value=False), \
+             patch.object(model_roles, "load_config", return_value=cfg), \
+             patch.object(model_roles, "connection", return_value={"model": "", "api_key": ""}):
+            msg = draft_delivery._require_model()
+            self.assertIsInstance(msg, str)
+            self.assertTrue(msg)
+
+
 if __name__ == "__main__":
     unittest.main()

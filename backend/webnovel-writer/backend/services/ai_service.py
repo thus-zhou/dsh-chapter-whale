@@ -113,11 +113,19 @@ class AIService:
 
     @contextmanager
     def without_thinking(self):
-        supported=self.model.casefold().startswith('deepseek-v4') or self.model.casefold()=='deepseek-flash'
+        native = (self.model or '').casefold().split('/')[-1]
+        supported = native.startswith('deepseek-v4') or native == 'deepseek-flash'
         token=self._thinking_override.set('disabled') if supported else None
         try:yield
         finally:
             if token is not None:self._thinking_override.reset(token)
+
+    def _is_loopback_base_url(self) -> bool:
+        try:
+            host = (urlsplit(self.base_url or '').hostname or '').lower()
+        except ValueError:
+            return False
+        return host in {'127.0.0.1', 'localhost', '::1'}
 
     def _reasoning_options(self):
         # User settings take precedence over automatic stage recommendations.
@@ -198,8 +206,8 @@ class AIService:
                 # 每次重试都创建新的 connector 和 session，确保连接干净
                 connector = aiohttp.TCPConnector(force_close=True, enable_cleanup_closed=True)
                 timeout = aiohttp.ClientTimeout(total=self.timeout, connect=30, sock_read=self.timeout)
-                # trust_env=True 允许使用系统代理，解决全球区域访问限制问题
-                async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=True) as session:
+                # 对本机回环网关（如 DSH 模型桥）跳过系统代理，避免被本地代理截留并泄露本机令牌
+                async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=not self._is_loopback_base_url()) as session:
                     async with session.post(url, json=payload, headers=headers) as response:
                         if response.status == 200:
                             data = await response.json()
@@ -303,7 +311,7 @@ class AIService:
             try:
                 connector = aiohttp.TCPConnector(force_close=True, enable_cleanup_closed=True)
                 timeout = aiohttp.ClientTimeout(total=300, connect=30, sock_read=300)
-                async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=True) as session:
+                async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=not self._is_loopback_base_url()) as session:
                     async with session.post(url, json=payload, headers=headers) as response:
                         if response.status != 200:
                             error_text = await response.text()
@@ -416,8 +424,8 @@ class AIService:
             try:
                 connector = aiohttp.TCPConnector(force_close=True, enable_cleanup_closed=True)
                 timeout = aiohttp.ClientTimeout(total=self.timeout, connect=30, sock_read=300)
-                # trust_env=True 允许使用系统代理
-                async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=True) as session:
+                # 对本机回环网关（如 DSH 模型桥）跳过系统代理
+                async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=not self._is_loopback_base_url()) as session:
                     async with session.post(url, json=payload, headers=headers) as response:
                         self._debug(f"AI Stream Response Status: {response.status}")
                         self._debug(f"AI Stream Content-Type: {response.headers.get('Content-Type', 'unknown')}")
@@ -576,6 +584,7 @@ class AIService:
                         ]
                     continue
                 yield f"[ERROR] 连接中断且重试失败: {type(e).__name__}"
+                return
             finally:
                 meter.finish()
 
@@ -593,8 +602,9 @@ class AIService:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         try:
-            proxy_url = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY") or os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY") or None
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True, proxy=proxy_url) as client:
+            loopback = self._is_loopback_base_url()
+            proxy_url = None if loopback else (os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY") or os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY") or None)
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True, proxy=proxy_url, trust_env=not loopback) as client:
                 response = await client.get(url, headers=headers)
                 if response.status_code != 200:
                     raise RuntimeError(f"模型列表请求失败 (HTTP {response.status_code})")

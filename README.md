@@ -1,12 +1,12 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**0.7.2（GPL-3.0-only）：修复新建和切换作品时大纲、草稿串书的问题，完善新书上手引导，并修复发布预检与排期恢复。**
+**0.7.3（GPL-3.0-only）：全量代码审计与可靠性修复——解决重启卡死、停止按钮失效、单模型阻塞、排期/恢复缺陷及前后端多处交互问题。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，在 Windows 上也可接入部分免费模型渠道。
 
 **[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.2
+Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.3
 
 > Windows 上已使用独立 DSH 环境实装；macOS 插件首发安装与独立工作区 `.venv` 服务启动已在 GitHub Actions `macos-latest` 跑通，真实番茄及七猫页面、真实模型调用、物理机 Intel Mac 与外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
 
@@ -16,6 +16,13 @@ Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档
 - **macOS（arm64 / x64）**：需本机已安装 Python 3.11+（`brew install python@3.13` 或 Python 官网安装包），首次启动自动在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 创建隔离环境并安装依赖；若需在 Mac 上启用浏览器发布，按[上手指南](docs/quickstart.md)安装 Chromium 一次即可。作品与账号数据留在独立工作区，卸载插件不会删除。
 
 ![码章鲸 0.7.0：液态玻璃工作台、全自动小说写作与番茄发布](assets/screenshots/02-dashboard.jpg)
+
+## 0.7.3 修复与改进
+
+- **启停与重启恢复**：修复 Windows `.venv` 启动器包装进程导致的停止失败与残留进程树问题；同工作区过期 `run-description.json` 重启时自动刷新，不再误判为外来进程阻塞；`.install-lock` 支持死进程锁自动回收。
+- **单模型与写作排期引擎**：解除 `provider_schema=1` 单模型配置在存稿中的误拦截；支持 `continuing` 周期恢复、`chapters_per_slot > 1` 排期展开与回环桥绕过系统代理；修复发布预检、记忆保存 422 与常驻服务退化空转。
+- **前后端一致性**：补齐 `GET /api/jobs` 接口；修复 DSH 面板 GET 带请求体、状态覆盖、角色测试误报与独立 Web 端错误解包、修订上限和总览同步。
+- **运行时基线**：Windows 轻量包复用经完整性校验的 `v0.7.0` 运行时，始终安装 `0.7.3` 包内后端代码；macOS 首启继续自动配置隔离 `.venv`。
 
 ## 0.7.2 修复与改进
 
@@ -155,16 +162,16 @@ npm pack dsh-chapter-whale@latest
 在 DSH 插件管理中添加对应版本的下载包地址，安装完成后重启 DSH，从侧栏打开「码章鲸」，点击「开始使用码章鲸」。
 
 ```text
-https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.2/dsh-chapter-whale-0.7.2.tgz
+https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.3/dsh-chapter-whale-0.7.3.tgz
 ```
 
-`dsh-chapter-whale-0.7.2.tgz` 是跨平台轻量插件包（Windows 首次启动自动下载并校验 `v0.7.0` 固定运行时归档 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`，始终安装 `0.7.2` 包内后端代码；macOS 首次启动基于本机 Python 3.11+ 创建隔离 `.venv`）。已有相同运行时的工作区直接复用，不重复下载。
+`dsh-chapter-whale-0.7.3.tgz` 是跨平台轻量插件包（Windows 首次启动自动下载并校验 `v0.7.0` 固定运行时归档 `dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz`，始终安装 `0.7.3` 包内后端代码；macOS 首次启动基于本机 Python 3.11+ 创建隔离 `.venv`）。已有相同运行时的工作区直接复用，不重复下载。
 
 <details>
 <summary>使用命令行安装</summary>
 
 ```powershell
-dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.2/dsh-chapter-whale-0.7.2.tgz
+dsh plugin --profile web add https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.3/dsh-chapter-whale-0.7.3.tgz
 ```
 
 这条命令面向 `dsh web`；桌面版请在应用内添加地址。也可以通过[自定义市场源](https://raw.githubusercontent.com/thus-zhou/dsh-chapter-whale/main/market/index.json)安装；首次启动按固定 buildId 和摘要核对运行时。插件版本与运行时版本分别记录。
@@ -225,7 +232,7 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 
 **支持什么系统和平台？**
 
-当前 `0.7.2` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
+当前 `0.7.3` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
 
 ## 许可证与第三方组件
 
@@ -241,6 +248,6 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前版本为 `0.7.2`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
+包名为 `dsh-chapter-whale`，当前版本为 `0.7.3`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
 
-**[查看 0.7.2 发布状态与验证边界 →](RELEASE_STATUS.md)**
+**[查看 0.7.3 发布状态与验证边界 →](RELEASE_STATUS.md)**

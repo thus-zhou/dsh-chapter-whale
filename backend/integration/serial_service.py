@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler as s, writer_runner as writer
 
-DATA = ROOT / 'integration_data' / 'serial_service'
+DATA = Path(bridge.COMBINED_ROOT) / 'integration_data' / 'serial_service'
 PENDING = DATA / 'pending_schedule.json'
 LOCK = DATA / 'service.lock'
 STATE = DATA / 'heartbeat.json'

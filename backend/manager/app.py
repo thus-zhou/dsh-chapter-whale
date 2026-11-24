@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -58,7 +59,10 @@ DB_PATH = Path(os.getenv("NOVEL_HELPER_MANAGER_DB", str(DATA / "manager.sqlite3"
 # 导致界面与 CLI 可能读写不同配置文件）。
 AI_PATH = Path(os.getenv("NOVEL_HELPER_AI_CONFIG") or str(DATA / "ai_config.json")).resolve()
 STATIC = Path(__file__).resolve().parent / "static"
-PYTHON = bridge.COMBINED_ROOT / ".venv" / "Scripts" / "python.exe"
+PYTHON = Path(sys.executable) if sys.executable else (
+    bridge.COMBINED_ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python3")
+)
+logger = logging.getLogger("chapter_whale.manager")
 
 
 class Store:
@@ -154,9 +158,18 @@ def stop_process_tree(process: subprocess.Popen):
         return
     if os.name == "nt":
         subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     else:
-        process.terminate()
+        import signal
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            process.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            except OSError:
+                process.terminate()
 
 
 class Operations:
@@ -165,6 +178,7 @@ class Operations:
         self.lock = threading.RLock()
         self.processes: dict[str, subprocess.Popen] = {}
         self.cancelled: set[str] = set()
+        self.login_confirmed: set[str] = set()
         # Reconciliation prevents a restart from showing indefinitely "running".
         for old in store.operations(active_only=True):
             if old.get("status") in {"queued", "running", "awaiting_login"}:
@@ -267,18 +281,27 @@ class Operations:
             suffix=f"-resume-{payload['resume_count']}" if payload.get('resume_count') else ''
             env["NOVEL_HELPER_MANAGER_RESULT"] = str(DATA / "operations" / f"{identity}{suffix}.json")
             result_path = Path(env["NOVEL_HELPER_MANAGER_RESULT"])
+            cancelled_before_spawn = False
             with self.lock:
                 if identity in self.cancelled:
                     payload.update(status="cancelled", finished_at=bridge.now_iso())
                     self.store.save_operation(payload)
                     return
-            process = subprocess.Popen([str(PYTHON), "-X", "utf8", "-u", str(ROOT / "manager" / "worker.py"), *args],
-                cwd=str(ROOT), env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+            popen_kwargs: dict[str, Any] = {
+                "cwd": str(ROOT), "env": env, "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE, "stderr": subprocess.STDOUT,
+                "text": True, "encoding": "utf-8", "errors": "replace",
+            }
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            else:
+                popen_kwargs["start_new_session"] = True
+            process = subprocess.Popen([str(PYTHON), "-X", "utf8", "-u", str(ROOT / "manager" / "worker.py"), *args], **popen_kwargs)
             with self.lock:
                 self.processes[identity] = process
-                if identity in self.cancelled:
-                    stop_process_tree(process)
+                cancelled_before_spawn = identity in self.cancelled
+            if cancelled_before_spawn:
+                stop_process_tree(process)
             payload.update(status="running", pid=process.pid)
             self.store.save_operation(payload)
             # Bound the child even if the website or model stops responding.
@@ -292,16 +315,21 @@ class Operations:
             try:
                 for line in process.stdout:
                     payload["log_tail"] = (payload.get("log_tail", "") + redact(line))[-16000:]
+                    with self.lock:
+                        confirmed = identity in self.login_confirmed
                     if line.startswith("NOVEL_HELPER_WAITING_LOGIN"):
-                        payload["status"] = "awaiting_login"
+                        if not confirmed:
+                            payload["status"] = "awaiting_login"
+                    elif confirmed and payload.get("status") == "awaiting_login":
+                        payload["status"] = "running"
                     self.store.save_operation(payload)
-                code = process.wait(timeout=10)
+                code = process.wait(timeout=30)
             finally:
                 timer.cancel()
             result = bridge.read_json(result_path, {})
             result = json.loads(redact(json.dumps(result, ensure_ascii=False)))
             child_status = result.get("status") if isinstance(result, dict) else None
-            benign = {"success", "progress", "generated", "reviewed", "authorized", "queued", "logged_in", "configured", "already_run", "already_ran", "ok", "learned", "planned", "polished", "memory_synced"}
+            benign = {"success", "progress", "generated", "reviewed", "authorized", "queued", "logged_in", "configured", "already_run", "already_ran", "ok", "learned", "planned", "polished", "preview", "memory_synced"}
             if timed_out.is_set():
                 payload.update(status="failed", error="运行超过一小时，已停止；请核对平台状态后再试")
             elif code == 0 and child_status in benign:
@@ -324,6 +352,7 @@ class Operations:
                         pipe.close()
             with self.lock:
                 self.processes.pop(identity, None)
+                self.login_confirmed.discard(identity)
                 if identity in self.cancelled:
                     payload.update(status="cancelled", error="已由用户取消；已提交到平台的章节请核对状态")
                     self.cancelled.discard(identity)
@@ -331,6 +360,7 @@ class Operations:
             self.store.save_operation(payload)
 
     def cancel(self, identity: str):
+        process = None
         with self.lock:
             payload = self.store.operation(identity)
             if payload.get('status')=='waiting':
@@ -341,18 +371,22 @@ class Operations:
                 raise HTTPException(409, "该操作已经结束")
             self.cancelled.add(identity)
             process = self.processes.get(identity)
-            if process:
-                stop_process_tree(process)
-            return {"id": identity, "status": "cancelling"}
+        if process:
+            stop_process_tree(process)
+        return {"id": identity, "status": "cancelling"}
 
     def confirm_login(self, name: str):
         with self.lock:
             for op in self.store.operations(active_only=True):
                 if op.get("identity") == f"login:{name}" and op.get("status") == "awaiting_login":
                     process = self.processes.get(op["id"])
-                    if process and process.poll() is None:
-                        process.stdin.write("\n")
-                        process.stdin.flush()
+                    if process and process.poll() is None and process.stdin:
+                        try:
+                            process.stdin.write("\n")
+                            process.stdin.flush()
+                        except (BrokenPipeError, OSError) as exc:
+                            raise HTTPException(409, "登录窗口进程已关闭，请重新启动登录") from exc
+                        self.login_confirmed.add(op["id"])
                         op["status"] = "running"
                         self.store.save_operation(op)
                         return op
@@ -360,9 +394,9 @@ class Operations:
 
     def shutdown(self):
         with self.lock:
-            for process in self.processes.values():
-                if process.poll() is None:
-                    stop_process_tree(process)
+            targets = [process for process in self.processes.values() if process.poll() is None]
+        for process in targets:
+            stop_process_tree(process)
 
 
 class ProjectInput(BaseModel):
@@ -579,10 +613,10 @@ class MemoryItemInput(BaseModel):
     title: str = Field(min_length=1,max_length=120)
     content: str = Field(min_length=1,max_length=2000)
     pinned: bool = False
-    status: str = Field(default="active",pattern="^(active|conflict|archived)$")
+    status: str = Field(default="active",pattern="^(active|conflict|archived|superseded)$")
     source_chapter: int = Field(default=0,ge=0,le=100000)
     due_chapter: int = Field(default=0,ge=0,le=100000)
-    clue_state: str = Field(default="planned",pattern="^(planned|planted|resolved)$")
+    clue_state: str = Field(default="",pattern="^(|planned|planted|resolved)$")
     valid_to: int = Field(default=0,ge=0,le=100000)
     story_time: str = Field(default="",max_length=80)
 
@@ -785,7 +819,7 @@ def _write_ai_config(config):
 
 def _persist_ai(config):
     try:
-        return secret_store.save(DATA, config, _write_ai_config)
+        return secret_store.save(AI_PATH.parent, config, _write_ai_config)
     except (OSError, ValueError, secret_store.SecretCorrupt):
         _write_ai_config(config)
         return {"mode": "plaintext-acl", "migrated": False, "stored": 0,
@@ -806,7 +840,7 @@ def load_ai():
         if not isinstance(role_values,dict) or set(role_values)-set(model_roles.ROLES) or any(not isinstance(v,dict) for v in role_values.values()):raise ValueError("多模型配置损坏")
         return config
     if AI_PATH.is_file():
-        config = secret_store.load(DATA, read_config(AI_PATH))
+        config = secret_store.load(AI_PATH.parent, read_config(AI_PATH))
         plaintext = secret_store.collect({key: value for key, value in config.items() if key != "secret_store"})
         if plaintext and not _AI_MIGRATION_TRIED and secret_store.codec() is not None:
             # 迁移只尝试一次：写受保护存储 → 读回校验 → 再移除明文。
@@ -839,7 +873,7 @@ def public_ai():
             "roles":{role:{"model":config.get("roles",{}).get(role,{}).get("model",""),
                 "base_url":config.get("roles",{}).get(role,{}).get("base_url",""),
                 "key_masked":"••••••••" if config.get("roles",{}).get(role,{}).get("api_key") else ""} for role in model_roles.ROLES},
-            "credential_store":secret_store.status(DATA)}
+            "credential_store":secret_store.status(AI_PATH.parent)}
 
 
 def project_summary(item: dict):
@@ -971,7 +1005,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     app.state.store = store
     app.state.operations = ops
     from manager import provider_api
-    provider_api.install(app, load_ai, AI_PATH)
+    provider_api.install(app, load_ai, AI_PATH, costs_db=DATA / "costs.sqlite3")
     access = device_access.DeviceAccess(network_hosts, port, pairing_required=device_pairing_required)
     app.state.device_access = access
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver", *network_hosts])
@@ -1912,6 +1946,10 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         return [scheduler._job_summary(identity, job) | {"max_revisions": job.get("max_revisions", 2)}
                 for identity, job in scheduler.load_scheduler()["jobs"].items() if isinstance(job, dict)]
 
+    @app.get("/api/jobs")
+    def jobs_listing():
+        return list_jobs()
+
     @app.post("/api/jobs")
     def add_job(data: JobInput):
         if not any(Path(x["path"]).resolve() == Path(data.project).resolve() for x in store.projects()):
@@ -1969,7 +2007,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         store = schedule_buffer.load_store(identity)
         last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), dict) else {}
         remote = [row for row in (last.get("rows") or []) if isinstance(row, dict)]
-        planned = schedule_buffer.plan(job, approved=approved, remote=remote,
+        planned = schedule_buffer.plan({**job, "job_id": identity}, approved=approved, remote=remote,
                                        intents=store.get("intents") or [],
                                        capability=capability, settings=settings)
         return {"settings": settings, "platform": platform, "account": account, "book": book,
@@ -1982,6 +2020,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         return {"job_id": identity, "settings": ctx["settings"], "platform": ctx["platform"],
                 "capability": ctx["capability"].get("capabilities") or {},
                 "capability_observed_at": ctx["capability"].get("observed_at", ""),
+                "capability_source": ctx["capability"].get("source", ""),
+                "capability_evidence": ctx["capability"].get("evidence", ""),
                 "review": schedule_buffer.review_items(identity, ctx["store"]),
                 "preview": ctx["planned"], "state": state}
 
@@ -2059,7 +2099,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         approved = schedule_buffer.approved_candidates(Path(job["project"]))
         last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), dict) else {}
         remote = [row for row in (last.get("rows") or []) if isinstance(row, dict)]
-        planned = schedule_buffer.plan(job, approved=approved, remote=remote,
+        planned = schedule_buffer.plan({**job, "job_id": identity}, approved=approved, remote=remote,
                                        intents=store.get("intents") or [],
                                        capability=capability, settings=settings)
         if settings["enabled"] and not allowed:
@@ -2345,11 +2385,6 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if not public_ai()["configured"]:
             raise ValueError("请先保存 AI 配置")
         return ops.start("ai_test", ["ai-test"], "ai-test")
-
-    @app.post("/api/ai/roles/{role}/test")
-    def test_role(role: str):
-        model_roles.connection(role,load_ai())
-        return ops.start("ai_test",["ai-test","--role",role],f"ai-test:{role}")
 
     @app.post("/api/ai/roles/test")
     def test_all_roles():

@@ -21,7 +21,7 @@ SERVICE_NAME = "novel-helper-manager"
 
 
 def normalize_path(value):
-    return os.path.normcase(os.path.abspath(str(value)))
+    return os.path.normcase(os.path.realpath(str(value)))
 
 
 def path(root_dir):

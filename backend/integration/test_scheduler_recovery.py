@@ -118,6 +118,19 @@ class DueJobsRecoveryTest(unittest.TestCase):
                         last_attempt_slot="2026-11-20@08:00", last_attempt_date="2026-11-20"))
         self.assertEqual(scheduler.due_jobs(self.now), [])
 
+    def test_continuing_cycle_is_due_same_slot_and_next_slot(self):
+        self.write(_job(cycle={"status": "continuing"}, last_status="continuing",
+                        last_attempt_slot="2026-11-21@08:00", last_attempt_date="2026-11-21"))
+        due_same = scheduler.due_jobs(self.now)
+        self.assertEqual([row["id"] for row in due_same], ["tide"])
+        self.assertFalse(due_same[0]["recovering"])
+
+        self.write(_job(cycle={"status": "continuing"}, last_status="continuing",
+                        last_attempt_slot="2026-11-20@08:00", last_attempt_date="2026-11-20"))
+        due_next = scheduler.due_jobs(self.now)
+        self.assertEqual([row["id"] for row in due_next], ["tide"])
+        self.assertTrue(due_next[0]["recovering"])
+
 
 if __name__ == "__main__":
     unittest.main()

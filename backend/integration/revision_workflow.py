@@ -35,8 +35,9 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
     def save():
         state.update(revision_attempts=attempts,updated_at=bridge.now_iso())
         writer.atomic_json(path,state)
+    min_clause = f'本章正文不含标题和空白至少{min_words}字；' if min_words else ''
     base=('保留设定、事件、人物弧线和伏笔，优化对话与重点场景，减少空泛旁白和AI腔。'
-          f'本章正文不含标题和空白至少{min_words}字；只深化本章，不写下一章、不重复灌水。')
+          f'{min_clause}只深化本章，不写下一章、不重复灌水。')
     need_edit=not state.get('polished')
     # Initial expansion plus at most three editorial corrections per execution.
     # Total corrections persist across restarts and share the original limit.
