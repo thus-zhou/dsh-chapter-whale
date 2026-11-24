@@ -223,11 +223,17 @@
               setup();
               if (staticOnly) frame();
             };
+            let ro = null;
+            if (typeof ResizeObserver === 'function') {
+              ro = new ResizeObserver(() => onResize());
+              ro.observe(canvas.parentElement || canvas);
+            }
             if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
               window.addEventListener('resize', onResize);
             }
             return () => {
               if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+              if (ro && typeof ro.disconnect === 'function') ro.disconnect();
               if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
                 window.removeEventListener('resize', onResize);
               }

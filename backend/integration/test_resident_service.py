@@ -377,9 +377,10 @@ class ResidentServiceTests(unittest.TestCase):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(backend)
         script = (
+            "from pathlib import Path\n"
             "import time\n"
             "from integration import resident_service as svc\n"
-            "svc._start_stop_watchdog(None, 0.5)\n"
+            f"svc._start_stop_watchdog(Path({str(self.root)!r}), 0.5)\n"
             "svc.request_stop(15)\n"
             "time.sleep(30)\n"
             "print('not-exited')\n"

@@ -890,6 +890,14 @@
 }
 .nh-root[data-ui="atelier"] .cw-stage-pill.current .cw-st-code { color: var(--state-active); }
 .nh-root[data-ui="atelier"] .cw-st-code { font-family: var(--nh-mono); font-size: 10.5px; opacity: 0.78; margin-right: 4px; }
+.nh-root[data-ui="atelier"] .cw-stage-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-active);
+  box-shadow: 0 0 8px var(--state-active);
+}
 @keyframes cw-stage-breathe {
   0%, 100% { box-shadow: 0 8px 20px -14px rgba(121, 180, 255, 0.45); }
   50% { box-shadow: 0 10px 26px -12px rgba(121, 180, 255, 0.72); }
@@ -1021,6 +1029,12 @@
   font-family: var(--font-serif);
   font-size: 15.5px;
   line-height: 1.96;
+}
+.nh-root[data-ui="atelier"][data-reader-font="serif"] .cw-reader-text p {
+  font-family: var(--font-serif) !important;
+}
+.nh-root[data-ui="atelier"][data-reader-font="sans"] .cw-reader-text p {
+  font-family: var(--font-body) !important;
 }
 .nh-root[data-ui="atelier"] .cw-manuscript-footer {
   display: flex;

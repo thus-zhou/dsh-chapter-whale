@@ -606,3 +606,122 @@ main {
   padding: 14px 16px; border-radius: var(--lg-radius-md); corner-shape: squircle;
   background: var(--surface-alt); border: 1px solid var(--line);
 }
+
+/* Override Legacy Green / Cream Literal Rules From editorial.css / studio.css / providers.css */
+.hero { color: var(--text) !important; }
+.hero h2 { color: var(--ink) !important; }
+.hero-kicker,
+.hero p,
+.hero-footnote { color: var(--muted) !important; }
+.hero .button-primary {
+  background: var(--cta-bg) !important;
+  color: var(--cta-ink) !important;
+  border-color: transparent !important;
+}
+.hero .button-primary:hover {
+  background: var(--cta-bg) !important;
+  color: var(--cta-ink) !important;
+}
+.hero .button-ghost { color: var(--ink) !important; }
+.hero .button-ghost:hover { background: rgba(255, 255, 255, 0.10) !important; }
+:root[data-theme="light"] .hero .button-ghost:hover { background: rgba(17, 19, 24, 0.06) !important; }
+.hero .small-dot { background: var(--state-active) !important; }
+.art-orbit,
+.art-orbit::after { border-color: var(--line) !important; }
+.art-stroke { background: var(--line) !important; }
+.art-caption { color: var(--muted) !important; }
+
+.dialog {
+  border-radius: var(--lg-radius) !important;
+  corner-shape: squircle;
+  border: 1px solid var(--line) !important;
+  background: var(--lg-paper-bg) !important;
+  color: var(--ink) !important;
+  backdrop-filter: blur(26px) saturate(1.8);
+  -webkit-backdrop-filter: blur(26px) saturate(1.8);
+  box-shadow: var(--shadow) !important;
+}
+.dialog::backdrop {
+  background: rgba(3, 5, 10, 0.62) !important;
+  backdrop-filter: blur(8px) !important;
+}
+:root[data-theme="light"] .dialog::backdrop {
+  background: rgba(17, 19, 24, 0.28) !important;
+}
+.toast {
+  border-radius: var(--lg-radius-sm) !important;
+  corner-shape: squircle;
+  background: var(--lg-paper-bg) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow) !important;
+  backdrop-filter: blur(20px) saturate(1.9);
+  -webkit-backdrop-filter: blur(20px) saturate(1.9);
+}
+.cw-web-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 95;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.cw-web-toast.is-error {
+  border-color: var(--state-danger) !important;
+  color: var(--state-danger) !important;
+}
+.model-menu {
+  border-radius: var(--lg-radius-sm) !important;
+  background: var(--lg-paper-bg) !important;
+  border: 1px solid var(--line) !important;
+  color: var(--ink) !important;
+  box-shadow: var(--shadow) !important;
+  backdrop-filter: blur(20px);
+}
+
+.file-drop {
+  border-radius: var(--lg-radius-md) !important;
+  border-color: var(--line) !important;
+  background: var(--surface-alt) !important;
+  color: var(--ink) !important;
+}
+.studio-tabs button[aria-selected="true"] {
+  background: var(--state-active-soft) !important;
+  color: var(--state-active) !important;
+  box-shadow: inset 0 0 0 1px rgba(121, 180, 255, 0.34) !important;
+}
+.cost-token-track span { background: var(--state-active) !important; }
+.cost-token-track span + span { background: var(--accent-gold) !important; }
+.cost-token-legend { color: var(--state-active) !important; }
+.cost-token-legend span + span { color: var(--accent-gold) !important; }
+
+.provider-row,
+.provider-binding { border-color: var(--line) !important; }
+.provider-row small { color: var(--muted) !important; }
+.team-enable input[type="checkbox"] { accent-color: var(--state-active) !important; }
+.role-health[data-status="ok"] { background: var(--state-ok) !important; }
+.provider-binding[open],
+.provider-binding:hover {
+  border-color: var(--state-active) !important;
+  box-shadow: 0 8px 24px -14px rgba(121, 180, 255, 0.25) !important;
+}
+
+.pair-page {
+  background:
+    radial-gradient(64% 50% at 14% 8%, var(--bg-grad-a), transparent 68%),
+    radial-gradient(58% 48% at 86% 16%, var(--bg-grad-b), transparent 66%),
+    var(--paper) !important;
+}
+.pair-brand .brand-mark { background: var(--cta-bg) !important; color: var(--cta-ink) !important; }
+.pair-card {
+  background: var(--lg-paper-bg) !important;
+  border-color: var(--line) !important;
+  border-radius: var(--lg-radius) !important;
+  box-shadow: var(--shadow) !important;
+}
+.pair-card .button {
+  background: var(--cta-bg) !important;
+  border-color: transparent !important;
+  color: var(--cta-ink) !important;
+}

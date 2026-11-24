@@ -1,5 +1,6 @@
         function DashboardPage(props) {
           const { overview } = props;
+          const queue = overview.queue || {};
           const project = (overview.projects || [])[0] || null;
           const job = props.job || (overview.jobs || []).find(item => matchesProject(item, project)) || null;
           const work = workHeadline(job), cycle = job && job.cycle || {}, stage = chapterStage(job);
@@ -58,7 +59,7 @@
                     onClick: () => props.navigate(stagePages[index]),
                   },
                     e('span', null, e('span', { className: 'cw-st-code' }, 'ABCDE'[index]), label),
-                    e('span', { className: 'cw-st-ico' }, isDone ? e(Icon, { name: 'check', size: 12 }) : isCurr ? '•' : ''));
+                    e('span', { className: 'cw-st-ico' }, isDone ? e(Icon, { name: 'check', size: 12 }) : isCurr ? e('span', { className: 'cw-stage-live-dot', 'aria-hidden': 'true' }) : null));
                 })),
               stage.active ? e('div', { className: 'cw-gemini-box', role: 'status' },
                 e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 } },

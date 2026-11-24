@@ -177,6 +177,7 @@
     const ctx = canvas.getContext("2d");
     let stars = [];
     let tick = 0;
+    let rafId = 0;
 
     function setup() {
       const dpr = window.devicePixelRatio || 1;
@@ -216,7 +217,7 @@
       ctx.restore();
     }
 
-    function frame() {
+    function paint() {
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.width;
       const h = canvas.height;
@@ -246,12 +247,42 @@
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fill();
       }
-      if (!settings.reduced && !document.hidden) requestAnimationFrame(frame);
+    }
+
+    function frame() {
+      rafId = 0;
+      paint();
+      if (!settings.reduced && !document.hidden) rafId = requestAnimationFrame(frame);
+    }
+
+    function stopLoop() {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+    }
+
+    function startLoop() {
+      if (!rafId && !settings.reduced && !document.hidden) rafId = requestAnimationFrame(frame);
+    }
+
+    function redraw() {
+      paint();
+      if (settings.reduced || document.hidden) stopLoop();
+      else startLoop();
     }
 
     setup();
     frame();
-    window.addEventListener("resize", () => { setup(); positionLens(); });
+    window.addEventListener("resize", () => { setup(); redraw(); positionLens(); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopLoop();
+      else startLoop();
+    });
+    if (typeof MutationObserver === "function") {
+      new MutationObserver(() => redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }
+    window.__cwWebRedrawBackdrop = redraw;
 
     let rafLock = false;
     window.addEventListener("pointermove", (e) => {
@@ -459,11 +490,13 @@
         settings[k] = Number(ev.target.value);
         saveSettings();
         syncPopValues();
+        if (k === "backdrop") window.__cwWebRedrawBackdrop?.();
       });
     });
     document.getElementById("lg-r-reduced")?.addEventListener("change", (ev) => {
       settings.reduced = ev.target.checked;
       saveSettings();
+      window.__cwWebRedrawBackdrop?.();
     });
   }
 
@@ -479,10 +512,34 @@
   /* ========================================================================
      3. 0.7.0 Real Backend Panels (#page-insights, Precheck Tab, Schedule/Platform)
      ======================================================================== */
+  function showLgNotice(message, isError = false) {
+    let el = document.getElementById("cw-web-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "cw-web-toast";
+      el.className = "toast cw-web-toast";
+      document.body.appendChild(el);
+    }
+    el.textContent = String(message || "");
+    el.classList.toggle("is-error", Boolean(isError));
+    el.hidden = false;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.hidden = true; }, 3200);
+  }
+
   async function getJson(url, opts) {
     const res = await fetch(url, opts);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    let data = null;
+    try { data = await res.json(); } catch {}
+    if (!res.ok) {
+      if (res.status === 401) {
+        showLgNotice("登录会话已失效，正在刷新页面重新配对…", true);
+        setTimeout(() => location.reload(), 900);
+      }
+      const msg = (data && (data.message || data.detail)) || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data || {};
   }
 
   async function refreshOverviewCache() {
@@ -542,45 +599,63 @@
     if (insightsSub === "readers") {
       try {
         const [series, obs] = await Promise.all([
-          getJson(`/api/projects/${pid}/readers/series`).catch(() => ({ points: [] })),
-          getJson(`/api/projects/${pid}/readers/observations`).catch(() => ({ items: [] })),
+          getJson(`/api/projects/${pid}/readers/series`).catch(() => ({ points: [], limitations: [] })),
+          getJson(`/api/projects/${pid}/readers/observations`).catch(() => ({ cards: [] })),
         ]);
         const pts = series.points || [];
-        const cards = obs.items || obs.observations || [];
+        const cards = obs.cards || obs.items || obs.observations || [];
+        const lim = Array.isArray(series.limitations) && series.limitations.length ? series.limitations[0] : "";
         body.innerHTML = `
           <div class="cw-grid-2">
             <article class="cw-lg-card cw-pad">
               <h2 style="font-size:16px">章节读完率走势 ·《${esc(proj.title)}》</h2>
               <div class="cw-well">${pts.length
-                ? `<div class="cw-web-dotted-grid">${pts.slice(-6).map((p) => `<div class="cw-web-dotted-row"><span class="k">第 ${esc(p.chapter)} 章</span><span class="dots"></span><span class="v is-ok">${esc(p.value ?? p.rate ?? "—")}</span></div>`).join("")}</div>`
+                ? `<div class="cw-web-dotted-grid">${pts.slice(-6).map((p) => {
+                  const chId = p.chapter_id ?? p.chapter ?? "?";
+                  const val = p.value ?? p.rate;
+                  const unit = p.unit === "ratio" && Number.isFinite(Number(val)) ? `${(Number(val) * 100).toFixed(1)}%` : `${val ?? "—"}${p.unit ? ` ${p.unit}` : ""}`;
+                  return `<div class="cw-web-dotted-row"><span class="k">第 ${esc(chId)} 章</span><span class="dots"></span><span class="v is-ok">${esc(unit)}</span></div>`;
+                }).join("")}</div>`
                 : `<p class="muted">暂无读者指标记录；导入读者指标或汇总批次后将展示真实曲线。</p>`}
               </div>
+              ${lim ? `<p class="muted" style="font-size:11.5px;margin:0">${esc(lim)}</p>` : ""}
             </article>
             <article class="cw-lg-card cw-pad">
               <h2 style="font-size:16px">可撤销风格观察卡</h2>
-              ${cards.length ? cards.slice(0, 4).map((c) => `
+              ${cards.length ? cards.slice(0, 4).map((c) => {
+                const label = c.metric_label || c.title || c.metric || c.id;
+                const snapVal = c.snapshot && c.snapshot.value != null ? ` · 第 ${c.chapter ?? "?"} 章 (${c.snapshot.value})` : "";
+                return `
                 <div class="cw-well" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                   <div>
-                    <strong>${esc(c.title || c.summary || c.id)}</strong>
-                    <div class="muted">${esc(c.status || "pending")}</div>
+                    <strong>${esc(label)}${esc(snapVal)}</strong>
+                    <div class="muted">${esc(c.status || "candidate")}</div>
                   </div>
                   <div style="display:flex;gap:6px">
                     <button type="button" class="button button-primary button-small" data-obs-act="adopt" data-obs-id="${esc(c.id)}">采纳</button>
                     <button type="button" class="button button-secondary button-small" data-obs-act="revoke" data-obs-id="${esc(c.id)}">撤销</button>
                   </div>
                 </div>
-              `).join("") : `<p class="muted">当前作品暂无待处理的读者反馈观察卡。</p>`}
+              `;
+              }).join("") : `<p class="muted">当前作品暂无待处理的读者反馈观察卡。</p>`}
             </article>
           </div>
         `;
         body.querySelectorAll("[data-obs-act]").forEach((btn) => {
           btn.onclick = async () => {
-            await getJson(`/api/projects/${pid}/readers/observations/${encodeURIComponent(btn.dataset.obsId)}/action`, {
-              method: "POST",
-              headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
-              body: JSON.stringify({ action: btn.dataset.obsAct }),
-            });
-            loadInsightsData();
+            btn.disabled = true;
+            try {
+              await getJson(`/api/projects/${pid}/readers/observations/${encodeURIComponent(btn.dataset.obsId)}/action`, {
+                method: "POST",
+                headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
+                body: JSON.stringify({ action: btn.dataset.obsAct }),
+              });
+              showLgNotice(btn.dataset.obsAct === "adopt" ? "已采纳风格观察卡" : "已撤销风格观察卡");
+              loadInsightsData();
+            } catch (err) {
+              btn.disabled = false;
+              showLgNotice(`操作失败：${err.message}`, true);
+            }
           };
         });
       } catch (err) {
@@ -591,10 +666,18 @@
     if (insightsSub === "entities") {
       try {
         const data = await getJson(`/api/projects/${pid}/entities`);
-        const entities = data.entities || data.items || [];
+        const entities = data.items || data.entities || [];
         body.innerHTML = `<article class="cw-lg-card cw-pad">
-          <h2 style="font-size:16px">实体状态锁定 ·《${esc(proj.title)}》</h2>
-          ${entities.length ? `<div class="cw-web-dotted-grid">${entities.slice(0, 12).map((en) => `<div class="cw-web-dotted-row"><span class="k">${esc(en.name || en.id)}</span><span class="dots"></span><span class="v is-active">${esc(en.status || en.state || "已锁定")}</span></div>`).join("")}</div>` : `<p class="muted">尚未提取实体状态记录。</p>`}
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <h2 style="font-size:16px">实体状态锁定 ·《${esc(proj.title)}》</h2>
+            <span class="muted" style="font-size:12px">事件 ${esc(data.events ?? 0)} 条</span>
+          </div>
+          ${entities.length ? `<div class="cw-web-dotted-grid">${entities.slice(0, 12).map((en) => {
+            const cur = en.current && typeof en.current === "object"
+              ? (en.current.holder || en.current.status || en.current.state || "已登记")
+              : (en.status || en.state || "已登记");
+            return `<div class="cw-web-dotted-row"><span class="k">${esc(en.name || en.id)}</span><span class="dots"></span><span class="v is-active">${esc(cur)}</span></div>`;
+          }).join("")}</div>` : `<p class="muted">尚未提取实体状态记录。</p>`}
         </article>`;
       } catch (err) {
         body.innerHTML = `<article class="cw-lg-card cw-pad"><p class="muted">读取实体失败：${esc(err.message)}</p></article>`;
@@ -605,11 +688,15 @@
       const ch = Math.max(1, Number(proj.chapters) || 1);
       const ret = await getJson(`/api/projects/${pid}/retrieval?chapter=${ch}`);
       const plan = ret.plan || ret || {};
+      const suppliedCount = Array.isArray(plan.supplied) ? plan.supplied.length : (plan.counts?.supplied ?? 0);
+      const candidateCount = plan.counts?.candidates ?? suppliedCount;
       body.innerHTML = `<article class="cw-lg-card cw-pad">
         <h2 style="font-size:16px">第 ${ch} 章上下文检索规划</h2>
         <div class="cw-web-dotted-grid">
           <div class="cw-web-dotted-row"><span class="k">目标章节</span><span class="dots"></span><span class="v is-active">第 ${ch} 章</span></div>
-          <div class="cw-web-dotted-row"><span class="k">入选记忆条目</span><span class="dots"></span><span class="v is-ok">${esc((plan.selected || []).length)} 条</span></div>
+          <div class="cw-web-dotted-row"><span class="k">入选 / 候选记忆</span><span class="dots"></span><span class="v is-ok">${esc(suppliedCount)} / ${esc(candidateCount)} 条</span></div>
+          <div class="cw-web-dotted-row"><span class="k">上下文预算占用</span><span class="dots"></span><span class="v">${esc(plan.used ?? 0)} / ${esc(plan.budget ?? "—")} 字</span></div>
+          <div class="cw-web-dotted-row"><span class="k">检索索引状态</span><span class="dots"></span><span class="v ${ret.ready ? "is-ok" : "is-warn"}">${ret.ready ? "已就绪" : "按需建库"}</span></div>
         </div>
       </article>`;
     } catch (err) {
@@ -638,11 +725,20 @@
       try {
         const s = await getJson(`/api/jobs/${encodeURIComponent(job.id)}/schedule`);
         const cap = s.capability || {};
+        const st = s.settings || {};
+        const reviewLen = Array.isArray(s.review) ? s.review.length : 0;
+        const modeText = st.enabled
+          ? (cap.can_schedule ? "自动排期已证实" : "本地缓冲（平台能力待证实）")
+          : "未启用自动排期";
+        const slotCount = Array.isArray(st.slots) ? st.slots.length : 0;
+        const bufferText = st.target_days != null
+          ? `${st.target_days} 天${slotCount ? ` · 日 ${slotCount} 档` : ""}`
+          : "—";
         schedHtml = `
           <div class="cw-web-dotted-grid">
-            <div class="cw-web-dotted-row"><span class="k">排期能力模式</span><span class="dots"></span><span class="v is-active">${esc(cap.mode || s.mode || "buffer")}</span></div>
-            <div class="cw-web-dotted-row"><span class="k">缓冲余量</span><span class="dots"></span><span class="v is-ok">${esc(s.buffer_days ?? "—")} 天</span></div>
-            <div class="cw-web-dotted-row"><span class="k">待人工复核 (needs_review)</span><span class="dots"></span><span class="v ${(s.needs_review_count || 0) > 0 ? "is-warn" : "is-ok"}">${esc(s.needs_review_count || 0)} 项</span></div>
+            <div class="cw-web-dotted-row"><span class="k">排期能力模式</span><span class="dots"></span><span class="v is-active">${esc(modeText)}</span></div>
+            <div class="cw-web-dotted-row"><span class="k">缓冲目标天数</span><span class="dots"></span><span class="v is-ok">${esc(bufferText)}</span></div>
+            <div class="cw-web-dotted-row"><span class="k">待人工复核 (needs_review)</span><span class="dots"></span><span class="v ${reviewLen > 0 ? "is-warn" : "is-ok"}">${esc(reviewLen)} 项</span></div>
           </div>
         `;
       } catch {}
@@ -653,12 +749,18 @@
           getJson(`/api/projects/${encodeURIComponent(proj.id)}/publish/platforms`).catch(() => ({})),
           getJson(`/api/projects/${encodeURIComponent(proj.id)}/browser/target`).catch(() => ({})),
         ]);
-        const targetPlat = plats.target || "fanqie";
+        const tObj = plats.target && typeof plats.target === "object" ? plats.target : {};
+        const targetPlat = tObj.platform || (typeof plats.target === "string" && plats.target) || "fanqie";
+        const platLabel = tObj.account ? `${targetPlat} · ${tObj.account}` : targetPlat;
+        const btObj = bt.target && typeof bt.target === "object" ? bt.target : null;
+        const btLabel = btObj && btObj.browser
+          ? `${btObj.browser} (${btObj.os || "local"} · ${btObj.scope || "read_only"})`
+          : "未配置单目标 · 本地夹具模式";
         platHtml = `
           <div class="cw-web-dotted-grid">
-            <div class="cw-web-dotted-row"><span class="k">当前目标平台</span><span class="dots"></span><span class="v is-active">${esc(targetPlat)}</span></div>
+            <div class="cw-web-dotted-row"><span class="k">当前目标平台</span><span class="dots"></span><span class="v is-active">${esc(platLabel)}</span></div>
             <div class="cw-web-dotted-row"><span class="k">七猫平台状态</span><span class="dots"></span><span class="v is-warn">只读导出包（真实站未验）</span></div>
-            <div class="cw-web-dotted-row"><span class="k">单目标浏览器试点</span><span class="dots"></span><span class="v is-warn">${esc(bt.target?.name || "本地夹具模式 · 真实登录待验")}</span></div>
+            <div class="cw-web-dotted-row"><span class="k">单目标浏览器试点</span><span class="dots"></span><span class="v ${btObj ? "is-active" : "is-warn"}">${esc(btLabel)}</span></div>
           </div>
         `;
       } catch {}
@@ -684,7 +786,7 @@
     const pid = encodeURIComponent(proj.id);
     try {
       const data = await getJson(`/api/projects/${pid}/precheck?chapter=${ch}`);
-      const issues = data.issues || data.alerts || [];
+      const issues = data.findings || data.issues || data.alerts || [];
       const terms = Array.isArray(data.ignore_terms) ? data.ignore_terms : [];
       host.innerHTML = `
         <div class="panel-header">
@@ -692,17 +794,22 @@
           <span class="pill ${issues.length ? "pill-active" : "pill-success"}">${issues.length ? `${issues.length} 项提示` : "预检通过"}</span>
         </div>
         <div class="cw-pad">
-          ${issues.length ? issues.slice(0, 5).map((it, idx) => `
+          ${issues.length ? issues.slice(0, 5).map((it, idx) => {
+            const ruleLabel = it.rule_id || it.rule || it.kind || `规则 #${idx + 1}`;
+            const paraText = it.paragraph != null ? `第 ${Number(it.paragraph) + 1} 段 · ` : "";
+            const desc = it.suggestion || it.message || it.quote || "";
+            return `
             <div class="cw-well" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-              <div><strong>${esc(it.rule || it.kind || `规则 #${idx + 1}`)}</strong><div class="muted">${esc(it.message || it.snippet || "")}</div></div>
+              <div><strong>${esc(ruleLabel)}</strong><div class="muted">${esc(paraText + desc)}</div></div>
               <div style="display:flex;gap:6px">
-                <button type="button" class="button button-secondary button-small" data-pc-action="ignore" data-pc-idx="${idx}">忽略</button>
+                <button type="button" class="button button-secondary button-small" data-pc-action="ignored" data-pc-idx="${idx}">忽略</button>
                 <button type="button" class="button button-secondary button-small" data-pc-action="false_positive" data-pc-idx="${idx}">误报</button>
               </div>
             </div>
-          `).join("") : `<p class="muted">第 ${ch} 章暂无待处理的风格冲突提示。</p>`}
+          `;
+          }).join("") : `<p class="muted">第 ${ch} 章暂无待处理的风格冲突提示。</p>`}
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span class="muted">忽略专有名词：${terms.length ? terms.map((t) => `<span class="pill pill-neutral">${esc(t)}</span>`).join(" ") : "暂无"}</span>
+            <span class="muted">忽略专有名词：${terms.length ? terms.map((t) => `<span class="pill pill-neutral" style="display:inline-flex;align-items:center;gap:4px">${esc(t)} <button type="button" data-pc-rm-term="${esc(t)}" aria-label="移除忽略词" style="border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-size:12px">&times;</button></span>`).join(" ") : "暂无"}</span>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             <input type="text" id="cw-web-ignore-input" placeholder="新增忽略词（回车或点击添加）" style="max-width:260px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
@@ -713,23 +820,67 @@
       host.querySelectorAll("[data-pc-action]").forEach((btn) => {
         btn.onclick = async () => {
           const item = issues[Number(btn.dataset.pcIdx)];
-          await getJson(`/api/projects/${pid}/precheck/action`, {
-            method: "POST",
-            headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
-            body: JSON.stringify({ chapter: ch, action: btn.dataset.pcAction, rule_id: item?.rule || item?.id || "" }),
-          });
-          loadStudioPrecheck();
+          const ruleId = item?.rule_id || item?.rule || "";
+          if (!/^[a-z_]+\.[a-z_]+$/.test(ruleId)) {
+            showLgNotice("无法提交：规则 ID 格式无效", true);
+            return;
+          }
+          btn.disabled = true;
+          try {
+            await getJson(`/api/projects/${pid}/precheck/action`, {
+              method: "POST",
+              headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
+              body: JSON.stringify({ rule_id: ruleId, action: btn.dataset.pcAction }),
+            });
+            showLgNotice("已记录预检反馈");
+            loadStudioPrecheck();
+          } catch (err) {
+            btn.disabled = false;
+            showLgNotice(`记录失败：${err.message}`, true);
+          }
         };
       });
-      host.querySelector("#cw-web-ignore-add")?.addEventListener("click", async () => {
-        const val = document.getElementById("cw-web-ignore-input")?.value.trim();
+      host.querySelectorAll("[data-pc-rm-term]").forEach((btn) => {
+        btn.onclick = async () => {
+          const next = terms.filter((t) => t !== btn.dataset.pcRmTerm);
+          try {
+            await getJson(`/api/projects/${pid}/precheck/ignore`, {
+              method: "PUT",
+              headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
+              body: JSON.stringify({ terms: next }),
+            });
+            showLgNotice("已移除忽略词");
+            loadStudioPrecheck();
+          } catch (err) {
+            showLgNotice(`移除失败：${err.message}`, true);
+          }
+        };
+      });
+      const submitIgnoreTerm = async () => {
+        const input = document.getElementById("cw-web-ignore-input");
+        const val = input?.value.trim();
         if (!val) return;
-        await getJson(`/api/projects/${pid}/precheck/ignore`, {
-          method: "PUT",
-          headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
-          body: JSON.stringify({ terms: [...new Set([...terms, val])] }),
-        });
-        loadStudioPrecheck();
+        const addBtn = document.getElementById("cw-web-ignore-add");
+        if (addBtn) addBtn.disabled = true;
+        try {
+          await getJson(`/api/projects/${pid}/precheck/ignore`, {
+            method: "PUT",
+            headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
+            body: JSON.stringify({ terms: [...new Set([...terms, val])] }),
+          });
+          showLgNotice(`已添加忽略词「${val}」`);
+          loadStudioPrecheck();
+        } catch (err) {
+          if (addBtn) addBtn.disabled = false;
+          showLgNotice(`添加失败：${err.message}`, true);
+        }
+      };
+      host.querySelector("#cw-web-ignore-add")?.addEventListener("click", submitIgnoreTerm);
+      host.querySelector("#cw-web-ignore-input")?.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          submitIgnoreTerm();
+        }
       });
     } catch {
       host.innerHTML = `<div class="panel-header"><div><span class="eyebrow">STYLE & CONTINUITY PRECHECK</span><h2>0.7.0 风格预检与忽略词条</h2></div></div><div class="cw-pad"><p class="muted">生成第 1 章正文后将自动接入该书风格预检。</p></div>`;
@@ -766,6 +917,11 @@
       const pop = document.getElementById("cw-web-appearance-pop");
       if (pop && !e.target.closest("#cw-web-appearance-pop") && !e.target.closest("#cw-web-appearance-btn")) {
         pop.classList.remove("is-open");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        document.getElementById("cw-web-appearance-pop")?.classList.remove("is-open");
       }
     });
   });

@@ -43,8 +43,10 @@ class DraftDeliveryTest(unittest.TestCase):
         self.scheduler_path = self.root / "scheduler.json"
         self.enterContext(patch.object(scheduler, "SCHEDULER_PATH", self.scheduler_path))
         self.enterContext(patch.object(scheduler, "RUNS_ROOT", self.root / "runs"))
-        # 协调器锁默认落在 backend/integration_data；不隔离就会把开发状态写进源码树。
+        # 协调器锁与平台队列锁默认落在 repo 下；不隔离就会把测试状态写进源码树。
         self.enterContext(patch.object(bridge, "RUNTIME_ROOT", self.root / "runtime"))
+        self.enterContext(patch.object(bridge, "FANQIE_ROOT", self.root / "fanqie"))
+        self.enterContext(patch.object(bridge, "MANIFEST_PATH", self.root / "manifest.json"))
         self.enterContext(patch.dict(os.environ, {
             "NOVEL_HELPER_AI_CONFIG": str(self.root / "ai.json"),
             "AI_API_KEY": "", "AI_MODEL": "",
