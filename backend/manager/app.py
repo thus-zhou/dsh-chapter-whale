@@ -2722,7 +2722,9 @@ def main():
     # Bind explicit private interfaces only. Never listen on a campus/public IP.
     sockets = device_access.listen_sockets(["127.0.0.1", *hosts], args.port)
     try:
-        config = uvicorn.Config(create_app(network_hosts=hosts, port=args.port), proxy_headers=False, access_log=False)
+        config = uvicorn.Config(create_app(network_hosts=hosts, port=args.port,
+                                          device_pairing_required=args.lan),
+                                proxy_headers=False, access_log=False)
         uvicorn.Server(config).run(sockets=sockets)
     finally:
         for sock in sockets:

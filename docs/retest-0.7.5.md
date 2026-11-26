@@ -33,7 +33,7 @@
 - **JS / 前端门禁与包契约（`npm test`）**：**125 项，109 pass / 0 fail / 16 skipped**（Linux；Windows/macOS 条件用例跳过），含 `test/client-ui.test.mjs` 的真实递归渲染回归。
 - **后端集成层（`backend/integration`）**：**768 tests OK（skipped=8）**，25.43s。
 - **后端管理服务层（`backend/manager`）**：**175 tests OK**，27.86s。
-- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `5c8586f8bb2111c65bb4d8fbabeb51d3fe6f67ee6ea8b7c416d6f8cbda15f62d`。
+- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `6467096cfc789c2ba6d898d5534ec4ac376013373da6fe8adfa32fbea2a71d0c`。
 - **完整包校验（HEAD 源码 + 真实 v0.7.0 runtime）**：**3421 个文件全部通过**，同一 buildId；`downloadRuntime()` 用真实归档字节复现成功。
 - **CSS 内联**：`scripts/build-client-ui.py` 生成结果与 `client.js` 字节一致；新增 26 个唯一 `.nh-*` 选择器。
 

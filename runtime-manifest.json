@@ -5,11 +5,11 @@
   "pythonSha256": "0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8",
   "distributionStatus": "tested-without-live-publish",
   "version": "0.7.0",
-  "buildId": "5c8586f8bb2111c65bb4d8fbabeb51d3fe6f67ee6ea8b7c416d6f8cbda15f62d",
+  "buildId": "6467096cfc789c2ba6d898d5534ec4ac376013373da6fe8adfa32fbea2a71d0c",
   "files": {
     "backend/manager/__init__.py": "25bf932079fe1bfd101f94cec4ee47c279847dce466f19d01b9d407122945697",
     "backend/manager/ai_tools.py": "8406dbb3f29adf64afce02e6bf02a96cd40894828bf6c03d57e2f501ac9ba53e",
-    "backend/manager/app.py": "a25975377225eb9c3daca4669a2d94316bf484bcb4c43b4adc4660fb988c0ce4",
+    "backend/manager/app.py": "fcfc9a25ea3e3c60e98050a85c19ac762801fd95dbd83ea38ea5cf19ec1e7d5a",
     "backend/manager/audit_inventory.py": "6dcc2a2ab6136477d7b761eecf3d0eb3686bb74f67f33ef8778cf98f60bcd174",
     "backend/manager/device_access.py": "e40bd0b120e2155e3eb90623993c2e7ebca4db904d15b0596a2c9dd0fd79883a",
     "backend/manager/free_model_api.py": "bc54fada020010313ef09072ea7bcfabe1ef0c4cb2f8fac9f490a9cc899133e2",
