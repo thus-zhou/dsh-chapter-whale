@@ -508,7 +508,8 @@ class PoolDefaultTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 saved = json.loads(cfg_path.read_text(encoding="utf-8"))
                 self.assertEqual(saved["default_binding"]["provider_id"], "paid")
-                self.assertIn(str(proj), saved["providers"]["free-pool"]["allowed_projects"])
+                self.assertIn(str(proj.resolve()),
+                              [str(Path(p).resolve()) for p in saved["providers"]["free-pool"]["allowed_projects"]])
 
 
 class AnonymousLaneTests(unittest.TestCase):
