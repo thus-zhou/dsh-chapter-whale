@@ -100,14 +100,26 @@ def resolve(config, binding):
     return {'base_url': url, 'api_key': provider['api_key'], 'model': model}
 
 
+def _has_control_char(value):
+    """Model IDs cross into URLs/JSON; control bytes have no legitimate role."""
+    return any(ord(c) < 32 or ord(c) == 127 for c in value)
+
+
 def save(config, identity, payload):
     from .model_roles import validate_url
     doc = migrate(config)
     identity = identity or 'provider-' + uuid.uuid4().hex[:12]
     old = doc['providers'].get(identity, {})
-    allowed = {'name', 'base_url', 'api_key', 'protocol', 'enabled', 'pricing', 'free_models', 'allowed_projects'}
+    allowed = {'name', 'base_url', 'api_key', 'protocol', 'enabled', 'pricing', 'free_models', 'allowed_projects', 'models'}
     if not isinstance(payload,dict) or set(payload) - allowed:raise ValueError('供应商包含未知字段')
     if 'enabled' in payload and type(payload['enabled']) is not bool:raise ValueError('启用状态必须为布尔值')
+    models_payload = payload.get('models') if 'models' in payload else None
+    if models_payload is not None:
+        if not isinstance(models_payload, list) or len(models_payload) > 1000:
+            raise ValueError('模型清单无效')
+        if any(not isinstance(x, str) or not x.strip() or len(x) > 200 or _has_control_char(x) for x in models_payload):
+            raise ValueError('模型清单无效')
+        models_payload = list(dict.fromkeys(x.strip() for x in models_payload))
     url = validate_url(payload.get('base_url', old.get('base_url', '')))
     protocol = payload.get('protocol', old.get('protocol', 'openai_compatible'))
     if protocol not in PROTOCOLS:raise ValueError('不支持的供应商协议')
@@ -127,7 +139,7 @@ def save(config, identity, payload):
     if not isinstance(price, dict):raise ValueError('价格必须为模型映射')
     from .costs import number
     for model, value in price.items():
-        if not isinstance(model,str) or not model.strip() or len(model)>200:raise ValueError('报价模型ID无效')
+        if not isinstance(model,str) or not model.strip() or len(model)>200 or _has_control_char(model):raise ValueError('报价模型ID无效')
         if not isinstance(value, dict) or value.get('currency', 'CNY') not in {'CNY', 'USD'} or any(k not in value for k in ('input','output')):raise ValueError('模型报价必须包含输入和输出价格')
         for field in ('input', 'output', 'cached'):
             if field in value:number(value[field])
@@ -135,7 +147,7 @@ def save(config, identity, payload):
         value.setdefault('currency','CNY')
         if 'usd_to_cny' in value and float(number(value['usd_to_cny'])) <= 0:raise ValueError('汇率必须大于零')
     free = payload.get('free_models',old.get('free_models',[]))
-    if not isinstance(free,list) or len(free)>10000 or any(not isinstance(x,str) or not x.strip() or len(x)>200 for x in free):raise ValueError('免费模型清单无效')
+    if not isinstance(free,list) or len(free)>10000 or any(not isinstance(x,str) or not x.strip() or len(x)>200 or _has_control_char(x) for x in free):raise ValueError('免费模型清单无效')
     permitted=payload.get('allowed_projects',old.get('allowed_projects',[]))
     if not isinstance(permitted,list) or any(not isinstance(x,str) or not Path(x).is_absolute() for x in permitted):raise ValueError('作品隐私授权无效')
     doc['providers'][identity] = {**old, 'id': identity, 'name': name, 'base_url': url, 'api_key': key,
@@ -143,7 +155,7 @@ def save(config, identity, payload):
         'revision': old.get('revision', 0) + 1, 'pricing': price,
         'free_models': free,
         'allowed_projects': permitted,
-        'models': [] if changed or supplied is not None and supplied != old.get('api_key') else old.get('models', []),
+        'models': models_payload if models_payload is not None else ([] if changed or supplied is not None and supplied != old.get('api_key') else old.get('models', [])),
         'last_check': None if changed or supplied is not None and supplied != old.get('api_key') else old.get('last_check')}
     refresh_legacy(doc)
     return doc, identity
@@ -177,6 +189,10 @@ def discover(config, identity):
         models=[x['id'] for x in result['models'] if x['channel']==item.get('channel_id')]
         item.update(models=models,last_check={'at':result['checked_at'],'status':'models_read','count':len(models)})
         return {'models':models,'count':len(models)}
+    if item.get('protocol')=='dsh_local':
+        # The model list must come from the verified dsh process, not from
+        # whatever loopback listener happens to answer /health.
+        verify_dsh_gateway(item['base_url'])
     result = ai_tools.discover(item['base_url'], None, item,registered=True)
     item.update(models=result['models'], last_check={'at': datetime.now(timezone.utc).isoformat(), 'status': 'models_read', 'count': result['count']})
     return result
@@ -185,37 +201,48 @@ def discover(config, identity):
 def verify_dsh_gateway(base_url):
     from urllib.request import build_opener,ProxyHandler
     from urllib.parse import urlsplit
+    from . import free_channels
     parts=urlsplit(base_url)
     if parts.scheme!='http' or parts.hostname not in {'127.0.0.1','localhost','::1'}:raise ValueError('dsh 仅允许本机网关')
+    try:
+        port=parts.port
+    except ValueError:
+        port=None
+    # Ownership first: a loopback listener that merely answers ``/health`` with
+    # the expected service name is not proof that dsh owns the port.
+    if port is None or port not in free_channels.owned_ports():
+        raise ValueError('dsh 网关端口不属于已核实的 dsh 监听进程；尚未发送网关密钥，请在插件核对实际端口')
     endpoint=f'{parts.scheme}://{parts.netloc}/health'
     try:
         with build_opener(ProxyHandler({})).open(endpoint,timeout=3) as response:
             body=response.read(4097)
         if len(body)>4096:raise ValueError('网关身份响应过大')
         data=json.loads(body)
-        if data.get('service')!='our-free-model' or data.get('ok') is not True:raise ValueError('不是 Our Free Model 网关')
+        if data.get('service') not in {'our-free-model', 'our-free-model-standalone'} or data.get('ok') is not True:
+            raise ValueError('不是 Our Free Model 网关')
     except (OSError,ValueError,AttributeError) as exc:
         raise ValueError('未核实 dsh 实际监听地址；尚未发送网关密钥，请在插件核对实际端口') from exc
 
 
-def import_dsh(config, settings_path=None):
+def import_dsh(config, settings_path=None, projects=None):
     """Read only the named plugin's local forward configuration; never its accounts."""
     from .writer_runner import strict_json
-    path = Path(settings_path) if settings_path else Path.home() / '.dsh' / 'our-free-model' / 'settings.json'
+    from .free_channels import home as dsh_home, token_saver_enabled
+    path = Path(settings_path) if settings_path else dsh_home() / 'our-free-model' / 'settings.json'
     settings = strict_json(path, {})
     forward = settings.get('forward') or settings.get('forwarding') or {}
     if not isinstance(forward, dict) or not forward.get('enabled'):
         raise ValueError('请先在 dsh → Our Free Model → 本地转发中启用网关')
-    if settings.get('tokenSaver',{}).get('enabled',True):
-        raise ValueError('dsh 提示词压缩仍开启，尚不能用于正式小说；请先关闭插件的提示词压缩，再连接。本助手不会擅自修改其他 dsh 使用场景')
+    if token_saver_enabled(settings):
+        raise ValueError('dsh 提示词压缩已开启或状态未知，尚不能用于正式小说；请先关闭插件的提示词压缩，再连接。本助手不会擅自修改其他 dsh 使用场景')
     port = forward.get('port')
     key = settings.get('forwardKey') or forward.get('key')
     if type(port) is not int or not 1 <= port <= 65535 or not isinstance(key, str) or not key:
         raise ValueError('dsh 本地转发端口或密钥不可用；请在插件中核对')
     verify_dsh_gateway(f'http://127.0.0.1:{port}/v1')
     existing = next((k for k,v in config.get('providers',{}).items() if v.get('protocol') == 'dsh_local'), None)
-    from . import scheduler
-    projects={job['project'] for job in scheduler.load_scheduler().get('jobs',{}).values() if job.get('enabled')}
-    if len(projects)!=1:raise ValueError('dsh 正文隐私授权需明确唯一作品，目前不会自动扩大至其他书籍')
+    # An empty, explicitly supplied list means “authorize nothing”; only the
+    # caller decides scope, and a missing list must never grant every book.
+    allowed = list(dict.fromkeys(projects or []))
     return save(config, existing, {'name': 'Our Free Model · 本机', 'base_url': f'http://127.0.0.1:{port}/v1',
-        'api_key': key, 'protocol': 'dsh_local', 'enabled': True,'allowed_projects':list(projects)})
+        'api_key': key, 'protocol': 'dsh_local', 'enabled': True,'allowed_projects':allowed})

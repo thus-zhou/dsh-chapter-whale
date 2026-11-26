@@ -5,7 +5,10 @@ The channel gateway is NOT OFM's anonymous forward listener.
 """
 import json
 import os
+import re
+import shlex
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError
@@ -31,7 +34,34 @@ CHANNELS = (
 CHANNEL_IDS={x[0] for x in CHANNELS}
 
 
-def home():return Path.home()/'.dsh'
+def home():return Path(os.environ.get('DSH_HOME') or (Path.home()/'.dsh')).expanduser()
+
+
+def token_saver_enabled(settings):
+    """Prompt compression gate: only an explicit ``enabled === false`` passes.
+
+    A missing section, a partial section or an unknown value must be treated as
+    "still on" — the old ``is True`` check let an absent field send raw prose.
+    """
+    if not isinstance(settings, dict):
+        return True
+    section = settings.get('tokenSaver')
+    if not isinstance(section, dict):
+        return True
+    return section.get('enabled') is not False
+
+
+def ofm_token_saver_enabled(path):
+    """Prompt compression state of the app-managed OFM standalone service.
+
+    Its launcher always starts with ``preservePrompts`` (token saving off), so a
+    missing settings file is not evidence of shaping; an existing file is read
+    fail-closed like the dsh plugin settings.
+    """
+    target = Path(path)
+    if not target.is_file():
+        return False
+    return token_saver_enabled(writer_runner.strict_json(target, {}))
 
 
 def cache_path():return bridge.RUNTIME_ROOT/'free-channel-catalog.json'
@@ -53,22 +83,170 @@ def read_object(path):
     return value
 
 
+HOST_PROCESS_RE = re.compile(r'^(node|nodejs|electron|dsh|deepseek)', re.IGNORECASE)
+# A process *name* is not an install path: any same-user ``node`` may listen on
+# a port and would then receive the gateway key. Require the kernel-reported
+# executable/command line to carry a DSH-family install path as well.
+OWNER_PATH_MARKERS = ('our-free-model', 'ofm_service.mjs', 'dsh-chapter-whale',
+    'chapter-whale', 'deepseek harness', 'deepseek-harness', 'deepseek')
+_EXE_DSH_RE = re.compile(r'(?:^|[/\\])\.?dsh(?:[/\\]|$)')
+_ARG_DSH_RE = re.compile(r'(?:^|[/\\])\.?dsh[/\\]|[/\\]\.?dsh$')
+
+
+def _proc_identity(pid):
+    """Kernel-reported ``exe``/``cmdline`` for a listener, or ``None``.
+
+    Linux uses ``/proc``; other Unix hosts fall back to ``ps`` because they do
+    not expose ``/proc``. Any read failure returns ``None`` so the caller can
+    reject instead of trusting a bare command name.
+    """
+    text = str(pid or '').strip()
+    if not text.isdigit():
+        return None
+    if sys.platform.startswith('linux'):
+        base = Path('/proc') / text
+        try:
+            exe = os.readlink(base / 'exe')
+            cmdline = (base / 'cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
+        except (OSError, ValueError):
+            return None
+    else:
+        try:
+            probe = subprocess.run(['ps', '-p', text, '-o', 'command='], capture_output=True, text=True, timeout=4)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if probe.returncode:
+            return None
+        cmdline = (probe.stdout or '').strip()
+        exe = cmdline.split(' ', 1)[0] if cmdline else ''
+    if not exe or not cmdline:
+        return None
+    return {'exe': exe, 'cmdline': cmdline}
+
+
+def _identity_owned(identity):
+    if not isinstance(identity, dict):
+        return False
+    exe = str(identity.get('exe') or '').casefold()
+    if any(marker in exe for marker in OWNER_PATH_MARKERS) or _EXE_DSH_RE.search(exe):
+        return True
+    cmdline = str(identity.get('cmdline') or '').casefold()
+    try:
+        tokens = shlex.split(cmdline, posix=True)
+    except ValueError:
+        tokens = cmdline.split()
+    non_flags = [tok for tok in tokens if tok and not tok.startswith('-')]
+    for tok in non_flags:
+        if any(marker in tok for marker in OWNER_PATH_MARKERS) or _ARG_DSH_RE.search(tok):
+            return True
+    return False
+
+
+def _loopback_port(name):
+    for prefix in ('127.0.0.1:', '[::1]:'):
+        if name.startswith(prefix):
+            try:
+                port = int(name[len(prefix):])
+            except ValueError:
+                return None
+            return port if 1 <= port <= 65535 else None
+    return None
+
+
+def _parse_lsof_listeners(text):
+    """Group ``lsof -F pcn`` output into ``{pid, command, ports}`` records."""
+    rows = []
+    current = None
+    for line in str(text or '').splitlines():
+        if not line:
+            continue
+        if line[0] == 'p':
+            current = {'pid': line[1:].strip(), 'command': '', 'ports': set()}
+            rows.append(current)
+        elif current is None:
+            continue
+        elif line[0] == 'c':
+            current['command'] = line[1:].strip()
+        elif line[0] == 'n':
+            port = _loopback_port(line[1:].strip())
+            if port:
+                current['ports'].add(port)
+    return rows
+
+
+def _host_process(command, pid=None):
+    """Accept only DSH host families proven by their kernel-reported path.
+
+    ``pid`` is required: a command name alone (``node``) is not ownership. A
+    listener whose ``/proc`` identity cannot be read is rejected, not trusted.
+    """
+    cmd_name = Path(str(command or '')).name
+    identity = _proc_identity(pid)
+    if not isinstance(identity, dict):
+        return False
+    if not HOST_PROCESS_RE.match(cmd_name):
+        exe_name = Path(str(identity.get('exe') or '')).name
+        # Node.js 24+ on Linux sets /proc/<pid>/comm to "MainThread" (lsof `c`
+        # field); verify the kernel executable basename is still a host binary.
+        if cmd_name.casefold() not in ('mainthread', 'mainthrea') or not HOST_PROCESS_RE.match(exe_name):
+            return False
+    return _identity_owned(identity)
+
+
 def owned_ports():
-    """Do not send a key to a port until its owner is the installed host."""
-    if os.name!='nt':return []
-    host=Path(os.environ.get('LOCALAPPDATA',str(Path.home()/'AppData/Local')))/'Programs/DeepSeek Harness/DeepSeek Harness.exe'
-    expected=str(host).replace("'","''")
-    script=f"""$ErrorActionPreference='Stop'
-$taskHost='{expected}'
-$taskOwners=@(Get-CimInstance Win32_Process | Where-Object {{$_.ExecutablePath -eq $taskHost}} | Select-Object -ExpandProperty ProcessId)
-if ($taskOwners.Count -eq 0) {{ Write-Output '[]'; exit }}
-$taskPorts=@(Get-NetTCPConnection -State Listen | Where-Object {{$_.LocalAddress -in @('127.0.0.1','::1') -and $_.OwningProcess -in $taskOwners}} | Select-Object -ExpandProperty LocalPort -Unique)
-ConvertTo-Json -InputObject $taskPorts -Compress
-"""
+    """Do not send a key to a port until its owner is the installed DSH host."""
+    if os.name!='nt':
+        # `-u <uid>` restricts lsof to the current user; `-F pcn` emits
+        # pid/command/name records so the listener owner can be checked
+        # instead of trusting every loopback port on the machine.
+        args=['lsof','-nP']
+        uid=getattr(os,'getuid',None)
+        if callable(uid):
+            try:args+=['-a','-u',str(uid())]
+            except OSError:pass
+        args+=['-iTCP','-sTCP:LISTEN','-F','pcn']
+        try:
+            out=subprocess.run(args,capture_output=True,text=True,timeout=8)
+        except (OSError,subprocess.SubprocessError):
+            return []
+        if out.returncode not in (0,1):
+            return []
+        ports=set()
+        for row in _parse_lsof_listeners(out.stdout):
+            if _host_process(row['command'], row.get('pid')):
+                ports.update(row['ports'])
+        return sorted(ports)
+    local = Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local')))
+    pf = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))
+    candidates = [
+        str(local / 'Programs/DeepSeek Harness/DeepSeek Harness.exe'),
+        str(pf / 'DeepSeek Harness/DeepSeek Harness.exe'),
+        str(local / 'Programs/DeepSeek Harness/resources/runtime/node/node.exe'),
+        str(local / 'Programs/DeepSeek Harness/resources/node/node.exe'),
+        str(pf / 'DeepSeek Harness/resources/runtime/node/node.exe'),
+    ]
+    script=windows_owned_ports_script(candidates)
     result=subprocess.run(['powershell.exe','-NoProfile','-Command',script],capture_output=True,timeout=12,creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode:raise ValueError('暂时无法核实 dsh 监听进程，尚未发送密钥')
     ports=json.loads(result.stdout.decode('utf-8-sig').strip() or '[]')
     return sorted(p for p in ports if type(p) is int and 1<=p<=65535)
+
+
+def windows_owned_ports_script(candidates):
+    """Exact install-path ownership only; no substring matches.
+
+    A ``-like '*DeepSeek Harness*'`` clause let any standard user place a
+    listener at ``C:\\Users\\Public\\DeepSeek Harness\\evil.exe`` and receive the
+    gateway key.
+    """
+    escaped = ','.join("'" + p.replace("'", "''") + "'" for p in candidates)
+    return f"""$ErrorActionPreference='Stop'
+$taskHosts=@({escaped})
+$taskOwners=@(Get-CimInstance Win32_Process | Where-Object {{$_.ExecutablePath -in $taskHosts}} | Select-Object -ExpandProperty ProcessId)
+if ($taskOwners.Count -eq 0) {{ Write-Output '[]'; exit }}
+$taskPorts=@(Get-NetTCPConnection -State Listen | Where-Object {{$_.LocalAddress -in @('127.0.0.1','::1') -and $_.OwningProcess -in $taskOwners}} | Select-Object -ExpandProperty LocalPort -Unique)
+ConvertTo-Json -InputObject $taskPorts -Compress
+"""
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -151,19 +329,28 @@ def snapshot(config,db_path):
             'official_balance':None,'balance_source':'not_exposed_by_inference_gateway'})
     return {'channels':rows,'connected_channels':sum(x['accounts']>0 for x in rows),'channel_count':len(rows),
         'gateway_enabled':state.get('gatewayEnabled') is not False,'endpoint':cache.get('endpoint'),
-        'checked_at':cache.get('checked_at'),'compression_enabled':settings.get('tokenSaver',{}).get('enabled',True),
+        'checked_at':cache.get('checked_at'),'compression_enabled':token_saver_enabled(settings),
         'model_count':sum(len(x['models']) for x in rows),'today':day,
         'management':'请在 dsh → Our Free Model → 白嫖模型接入中添加账号、刷新官方余额或领取额度。',
         'notice':'本地调用量不是官方剩余额度；网关可能包含付费模型，不自动标记为免费。'}
 
 
-def import_channel(config,payload):
+def import_channel(config,payload,known_projects=None):
     channel=payload.get('channel_id')
     if channel not in CHANNEL_IDS:raise ValueError('渠道无效')
     if payload.get('authorize_project') is not True:raise ValueError('请确认本项目正文及必要记忆的渠道处理授权')
-    from integration import scheduler
-    projects={x['project'] for x in scheduler.load_scheduler().get('jobs',{}).values() if x.get('enabled')}
-    if len(projects)!=1:raise ValueError('需要明确唯一作品的隐私授权，尚未接入')
+    projects=set()
+    if isinstance(payload.get('projects'), list):
+        projects={str(Path(p).resolve()) for p in payload['projects'] if isinstance(p,str) and p}
+    elif isinstance(payload.get('project'), str) and payload['project']:
+        projects={str(Path(payload['project']).resolve())}
+    # Never fall back to “every enabled job”: an import without an explicit
+    # project must be rejected, not silently granted the whole library.
+    if not projects:raise ValueError('请先选择或创建需要授权的作品，再导入渠道')
+    if known_projects is not None:
+        known={str(Path(p).resolve()) for p in known_projects if p}
+        projects&=known
+        if not projects:raise ValueError('请选择已登记的作品，不扩大隐私授权范围')
     catalog,key=scan(payload.get('port'))
     models=[x['id'] for x in catalog['models'] if x['channel']==channel]
     if not models:raise ValueError('此渠道未返回可用模型，请先在 dsh 登录并刷新模型')

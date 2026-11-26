@@ -124,7 +124,7 @@ export class DshModelBridge {
     const selected = selection && `${selection.provider}/${selection.model}`;
     this.defaultModel = catalog.has(selected) ? selected : catalog.keys().next().value;
     this.reasoningEffort = catalog.has(selected) ? selection.reasoningEffort : undefined;
-    this.checkedAt = Date.now();
+    this.checkedAt = catalog.size > 0 ? Date.now() : 0;
     return this.status();
   }
 
@@ -352,7 +352,9 @@ export class DshModelBridge {
         : reason === 'generation_timeout' ? `DSH 模型生成超时（${limits.totalMs} 毫秒）`
         : reason === 'response_too_large' ? `DSH 模型响应超过缓冲上限（${limits.maxChars} 字符）`
         : reason === 'client_closed' ? '客户端已断开，本次生成已中止'
-        : 'DSH 模型调用失败，请检查宿主中的登录状态和模型设置';
+        : status === 401 || status === 403 ? 'DSH 模型认证或授权失败，请在宿主重新登录对应模型渠道'
+        : status === 429 ? 'DSH 模型触发限流或免费额度已用尽，请稍后重试或切换模型'
+        : 'DSH 模型调用失败，请检查宿主中的登录状态、网络代理和模型设置';
       // A disconnected client cannot receive a frame; never fake a success either.
       if (reason === 'client_closed' || res.destroyed) return;
       const failure = { error: { message, status, code } };

@@ -38,18 +38,23 @@ def install(app,load,transaction,listing):
 
     @app.put('/api/free-model/pool')
     def pool(payload:dict):
-        if set(payload)-{'members','project','authorize_project'}:raise ValueError('免费池包含未知字段')
+        if set(payload)-{'members','project','project_id','authorize_project','set_default'}:raise ValueError('免费池包含未知字段')
         if payload.get('authorize_project') is not True:raise ValueError('请确认所选作品正文和必要记忆的渠道处理授权')
         from integration import scheduler
         project=payload.get('project')
+        if not project and payload.get('project_id'):
+            matched = next((x['path'] for x in app.state.store.projects() if x['id'] == payload['project_id']), None)
+            if matched:
+                project = matched
         choices={str(Path(x['project']).resolve()) for x in scheduler.load_scheduler().get('jobs',{}).values()}
         choices.update(str(Path(x['path']).resolve()) for x in app.state.store.projects())
-        if not isinstance(project,str) or str(Path(project).resolve()) not in choices:raise ValueError('请选择已有日更作品，不扩大隐私授权范围')
+        if not isinstance(project,str) or str(Path(project).resolve()) not in choices:raise ValueError('请选择已有作品，不扩大隐私授权范围')
         project=str(Path(project).resolve())
         raw=ofm_runtime.request('/api/management/summary')
         members=free_pool.validate_members(payload.get('members'),[r for r in raw.get('catalog',[]) if r.get('routable')])
         info=ofm_runtime.health();key=ofm_runtime.strict(ofm_runtime.HOME/'settings.json').get('forwardKey')
         ids=[r['id'] for r in raw.get('catalog',[]) if r.get('routable')]
+        free_pool.clear_recovery(project)
         def change(doc):
             previous=doc['providers'].get('free-pool',{})
             permitted=list(dict.fromkeys([*previous.get('allowed_projects',[]),project]))
@@ -60,5 +65,10 @@ def install(app,load,transaction,listing):
                 'protocol':'free_pool','api_key':key,'allowed_projects':permitted})
             updated['providers']['free-pool'].update(models=['auto'],pool_members=members)
             doc['providers']=updated['providers']
+            # Only an explicit “set as default” may change the global binding.
+            # Authorizing a single book must never repoint every other book that
+            # relies on the global default.
+            if payload.get('set_default') is True:
+                doc['default_binding'] = {'provider_id': 'free-pool', 'model_id': 'auto', 'reasoning_effort': 'auto'}
         transaction(change)
         return {'status':'saved','members':members,**listing()}

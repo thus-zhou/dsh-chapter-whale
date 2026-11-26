@@ -138,14 +138,18 @@ class GateTest(unittest.TestCase):
         self.assertFalse(result["quality_pass"])
         self.assertIn("model_verdict_conflict", result["reasons"])
 
-    def test_publication_gate_requires_quality_but_keeps_legacy_compatible(self):
-        self.assertTrue(publication_safety.review_eligible(review(), "digest"))
+    def test_publication_gate_requires_quality_scores(self):
+        # P1-E: an unscored "pass" is not publication-eligible by default.
+        self.assertFalse(publication_safety.review_eligible(review(), "digest"))
+        self.assertTrue(publication_safety.review_eligible(review(quality=payload()), "digest"))
         failing = review(quality=payload({key: 60 for key, _ in quality_score.DIMENSIONS}))
         self.assertFalse(publication_safety.review_eligible(failing, "digest"))
         self.assertFalse(publication_safety.review_eligible({**review(), "review_decision": "unknown"}, "digest"))
 
     def test_review_passed_wrapper(self):
-        self.assertTrue(quality_gate.review_passed(review()))
+        self.assertFalse(quality_gate.review_passed(review()))
+        self.assertTrue(quality_gate.review_passed(review(quality=payload())))
+        self.assertTrue(quality_gate.review_passed(review(), config={"review_quality": {"allow_unscored_pass": True}}))
         self.assertFalse(quality_gate.review_passed(review(quality=payload({key: 60 for key, _ in quality_score.DIMENSIONS}))))
         self.assertFalse(quality_gate.review_passed({"success": False}))
 

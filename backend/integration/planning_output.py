@@ -42,7 +42,13 @@ def _safe(value):
 
 async def validated_call(project,ids,prompt,call,max_tokens):
     project=Path(project).resolve()
-    key=hashlib.sha256(json.dumps([ids,prompt],ensure_ascii=False).encode()).hexdigest()[:20]
+    cfg = model_roles.load_config()
+    try:
+        conn = model_roles.connection("A", cfg)
+        model_tag = f"{conn.get('base_url', '')}|{conn.get('model', '')}"
+    except Exception:
+        model_tag = ""
+    key=hashlib.sha256(json.dumps([ids,prompt,model_tag],ensure_ascii=False).encode()).hexdigest()[:20]
     path=project/'.webnovel/planning_checkpoints'/f'{ids[0]:04d}-{ids[-1]:04d}-{key}.json'
     if path.is_symlink() or path.parent.is_symlink():raise PlanningOutputInvalid('planning_checkpoint_path_invalid')
     state=writer.strict_json(path,{})

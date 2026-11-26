@@ -122,6 +122,8 @@ async def learn_async(project,identity,revision,full=False):
                 notes.append(note)
                 writer.atomic_json(checkpoint,{"token":token,"notes":notes})
                 meta["analyzed_segments"]=len(notes);writer.atomic_json(meta_path,meta)
+                pct = min(88, max(8, round((len(notes) / max(1, len(parts))) * 85)))
+                print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'learn', 'label': f'分析示范 {len(notes)}/{len(parts)} 段', 'percent': pct, 'current': len(notes), 'total': len(parts)}, ensure_ascii=False)}", flush=True)
                 print(f"示范分析 {len(notes)}/{len(parts)}",flush=True)
             condensed=notes
             if len(notes)>6:
@@ -210,7 +212,9 @@ async def plan_async(project,count=5,start=None,locked=False):
     from .planning_failover import PlanningRouter
     planner = PlanningRouter(project)
     from .planning_output import validated_call
+    print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'A', 'label': f'规划第 {start}–{ids[-1]} 章细纲', 'percent': 25, 'current': 0, 'total': count}, ensure_ascii=False)}", flush=True)
     value=await validated_call(project,ids,prompt,planner.call,budget)
+    print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'A', 'label': f'保存第 {start}–{ids[-1]} 章规划', 'percent': 92, 'current': count, 'total': count}, ensure_ascii=False)}", flush=True)
     chapters=value['chapters']
     # A single Markdown artifact is the durable planning commit. Recovery uses
     # its embedded validated metadata if a later index write is interrupted.
@@ -230,8 +234,19 @@ def plan(project,count=5):return asyncio.run(plan_async(project,count))
 def recover_plan(project,persist=True):
     project=Path(project);path=project/".webnovel"/"story_plan.json"
     doc=writer.strict_json(path,{})
-    if not isinstance(doc,dict) or not isinstance(doc.get("chapters",{}),dict):raise ValueError("规划索引损坏")
+    if not isinstance(doc,dict):
+        raise ValueError("规划索引损坏")
     changed=False
+    raw_chapters=doc.get("chapters",{})
+    if isinstance(raw_chapters,list):
+        normalized={}
+        for item in raw_chapters:
+            if isinstance(item,dict) and "id" in item:
+                normalized[str(item["id"])]=item
+        doc["chapters"]=normalized
+        changed=True
+    elif not isinstance(raw_chapters,dict):
+        raise ValueError("规划索引损坏")
     for artifact in sorted((project/"大纲").glob("AI规划-*.md")):
         with artifact.open(encoding="utf-8") as stream:first=stream.readline()
         if not first.startswith("<!-- novel-plan:"):continue
@@ -257,6 +272,119 @@ def is_key_scene(project,chapter):
     return bool(value.get("chapters",{}).get(str(chapter),{}).get("key_scene"))
 
 
+def pending_batches(project):
+    project = Path(project).resolve()
+    root = project / ".webnovel" / "batches"
+    if not root.is_dir():
+        return []
+    rows = []
+    for path in sorted(root.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+        if not re.fullmatch(r"[a-f0-9]{32}", path.stem):
+            continue
+        try:
+            doc = writer.strict_json(path, {})
+        except (ValueError, OSError):
+            continue
+        if isinstance(doc, dict) and doc.get("status") in {"running", "partial", "waiting"}:
+            rows.append({
+                "id": doc.get("id") or path.stem,
+                "status": doc.get("status"),
+                "targets": list(doc.get("targets") or []),
+                "completed": list(doc.get("completed") or []),
+                "created_at": doc.get("created_at", ""),
+                "finished_at": doc.get("finished_at", ""),
+                "recovery": doc.get("recovery") if isinstance(doc.get("recovery"), dict) else None,
+            })
+    return rows
+
+
+def abandon_batch(project, batch_id=None):
+    project = Path(project).resolve()
+    with writer.file_lock(project / ".webnovel" / "batch.lock"), writer.file_lock(project / ".webnovel" / "writer.lock"):
+        root = project / ".webnovel" / "batches"
+        abandoned = []
+        if root.is_dir():
+            if batch_id and batch_id != "all":
+                targets = [project_file(project, "batches", batch_id)]
+                if not targets[0].is_file():
+                    raise ValueError("找不到要放弃的批次")
+            else:
+                targets = [p for p in root.glob("*.json") if re.fullmatch(r"[a-f0-9]{32}", p.stem)]
+            for target in targets:
+                if not target.is_file():
+                    continue
+                doc = writer.strict_json(target, {})
+                if isinstance(doc, dict) and doc.get("status") in {"running", "partial", "waiting"}:
+                    doc.update(status="abandoned", abandoned_reason="user_abandoned", finished_at=bridge.now_iso())
+                    writer.atomic_json(target, doc)
+                    abandoned.append(doc.get("id") or target.stem)
+        return {"status": "abandoned", "abandoned": abandoned}
+
+
+def _empty_body_paths(project, chapters) -> list:
+    """Body files for *chapters* that exist but hold no prose (0 bytes/blank).
+
+    A chapter with more than one body file is ambiguous; it is not treated as a
+    simple empty body because quarantining one copy would leave the duplicate in
+    place. Those chapters keep the pre-existing duplicate handling.
+    """
+    paths = {}
+    for path, chapter in writer._chapter_files(Path(project)):
+        paths.setdefault(chapter, []).append(path)
+    empty = []
+    for chapter in set(chapters):
+        group = paths.get(chapter) or []
+        if len(group) != 1:
+            continue
+        path = group[0]
+        try:
+            if path.stat().st_size <= 0:
+                empty.append(path)
+                continue
+            text = path.read_text(encoding="utf-8-sig")
+        except OSError:
+            continue
+        if not text.strip():
+            empty.append(path)
+    return empty
+
+
+def _quarantine_empty_bodies(project, chapters) -> list:
+    """Move empty body files aside so the chapter can be regenerated.
+
+    ``_generate_chapter_locked`` refuses to overwrite an existing chapter, and an
+    empty file still counts as existing. Preserve it under ``.webnovel/originals``
+    (never silently delete evidence) and remove the zero-byte body.
+    """
+    project = Path(project)
+    moved = []
+    for path in _empty_body_paths(project, chapters):
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        backup = project_file(project, "originals", uuid.uuid4().hex, ".md")
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        bridge._write_text_atomic(backup, raw.decode("utf-8-sig", errors="replace"))
+        path.unlink()
+        moved.append(backup)
+    return moved
+
+
+def _completed_with_bodies(project, doc):
+    """Batch `completed` is only trustworthy when the body still has prose."""
+    recorded = {c for c in doc.get("completed") or [] if type(c) is int and c > 0}
+    existing = writer.existing_chapter_ids(Path(project))
+    empty_paths = set(_empty_body_paths(project, recorded))
+    files: dict = {}
+    for path, chapter in writer._chapter_files(Path(project)):
+        files.setdefault(chapter, []).append(path)
+    empty = {c for c, group in files.items() if len(group) == 1 and group[0] in empty_paths}
+    completed = [c for c in sorted(recorded) if c in existing and c not in empty]
+    missing = [c for c in sorted(recorded) if c not in existing or c in empty]
+    return completed, missing
+
+
 def batch(project,count,word_count,max_revisions,identity,scenes=0):
     scenes=max(0,min(3,int(scenes or 0)))
     if type(count) is not int or not 1<=count<=30:raise ValueError("批量创作每次 1–30 章")
@@ -272,8 +400,27 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
                     raise ValueError('本书有未完成的逐章发布任务，请继续原日更任务；不能另建创作批次重写同章')
             for other in path.parent.glob("*.json"):
                 pending=writer.strict_json(other,{})
-                if pending.get("status") in {"running","partial","waiting"}:
-                    raise ValueError("有未完成的创作批次，请在原运行记录中继续")
+                if not isinstance(pending, dict):
+                    continue
+                st = pending.get("status")
+                done_list = pending.get("completed") or []
+                if st == "running":
+                    # Holding both batch.lock and writer.lock guarantees no live batch worker owns this file.
+                    if not done_list:
+                        pending.update(status="abandoned", abandoned_reason="stale_empty_batch", finished_at=bridge.now_iso())
+                        writer.atomic_json(other, pending)
+                        continue
+                    pending.update(status="partial", finished_at=bridge.now_iso())
+                    writer.atomic_json(other, pending)
+                    st = "partial"
+                if st == "partial" and not done_list:
+                    # Chapter 1 (or the first chapter in the batch) never landed on disk; don't trap the book forever.
+                    pending.update(status="superseded", finished_at=bridge.now_iso())
+                    writer.atomic_json(other, pending)
+                    continue
+                if st in {"partial", "waiting"}:
+                    bid = pending.get("id") or other.stem
+                    raise ValueError(f"有未完成的创作批次（{bid[:8]}），请在原运行记录中继续或放弃旧批次")
             start=writer.next_chapter_id(project)
             doc={"id":identity,"targets":list(range(start,start+count)),"word_count":word_count,"max_revisions":max_revisions,"scenes":scenes,"status":"running","created_at":bridge.now_iso()}
             writer.atomic_json(path,doc)
@@ -283,12 +430,40 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
         doc.pop('recovery',None)
         doc.pop('finished_at',None)
         writer.atomic_json(path,doc)
-        result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":[]}
+        completed_set = set(doc.get("completed") or [])
+        completed, missing_bodies = _completed_with_bodies(project, doc)
+        quarantined = []
+        if missing_bodies:
+            # Recorded as completed but the body was deleted/moved/empty:
+            # regenerate it instead of silently skipping the chapter and still
+            # reporting success. Empty files are moved aside first so the
+            # generator does not hit FileExistsError on a 0-byte chapter.
+            print(f"批次记录第{missing_bodies}章已完成但正文缺失，重新生成", flush=True)
+            quarantined = _quarantine_empty_bodies(project, missing_bodies)
+            doc["completed"] = completed
+            completed_set = set(completed)
+        remaining_targets = [c for c in doc["targets"] if c not in completed_set]
+        # Also cover an empty body that was never recorded as completed: the
+        # generator refuses to overwrite an existing chapter, even a 0-byte one.
+        quarantined += _quarantine_empty_bodies(project, remaining_targets)
+        result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":completed}
+        if missing_bodies:
+            result["recovered_missing_bodies"] = missing_bodies
+        if quarantined:
+            result["quarantined_empty_bodies"] = [str(path) for path in quarantined]
+        total = max(1, len(doc["targets"]))
         try:
-            for chapter in doc["targets"]:
+            for idx, chapter in enumerate(remaining_targets):
+                done_count = len(result["completed"])
+                pct = min(95, max(5, round((done_count / total) * 100)))
+                print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'B', 'label': f'创作第{chapter}章（{done_count + 1}/{total}）', 'percent': pct, 'current': done_count, 'total': total, 'chapter': chapter}, ensure_ascii=False)}", flush=True)
                 print(f"创作第{chapter}章",flush=True)
                 asyncio.run(writer._generate_chapter_locked(project,doc["word_count"],doc["max_revisions"],chapter,False,int(doc.get("scenes") or 0)))
                 result["completed"].append(chapter);doc.update(result,status="running");writer.atomic_json(path,doc)
+            missing_after = [c for c in doc["targets"] if c not in writer.existing_chapter_ids(project)]
+            if missing_after:
+                raise RuntimeError(f"批次第{missing_after}章没有正文落盘，未标记完成")
+            print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'done', 'label': '创作完成', 'percent': 100, 'current': total, 'total': total}, ensure_ascii=False)}", flush=True)
             doc.update(result,status="generated",finished_at=bridge.now_iso());writer.atomic_json(path,doc)
             return doc
         except Exception as exc:
@@ -347,11 +522,23 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         payload=rewritten.encode("utf-8");receipts_path=project/".webnovel"/"writer_receipts.json"
         receipts=writer.strict_json(receipts_path,{})
         receipt={"destination":str(source.resolve()),"sha256":hashlib.sha256(payload).hexdigest(),"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
+        handoff=isinstance(review,dict) and review.get("review_decision")=="needs_human_review" and review.get("human_review_required") is True
+        # P2-6: write the new body before saving candidates. save_candidates
+        # re-reads the body file and rejects a digest that does not match, so
+        # saving the receipt first would leave both modules "failed" until the
+        # next approve. Body first, candidates second, receipt last.
+        bridge._write_text_atomic(source,rewritten)
+        if handoff:
+            # 非预览润色到达两次审查上限：正文保留为交接稿，候选只存 pending，
+            # 人工 approve-review 时再提交，避免未审定内容进入记忆。
+            receipt["candidates"]=writer._commit_review_candidates(project,chapter,rewritten,review,_writer_locked=True)
         receipts[str(chapter)]=receipt
         writer.atomic_json(receipts_path,receipts)
-        bridge._write_text_atomic(source,rewritten)
         post=asyncio.run(writer._sync_committed_artifacts(executor,chapter,rewritten,receipt,receipts,receipts_path))
-        return {"status":"polished","chapter_id":chapter,"post_save":post,"backup_saved":True}
+        return {"status":"polished","chapter_id":chapter,
+                "post_save":post,"backup_saved":True,
+                "review_decision":(review or {}).get("review_decision") if isinstance(review,dict) else "",
+                "human_review_required":handoff}
 
 
 def reject_sample_copy(project,content):
@@ -371,7 +558,7 @@ def sync_existing_artifacts(project, chapter):
     """Repair metadata of the same qualified body, without another prose draft."""
     project=Path(project).resolve()
     with writer.file_lock(project/'.webnovel'/'writer.lock'):
-        current=writer.reviewed_chapters(project).get(chapter)
+        current=writer.committed_chapters(project).get(chapter)
         if not current:raise ValueError('正文缺少有效审查记录，不能补同步')
         source=Path(current['destination']);content=source.read_text(encoding='utf-8-sig')
         Executor,get_ai=writer._load_webnovel_services();ai=get_ai();config=roles.load_config()

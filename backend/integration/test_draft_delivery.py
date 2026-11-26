@@ -78,7 +78,10 @@ class DraftDeliveryTest(unittest.TestCase):
         import hashlib
         return {"chapter_id": chapter, "destination": str(path.resolve()),
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                "review": {"success": True, "review_decision": "pass"}, "reviewed_at": bridge.now_iso(),
+                "review": {"success": True, "review_decision": "pass",
+                           "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                                       "scores": {"setting": 90, "plot": 90, "character": 90,
+                                                 "prose": 90, "dialogue": 90, "style": 90}}}, "reviewed_at": bridge.now_iso(),
                 "post_save": {"shared_memory": {"status": "synced"}, "entities": {"status": "synced"},
                               "rag_indexed": True, "continuity_written": True},
                 "creative_contract_hash": bridge.creative_contract_hash(self.project)}
@@ -87,7 +90,10 @@ class DraftDeliveryTest(unittest.TestCase):
         path = self.write_chapter(chapter_id)
         self.receipts[chapter_id] = self.fake_receipt(chapter_id, path)
         return {"project": str(project), "chapter_id": chapter_id, "destination": str(path),
-                "status": "reviewed", "review": {"success": True, "review_decision": "pass"}}
+                "status": "reviewed", "review": {"success": True, "review_decision": "pass",
+                    "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                                "scores": {"setting": 90, "plot": 90, "character": 90,
+                                          "prose": 90, "dialogue": 90, "style": 90}}}}
 
     # --- 字段穿透 ---------------------------------------------------------------
     def test_new_job_defaults_to_draft_only_without_account(self):
@@ -295,15 +301,19 @@ class DraftDeliveryTest(unittest.TestCase):
                 self.receipts.clear()
                 job_id = "missing-" + key
                 self.add_job(job_id=job_id)
-                def partial(project, word_count, max_revisions, chapter_id):
-                    value = self.generate_ok(project, word_count, max_revisions, chapter_id)
-                    self.receipts[chapter_id]["post_save"][key] = False
-                    return value
-                self.generate.side_effect = partial
-                result = scheduler.run_once(job_id)
-                self.assertEqual(result["status"], "metadata_pending")
-                job = scheduler.load_scheduler()["jobs"][job_id]
-                self.assertFalse(job.get("completed_slots"))
+                try:
+                    def partial(project, word_count, max_revisions, chapter_id):
+                        value = self.generate_ok(project, word_count, max_revisions, chapter_id)
+                        self.receipts[chapter_id]["post_save"][key] = False
+                        return value
+                    self.generate.side_effect = partial
+                    result = scheduler.run_once(job_id)
+                    self.assertEqual(result["status"], "metadata_pending")
+                    job = scheduler.load_scheduler()["jobs"][job_id]
+                    self.assertFalse(job.get("completed_slots"))
+                finally:
+                    with scheduler.config_transaction() as data:
+                        data["jobs"].pop(job_id, None)
 
     def test_missing_model_blocks_without_writing(self):
         self.add_job()

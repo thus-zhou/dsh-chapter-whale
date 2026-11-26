@@ -492,10 +492,10 @@ test('v5 液态玻璃重整、DashboardPage 无异常渲染与 standalone Web AP
   storage.set('chapter-whale-appearance-v2', JSON.stringify({ palette: 'ocean' }));
   assertMod.equal(internals.readAppearance().palette, 'apple');
 
-  // 2. HUBS covers all 6 top-dock workspaces (array returned from vm context -> convert via Array.from)
+  // 2. HUBS covers all 4 consolidated top-dock workspaces (array returned from vm context -> convert via Array.from)
   assertMod.deepEqual(
     Array.from(internals.HUBS || [], (h) => h.id),
-    ['work', 'studio', 'insights', 'publish', 'ops', 'system'],
+    ['work', 'studio', 'publish', 'system'],
   );
 
   // 3. DashboardPage renders without throwing ReferenceError (e.g. queue or icon checks)
@@ -520,11 +520,19 @@ test('v5 液态玻璃重整、DashboardPage 无异常渲染与 standalone Web AP
     assertMod.ok(webLgSrc.includes(snippet), `liquid-glass.js includes ${snippet}`);
   }
 
-  // 5. Regression guards for GET body handling, role test status check, 1-based precheck paragraph, and max_revisions bound
+  // 5. Regression guards for GET body handling, role test status check, 1-based precheck paragraph, max_revisions bound, and v0.7.5 UX fixes
   assertMod.match(source, /hasBody\s*&&\s*options\s*&&\s*options\.body\s*!==\s*undefined/);
   assertMod.match(source, /result\.status\s*!==\s*'ok'/);
   assertMod.match(source, /Number\(item\.paragraph\)\s*\+\s*1/);
+  for (const feature of ['TaskProgressBar', 'TaskCenterPopover', 'NewBookModal', 'approve-review', 'loginUrl', 'FREE_CHANNEL_FALLBACKS', 'pendingBatchId', '.cw-task-drawer', '.nh-note']) {
+    assertMod.ok(source.includes(feature), `client.js includes v0.7.5 feature: ${feature}`);
+  }
+  assertMod.ok(!source.includes('set_default: true'), 'saving the free pool must not force the global default binding');
+  const atelierCssSrc = fsMod.readFileSync(new URL('../assets/atelier-native.css', import.meta.url), 'utf8');
+  assertMod.match(atelierCssSrc, /\.nh-body\s*\{[\s\S]*?z-index:\s*auto/);
   const staticAppSrc = fsMod.readFileSync(new URL('../backend/manager/static/app.js', import.meta.url), 'utf8');
   assertMod.doesNotMatch(staticAppSrc, /name="max_revisions"[^>\n]*max="5"/);
   assertMod.ok(staticAppSrc.includes('chapter-whale:overview'));
+  assertMod.ok(staticAppSrc.includes('approve-review'));
+  assertMod.ok(staticAppSrc.includes('delete-job'));
 });

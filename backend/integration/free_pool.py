@@ -44,15 +44,50 @@ def blocked(project,model):
     return datetime.fromisoformat(until) if until and datetime.fromisoformat(until)>now() else None
 
 
+NO_ACCOUNT_CHANNELS = {'opencode', 'kilo', 'kilo-auto', 'openrouter'}
+
+
+def _requires_account_login(model: str) -> bool:
+    """Only prefixes that are known account-backed channels need a login.
+
+    Model IDs are not proof of an account lane: ``kilo-auto/free`` and
+    ``openrouter/free`` are anonymous lanes, so a 401/429 there must not lock
+    the model for a day behind a “requires login” banner.
+    """
+    text = str(model or '')
+    prefix = text.split('/', 1)[0].casefold()
+    return bool(prefix) and '/' in text and prefix not in NO_ACCOUNT_CHANNELS and not text.startswith('combo:')
+
+
 def defer(project,model,failure):
     status=failure.get('http_status')
-    target=next_day() if status in (401,403,429) or failure.get('failure_kind')=='configuration_or_access' else now()+timedelta(minutes=30)
+    account_login = _requires_account_login(model) and (
+        status in (401,403)
+        or (failure.get('failure_kind')=='configuration_or_access' and failure.get('error_code') not in {'insufficient_quota','billing_hard_limit_reached'})
+    )
+    if not account_login and status in (401, 403):
+        target = now() + timedelta(minutes=15)
+    else:
+        target = next_day() if status in (401,403,429) or failure.get('failure_kind')=='configuration_or_access' else now()+timedelta(minutes=30)
     path=state_path()
     with writer_runner.file_lock(path.with_suffix('.lock'),blocking=True):
         doc=states();key=identity(project,model);previous=doc.get(key,{})
         doc[key]={'model':model,'project':str(project),'next_retry_at':target.isoformat(),
             'attempts':previous.get('attempts',0)+1,'status':'failed','failure_kind':failure.get('failure_kind'),'http_status':status,
-            'requires_login':status in (401,403) or failure.get('failure_kind')=='configuration_or_access' and failure.get('error_code') not in {'insufficient_quota','billing_hard_limit_reached'}}
+            'requires_login':account_login}
+        bridge.write_json_atomic(path,doc)
+
+
+def clear_recovery(project=None):
+    path=state_path()
+    if not path.exists():return
+    with writer_runner.file_lock(path.with_suffix('.lock'),blocking=True):
+        doc=states()
+        if project is None:
+            doc={}
+        else:
+            prefix=str(Path(project).resolve()).casefold()
+            doc={k:v for k,v in doc.items() if str(Path(v.get('project','.')).resolve()).casefold()!=prefix}
         bridge.write_json_atomic(path,doc)
 
 
@@ -111,15 +146,31 @@ class FreePoolClient:
 
     def _choices(self):
         from . import ofm_runtime
+        from .free_channels import ofm_token_saver_enabled
         info=ofm_runtime.ensure_started()
-        if self.config['providers']['ofm-standalone']['base_url']!=info['url']+'/v1':raise ValueError('独立服务端口已变化，请在网页重新保存免费池')
-        project=costs.META.get().get('project')
-        if not project:raise ValueError('免费池请求缺少作品归属')
+        live_base = info['url'] + '/v1'
+        self.base_url = live_base
+        if self.config['providers']['ofm-standalone']['base_url'] != live_base:
+            self.config['providers']['ofm-standalone']['base_url'] = live_base
+            if 'free-pool' in self.config['providers']:
+                self.config['providers']['free-pool']['base_url'] = live_base
+            ofm_runtime.persist_service_url(live_base)
+        if ofm_token_saver_enabled(ofm_runtime.HOME/'settings.json'):
+            raise ValueError('独立服务提示词压缩已开启，已停止发送原始创作材料')
+        meta = costs.META.get()
+        is_probe = meta.get('stage') == 'probe'
+        project = meta.get('project')
+        if not project and not is_probe:
+            raise ValueError('免费池请求缺少作品归属')
         pool=self.config['providers']['free-pool']
-        permitted={str(Path(p).resolve()).casefold() for p in pool.get('allowed_projects',[])}
-        if str(Path(project).resolve()).casefold() not in permitted:raise ValueError('此作品未授权免费渠道处理正文与必要记忆')
+        if not is_probe:
+            permitted={str(Path(p).resolve()).casefold() for p in pool.get('allowed_projects',[])}
+            if str(Path(project).resolve()).casefold() not in permitted:
+                raise ValueError('此作品未授权免费渠道处理正文与必要记忆')
         rows=[r for r in pool.get('pool_members',[]) if self.role in r['roles']]
         if not rows:raise ValueError(f'免费池尚未为角色{self.role}选择模型')
+        if is_probe:
+            return project or str(bridge.RUNTIME_ROOT), rows
         available=[r for r in rows if not blocked(project,r['model_id'])]
         if not available:
             deadlines=[blocked(project,r['model_id']) for r in rows]
@@ -130,7 +181,11 @@ class FreePoolClient:
         if index or states().get(identity(project,row['model_id']),{}).get('status')=='failed':
             extra=retry_budget.extension({'project':project,'recovery_policy':{'extra_attempts_per_day':6}},now(),immediate=True,routing=True)
             if not extra:raise PoolWait('今日额外恢复次数已用完，等待次日恢复',next_day())
-        return self.factory({'provider_id':'ofm-standalone','model_id':row['model_id']})
+        client=self.factory({'provider_id':'ofm-standalone','model_id':row['model_id']})
+        # The factory closure may hold the URL captured before OFM self-healed
+        # its port; stamp every created client with the URL we are about to use.
+        if getattr(client,'base_url',None)!=self.base_url:client.base_url=self.base_url
+        return client
 
     async def _run(self,method,messages,**kwargs):
         from .failure_info import details

@@ -3,6 +3,7 @@
 //   node scripts/check-release.mjs [--local] [--root <dir>] [--json <file>]
 // --local   允许包内没有内置 runtime（薄源码检出）；此时只跳过缺席的 runtime/ 项，
 //           backend/ 的每一项都必须存在且哈希一致，绝不静默跳过。
+//           非 --local 面向完整发行包：缺 runtime/ 或 runtime/python/python.exe 直接失败。
 // --root    校验指定目录（打包暂存目录、干净检出或完整包解包目录）。
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -34,11 +35,66 @@ function digest(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+// runtime-manifest.json 的 buildId 由 Python 的
+// `sha256(json.dumps(files, sort_keys=True))` 生成。这里必须逐字节复刻该格式：
+// 键按 Unicode 码点排序、分隔符为 ", " / ": "、ensure_ascii 会把非 ASCII 转成
+// \uXXXX（非 BMP 用代理对）。用 JSON.stringify 会得到不同字节，复算就没有意义。
+function pythonJsonString(value) {
+  let out = '"';
+  for (const ch of String(value)) {
+    const code = ch.codePointAt(0);
+    if (ch === '"') out += '\\"';
+    else if (ch === '\\') out += '\\\\';
+    else if (ch === '\b') out += '\\b';
+    else if (ch === '\f') out += '\\f';
+    else if (ch === '\n') out += '\\n';
+    else if (ch === '\r') out += '\\r';
+    else if (ch === '\t') out += '\\t';
+    else if (code < 0x20) out += `\\u${code.toString(16).padStart(4, '0')}`;
+    else if (code < 0x7f) out += ch;
+    else if (code <= 0xffff) out += `\\u${code.toString(16).padStart(4, '0')}`;
+    else {
+      const pair = code - 0x10000;
+      out += `\\u${(0xd800 + (pair >> 10)).toString(16).padStart(4, '0')}`;
+      out += `\\u${(0xdc00 + (pair & 0x3ff)).toString(16).padStart(4, '0')}`;
+    }
+  }
+  return `${out}"`;
+}
+
+/** Python sorts strings by code point; Array#sort compares UTF-16 code units. */
+function compareCodePoints(a, b) {
+  const left = Array.from(a);
+  const right = Array.from(b);
+  const shared = Math.min(left.length, right.length);
+  for (let index = 0; index < shared; index += 1) {
+    const delta = left[index].codePointAt(0) - right[index].codePointAt(0);
+    if (delta !== 0) return delta;
+  }
+  return left.length - right.length;
+}
+
+function manifestBuildId(files) {
+  const keys = Object.keys(files || {}).sort(compareCodePoints);
+  const body = keys.map((name) => `${pythonJsonString(name)}: ${pythonJsonString(files[name])}`).join(', ');
+  return createHash('sha256').update(`{${body}}`, 'utf8').digest('hex');
+}
+
 const bundledRuntime = existsSync(join(root, 'runtime', 'python', 'python.exe'));
 let skippedRuntime = 0;
 let checked = 0;
+// P2-21：静默跳过 runtime 只允许发生在 --local。完整包缺 python.exe 时，
+// 2253 个 runtime 项不是“缺席”，而是发行包损坏。只报一条总错误，避免刷屏。
+if (!bundledRuntime && !local) {
+  errors.push(existsSync(join(root, 'runtime'))
+    ? '完整发行包缺少 runtime/python/python.exe（--local 才允许跳过 runtime 项）。'
+    : '完整发行包缺少 runtime/ 目录（--local 才允许跳过 runtime 项）。');
+}
 for (const [name, hash] of Object.entries(manifest.files || {})) {
-  if (name.startsWith('runtime/') && !bundledRuntime) { skippedRuntime += 1; continue; }
+  if (name.startsWith('runtime/') && !bundledRuntime) {
+    if (local) skippedRuntime += 1;
+    continue;
+  }
   const path = join(root, name);
   if (!existsSync(path) || !statSync(path).isFile()) {
     errors.push(`缺失：${name}`);
@@ -60,13 +116,23 @@ for (const [name, hash] of Object.entries(manifest.files || {})) {
   }
 }
 
+// P3-3：buildId 与 packageVersion 必须能从清单本身复算，不能只信手工字段。
+const recomputedBuildId = manifestBuildId(manifest.files);
+if (manifest.buildId !== recomputedBuildId) {
+  errors.push(`runtime-manifest.json 的 buildId 与文件清单复算值不一致（清单 ${String(manifest.buildId)}，复算 ${recomputedBuildId}）。`);
+}
+if (String(manifest.packageVersion ?? '') !== String(pkg.version)) {
+  errors.push(`runtime-manifest.json 的 packageVersion（${String(manifest.packageVersion ?? '缺失')}）与 package.json ${pkg.version} 不一致。`);
+}
+
 for (const name of ['accounts', 'books', 'integration_data', 'playwright-browsers', '.env', '.dpapi']) {
   if (existsSync(join(root, 'backend', name))) errors.push(`后端包混入本地状态：backend/${name}`);
 }
 
 const residue = [/\/__pycache__\//, /\.py[co]$/, /(^|\/)\.webnovel\//, /(^|\/)正文\//,
   /integration_data\//, /(^|\/)accounts\//, /(^|\/)books\//, /\.dpapi(\.bak)?$/, /\.publish\.json$/,
-  /scheduler\.json/, /(^|\/)\.install-lock\//, /(^|\/)\.chapter-whale-release\.json$/];
+  /scheduler\.json/, /(^|\/)\.install-lock\//, /(^|\/)\.chapter-whale-release\.json$/,
+  /(^|\/)test_[^/]*\.py$/];
 for (const name of Object.keys(manifest.files || {})) {
   if (residue.some((pattern) => pattern.test(name))) errors.push(`发行清单包含不应分发的文件：${name}`);
   if (/^runtime\/python\/Lib\/site-packages\/(manager|integration|fanqie_auto_publish|services|routers)(\/|$)/.test(name)) {
@@ -127,8 +193,38 @@ if (Array.isArray(pkg?.dsh?.bundle?.platforms) && pkg.dsh.bundle.platforms.inclu
 if (!local && pkg.private) errors.push('package.json 仍标记为 private，禁止发布。');
 if (typeof pkg.license !== 'string' || !pkg.license.trim()) errors.push('package.json 缺少 license 字段。');
 
-// 市场元数据只在本仓库快照里存在（打包暂存目录可能没有）。存在就必须与 package.json 对齐：
-// 宿主按 semver 取 versions.at(-1)，多留旧版本会让「最新版」指回上一版。
+// 市场元数据只在本仓库快照里存在（打包暂存目录可能没有）。
+// P2-23：市场条目只能在对应 GitHub/npm 资产真实存在后指向新版本。发布前允许
+// market 落后于 package.json（当前 0.7.4 已发布、0.7.5 尚在验收），但绝不允许
+// 指向比 package.json 更新的版本，否则宿主会去下载 404 的资产。
+function versionTuple(value) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(value ?? '').trim());
+  if (!match) return null;
+  return { core: [Number(match[1]), Number(match[2]), Number(match[3])], pre: match[4] || null };
+}
+function compareVersions(left, right) {
+  const a = versionTuple(left);
+  const b = versionTuple(right);
+  if (!a || !b) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (a.core[index] !== b.core[index]) return a.core[index] - b.core[index];
+  }
+  if (a.pre === b.pre) return 0;
+  if (!a.pre) return 1;
+  if (!b.pre) return -1;
+  return a.pre.localeCompare(b.pre);
+}
+function marketVersionProblem(label, version) {
+  if (version === pkg.version) return null;
+  const order = compareVersions(version, pkg.version);
+  if (order === null) return `${label} 的版本 ${String(version)} 不是有效 semver。`;
+  if (order < 0) {
+    notes.push(`${label} 仍指向 ${version}（低于 package.json ${pkg.version}）；发布 v${pkg.version} 前允许滞后，Release/npm 完成后必须同步。`);
+    return null;
+  }
+  return `${label} 的版本 ${String(version)} 高于 package.json ${pkg.version}；资产尚不存在时会把用户引向 404。`;
+}
+
 const marketPath = join(root, 'market', 'index.json');
 if (existsSync(marketPath)) {
   try {
@@ -137,8 +233,9 @@ if (existsSync(marketPath)) {
     const versions = Array.isArray(plugin?.versions) ? plugin.versions : [];
     if (versions.length !== 1) {
       errors.push(`market/index.json 的 plugins[0].versions 必须只保留当前版本一个对象（现有 ${versions.length} 个）。`);
-    } else if (versions[0]?.version !== pkg.version) {
-      errors.push(`market/index.json 的版本 ${versions[0]?.version} 与 package.json ${pkg.version} 不一致。`);
+    } else {
+      const problem = marketVersionProblem('market/index.json', versions[0]?.version);
+      if (problem) errors.push(problem);
     }
   } catch (error) {
     errors.push(`market/index.json 无法解析：${error.message}`);
@@ -148,16 +245,27 @@ const losebirdPath = join(root, 'market', 'losebird-entry.json');
 if (existsSync(losebirdPath)) {
   try {
     const entry = JSON.parse(readFileSync(losebirdPath, 'utf8'));
-    if (entry.version !== pkg.version || entry.latestVersion !== pkg.version) {
-      errors.push(`market/losebird-entry.json 的版本（${entry.version}/${entry.latestVersion}）与 package.json ${pkg.version} 不一致。`);
+    for (const [field, value] of [['version', entry.version], ['latestVersion', entry.latestVersion]]) {
+      const problem = marketVersionProblem(`market/losebird-entry.json 的 ${field}`, value);
+      if (problem) errors.push(problem);
     }
   } catch (error) {
     errors.push(`market/losebird-entry.json 无法解析：${error.message}`);
   }
 }
+const catalogPath = join(root, 'market', 'catalog-entry.yml');
+if (existsSync(catalogPath)) {
+  const catalog = readFileSync(catalogPath, 'utf8');
+  const tarball = /releases\/download\/v([^/\s]+)\//.exec(catalog);
+  if (tarball) {
+    const problem = marketVersionProblem('market/catalog-entry.yml 的 tarball', tarball[1]);
+    if (problem) errors.push(problem);
+  }
+}
 
 const summary = {
-  root, version: pkg.version, buildId: manifest.buildId, files: Object.keys(manifest.files || {}).length,
+  root, version: pkg.version, packageVersion: manifest.packageVersion,
+  buildId: manifest.buildId, recomputedBuildId, files: Object.keys(manifest.files || {}).length,
   checked, skippedRuntime, errors: errors.length, notes,
 };
 if (jsonAt) {

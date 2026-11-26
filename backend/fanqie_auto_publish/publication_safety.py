@@ -212,6 +212,11 @@ def review_eligible(review,body_sha256,project=None,chapter=None):
         if project is not None and str(Path(auth.get('project','')).resolve()).casefold()!=str(Path(project).resolve()).casefold():return False
         if chapter is not None and (type(auth.get('chapter')) is not int or auth['chapter']!=chapter):return False
         return valid(review,body_sha256)
+    if review.get('review_decision')=='human_approved':
+        return (
+            review.get('human_review_approved') is True
+            and review.get('body_sha256') == body_sha256
+        )
     if review.get("review_decision")!="waived_by_E":return False
     import sys
     root=str(Path(__file__).resolve().parents[1])

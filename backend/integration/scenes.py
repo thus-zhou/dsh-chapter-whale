@@ -137,7 +137,8 @@ def plan(project, chapter, *, count=2, word_count=3500):
         if not str(entry.get("outline") or "").strip():
             raise ValueError(f"第{chapter}章没有细纲，不能生成空场景卡")
         purpose = _split_outline(entry.get("outline"), count)
-        target = max(600, int(word_count or 3500) // count)
+        expected_words = int(word_count or 3500)
+        target = max(200, expected_words // count) if expected_words < 600 * count else max(600, expected_words // count)
         cards = [_card(index, purpose[index], target, calm=_calm(purpose[index])) for index in range(count)]
         source = "derived"
     validate(cards, word_count)

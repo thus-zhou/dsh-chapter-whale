@@ -1229,16 +1229,19 @@
           "\"atelier\"][data-theme=\"light\"] .cw-ai-star{background:var(--a)}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon{border:0;background:conic-gradient(from 25deg,transparent 3%,var(--a) 28%,var(--b) 55%,var(--c) 72%,transparent 96%);mask:radial-gradient(closest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));box-shadow:none}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon:nth-child(2){background:conic-gradient(from 135deg,transparent,var(--c),var(--b),transparent)}\n.nh-root[data-ui=\"atelier\"] .cw-ai-ribbon:nth-child(3){background:conic-gradient(from 70deg,transparent,var(--a),var(--c),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"polish\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--b),var(--c),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"review\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--a),var(--mint),transparent)}\n.nh-root[data-ui=\"atelier\"][data-status=\"error\"] .cw-ai-ribbon{background:conic-gradient(from 25deg,transparent,var(--error),transparent);animation:none}\n.nh-root[data-ui=\"atelier\"]:is([data-status=\"idle\"],[data-status=\"success\"]) :is(.cw-ai-core,.cw-ai-ribbon,.cw-ai-star){animation:none}\n.nh-root[data-ui=\"atelier\"][data-paused=\"true\"] .cw-ai-presence{opacity:.35}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-weight:350}\n@media (min-width:851px) and (max-width:1080px){.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:318px;padding-top:21px;padding-bottom:17px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{margin-top:11px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{margin-top:18px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics{padding-top:12px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{top:119px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript{margin-top:13px}}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-manuscript-card{height:330px;padding:21px 24px 17px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] main{padding-top:18px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-page-heading{margin-bottom:18px}\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] .cw-word-progress{margin-top:15px}\n@media (min-width:1600px){.nh-root[data-ui=\"atelier\"]{--content-pad:42px;--sidebar-w:220px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{gap:22px;padding-inline:26px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:362px;padding-inline:33px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:16px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:32px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:29px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-size:40px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{right:35px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:18px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding-inline:16px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{font-size:14px;min-height:44px}}\n@media (max-width:1250px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:185px;--content-pad:23px;--gap:18px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding-inline:18px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding-inline:10px}\n.nh-root[data-ui=\"atelier\"] .cw-brand{padding-inline:7px}\n.nh-root[data-ui=\"atelier\"] .cw-brand>span{font-size:19px}\n.nh-root[data-ui=\"atelier\"] .cw-project-picker{padding-inline:8px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{padding-inline:10px;font-size:12px;gap:10px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{padding-inline:23px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:25px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:10px;padding-inline:9px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{right:17px;width:100px;height:100px;top:138px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-",
           "size:34px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card,.nh-root[data-ui=\"atelier\"] .cw-next-card{padding-inline:20px}}\n@media (max-width:1080px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:63px;--content-pad:24px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding:13px 14px 20px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding:23px 9px 15px;min-height:620px;align-items:center;gap:28px;border-radius:22px}\n.nh-root[data-ui=\"atelier\"] .cw-brand{padding:0}\n.nh-root[data-ui=\"atelier\"] .cw-brand>span,.nh-root[data-ui=\"atelier\"] .cw-project-picker,.nh-root[data-ui=\"atelier\"] .cw-nav-label,.nh-root[data-ui=\"atelier\"] .cw-nav-live,.nh-root[data-ui=\"atelier\"] .cw-nav-count,.nh-root[data-ui=\"atelier\"] .cw-appearance-entry>span{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar nav{width:100%;gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{font-size:0;gap:0;justify-content:center;padding:10px;min-height:41px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item .cw-icon{width:18px;height:18px}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar-bottom{width:100%}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry{padding:10px}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry>.cw-icon{width:18px;height:18px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:26px}\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr)}\n.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}}\n@media (max-width:850px){.nh-root[data-ui=\"atelier\"] .cw-primary-grid{grid-template-columns:1fr}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card{height:332px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{width:116px;height:110px;right:40px;top:125px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{max-width:82%}\n.nh-root[data-ui=\"atelier\"] .cw-secondary-grid{grid-template-columns:1fr}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-muted{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:27px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:18px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:12px}\n.nh-root[data-ui=\"atelier\"] .cw-next-card{padding-bottom:22px}\n.nh-root[data-ui=\"atelier\"] .cw-model-connected{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-top-actions{gap:0}\n.nh-root[data-ui=\"atelier\"] .cw-vertical-divider{display:none}}\n@media (max-width:520px){.nh-root[data-ui=\"atelier\"]{--sidebar-w:52px;--content-pad:14px;--gap:15px;--radius:18px}\n.nh-root[data-ui=\"atelier\"] .cw-app-shell{padding:10px 8px 16px;gap:0}\n.nh-root[data-ui=\"atelier\"] .cw-sidebar{padding:20px 6px 12px;top:10px;height:calc(100vh - 52px);border-radius:17px}\n.nh-root[data-ui=\"atelier\"] .cw-brand-whale{width:27px;height:24px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item{padding:9px;min-height:37px;border-radius:10px}\n.nh-root[data-ui=\"atelier\"] .cw-nav-item .cw-icon{width:17px;height:17px}\n.nh-root[data-ui=\"atelier\"] .cw-appearance-entry{padding:9px}\n.nh-root[data-ui=\"atelier\"] .cw-topbar{height:42px}\n.nh-root[data-ui=\"atelier\"] .cw-breadcrumbs{font-size:10px;gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-breadcrumbs .cw-icon{width:10px;height:10px}\n.nh-root[data-ui=\"atelier\"] .cw-floating-tools{padding:2px 4px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-floating-tools .cw-avatar{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-icon-button{width:27px;height:27px}\n.nh-root[data-ui=\"atelier\"] .cw-preview-bar{padding:0 12px;font-size:9px;gap:6px}\n.nh-root[data-ui=\"atelier\"] .cw-preview-separator,.nh-root[data-ui=\"atelier\"] .cw-preview-bar>span>.cw-muted,.nh-root[data-ui=\"atelier\"] .cw-host-toggle,.nh-root[data-ui=\"atelier\"] .cw-quiet-button>span{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-preview-actions{gap:9px}\n.nh-root",
           "[data-ui=\"atelier\"] .cw-preview-bar select{font-size:10px;max-width:85px}\n.nh-root[data-ui=\"atelier\"] .cw-scenario-control{gap:4px}\n.nh-root[data-ui=\"atelier\"] main{padding-top:18px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading{gap:10px;margin-bottom:22px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading .cw-button{min-height:33px;font-size:10px;padding:7px 11px;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading .cw-button .cw-icon{width:13px;height:13px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta{gap:7px;align-items:flex-start}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>div{flex-direction:column;align-items:flex-start;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta>div>strong{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-text-button{gap:4px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-meta .cw-text-button strong{font-size:13px}\n.nh-root[data-ui=\"atelier\"] .cw-live-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot{flex-wrap:wrap;font-size:9px;gap:3px}\n.nh-root[data-ui=\"atelier\"] .cw-overall-foot .cw-eta{width:100%;margin-left:0}\n.nh-root[data-ui=\"atelier\"] .cw-overall-progress{padding-bottom:17px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card,.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{padding:20px 18px 16px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card{height:333px}\n.nh-root[data-ui=\"atelier\"] .cw-creation-card h2{font-size:25px;margin-top:15px}\n.nh-root[data-ui=\"atelier\"] .cw-card-topline{gap:7px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions{gap:6px}\n.nh-root[data-ui=\"atelier\"] .cw-section-kicker{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-engine-pill{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button{font-size:9px;padding:5px 8px;min-height:29px;gap:4px}\n.nh-root[data-ui=\"atelier\"] .cw-card-top-actions .cw-button .cw-icon{width:11px;height:11px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill{font-size:10px;gap:5px}\n.nh-root[data-ui=\"atelier\"] .cw-model-pill>.cw-muted{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-model-reasoning{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-word-progress{max-width:100%;margin-top:25px}\n.nh-root[data-ui=\"atelier\"] .cw-word-value{font-size:34px}\n.nh-root[data-ui=\"atelier\"] .cw-word-target{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-ai-presence{width:90px;height:90px;right:15px;top:134px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics{gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-live-metrics strong{font-size:16px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card{height:350px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4{font-size:17px}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p{font-size:15px;line-height:2}\n.nh-root[data-ui=\"atelier\"] .cw-pipeline-card{padding:18px 9px 11px;border-radius:16px;margin-top:15px}\n.nh-root[data-ui=\"atelier\"] .cw-stage{padding-inline:0;gap:7px;min-height:78px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-copy strong{font-size:10px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-state{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-stage-node{height:25px;width:25px;font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-flow-rail{top:12px}\n.nh-root[data-ui=\"atelier\"] .cw-chapters-card,.nh-root[data-ui=\"atelier\"] .cw-next-card{padding:18px 16px}\n.nh-root[data-ui=\"atelier\"] .cw-card-tab{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-card-tabs{gap:15px}\n.nh-root[data-ui=\"atelier\"] .cw-subtle-badge{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row{gap:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title{font-size:11px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small{font-size:9px}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index{font-size:10px;width:19px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status{font-size:8px}\n.nh-root[data-ui=\"atelier\"] .cw-row-status .cw-icon{display:none}\n.nh-root[data-ui=\"atelier\"] .cw-settings-drawer{width:calc(100vw - 22px);inset:10px 11px;border-radius:22px}\n.nh-root[data-ui=\"atelier\"] .cw-drawer-heading{padding:20px}\n.nh-root[data-ui=\"atelier\"] .cw-drawer-content{padding-inline:20px}\n.nh-root[data-ui=\"atelier\"] .",
-          "reader-dialog{padding:24px!important}\n.nh-root[data-ui=\"atelier\"] #dialog-content h2{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-text p{font-size:16px!important}\n.nh-root[data-ui=\"atelier\"] .cw-toast{font-size:10px;padding:12px 14px;max-width:calc(100vw - 35px);white-space:normal}}\n/* ==========================================================================\n   码章鲸 Chapter Whale · DSH Plugin UI v5\n   Optical Liquid Glass × Gemini Fluid Aurora × Craft Editorial × Trident\n   ========================================================================== */\n\n.nh-root[data-ui=\"atelier\"] {\n  --nh-mono: ui-monospace, \"Cascadia Code\", \"JetBrains Mono\", Consolas, monospace;\n  --font-display: \"Whale Geometric\", \"Whale Text\", \"Microsoft YaHei UI\", system-ui, sans-serif;\n  --font-body: \"Whale Text\", \"Whale Geometric\", \"Microsoft YaHei UI\", sans-serif;\n  --font-serif: \"Whale Editorial\", \"Source Han Serif SC\", \"Noto Serif SC\", Georgia, serif;\n\n  /* Default v5 optical material variables (overridden inline by AppearanceContext) */\n  --glass-opacity: 0.24;\n  --blur: 18px;\n  --glass-refract: 0.85;\n  --backdrop-light: 1.00;\n  --nh-gap: 16px;\n  --nh-pad: 20px;\n  --nh-row: 36px;\n  --nh-fs: 13px;\n  --radius-lg: 26px;\n  --radius-md: 17px;\n  --radius-sm: 12px;\n  --radius-pill: 9999px;\n\n  /* Strict 4-Channel Semantic Palette (Dark default) */\n  --accent-gold: #e6b94c;\n  --accent-gold-soft: rgba(230, 185, 76, 0.14);\n  --state-active: #79b4ff;\n  --state-active-soft: rgba(121, 180, 255, 0.16);\n  --state-ok: #4be3a4;\n  --state-ok-soft: rgba(75, 227, 164, 0.13);\n  --state-warn: #ff9650;\n  --state-warn-soft: rgba(255, 150, 80, 0.15);\n  --state-danger: #ff647c;\n  --state-danger-soft: rgba(255, 100, 124, 0.15);\n\n  /* Gemini Aurora Gradient Stops */\n  --iris-1: #5a96ff;\n  --iris-2: #a882ff;\n  --iris-3: #f27dc2;\n  --iris-4: #ffc845;\n  --iris-5: #5ee7c8;\n  --a: var(--state-active);\n  --b: var(--iris-2);\n  --c: var(--iris-5);\n\n  /* WCAG AA+ Ink & Obsidian Crystal Surfaces */\n  --bg-canvas: #03050a;\n  --bg-grad-a: rgba(94, 164, 255, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(230, 185, 76, calc(0.22 * var(--backdrop-light)));\n  --bg-grad-c: rgba(166, 128, 255, calc(0.20 * var(--backdrop-light)));\n\n  --ink: #f8fafc;\n  --ink2: rgba(241, 245, 249, 0.85);\n  --muted: rgba(226, 232, 240, 0.68);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(20, 25, 36, var(--glass-opacity));\n  --nh-surface2: rgba(6, 9, 15, 0.44);\n  --nh-border: rgba(255, 255, 255, 0.20);\n  --nh-border-soft: rgba(255, 255, 255, 0.14);\n  --nh-accent: var(--state-active);\n  --nh-cyan: var(--iris-5);\n  --nh-hover: rgba(255, 255, 255, 0.08);\n  --nh-ok: var(--state-ok);\n  --nh-warn: var(--state-warn);\n  --nh-err: var(--state-danger);\n  --success: var(--state-ok);\n  --warning: var(--state-warn);\n  --error: var(--state-danger);\n  --line: rgba(255, 255, 255, 0.14);\n  --line-strong: rgba(255, 255, 255, 0.24);\n  --dotted: rgba(255, 255, 255, 0.24);\n  --tint: rgba(255, 255, 255, 0.07);\n  --selected: rgba(121, 180, 255, 0.15);\n  --button-bg: #f8fafc;\n  --button-ink: #050608;\n  --surface: 20 25 36;\n  --card: 18 22 32;\n\n  --rim-hi: rgba(255, 255, 255, 0.56);\n  --rim-mid: rgba(255, 255, 255, 0.20);\n  --rim-lo: rgba(255, 255, 255, 0.06);\n  --glass-edge: rgba(255, 255, 255, 0.22);\n  --glass-shine: rgba(255, 255, 255, 0.34);\n  --glass-bounce: rgba(145, 188, 255, 0.14);\n  --dock-outer: rgba(20, 24, 34, calc(var(--glass-opacity) + 0.18));\n  --dock-inner: rgba(255, 255, 255, 0.06);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 54%, rgba(255, 255, 255, 0.18) 100%);\n  --paper-bg: rgba(11, 13, 18, 0.90);\n  --paper-border: rgba(255, 255, 255, 0.14);\n  --shadow-glass: 0 22px 50px -20px rgba(0, 0, 0, 0.84), 0 6px 18px -6px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.06);\n\n  --ease: cubic-bezier(0.22, 1, 0.36, 1);\n  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);\n  --spring: cubic-bezier(0.22, 1.18, 0.36, 1);\n\n  position: relative;\n  isolation: isolate;\n  height: 100%;\n  m",
-          "in-height: 0;\n  display: flex;\n  flex-direction: column;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  font-family: var(--font-body);\n  font-size: var(--nh-fs);\n  line-height: 1.6;\n  overflow: hidden;\n  border-radius: 18px;\n  corner-shape: squircle;\n  /* Soft left ambient transition easing contrast against light DSH host rail */\n  box-shadow:\n    inset 24px 0 38px -22px rgba(148, 186, 240, 0.22),\n    inset 0 0 0 1px rgba(148, 163, 184, 0.14);\n}\n\n/* Light Mode Tokens */\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] {\n  --bg-canvas: #eef1f7;\n  --bg-grad-a: rgba(94, 152, 224, calc(0.38 * var(--backdrop-light)));\n  --bg-grad-b: rgba(229, 172, 102, calc(0.32 * var(--backdrop-light)));\n  --bg-grad-c: rgba(154, 130, 235, calc(0.22 * var(--backdrop-light)));\n\n  --accent-gold: #9e6d08;\n  --accent-gold-soft: rgba(158, 109, 8, 0.11);\n  --state-active: #2f5fe3;\n  --state-active-soft: rgba(47, 95, 227, 0.12);\n  --state-ok: #0d8a5f;\n  --state-ok-soft: rgba(13, 138, 95, 0.11);\n  --state-warn: #c95d12;\n  --state-warn-soft: rgba(201, 93, 18, 0.12);\n  --state-danger: #cc2945;\n  --state-danger-soft: rgba(204, 41, 69, 0.12);\n\n  --ink: #111318;\n  --ink2: rgba(17, 19, 24, 0.78);\n  --muted: rgba(17, 19, 24, 0.62);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --nh-surface2: rgba(17, 19, 24, 0.042);\n  --nh-border: rgba(17, 19, 24, 0.12);\n  --nh-border-soft: rgba(17, 19, 24, 0.10);\n  --nh-hover: rgba(17, 19, 24, 0.065);\n  --line: rgba(17, 19, 24, 0.11);\n  --line-strong: rgba(17, 19, 24, 0.18);\n  --dotted: rgba(17, 19, 24, 0.24);\n  --tint: rgba(17, 19, 24, 0.045);\n  --selected: rgba(47, 95, 227, 0.12);\n  --button-bg: #111318;\n  --button-ink: #ffffff;\n  --surface: 255 255 255;\n  --card: 255 255 255;\n\n  --rim-hi: rgba(255, 255, 255, 0.99);\n  --rim-mid: rgba(255, 255, 255, 0.65);\n  --rim-lo: rgba(17, 19, 24, 0.10);\n  --glass-edge: rgba(17, 19, 24, 0.10);\n  --glass-shine: rgba(255, 255, 255, 0.96);\n  --glass-bounce: rgba(125, 168, 255, 0.16);\n  --dock-outer: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --dock-inner: rgba(17, 19, 24, 0.05);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.70) 58%, rgba(255, 255, 255, 0.92) 100%);\n  --paper-bg: rgba(255, 255, 255, 0.92);\n  --paper-border: rgba(17, 19, 24, 0.10);\n  --shadow-glass: 0 20px 44px -18px rgba(17, 24, 39, 0.16), 0 4px 12px -4px rgba(17, 24, 39, 0.08), 0 0 0 1px rgba(17, 19, 24, 0.06);\n  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);\n}\n\n/* 3 Palettes (liquid / craft / apple, mapping legacy gemini -> liquid, ocean -> apple) */\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"] {\n  --bg-canvas: #080705;\n  --bg-grad-a: rgba(226, 174, 108, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(122, 158, 196, calc(0.22 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 29, 23, calc(var(--glass-opacity) + 0.06));\n}\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"][data-theme=\"light\"] {\n  --bg-canvas: #f5f1e9;\n  --nh-surface: rgba(255, 251, 244, calc(var(--glass-opacity) + 0.38));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"]) {\n  --bg-canvas: #050608;\n  --bg-grad-a: rgba(135, 176, 224, calc(0.30 * var(--backdrop-light)));\n  --bg-grad-b: rgba(224, 186, 138, calc(0.24 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 36, 42, var(--glass-opacity));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"])[data-theme=\"light\"] {\n  --bg-canvas: #f2f3f5;\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.40));\n}\n\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] {\n  --nh-gap: 12px;\n  --nh-pad: 15px;\n  --nh-row: 32px;\n  --nh-fs: 12.5px;\n  --radius-lg: 20px;\n  --radius-md: 14px;\n  --radius-sm: 10px;\n}\n\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::after,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *,\n.nh-root[d",
-          "ata-ui=\"atelier\"][data-motion=\"off\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *::after {\n  animation-duration: 0.01ms !important;\n  transition-duration: 0.01ms !important;\n}\n\n/* Backdrop Layer (Canvas Silk Ribbons + Optical Gradient Wash + SDF Filters) */\n.nh-root[data-ui=\"atelier\"] .cw-backdrop-layer {\n  position: absolute;\n  inset: 0;\n  z-index: 0;\n  pointer-events: none;\n  overflow: hidden;\n  border-radius: inherit;\n  corner-shape: inherit;\n}\n.nh-root[data-ui=\"atelier\"] .cw-cosmos-canvas {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  display: block;\n}\n.nh-root[data-ui=\"atelier\"] .cw-optical-wash {\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(64% 50% at 14% 8%, var(--bg-grad-a), transparent 68%),\n    radial-gradient(58% 48% at 86% 16%, var(--bg-grad-b), transparent 66%),\n    radial-gradient(48% 42% at 52% 86%, var(--bg-grad-c), transparent 72%);\n}\n\n/* Typography Discipline */\n.nh-root[data-ui=\"atelier\"] h1,\n.nh-root[data-ui=\"atelier\"] h2,\n.nh-root[data-ui=\"atelier\"] h3 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  color: var(--ink);\n  text-wrap: balance;\n}\n.nh-root[data-ui=\"atelier\"] p { text-wrap: pretty; }\n\n/* ==========================================================================\n   3-Island Floating Apple Liquid Glass Dock (Eliminates Internal Left Sidebar)\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-head {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-sticky {\n  position: relative;\n  z-index: 40;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  padding: 12px 18px 6px;\n  flex: 0 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-row {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 9px;\n  max-width: 100%;\n  width: 100%;\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n  position: relative;\n  isolation: isolate;\n  width: 42px;\n  height: 42px;\n  flex: 0 0 42px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--ink);\n  background: var(--dock-outer);\n  border: 0;\n  cursor: pointer;\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 12px 28px -12px rgba(0, 0, 0, 0.58);\n  backdrop-filter: blur(var(--blur)) saturate(2.1);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.1);\n  transition: transform 150ms var(--ease-expo), box-shadow 240ms ease;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n    backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:hover {\n  transform: translateY(-1.5px) scale(1.04);\n  box-shadow: 0 0 0 1px var(--rim-hi), inset 0 1.5px 1px var(--glass-shine), 0 14px 30px -10px rgba(0, 0, 0, 0.65);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-on {\n  box-shadow: 0 0 0 1.5px var(--state-active), inset 0 1.5px 1px var(--glass-shine), 0 10px 26px -8px rgba(121, 180, 255, 0.44);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-project-lens {\n  width: auto;\n  max-width: 210px;\n  height: 42px;\n  padding: 0 12px 0 7px;\n  border-radius: var(--radius-pill);\n  gap: 8px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-badge {\n  width: 26px;\n  height: 26px;\n  flex: 0 0 26px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-4), var(--iris-5), var(--iris-1));\n  color: #050608;\n  font-weight: 700;\n  font-size: 12px;\n  box-shadow: 0 0 12px rgba(139, 184, 255, 0.35);\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-title {\n  font-size: 12.5px;\n  font-weight: 600;\n  white-space: nowrap;\n  overflow: hidden;\n  text-over",
-          "flow: ellipsis;\n  color: var(--ink);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n  --mx: 50%;\n  --my: 20%;\n  position: relative;\n  display: flex;\n  align-items: center;\n  padding: 4px;\n  border-radius: var(--radius-pill);\n  background:\n    radial-gradient(220px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.14), transparent 70%),\n    var(--dock-outer);\n  backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  -webkit-backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 16px 36px -14px rgba(0, 0, 0, 0.60);\n  overflow-x: auto;\n  scrollbar-width: none;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n    backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule::-webkit-scrollbar { display: none; }\n.nh-root[data-ui=\"atelier\"] .cw-dock-track {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  border-radius: var(--radius-pill);\n  background: var(--dock-inner);\n  padding: 2px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-lens {\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  height: calc(100% - 4px);\n  border-radius: var(--radius-pill);\n  background: var(--lens-fill);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px rgba(0, 0, 0, 0.16),\n    0 4px 14px -4px rgba(0, 0, 0, 0.45),\n    0 0 0 1px var(--rim-mid);\n  transition: transform 0.44s var(--spring), width 0.36s var(--spring);\n  pointer-events: none;\n  z-index: 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill {\n  position: relative;\n  z-index: 1;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 30px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 0;\n  background: transparent;\n  font-size: 12.5px;\n  font-weight: 500;\n  color: var(--ink2);\n  white-space: nowrap;\n  cursor: pointer;\n  transition: color 180ms ease, transform 150ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:hover { color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill.is-active { color: var(--ink); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-pill-dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n.nh-root[data-ui=\"atelier\"] .cw-pill-badge {\n  font-size: 10px;\n  font-family: var(--nh-mono);\n  font-variant-numeric: tabular-nums;\n  padding: 1px 6px;\n  border-radius: var(--radius-pill);\n  background: var(--state-warn-soft);\n  color: var(--state-warn);\n  font-weight: 600;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-tools {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n}\n\n/* Gemini Living Breathing Halo Orb inside Dock */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb {\n  position: relative;\n  width: 22px;\n  height: 22px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb::before {\n  content: \"\";\n  position: absolute;\n  inset: -4px;\n  border-radius: 50%;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  opacity: 0.65;\n  filter: blur(5px);\n  animation: cw-spin-slow 9s linear infinite, cw-orb-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb-core {\n  position: relative;\n  width: 20px;\n  height: 20px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  border: 1px solid var(--rim-mid);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-streaming .cw-gemini-orb::before {\n  opacity: 1;\n  filter: blur(6px);\n  animation-duration: 2.2s, 1.8s;\n}\n@keyframes cw-spin-slow { to { transform: rotate(36",
-          "0deg); } }\n@keyframes cw-orb-breathe { 0%, 100% { transform: scale(0.95); opacity: 0.62; } 50% { transform: scale(1.12); opacity: 0.96; } }\n\n/* Compact Sub-Route & Service Strip */\n.nh-root[data-ui=\"atelier\"] .cw-subnav-bar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  flex-wrap: wrap;\n  width: 100%;\n  max-width: 1220px;\n  padding: 2px 4px 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subnav-pills {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill {\n  height: 28px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 12px;\n  font-weight: 500;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 140ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill.is-active {\n  color: var(--state-active);\n  border-color: var(--state-active);\n  background: var(--state-active-soft);\n}\n.nh-root[data-ui=\"atelier\"] .cw-service-cluster {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  margin-left: auto;\n  font-size: 11.5px;\n  color: var(--muted);\n}\n\n/* Popover Card (Origin-Anchored) */\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  position: absolute;\n  top: 66px;\n  left: 22px;\n  width: 310px;\n  max-width: calc(100vw - 44px);\n  z-index: 65;\n  transform-origin: top left;\n  animation: cw-pop-in 0.26s var(--ease-expo) backwards;\n}\n@keyframes cw-pop-in {\n  from { opacity: 0; filter: blur(6px); transform: translateY(-6px) scale(0.95); }\n  to { opacity: 1; filter: blur(0px); transform: translateY(0) scale(1); }\n}\n\n/* Collapse Old Vertical Left Sidebar Inside Plugin */\n.nh-root[data-ui=\"atelier\"] .nh-body {\n  position: relative;\n  z-index: 10;\n  flex: 1;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-nav {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-main {\n  flex: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n  min-width: 0;\n  min-height: 0;\n  padding: 0 6px 28px;\n  background: transparent;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .nh-page {\n  width: 100%;\n  padding: 10px 22px 32px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-route-heading {\n  width: 100%;\n  padding: 10px 22px 2px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  margin-bottom: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  font-size: 26px;\n  margin: 0;\n}\n\n/* ==========================================================================\n   Optical Liquid Glass Cards, Squircles & Specular Rims\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-card,\n.nh-root[data-ui=\"atelier\"] .nh-stat,\n.nh-root[data-ui=\"atelier\"] .nh-hero,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card,\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  --mx: 50%;\n  --my: 15%;\n  position: relative;\n  isolation: isolate;\n  border: 0;\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  background: transparent;\n  box-shadow: var(--shadow-glass);\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::before,\n.nh-root[data-ui=\"atelier\"] .nh-stat::before,\n.nh-root[data-ui=\"atelier\"] .nh-hero::before,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n.nh-root[data-ui=\"atelier\"] .cw-popover::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -2;\n  border-radius: inherit;\n  corner-shape: inherit;\n  background:\n    radial-gradient(360px",
-          " circle at var(--mx) var(--my), rgba(255, 255, 255, calc(0.13 * var(--glass-refract))), transparent 65%),\n    linear-gradient(132deg,\n      rgba(255, 255, 255, calc(0.15 * var(--glass-refract))) 0%,\n      rgba(255, 255, 255, 0.02) 48%,\n      rgba(255, 255, 255, calc(0.07 * var(--glass-refract))) 100%),\n    var(--nh-surface);\n  backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce);\n}\n@supports (backdrop-filter: url(#cw-lg-card-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n  .nh-root[data-ui=\"atelier\"] .cw-popover::before,\n  .nh-root[data-ui=\"atelier\"] .nh-hero::before {\n    backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::after,\n.nh-root[data-ui=\"atelier\"] .nh-stat::after,\n.nh-root[data-ui=\"atelier\"] .nh-hero::after,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::after,\n.nh-root[data-ui=\"atelier\"] .cw-popover::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  border-radius: inherit;\n  corner-shape: inherit;\n  padding: 1px;\n  background: linear-gradient(156deg, var(--rim-hi) 2%, var(--rim-mid) 44%, var(--rim-lo) 96%);\n  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  pointer-events: none;\n}\n\n.nh-root[data-ui=\"atelier\"] .nh-cardhead { padding: 16px 20px; border-bottom: 1px solid var(--line); background: transparent; }\n.nh-root[data-ui=\"atelier\"] .nh-cardbody { padding: 18px 20px; }\n.nh-root[data-ui=\"atelier\"] .nh-cardtitle { font-size: 15px; font-weight: 500; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .nh-cardhint { font-size: 12px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .nh-stat { padding: 16px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-statvalue { font-family: var(--font-display); font-size: 28px; font-weight: 300; font-variant-numeric: tabular-nums; }\n\n/* Signature Maserati Sweep Primary Buttons */\n.nh-root[data-ui=\"atelier\"] .nh-btn {\n  position: relative;\n  overflow: hidden;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  font-family: inherit;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line-strong);\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--ink);\n  padding: 0 14px;\n  height: 34px;\n  font-size: 12.5px;\n  font-weight: 500;\n  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);\n  backdrop-filter: blur(12px) saturate(1.8);\n  transition: transform 150ms var(--ease-expo), background 200ms ease, border-color 200ms ease, box-shadow 240ms ease;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn { background: rgba(255, 255, 255, 0.76); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:hover:not(:disabled) {\n  transform: translateY(-1px);\n  background: rgba(255, 255, 255, 0.16);\n  border-color: var(--rim-hi);\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.96); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:active:not(:disabled) { transform: scale(0.972); }\n\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-color: transparent;\n  font-weight: 600;\n  box-shadow: 0 4px 16px -6px rgba(0, 0, 0, 0.45);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]::after {\n  content: \"\";\n  position: absolute;\n  top: -20%; left: -45%;\n  width: 34%; height: 140%;\n  background: linear-gradient(90deg, transparent, rgba(230, 185, 76, 0.56), rgba(255, 255, 255, 0.88), transparent);\n  transform: skewX(-8deg) translateX(-160%);\n  transition: transform 0.85s var(--ease);\n  pointer-events: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled) {\n  background: var(--button-bg);\n ",
-          " color: var(--button-ink);\n  box-shadow: 0 10px 24px -10px rgba(230, 185, 76, 0.42);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled)::after {\n  transform: skewX(-8deg) translateX(480%);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"ghost\"] {\n  border-color: transparent;\n  background: transparent;\n  box-shadow: none;\n  color: var(--state-active);\n  backdrop-filter: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"danger\"] {\n  color: var(--state-danger);\n  border-color: rgba(255, 100, 124, 0.36);\n  background: var(--state-danger-soft);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-size=\"sm\"] {\n  height: 28px;\n  padding: 0 10px;\n  font-size: 11.5px;\n}\n\n/* Badges (4-Channel Semantic Rules) */\n.nh-root[data-ui=\"atelier\"] .nh-badge {\n  border-radius: var(--radius-pill);\n  padding: 2px 9px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"ok\"] { color: var(--state-ok); border-color: rgba(75, 227, 164, 0.34); background: var(--state-ok-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"warn\"] { color: var(--state-warn); border-color: rgba(255, 150, 80, 0.36); background: var(--state-warn-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"err\"] { color: var(--state-danger); border-color: rgba(255, 100, 124, 0.36); background: var(--state-danger-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"info\"] { color: var(--state-active); border-color: rgba(121, 180, 255, 0.36); background: var(--state-active-soft); }\n\n/* Inputs & Modals */\n.nh-root[data-ui=\"atelier\"] .nh-input,\n.nh-root[data-ui=\"atelier\"] .nh-select,\n.nh-root[data-ui=\"atelier\"] .nh-textarea {\n  color: var(--ink);\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  font-family: var(--font-body);\n}\n.nh-root[data-ui=\"atelier\"] .nh-select option { background: #141924; color: #f8fafc; }\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-select option { background: #ffffff; color: #111318; }\n.nh-root[data-ui=\"atelier\"] .nh-seg {\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  background: var(--nh-surface2);\n  padding: 3px;\n  gap: 3px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-seg button[data-active=\"true\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-radius: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask { background: rgba(2, 5, 12, 0.62); backdrop-filter: blur(8px); padding: 24px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal {\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  width: 860px;\n  max-width: calc(100vw - 36px);\n  max-height: calc(100vh - 36px);\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  border: 1px solid var(--line-strong);\n  background: var(--paper-bg);\n  color: var(--ink);\n  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);\n  backdrop-filter: blur(26px) saturate(1.9);\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardhead { flex: 0 0 auto; }\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; max-height: none; }\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask:has(.cw-appearance-modal) { justify-content: flex-end; align-items: stretch; padding: 12px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal { width: 410px; height: 100%; max-height: 100%; max-width: calc(100vw - 24px); }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardhead { padding: 13px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardbody { padding: 10px 18px 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-appearance { display: flex; flex-direction: column; gap: 2px; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-section { padding: 6px 0; border-bottom: 1px solid var(--line); }\n.nh-root[data-ui=\"atelier\"] .cw-setting-section:last-of-type { border-bottom: 0; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-title { margin-bottom: 5px; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-title h3 { margi",
-          "n: 0; font-size: 11.5px; font-weight: 600; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .cw-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 12px; cursor: pointer; }\n.nh-root[data-ui=\"atelier\"] .cw-appearance > .nh-row { margin-top: 8px !important; }\n.nh-root[data-ui=\"atelier\"] .cw-range-label { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; font-family: var(--nh-mono); font-size: 11.5px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .cw-range-label input[type=\"range\"] { accent-color: var(--state-active); width: 100%; }\n.nh-root[data-ui=\"atelier\"] .nh-pre {\n  font-family: var(--font-body);\n  line-height: 1.92;\n  font-size: 15px;\n  color: var(--ink);\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  padding: 20px 24px;\n  white-space: pre-wrap;\n  overflow-wrap: anywhere;\n  max-width: 68ch;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-pre { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.95; }\n\n/* ==========================================================================\n   Editorial-First v5 Dashboard Layout\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .cw-dashboard {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-workflow-ribbon {\n  padding: 15px 20px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 11px;\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--muted);\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow .cw-reticle { color: var(--accent-gold); }\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top h1 {\n  margin: 2px 0 0;\n  font-size: clamp(20px, 2.3vw, 26px);\n  font-weight: 300;\n  line-height: 1.22;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-strip {\n  display: grid;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill {\n  height: 36px;\n  padding: 0 11px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  font-size: 12px;\n  color: var(--ink2);\n  cursor: pointer;\n  transition: transform 150ms var(--ease-expo), border-color 200ms ease, color 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done { border-color: rgba(75, 227, 164, 0.30); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done .cw-st-ico { color: var(--state-ok); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current {\n  color: var(--ink);\n  font-weight: 600;\n  border: 1px solid transparent;\n  background:\n    linear-gradient(var(--nh-surface2), var(--nh-surface2)) padding-box,\n    linear-gradient(115deg, var(--state-active), var(--iris-2), var(--iris-5)) border-box;\n  animation: cw-stage-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current .cw-st-code { color: var(--state-active); }\n.nh-root[data-ui=\"atelier\"] .cw-st-code { font-family: var(--nh-mono); font-size: 10.5px; opacity: 0.78; margin-right: 4px; }\n.nh-root[data-ui=\"atelier\"] .cw-stage-live-dot {\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n@keyframes cw-stage-breathe {\n  0%, 100% { box-shadow: 0 8px 20px -14px rgba(121, 180, 255, 0.45); }\n  50% { box-shadow: 0 10px 26px -12px rgba(121, 180, 255, 0.72); }\n}\n\n/* Silky Gemini Fluid Aurora Progre",
-          "ss Bar */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-box {\n  margin-top: 12px;\n  padding: 12px 14px 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n@keyframes cw-aurora-flow {\n  0% { background-position: 0% 50%; }\n  100% { background-position: -300% 50%; }\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-track {\n  --p: 0%;\n  position: relative;\n  height: 7px;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.08);\n  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.42);\n  overflow: visible;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .cw-gemini-track {\n  background: rgba(17, 19, 24, 0.08);\n  box-shadow: inset 0 1px 2px rgba(17, 19, 24, 0.14);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-glow {\n  position: absolute;\n  inset: -3px 0;\n  border-radius: 999px;\n  background: linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n  filter: blur(8px);\n  opacity: 0.62;\n  pointer-events: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-fill {\n  position: absolute;\n  inset: 0;\n  border-radius: 999px;\n  background:\n    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0) 56%),\n    linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 100% 100%, 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-comet {\n  position: absolute;\n  top: 50%;\n  left: var(--p);\n  width: 13px;\n  height: 13px;\n  border-radius: 50%;\n  transform: translate(-50%, -50%);\n  background: radial-gradient(circle, #ffffff 20%, #b8d8ff 60%, rgba(125, 168, 255, 0) 78%);\n  box-shadow: 0 0 12px 3px rgba(121, 180, 255, 0.72), 0 0 20px 4px rgba(168, 130, 255, 0.45);\n  pointer-events: none;\n}\n\n/* Main Dashboard Split (Dominant Shielded Manuscript Left + Semantic Telemetry Rail Right) */\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid {\n  display: grid;\n  grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr);\n  gap: var(--nh-gap);\n  align-items: start;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card {\n  padding: 20px 22px;\n  display: flex;\n  flex-direction: column;\n  gap: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title h2,\n.nh-root[data-ui=\"atelier\"] .cw-card-title h3 {\n  margin: 0;\n  font-size: 16px;\n  font-weight: 400;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript {\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  backdrop-filter: blur(26px);\n  -webkit-backdrop-filter: blur(26px);\n  padding: 24px 26px;\n  min-height: 290px;\n  max-height: 460px;\n  overflow-y: auto;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4 {\n  font-family: var(--font-display);\n  font-size: 20px;\n  font-weight: 300;\n  margin: 0 0 14px;\n  letter-spacing: 0.02em;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p {\n  font-family: var(--font-body);\n  font-size: 15px;\n  line-height: 1.92;\n  letter-spacing: 0.015em;\n  color: var(--ink);\n  margin: 0 0 13px;\n  max-width: 68ch;\n  text-indent: 2em;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-root-skip,\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-manuscript p {\n  font-family: var(--font-serif);\n  font-size: 15.5px;\n  line-height: 1.96;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-reader-text p {\n  font-family: var(--font-serif) !important;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"sans\"] .cw-reader-text p {\n  font-family: var(--font-body) !important;\n}\n.nh-root[data-ui=\"atelier\"] .cw",
-          "-manuscript-footer {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  font-size: 12px;\n  color: var(--muted);\n}\n\n/* Right Rail Telemetry & Dotted Specs */\n.nh-root[data-ui=\"atelier\"] .cw-rail-stack {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-rail-card {\n  padding: 18px 20px;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-list {\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row {\n  display: flex;\n  align-items: baseline;\n  gap: 8px;\n  font-size: 12.5px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .k { color: var(--muted); white-space: nowrap; font-size: 11.5px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .dots { flex: 1; border-bottom: 1px dotted var(--dotted); transform: translateY(-2px); min-width: 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v { font-family: var(--nh-mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-ok { color: var(--state-ok); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-active { color: var(--state-active); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-warn { color: var(--state-warn); font-weight: 600; }\n\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row {\n  width: 100%;\n  padding: 10px 12px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  text-align: left;\n  cursor: pointer;\n  color: var(--ink);\n  transition: border-color 180ms ease, background 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row:hover { border-color: var(--rim-hi); background: var(--nh-hover); }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index { font-family: var(--nh-mono); font-size: 11px; color: var(--state-active); min-width: 28px; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small { margin-left: 8px; color: var(--muted); font-size: 11px; }\n\n/* Responsive adjustments */\n@media (max-width: 960px) {\n  .nh-root[data-ui=\"atelier\"] .cw-primary-grid { grid-template-columns: 1fr; }\n  .nh-root[data-ui=\"atelier\"] .cw-stage-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n@media (max-width: 720px) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-sticky { padding: 8px 10px 4px; }\n  .nh-root[data-ui=\"atelier\"] .cw-project-lens .cw-project-title { display: none; }\n  .nh-root[data-ui=\"atelier\"] .nh-page { padding: 8px 12px 24px; }\n  .nh-root[data-ui=\"atelier\"] .nh-formgrid { grid-template-columns: 1fr !important; }\n  .nh-root[data-ui=\"atelier\"] .nh-role-grid { grid-template-columns: 1fr !important; }\n}\n"
+          "reader-dialog{padding:24px!important}\n.nh-root[data-ui=\"atelier\"] #dialog-content h2{font-size:24px}\n.nh-root[data-ui=\"atelier\"] .cw-reader-text p{font-size:16px!important}\n.nh-root[data-ui=\"atelier\"] .cw-toast{font-size:10px;padding:12px 14px;max-width:calc(100vw - 35px);white-space:normal}}\n/* ==========================================================================\n   码章鲸 Chapter Whale · DSH Plugin UI v5\n   Optical Liquid Glass × Gemini Fluid Aurora × Craft Editorial × Trident\n   ========================================================================== */\n\n.nh-root[data-ui=\"atelier\"] {\n  --nh-mono: ui-monospace, \"Cascadia Code\", \"JetBrains Mono\", Consolas, monospace;\n  --font-display: \"Whale Geometric\", \"Whale Text\", \"Microsoft YaHei UI\", system-ui, sans-serif;\n  --font-body: \"Whale Text\", \"Whale Geometric\", \"Microsoft YaHei UI\", sans-serif;\n  --font-serif: \"Whale Editorial\", \"Source Han Serif SC\", \"Noto Serif SC\", Georgia, serif;\n\n  /* Default v5 optical material variables (overridden inline by AppearanceContext) */\n  --glass-opacity: 0.24;\n  --blur: 18px;\n  --glass-refract: 0.85;\n  --backdrop-light: 1.00;\n  --nh-gap: 16px;\n  --nh-pad: 20px;\n  --nh-row: 36px;\n  --nh-fs: 13px;\n  --radius-lg: 26px;\n  --radius-md: 17px;\n  --radius-sm: 12px;\n  --radius-pill: 9999px;\n\n  /* Strict 4-Channel Semantic Palette (Dark default) */\n  --accent-gold: #e6b94c;\n  --accent-gold-soft: rgba(230, 185, 76, 0.14);\n  --state-active: #79b4ff;\n  --state-active-soft: rgba(121, 180, 255, 0.16);\n  --state-ok: #4be3a4;\n  --state-ok-soft: rgba(75, 227, 164, 0.13);\n  --state-warn: #ff9650;\n  --state-warn-soft: rgba(255, 150, 80, 0.15);\n  --state-danger: #ff647c;\n  --state-danger-soft: rgba(255, 100, 124, 0.15);\n\n  /* Gemini Aurora Gradient Stops */\n  --iris-1: #5a96ff;\n  --iris-2: #a882ff;\n  --iris-3: #f27dc2;\n  --iris-4: #ffc845;\n  --iris-5: #5ee7c8;\n  --a: var(--state-active);\n  --b: var(--iris-2);\n  --c: var(--iris-5);\n\n  /* WCAG AA+ Ink & Obsidian Crystal Surfaces */\n  --bg-canvas: #03050a;\n  --bg-grad-a: rgba(94, 164, 255, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(230, 185, 76, calc(0.22 * var(--backdrop-light)));\n  --bg-grad-c: rgba(166, 128, 255, calc(0.20 * var(--backdrop-light)));\n\n  --ink: #f8fafc;\n  --ink2: rgba(241, 245, 249, 0.85);\n  --muted: rgba(226, 232, 240, 0.68);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-text-3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(20, 25, 36, var(--glass-opacity));\n  --nh-surface2: rgba(6, 9, 15, 0.44);\n  --nh-border: rgba(255, 255, 255, 0.20);\n  --nh-border-soft: rgba(255, 255, 255, 0.14);\n  --nh-accent: var(--state-active);\n  --nh-cyan: var(--iris-5);\n  --nh-hover: rgba(255, 255, 255, 0.08);\n  --nh-ok: var(--state-ok);\n  --nh-warn: var(--state-warn);\n  --nh-err: var(--state-danger);\n  --success: var(--state-ok);\n  --warning: var(--state-warn);\n  --error: var(--state-danger);\n  --line: rgba(255, 255, 255, 0.14);\n  --line-strong: rgba(255, 255, 255, 0.24);\n  --dotted: rgba(255, 255, 255, 0.24);\n  --tint: rgba(255, 255, 255, 0.07);\n  --selected: rgba(121, 180, 255, 0.15);\n  --button-bg: #f8fafc;\n  --button-ink: #050608;\n  --surface: 20 25 36;\n  --card: 18 22 32;\n\n  --rim-hi: rgba(255, 255, 255, 0.56);\n  --rim-mid: rgba(255, 255, 255, 0.20);\n  --rim-lo: rgba(255, 255, 255, 0.06);\n  --glass-edge: rgba(255, 255, 255, 0.22);\n  --glass-shine: rgba(255, 255, 255, 0.34);\n  --glass-bounce: rgba(145, 188, 255, 0.14);\n  --dock-outer: rgba(20, 24, 34, calc(var(--glass-opacity) + 0.18));\n  --dock-inner: rgba(255, 255, 255, 0.06);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 54%, rgba(255, 255, 255, 0.18) 100%);\n  --paper-bg: rgba(11, 13, 18, 0.90);\n  --paper-border: rgba(255, 255, 255, 0.14);\n  --shadow-glass: 0 22px 50px -20px rgba(0, 0, 0, 0.84), 0 6px 18px -6px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.06);\n\n  --ease: cubic-bezier(0.22, 1, 0.36, 1);\n  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);\n  --spring: cubic-bezier(0.22, 1.18, 0.36, 1);\n\n  position: relative;\n  isolation:",
+          " isolate;\n  height: 100%;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  font-family: var(--font-body);\n  font-size: var(--nh-fs);\n  line-height: 1.6;\n  overflow: hidden;\n  border-radius: 18px;\n  corner-shape: squircle;\n  /* Soft left ambient transition easing contrast against light DSH host rail */\n  box-shadow:\n    inset 24px 0 38px -22px rgba(148, 186, 240, 0.22),\n    inset 0 0 0 1px rgba(148, 163, 184, 0.14);\n}\n\n/* Light Mode Tokens */\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] {\n  --bg-canvas: #eef1f7;\n  --bg-grad-a: rgba(94, 152, 224, calc(0.38 * var(--backdrop-light)));\n  --bg-grad-b: rgba(229, 172, 102, calc(0.32 * var(--backdrop-light)));\n  --bg-grad-c: rgba(154, 130, 235, calc(0.22 * var(--backdrop-light)));\n\n  --accent-gold: #9e6d08;\n  --accent-gold-soft: rgba(158, 109, 8, 0.11);\n  --state-active: #2f5fe3;\n  --state-active-soft: rgba(47, 95, 227, 0.12);\n  --state-ok: #0d8a5f;\n  --state-ok-soft: rgba(13, 138, 95, 0.11);\n  --state-warn: #c95d12;\n  --state-warn-soft: rgba(201, 93, 18, 0.12);\n  --state-danger: #cc2945;\n  --state-danger-soft: rgba(204, 41, 69, 0.12);\n\n  --ink: #111318;\n  --ink2: rgba(17, 19, 24, 0.78);\n  --muted: rgba(17, 19, 24, 0.62);\n  --nh-ink: var(--ink);\n  --nh-ink2: var(--ink2);\n  --nh-ink3: var(--muted);\n  --nh-text-3: var(--muted);\n  --nh-base: var(--bg-canvas);\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --nh-surface2: rgba(17, 19, 24, 0.042);\n  --nh-border: rgba(17, 19, 24, 0.12);\n  --nh-border-soft: rgba(17, 19, 24, 0.10);\n  --nh-hover: rgba(17, 19, 24, 0.065);\n  --line: rgba(17, 19, 24, 0.11);\n  --line-strong: rgba(17, 19, 24, 0.18);\n  --dotted: rgba(17, 19, 24, 0.24);\n  --tint: rgba(17, 19, 24, 0.045);\n  --selected: rgba(47, 95, 227, 0.12);\n  --button-bg: #111318;\n  --button-ink: #ffffff;\n  --surface: 255 255 255;\n  --card: 255 255 255;\n\n  --rim-hi: rgba(255, 255, 255, 0.99);\n  --rim-mid: rgba(255, 255, 255, 0.65);\n  --rim-lo: rgba(17, 19, 24, 0.10);\n  --glass-edge: rgba(17, 19, 24, 0.10);\n  --glass-shine: rgba(255, 255, 255, 0.96);\n  --glass-bounce: rgba(125, 168, 255, 0.16);\n  --dock-outer: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.36));\n  --dock-inner: rgba(17, 19, 24, 0.05);\n  --lens-fill: linear-gradient(165deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.70) 58%, rgba(255, 255, 255, 0.92) 100%);\n  --paper-bg: rgba(255, 255, 255, 0.92);\n  --paper-border: rgba(17, 19, 24, 0.10);\n  --shadow-glass: 0 20px 44px -18px rgba(17, 24, 39, 0.16), 0 4px 12px -4px rgba(17, 24, 39, 0.08), 0 0 0 1px rgba(17, 19, 24, 0.06);\n  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);\n}\n\n/* 3 Palettes (liquid / craft / apple, mapping legacy gemini -> liquid, ocean -> apple) */\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"] {\n  --bg-canvas: #080705;\n  --bg-grad-a: rgba(226, 174, 108, calc(0.28 * var(--backdrop-light)));\n  --bg-grad-b: rgba(122, 158, 196, calc(0.22 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 29, 23, calc(var(--glass-opacity) + 0.06));\n}\n.nh-root[data-ui=\"atelier\"][data-palette=\"craft\"][data-theme=\"light\"] {\n  --bg-canvas: #f5f1e9;\n  --nh-surface: rgba(255, 251, 244, calc(var(--glass-opacity) + 0.38));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"]) {\n  --bg-canvas: #050608;\n  --bg-grad-a: rgba(135, 176, 224, calc(0.30 * var(--backdrop-light)));\n  --bg-grad-b: rgba(224, 186, 138, calc(0.24 * var(--backdrop-light)));\n  --nh-surface: rgba(34, 36, 42, var(--glass-opacity));\n}\n.nh-root[data-ui=\"atelier\"]:is([data-palette=\"apple\"], [data-palette=\"ocean\"])[data-theme=\"light\"] {\n  --bg-canvas: #f2f3f5;\n  --nh-surface: rgba(255, 255, 255, calc(var(--glass-opacity) + 0.40));\n}\n\n.nh-root[data-ui=\"atelier\"][data-density=\"compact\"] {\n  --nh-gap: 12px;\n  --nh-pad: 15px;\n  --nh-row: 32px;\n  --nh-fs: 12.5px;\n  --radius-lg: 20px;\n  --radius-md: 14px;\n  --radius-sm: 10px;\n}\n\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-reduced=\"true\"] *::after,\n.n",
+          "h-root[data-ui=\"atelier\"][data-motion=\"off\"] *,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *::before,\n.nh-root[data-ui=\"atelier\"][data-motion=\"off\"] *::after {\n  animation-duration: 0.01ms !important;\n  transition-duration: 0.01ms !important;\n}\n\n/* Backdrop Layer (Canvas Silk Ribbons + Optical Gradient Wash + SDF Filters) */\n.nh-root[data-ui=\"atelier\"] .cw-backdrop-layer {\n  position: absolute;\n  inset: 0;\n  z-index: 0;\n  pointer-events: none;\n  overflow: hidden;\n  border-radius: inherit;\n  corner-shape: inherit;\n}\n.nh-root[data-ui=\"atelier\"] .cw-cosmos-canvas {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  display: block;\n}\n.nh-root[data-ui=\"atelier\"] .cw-optical-wash {\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(64% 50% at 14% 8%, var(--bg-grad-a), transparent 68%),\n    radial-gradient(58% 48% at 86% 16%, var(--bg-grad-b), transparent 66%),\n    radial-gradient(48% 42% at 52% 86%, var(--bg-grad-c), transparent 72%);\n}\n\n/* Typography Discipline */\n.nh-root[data-ui=\"atelier\"] h1,\n.nh-root[data-ui=\"atelier\"] h2,\n.nh-root[data-ui=\"atelier\"] h3 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  color: var(--ink);\n  text-wrap: balance;\n}\n.nh-root[data-ui=\"atelier\"] p { text-wrap: pretty; }\n\n/* ==========================================================================\n   3-Island Floating Apple Liquid Glass Dock (Eliminates Internal Left Sidebar)\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-head {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-sticky {\n  position: relative;\n  z-index: 40;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  padding: 12px 18px 6px;\n  flex: 0 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-row {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 9px;\n  max-width: 100%;\n  width: 100%;\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n  position: relative;\n  isolation: isolate;\n  width: 42px;\n  height: 42px;\n  flex: 0 0 42px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--ink);\n  background: var(--dock-outer);\n  border: 0;\n  cursor: pointer;\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 12px 28px -12px rgba(0, 0, 0, 0.58);\n  backdrop-filter: blur(var(--blur)) saturate(2.1);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.1);\n  transition: transform 150ms var(--ease-expo), box-shadow 240ms ease;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-lens-circle {\n    backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.55)) saturate(2.2) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:hover {\n  transform: translateY(-1.5px) scale(1.04);\n  box-shadow: 0 0 0 1px var(--rim-hi), inset 0 1.5px 1px var(--glass-shine), 0 14px 30px -10px rgba(0, 0, 0, 0.65);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-on {\n  box-shadow: 0 0 0 1.5px var(--state-active), inset 0 1.5px 1px var(--glass-shine), 0 10px 26px -8px rgba(121, 180, 255, 0.44);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-project-lens {\n  width: auto;\n  max-width: 210px;\n  height: 42px;\n  padding: 0 12px 0 7px;\n  border-radius: var(--radius-pill);\n  gap: 8px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-badge {\n  width: 26px;\n  height: 26px;\n  flex: 0 0 26px;\n  border-radius: 50%;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-4), var(--iris-5), var(--iris-1));\n  color: #050608;\n  font-weight: 700;\n  font-size: 12px;\n  box-shadow: 0 0 12px rgba(139, 184, 255, 0.35);\n}\n.nh-root[data-ui=\"atelier\"] .cw-project-title {\n  font-size: 12.5px;\n  font-weight: 6",
+          "00;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  color: var(--ink);\n}\n\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n  --mx: 50%;\n  --my: 20%;\n  position: relative;\n  display: flex;\n  align-items: center;\n  padding: 4px;\n  border-radius: var(--radius-pill);\n  background:\n    radial-gradient(220px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.14), transparent 70%),\n    var(--dock-outer);\n  backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  -webkit-backdrop-filter: blur(calc(var(--blur) + 2px)) saturate(2.15);\n  box-shadow:\n    0 0 0 1px var(--glass-edge),\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce),\n    0 16px 36px -14px rgba(0, 0, 0, 0.60);\n  overflow-x: auto;\n  scrollbar-width: none;\n}\n@supports (backdrop-filter: url(#cw-lg-pill-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-capsule {\n    backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.52)) saturate(2.25) contrast(1.06) url(#cw-lg-pill-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-capsule::-webkit-scrollbar { display: none; }\n.nh-root[data-ui=\"atelier\"] .cw-dock-track {\n  position: relative;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  border-radius: var(--radius-pill);\n  background: var(--dock-inner);\n  padding: 2px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-lens {\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  height: calc(100% - 4px);\n  border-radius: var(--radius-pill);\n  background: var(--lens-fill);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px rgba(0, 0, 0, 0.16),\n    0 4px 14px -4px rgba(0, 0, 0, 0.45),\n    0 0 0 1px var(--rim-mid);\n  transition: transform 0.44s var(--spring), width 0.36s var(--spring);\n  pointer-events: none;\n  z-index: 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill {\n  position: relative;\n  z-index: 1;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 30px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 0;\n  background: transparent;\n  font-size: 12.5px;\n  font-weight: 500;\n  color: var(--ink2);\n  white-space: nowrap;\n  cursor: pointer;\n  transition: color 180ms ease, transform 150ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:hover { color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-nav-pill.is-active { color: var(--ink); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-pill-dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n.nh-root[data-ui=\"atelier\"] .cw-pill-badge {\n  font-size: 10px;\n  font-family: var(--nh-mono);\n  font-variant-numeric: tabular-nums;\n  padding: 1px 6px;\n  border-radius: var(--radius-pill);\n  background: var(--state-warn-soft);\n  color: var(--state-warn);\n  font-weight: 600;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dock-tools {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n}\n\n/* Gemini Living Breathing Halo Orb inside Dock */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb {\n  position: relative;\n  width: 22px;\n  height: 22px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb::before {\n  content: \"\";\n  position: absolute;\n  inset: -4px;\n  border-radius: 50%;\n  background: conic-gradient(from 0deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  opacity: 0.65;\n  filter: blur(5px);\n  animation: cw-spin-slow 9s linear infinite, cw-orb-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-orb-core {\n  position: relative;\n  width: 20px;\n  height: 20px;\n  border-radius: 50%;\n  display: grid;\n  place-items: center;\n  background: var(--bg-canvas);\n  color: var(--ink);\n  border: 1px solid var(--rim-mid);\n}\n.nh-root[data-ui=\"atelier\"] .cw-lens-circle.is-streaming .cw-gemini-orb::before {\n  opacity: 1;\n  filter: blur(6px);\n  animation-duration: 2.2s, 1",
+          ".8s;\n}\n@keyframes cw-spin-slow { to { transform: rotate(360deg); } }\n@keyframes cw-orb-breathe { 0%, 100% { transform: scale(0.95); opacity: 0.62; } 50% { transform: scale(1.12); opacity: 0.96; } }\n\n/* Compact Sub-Route & Service Strip */\n.nh-root[data-ui=\"atelier\"] .cw-subnav-bar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  flex-wrap: wrap;\n  width: 100%;\n  max-width: 1220px;\n  padding: 2px 4px 0;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subnav-pills {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill {\n  height: 28px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 12px;\n  font-weight: 500;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 140ms var(--ease-expo);\n}\n.nh-root[data-ui=\"atelier\"] .cw-subpill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-subpill.is-active {\n  color: var(--state-active);\n  border-color: var(--state-active);\n  background: var(--state-active-soft);\n}\n.nh-root[data-ui=\"atelier\"] .cw-service-cluster {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  margin-left: auto;\n  font-size: 11.5px;\n  color: var(--muted);\n}\n\n/* Popover Card (Origin-Anchored) */\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  position: absolute;\n  top: 66px;\n  left: 22px;\n  width: 310px;\n  max-width: calc(100vw - 44px);\n  max-height: 60vh;\n  overflow-y: auto;\n  z-index: 65;\n  transform-origin: top left;\n  animation: cw-pop-in 0.26s var(--ease-expo) backwards;\n}\n@keyframes cw-pop-in {\n  from { opacity: 0; filter: blur(6px); transform: translateY(-6px) scale(0.95); }\n  to { opacity: 1; filter: blur(0px); transform: translateY(0) scale(1); }\n}\n\n/* Collapse Old Vertical Left Sidebar Inside Plugin */\n.nh-root[data-ui=\"atelier\"] .nh-body {\n  position: relative;\n  z-index: auto;\n  flex: 1;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-nav {\n  display: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-main {\n  flex: 1;\n  width: 100%;\n  max-width: none;\n  margin: 0;\n  min-width: 0;\n  min-height: 0;\n  padding: 0 6px 28px;\n  background: transparent;\n  overflow-y: auto;\n  overflow-x: hidden;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .nh-page {\n  width: 100%;\n  padding: 10px 22px 32px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-route-heading {\n  width: 100%;\n  padding: 10px 22px 2px;\n  max-width: 1220px;\n  margin: 0 auto;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  margin-bottom: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-page-heading h1 {\n  font-family: var(--font-display);\n  font-weight: 300;\n  font-size: 26px;\n  margin: 0;\n}\n\n/* ==========================================================================\n   Optical Liquid Glass Cards, Squircles & Specular Rims\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-card,\n.nh-root[data-ui=\"atelier\"] .nh-stat,\n.nh-root[data-ui=\"atelier\"] .nh-hero,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card,\n.nh-root[data-ui=\"atelier\"] .cw-popover {\n  --mx: 50%;\n  --my: 15%;\n  position: relative;\n  isolation: isolate;\n  border: 0;\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  background: transparent;\n  box-shadow: var(--shadow-glass);\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::before,\n.nh-root[data-ui=\"atelier\"] .nh-stat::before,\n.nh-root[data-ui=\"atelier\"] .nh-hero::before,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n.nh-root[data-ui=\"atelier\"] .cw-popover::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-i",
+          "ndex: -2;\n  border-radius: inherit;\n  corner-shape: inherit;\n  background:\n    radial-gradient(360px circle at var(--mx) var(--my), rgba(255, 255, 255, calc(0.13 * var(--glass-refract))), transparent 65%),\n    linear-gradient(132deg,\n      rgba(255, 255, 255, calc(0.15 * var(--glass-refract))) 0%,\n      rgba(255, 255, 255, 0.02) 48%,\n      rgba(255, 255, 255, calc(0.07 * var(--glass-refract))) 100%),\n    var(--nh-surface);\n  backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  -webkit-backdrop-filter: blur(var(--blur)) saturate(2.05) contrast(1.04);\n  box-shadow:\n    inset 0 1.5px 1px var(--glass-shine),\n    inset 0 -1.5px 2px var(--glass-bounce);\n}\n@supports (backdrop-filter: url(#cw-lg-card-refract)) {\n  .nh-root[data-ui=\"atelier\"] .cw-glass-card::before,\n  .nh-root[data-ui=\"atelier\"] .cw-popover::before,\n  .nh-root[data-ui=\"atelier\"] .nh-hero::before {\n    backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n    -webkit-backdrop-filter: blur(calc(var(--blur) * 0.74)) saturate(2.15) contrast(1.06) url(#cw-lg-card-refract);\n  }\n}\n.nh-root[data-ui=\"atelier\"] .nh-card::after,\n.nh-root[data-ui=\"atelier\"] .nh-stat::after,\n.nh-root[data-ui=\"atelier\"] .nh-hero::after,\n.nh-root[data-ui=\"atelier\"] .cw-glass-card::after,\n.nh-root[data-ui=\"atelier\"] .cw-popover::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  border-radius: inherit;\n  corner-shape: inherit;\n  padding: 1px;\n  background: linear-gradient(156deg, var(--rim-hi) 2%, var(--rim-mid) 44%, var(--rim-lo) 96%);\n  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  pointer-events: none;\n}\n\n.nh-root[data-ui=\"atelier\"] .nh-cardhead { padding: 16px 20px; border-bottom: 1px solid var(--line); background: transparent; }\n.nh-root[data-ui=\"atelier\"] .nh-cardbody { padding: 18px 20px; }\n.nh-root[data-ui=\"atelier\"] .nh-cardtitle { font-size: 15px; font-weight: 500; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .nh-cardhint { font-size: 12px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .nh-stat { padding: 16px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-statvalue { font-family: var(--font-display); font-size: 28px; font-weight: 300; font-variant-numeric: tabular-nums; }\n\n/* Signature Maserati Sweep Primary Buttons */\n.nh-root[data-ui=\"atelier\"] .nh-btn {\n  position: relative;\n  overflow: hidden;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  font-family: inherit;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line-strong);\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--ink);\n  padding: 0 14px;\n  height: 34px;\n  font-size: 12.5px;\n  font-weight: 500;\n  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);\n  backdrop-filter: blur(12px) saturate(1.8);\n  transition: transform 150ms var(--ease-expo), background 200ms ease, border-color 200ms ease, box-shadow 240ms ease;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn { background: rgba(255, 255, 255, 0.76); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:hover:not(:disabled) {\n  transform: translateY(-1px);\n  background: rgba(255, 255, 255, 0.16);\n  border-color: var(--rim-hi);\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.96); }\n.nh-root[data-ui=\"atelier\"] .nh-btn:active:not(:disabled) { transform: scale(0.972); }\n\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-color: transparent;\n  font-weight: 600;\n  box-shadow: 0 4px 16px -6px rgba(0, 0, 0, 0.45);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]::after {\n  content: \"\";\n  position: absolute;\n  top: -20%; left: -45%;\n  width: 34%; height: 140%;\n  background: linear-gradient(90deg, transparent, rgba(230, 185, 76, 0.56), rgba(255, 255, 255, 0.88), transparent);\n  transform: skewX(-8deg) translateX(-160%);\n  transition: transform 0.85s var(--ease);\n  pointer-events: none;\n}\n.nh-root[data",
+          "-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled) {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  box-shadow: 0 10px 24px -10px rgba(230, 185, 76, 0.42);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"primary\"]:hover:not(:disabled)::after {\n  transform: skewX(-8deg) translateX(480%);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"ghost\"] {\n  border-color: transparent;\n  background: transparent;\n  box-shadow: none;\n  color: var(--state-active);\n  backdrop-filter: none;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-kind=\"danger\"] {\n  color: var(--state-danger);\n  border-color: rgba(255, 100, 124, 0.36);\n  background: var(--state-danger-soft);\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn[data-size=\"sm\"] {\n  height: 28px;\n  padding: 0 10px;\n  font-size: 11.5px;\n}\n\n/* Badges (4-Channel Semantic Rules) */\n.nh-root[data-ui=\"atelier\"] .nh-badge {\n  border-radius: var(--radius-pill);\n  padding: 2px 9px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n}\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"ok\"] { color: var(--state-ok); border-color: rgba(75, 227, 164, 0.34); background: var(--state-ok-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"warn\"] { color: var(--state-warn); border-color: rgba(255, 150, 80, 0.36); background: var(--state-warn-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"err\"] { color: var(--state-danger); border-color: rgba(255, 100, 124, 0.36); background: var(--state-danger-soft); }\n.nh-root[data-ui=\"atelier\"] .nh-badge[data-tone=\"info\"] { color: var(--state-active); border-color: rgba(121, 180, 255, 0.36); background: var(--state-active-soft); }\n\n/* Inputs & Modals */\n.nh-root[data-ui=\"atelier\"] .nh-input,\n.nh-root[data-ui=\"atelier\"] .nh-select,\n.nh-root[data-ui=\"atelier\"] .nh-textarea {\n  color: var(--ink);\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  font-family: var(--font-body);\n}\n.nh-root[data-ui=\"atelier\"] .nh-select option { background: #141924; color: #f8fafc; }\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .nh-select option { background: #ffffff; color: #111318; }\n.nh-root[data-ui=\"atelier\"] .nh-seg {\n  border: 1px solid var(--line);\n  border-radius: var(--radius-sm);\n  background: var(--nh-surface2);\n  padding: 3px;\n  gap: 3px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-seg button[data-active=\"true\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  border-radius: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask { background: rgba(2, 5, 12, 0.62); backdrop-filter: blur(8px); padding: 24px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal {\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  width: 860px;\n  max-width: calc(100vw - 36px);\n  max-height: calc(100vh - 36px);\n  border-radius: var(--radius-lg);\n  corner-shape: squircle;\n  border: 1px solid var(--line-strong);\n  background: var(--paper-bg);\n  color: var(--ink);\n  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);\n  backdrop-filter: blur(26px) saturate(1.9);\n}\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardhead { flex: 0 0 auto; }\n.nh-root[data-ui=\"atelier\"] .nh-modal > .nh-cardbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; max-height: none; }\n.nh-root[data-ui=\"atelier\"] .nh-modal-mask:has(.cw-appearance-modal) { justify-content: flex-end; align-items: stretch; padding: 12px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal { width: 410px; height: 100%; max-height: 100%; max-width: calc(100vw - 24px); }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardhead { padding: 13px 18px; }\n.nh-root[data-ui=\"atelier\"] .nh-modal.cw-appearance-modal > .nh-cardbody { padding: 10px 18px 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-appearance { display: flex; flex-direction: column; gap: 2px; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-section { padding: 6px 0; border-bottom: 1px solid var(--line); }\n.nh-root[data-ui=\"atelier\"] .cw-setting-section:last-of-type { border-bottom: 0; }\n.nh-root[data-ui=\"atelier\"",
+          "] .cw-setting-title { margin-bottom: 5px; }\n.nh-root[data-ui=\"atelier\"] .cw-setting-title h3 { margin: 0; font-size: 11.5px; font-weight: 600; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .cw-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 12px; cursor: pointer; }\n.nh-root[data-ui=\"atelier\"] .cw-appearance > .nh-row { margin-top: 8px !important; }\n.nh-root[data-ui=\"atelier\"] .cw-range-label { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; font-family: var(--nh-mono); font-size: 11.5px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .cw-range-label input[type=\"range\"] { accent-color: var(--state-active); width: 100%; }\n.nh-root[data-ui=\"atelier\"] .nh-pre {\n  font-family: var(--font-body);\n  line-height: 1.92;\n  font-size: 15px;\n  color: var(--ink);\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  padding: 20px 24px;\n  white-space: pre-wrap;\n  overflow-wrap: anywhere;\n  max-width: 68ch;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-pre { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.95; }\n\n/* ==========================================================================\n   Editorial-First v5 Dashboard Layout\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .cw-dashboard {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-workflow-ribbon {\n  padding: 15px 20px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 11px;\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--muted);\n}\n.nh-root[data-ui=\"atelier\"] .cw-eyebrow .cw-reticle { color: var(--accent-gold); }\n.nh-root[data-ui=\"atelier\"] .cw-ribbon-top h1 {\n  margin: 2px 0 0;\n  font-size: clamp(20px, 2.3vw, 26px);\n  font-weight: 300;\n  line-height: 1.22;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-strip {\n  display: grid;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill {\n  height: 36px;\n  padding: 0 11px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 6px;\n  font-size: 12px;\n  color: var(--ink2);\n  cursor: pointer;\n  transition: transform 150ms var(--ease-expo), border-color 200ms ease, color 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill:active { transform: scale(0.972); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done { border-color: rgba(75, 227, 164, 0.30); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.done .cw-st-ico { color: var(--state-ok); }\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current {\n  color: var(--ink);\n  font-weight: 600;\n  border: 1px solid transparent;\n  background:\n    linear-gradient(var(--nh-surface2), var(--nh-surface2)) padding-box,\n    linear-gradient(115deg, var(--state-active), var(--iris-2), var(--iris-5)) border-box;\n  animation: cw-stage-breathe 4.2s ease-in-out infinite;\n}\n.nh-root[data-ui=\"atelier\"] .cw-stage-pill.current .cw-st-code { color: var(--state-active); }\n.nh-root[data-ui=\"atelier\"] .cw-st-code { font-family: var(--nh-mono); font-size: 10.5px; opacity: 0.78; margin-right: 4px; }\n.nh-root[data-ui=\"atelier\"] .cw-stage-live-dot {\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--state-active);\n  box-shadow: 0 0 8px var(--state-active);\n}\n@keyframes cw-stage-breathe {\n  0%, 100% { box-shadow: 0 8px 20px -14px rgba(121, 180, 255, 0.45); }\n  50%",
+          " { box-shadow: 0 10px 26px -12px rgba(121, 180, 255, 0.72); }\n}\n\n/* Silky Gemini Fluid Aurora Progress Bar */\n.nh-root[data-ui=\"atelier\"] .cw-gemini-box {\n  margin-top: 12px;\n  padding: 12px 14px 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n@keyframes cw-aurora-flow {\n  0% { background-position: 0% 50%; }\n  100% { background-position: -300% 50%; }\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-track {\n  --p: 0%;\n  position: relative;\n  height: 7px;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.08);\n  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.42);\n  overflow: visible;\n}\n.nh-root[data-ui=\"atelier\"][data-theme=\"light\"] .cw-gemini-track {\n  background: rgba(17, 19, 24, 0.08);\n  box-shadow: inset 0 1px 2px rgba(17, 19, 24, 0.14);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-glow {\n  position: absolute;\n  inset: -3px 0;\n  border-radius: 999px;\n  background: linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n  filter: blur(8px);\n  opacity: 0.62;\n  pointer-events: none;\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-fill {\n  position: absolute;\n  inset: 0;\n  border-radius: 999px;\n  background:\n    linear-gradient(180deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0) 56%),\n    linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-3), var(--iris-4), var(--iris-5), var(--iris-1));\n  background-size: 100% 100%, 300% 100%;\n  animation: cw-aurora-flow 2.6s linear infinite;\n  clip-path: inset(0 calc(100% - var(--p)) 0 0 round 999px);\n}\n.nh-root[data-ui=\"atelier\"] .cw-gemini-comet {\n  position: absolute;\n  top: 50%;\n  left: var(--p);\n  width: 13px;\n  height: 13px;\n  border-radius: 50%;\n  transform: translate(-50%, -50%);\n  background: radial-gradient(circle, #ffffff 20%, #b8d8ff 60%, rgba(125, 168, 255, 0) 78%);\n  box-shadow: 0 0 12px 3px rgba(121, 180, 255, 0.72), 0 0 20px 4px rgba(168, 130, 255, 0.45);\n  pointer-events: none;\n}\n\n/* Main Dashboard Split (Dominant Shielded Manuscript Left + Semantic Telemetry Rail Right) */\n.nh-root[data-ui=\"atelier\"] .cw-primary-grid {\n  display: grid;\n  grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr);\n  gap: var(--nh-gap);\n  align-items: start;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-card {\n  padding: 20px 22px;\n  display: flex;\n  flex-direction: column;\n  gap: 14px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-card-title h2,\n.nh-root[data-ui=\"atelier\"] .cw-card-title h3 {\n  margin: 0;\n  font-size: 16px;\n  font-weight: 400;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript {\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  background: var(--paper-bg);\n  border: 1px solid var(--paper-border);\n  backdrop-filter: blur(26px);\n  -webkit-backdrop-filter: blur(26px);\n  padding: 24px 26px;\n  min-height: 290px;\n  max-height: 460px;\n  overflow-y: auto;\n  scrollbar-width: thin;\n  scrollbar-color: var(--line-strong) transparent;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript h4 {\n  font-family: var(--font-display);\n  font-size: 20px;\n  font-weight: 300;\n  margin: 0 0 14px;\n  letter-spacing: 0.02em;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript p {\n  font-family: var(--font-body);\n  font-size: 15px;\n  line-height: 1.92;\n  letter-spacing: 0.015em;\n  color: var(--ink);\n  margin: 0 0 13px;\n  max-width: 68ch;\n  text-indent: 2em;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .nh-root-skip,\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-manuscript p {\n  font-family: var(--font-serif);\n  font-size: 15.5px;\n  line-height: 1.96;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"serif\"] .cw-reader-text p {\n  font-family: var(--font-serif) !important;\n}\n.nh-root[data-ui=\"atelier\"][data-reader-font=\"sans",
+          "\"] .cw-reader-text p {\n  font-family: var(--font-body) !important;\n}\n.nh-root[data-ui=\"atelier\"] .cw-manuscript-footer {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  font-size: 12px;\n  color: var(--muted);\n}\n\n/* Right Rail Telemetry & Dotted Specs */\n.nh-root[data-ui=\"atelier\"] .cw-rail-stack {\n  display: flex;\n  flex-direction: column;\n  gap: var(--nh-gap);\n}\n.nh-root[data-ui=\"atelier\"] .cw-rail-card {\n  padding: 18px 20px;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-list {\n  display: flex;\n  flex-direction: column;\n  gap: 9px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row {\n  display: flex;\n  align-items: baseline;\n  gap: 8px;\n  font-size: 12.5px;\n}\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .k { color: var(--muted); white-space: nowrap; font-size: 11.5px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .dots { flex: 1; border-bottom: 1px dotted var(--dotted); transform: translateY(-2px); min-width: 14px; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v { font-family: var(--nh-mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-ok { color: var(--state-ok); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-active { color: var(--state-active); font-weight: 600; }\n.nh-root[data-ui=\"atelier\"] .cw-dotted-row .v.is-warn { color: var(--state-warn); font-weight: 600; }\n\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row {\n  width: 100%;\n  padding: 10px 12px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  background: var(--nh-surface2);\n  border: 1px solid var(--line);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  text-align: left;\n  cursor: pointer;\n  color: var(--ink);\n  transition: border-color 180ms ease, background 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row:hover { border-color: var(--rim-hi); background: var(--nh-hover); }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-index { font-family: var(--nh-mono); font-size: 11px; color: var(--state-active); min-width: 28px; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.nh-root[data-ui=\"atelier\"] .cw-chapter-row-title small { margin-left: 8px; color: var(--muted); font-size: 11px; }\n\n/* ==========================================================================\n   v0.7.5 Missing Utilities, Progress Bars, Task Tray & Review Banner\n   ========================================================================== */\n.nh-root[data-ui=\"atelier\"] .nh-muted { color: var(--muted); font-size: 12px; }\n.nh-root[data-ui=\"atelier\"] .nh-inline-err {\n  margin-top: 6px;\n  padding: 6px 10px;\n  border-radius: var(--radius-sm);\n  border: 1px solid rgba(255, 100, 124, 0.36);\n  background: var(--state-danger-soft);\n  color: var(--state-danger);\n  font-size: 12px;\n  line-height: 1.5;\n}\n.nh-root[data-ui=\"atelier\"] .nh-note {\n  padding: 10px 13px;\n  border-radius: var(--radius-sm);\n  corner-shape: squircle;\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 12.5px;\n  line-height: 1.6;\n}\n.nh-root[data-ui=\"atelier\"] .nh-ack {\n  padding: 9px 12px;\n  border-radius: var(--radius-sm);\n  border: 1px solid rgba(75, 227, 164, 0.32);\n  background: var(--state-ok-soft);\n  color: var(--ink);\n  font-size: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-panel {\n  padding: 12px 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-kv {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-kvrow {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  padding: 5px 0;\n  border-bottom: 1px solid var(--line);\n  font-size: 12.5px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-kvrow:la",
+          "st-child { border-bottom: 0; }\n.nh-root[data-ui=\"atelier\"] .nh-kvval {\n  font-family: var(--nh-mono);\n  font-size: 12px;\n  color: var(--ink);\n  text-align: right;\n  word-break: break-all;\n}\n.nh-root[data-ui=\"atelier\"] .nh-chips {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-step {\n  display: flex;\n  align-items: flex-start;\n  gap: 10px;\n  padding: 8px 0;\n}\n.nh-root[data-ui=\"atelier\"] .nh-stepno {\n  flex: 0 0 22px;\n  height: 22px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line-strong);\n  background: var(--state-active-soft);\n  color: var(--state-active);\n  font-family: var(--nh-mono);\n  font-size: 11px;\n  font-weight: 600;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n}\n.nh-root[data-ui=\"atelier\"] .nh-excerpt {\n  padding: 10px 12px;\n  border-radius: var(--radius-sm);\n  border-left: 2px solid var(--state-active);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 12.5px;\n  line-height: 1.65;\n  white-space: pre-wrap;\n}\n.nh-root[data-ui=\"atelier\"] .nh-timegrid {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-timerow {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  padding: 7px 10px;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  font-size: 12px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-loginbox {\n  padding: 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  border: 1px solid rgba(121, 180, 255, 0.34);\n  background: var(--state-active-soft);\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-catalog {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));\n  gap: 10px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-poolrow {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  padding: 9px 12px;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .nh-rolepick {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .nh-tagbtn {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  padding: 3px 9px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink2);\n  font-size: 11.5px;\n  cursor: pointer;\n}\n.nh-root[data-ui=\"atelier\"] .nh-tagbtn:hover { border-color: var(--rim-hi); color: var(--ink); }\n.nh-root[data-ui=\"atelier\"] .nh-tagbtn[data-active=\"true\"] {\n  border-color: var(--state-active);\n  background: var(--state-active-soft);\n  color: var(--state-active);\n}\n.nh-root[data-ui=\"atelier\"] .nh-chipbtn {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  padding: 5px 11px;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink);\n  font-size: 12px;\n  cursor: pointer;\n}\n.nh-root[data-ui=\"atelier\"] .nh-chipbtn:hover { border-color: var(--rim-hi); background: var(--nh-hover); }\n.nh-root[data-ui=\"atelier\"] .nh-chipmeta { font-family: var(--nh-mono); font-size: 11px; color: var(--muted); }\n.nh-root[data-ui=\"atelier\"] .nh-issues {\n  margin: 0;\n  padding-left: 18px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  color: var(--ink2);\n  font-size: 12.5px;\n}\n.nh-root[data-ui=\"atelier\"] .nh-qr {\n  display: block;\n  width: 168px;\n  height: 168px;\n  max-width: 100%;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--line);\n  background: #ffffff;\n  padding: 6px;\n  object-fit: contain;\n}\n.nh-root[data-ui=\"atelier\"] .nh-link {\n  color: var(--state-active);\n  text-decoration: underline;\n  text-underline-offset: 2px;\n  cursor: pointer;\n  background: transparent;\n  border: 0;\n  padding: 0;\n  font: inherit;\n}\n.nh-root[data-ui=\"atelier\"] .nh-btn-sm {\n  height: 28px;\n  padding: 0 10px;\n  font-size: 11.5px;\n}\n\n/* Universal Task Progress Bar */\n.nh-root[data-ui=\"atelier\"] .cw-progress-wrap {\n  display: flex;\n ",
+          " flex-direction: column;\n  gap: 5px;\n  width: 100%;\n}\n.nh-root[data-ui=\"atelier\"] .cw-progress-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  font-size: 11.5px;\n  color: var(--ink2);\n}\n.nh-root[data-ui=\"atelier\"] .cw-progress-head strong {\n  color: var(--ink);\n  font-weight: 600;\n}\n.nh-root[data-ui=\"atelier\"] .cw-progress-bar {\n  position: relative;\n  width: 100%;\n  height: 6px;\n  border-radius: var(--radius-pill);\n  background: rgba(148, 163, 184, 0.22);\n  overflow: hidden;\n}\n.nh-root[data-ui=\"atelier\"] .cw-progress-fill {\n  height: 100%;\n  border-radius: var(--radius-pill);\n  background: linear-gradient(90deg, var(--iris-1), var(--iris-2), var(--iris-5));\n  transition: width 260ms var(--ease);\n}\n.nh-root[data-ui=\"atelier\"] .cw-progress-indeterminate {\n  width: 38%;\n  animation: cw-indeterminate 1.4s ease-in-out infinite;\n}\n@keyframes cw-indeterminate {\n  0% { transform: translateX(-110%); }\n  50% { transform: translateX(110%); }\n  100% { transform: translateX(280%); }\n}\n\n/* Top-Right Collapsible Task Center Trigger & Drawer */\n.nh-root[data-ui=\"atelier\"] .cw-task-trigger {\n  display: inline-flex;\n  align-items: center;\n  gap: 7px;\n  height: 32px;\n  padding: 0 11px;\n  border-radius: var(--radius-pill);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  color: var(--ink);\n  font-size: 12px;\n  cursor: pointer;\n  white-space: nowrap;\n  transition: border-color 180ms ease, background 180ms ease;\n}\n.nh-root[data-ui=\"atelier\"] .cw-task-trigger[data-busy=\"true\"] {\n  border-color: rgba(121, 180, 255, 0.45);\n  background: var(--state-active-soft);\n}\n.nh-root[data-ui=\"atelier\"] .cw-task-badge {\n  font-family: var(--nh-mono);\n  font-size: 11px;\n  font-variant-numeric: tabular-nums;\n  padding: 1px 6px;\n  border-radius: var(--radius-pill);\n  background: var(--state-active);\n  color: #060910;\n  font-weight: 700;\n}\n.nh-root[data-ui=\"atelier\"] .cw-popover.cw-task-drawer {\n  left: auto;\n  right: 22px;\n  width: 390px;\n  max-width: calc(100vw - 28px);\n  max-height: 70vh;\n  padding: 14px;\n  transform-origin: top right;\n}\n.nh-root[data-ui=\"atelier\"] .cw-task-row {\n  display: flex;\n  flex-direction: column;\n  gap: 7px;\n  padding: 10px 11px;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n}\n.nh-root[data-ui=\"atelier\"] .cw-task-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n  font-size: 11.5px;\n  color: var(--muted);\n}\n\n/* Sub-tabs & Collapsible Sections & Human Review Banner */\n.nh-root[data-ui=\"atelier\"] .cw-subtabs {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px;\n  border-radius: var(--radius-sm);\n  border: 1px solid var(--line);\n  background: var(--nh-surface2);\n  margin-bottom: 14px;\n  flex-wrap: wrap;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subtab {\n  height: 30px;\n  padding: 0 13px;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: var(--ink2);\n  font-size: 12.5px;\n  cursor: pointer;\n}\n.nh-root[data-ui=\"atelier\"] .cw-subtab[data-active=\"true\"] {\n  background: var(--button-bg);\n  color: var(--button-ink);\n  font-weight: 600;\n}\n.nh-root[data-ui=\"atelier\"] .cw-review-banner {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  flex-wrap: wrap;\n  padding: 12px 14px;\n  border-radius: var(--radius-md);\n  corner-shape: squircle;\n  border: 1px solid rgba(255, 150, 80, 0.42);\n  background: var(--state-warn-soft);\n  color: var(--ink);\n}\n.nh-root[data-ui=\"atelier\"] .cw-collapse-panel summary {\n  cursor: pointer;\n  font-size: 12.5px;\n  font-weight: 600;\n  color: var(--ink2);\n  padding: 6px 2px;\n  user-select: none;\n}\n\n/* Responsive adjustments */\n@media (max-width: 960px) {\n  .nh-root[data-ui=\"atelier\"] .cw-primary-grid { grid-template-columns: 1fr; }\n  .nh-root[data-ui=\"atelier\"] .cw-stage-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n@media (max-width: 720px) {\n  .nh-root[data-ui=\"atelier\"] .cw-dock-sticky { padding: 8px 10px 4px; }\n  .nh-root[data-ui=\"atelier\"] .cw-project-lens .cw-proje",
+          "ct-title { display: none; }\n  .nh-root[data-ui=\"atelier\"] .nh-page { padding: 8px 12px 24px; }\n  .nh-root[data-ui=\"atelier\"] .nh-formgrid { grid-template-columns: 1fr !important; }\n  .nh-root[data-ui=\"atelier\"] .nh-role-grid { grid-template-columns: 1fr !important; }\n}\n"
         ].join('');
         // END GENERATED ATELIER CSS
 
@@ -1886,12 +1889,19 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function ToastProvider(props) {
           const [items, setItems] = React.useState([]);
+          const timersRef = React.useRef([]);
+          React.useEffect(() => () => {
+            timersRef.current.forEach((id) => clearTimeout(id));
+            timersRef.current = [];
+          }, []);
           const push = React.useCallback((text, tone) => {
             const id = Math.random().toString(36).slice(2);
-            setItems((current) => [...current, { id, text, tone: tone || 'info' }]);
-            setTimeout(() => {
+            setItems((current) => [...current.slice(-2), { id, text, tone: tone || 'info' }]);
+            const timerId = setTimeout(() => {
               setItems((current) => current.filter((item) => item.id !== id));
+              timersRef.current = timersRef.current.filter((item) => item !== timerId);
             }, 4200);
+            timersRef.current.push(timerId);
           }, []);
           const value = React.useMemo(() => ({ push }), [push]);
           return e(
@@ -1909,7 +1919,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     'div',
                     { className: 'nh-row', style: { gap: 7 } },
                     e(Icon, {
-                      name: item.tone === 'err' ? 'alert' : item.tone === 'ok' ? 'check' : 'alert',
+                      name: item.tone === 'err' ? 'alert' : item.tone === 'ok' ? 'check' : 'spark',
                       size: 12,
                     }),
                     e('span', { className: 'nh-wrap' }, item.text),
@@ -2037,9 +2047,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             scope.pending = Promise.resolve().then(fetcher)
               .then((data) => {
                 if (scope.revision === revision) update(() => ({ data, error: null, loading: false }));
+                return data;
               })
               .catch((error) => {
                 if (scope.revision === revision) update(() => ({ error: String(error.message || error), loading: false }));
+                return null;
               })
               .finally(() => { scope.pending = null; });
             return scope.pending;
@@ -2263,12 +2275,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function Modal(props) {
           const focusRef = React.useRef(null);
+          const onCloseRef = React.useRef(props.onClose);
+          onCloseRef.current = props.onClose;
           React.useEffect(() => {
             if (!props.open) return undefined;
             const previous = document.activeElement;
             const timer = setTimeout(() => focusRef.current?.focus(), 0);
             const handle = event => {
-              if (event.key === 'Escape') { event.preventDefault(); props.onClose(); }
+              if (event.key === 'Escape') { event.preventDefault(); onCloseRef.current?.(); }
               if (event.key !== 'Tab' || !focusRef.current) return;
               const nodes = [...focusRef.current.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]')].filter(node => node.getClientRects().length);
               if (!nodes.length) { event.preventDefault(); return; }
@@ -2657,6 +2671,206 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           );
         }
 
+        const OP_KIND_LABELS = {
+          plan: '生成大纲/细纲',
+          generate: '章节创作',
+          review: '章节审查',
+          polish: '章内润色',
+          daily: '自动日更',
+          publish: '番茄发布',
+          stage: '加入发布队列',
+          login: '账号扫码登录',
+          memory: '记忆同步',
+          learn: '文风学习',
+          test: '模型连接测试',
+          'service-probe': '免费渠道探测',
+          'service-refresh': '免费清单刷新',
+        };
+        const OP_STATUS_LABELS = {
+          queued: '排队中',
+          running: '进行中',
+          waiting: '等待处理',
+          awaiting_login: '等待扫码登录',
+          cancelling: '取消中',
+          success: '已完成',
+          failed: '失败',
+          partial: '部分完成',
+          interrupted: '已中断',
+          cancelled: '已取消',
+        };
+        const OP_ACTIVE_STATUSES = ['queued', 'running', 'waiting', 'awaiting_login', 'cancelling'];
+
+        /* Must stay identical to integration/free_channels.py CHANNELS: the
+           fallback list is used before the summary loads, and ofm_runtime.rpc
+           rejects any provider id that is not in CHANNEL_IDS. */
+        const FREE_CHANNEL_FALLBACKS = [
+          { id: 'codearts', name: 'CodeArts' },
+          { id: 'buddy', name: 'WorkBuddy 国内版' },
+          { id: 'workbuddy', name: 'WorkBuddy 国际版' },
+          { id: 'lobsterai', name: 'LobsterAI' },
+          { id: 'qoder', name: 'Qoder' },
+          { id: 'qodercn', name: 'Qoder 中国版' },
+          { id: 'trae', name: 'TRAE' },
+          { id: 'cline', name: 'Cline' },
+          { id: 'loomy', name: 'Loomy' },
+          { id: 'raccoon', name: 'Raccoon' },
+          { id: 'minimax', name: 'MiniMax Code' },
+          { id: 'zcode', name: 'ZCode' },
+          { id: 'gemini', name: 'Gemini' },
+        ];
+
+        function resolveTaskProgress(op) {
+          const p = op && op.progress;
+          if (p && typeof p === 'object') {
+            const pct = Number(p.percent);
+            return {
+              hasPercent: Number.isFinite(pct) && pct > 0,
+              percent: Number.isFinite(pct) ? Math.max(4, Math.min(100, Math.round(pct))) : 0,
+              label: p.label || (p.stage ? `阶段 ${p.stage}` : OP_STATUS_LABELS[op.status] || '处理中'),
+              chapter: p.chapter,
+              current: p.current,
+              total: p.total,
+            };
+          }
+          if (op && op.status === 'success') return { hasPercent: true, percent: 100, label: '已完成' };
+          if (op && op.status === 'queued') return { hasPercent: false, percent: 12, label: '排队等待执行…' };
+          return { hasPercent: false, percent: 25, label: OP_STATUS_LABELS[op && op.status] || '处理中…' };
+        }
+
+        function TaskProgressBar({ op, compact }) {
+          if (!op) return null;
+          const info = resolveTaskProgress(op);
+          const isActive = OP_ACTIVE_STATUSES.includes(op.status);
+          const countHint = info.total ? ` (${info.current || 0}/${info.total})` : info.chapter ? ` · 第${info.chapter}章` : '';
+          return e(
+            'div',
+            { className: 'cw-progress-wrap' },
+            e(
+              'div',
+              { className: 'cw-progress-head' },
+              e('span', null, info.label + countHint),
+              e('strong', { className: 'nh-mono' }, info.hasPercent ? `${info.percent}%` : isActive ? '运行中' : (OP_STATUS_LABELS[op.status] || op.status || '')),
+            ),
+            e(
+              'div',
+              { className: 'cw-progress-bar', role: 'progressbar', 'aria-valuenow': info.hasPercent ? info.percent : undefined, 'aria-valuemin': 0, 'aria-valuemax': 100 },
+              e('div', {
+                className: `cw-progress-fill${!info.hasPercent && isActive ? ' cw-progress-indeterminate' : ''}`,
+                style: info.hasPercent ? { width: `${info.percent}%` } : undefined,
+              }),
+            ),
+          );
+        }
+
+        function TaskCenterPopover({ open, onClose, allOperations, projects, onCancelOp, onNavigate }) {
+          if (!open) return null;
+          const projectMap = new Map((projects || []).map((p) => [p.id, p.title]));
+          const activeOps = (allOperations || []).filter((op) => OP_ACTIVE_STATUSES.includes(op.status));
+          const recentOps = (allOperations || []).filter((op) => !OP_ACTIVE_STATUSES.includes(op.status)).slice(0, 8);
+          return e(
+            'div',
+            { className: 'cw-popover cw-task-drawer', onClick: (event) => event.stopPropagation() },
+            e(
+              'div',
+              { className: 'nh-cardbody', style: { display: 'flex', flexDirection: 'column', gap: 10, padding: 0 } },
+              e(
+                'div',
+                { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                e('span', { className: 'cw-eyebrow' }, e('span', { className: 'cw-reticle' }, e(Icon, { name: 'spark', size: 11, fill: true })), `后台任务中心 (${activeOps.length} 进行中)`),
+                e('div', { className: 'nh-row', style: { gap: 4 } },
+                  e(Button, { kind: 'ghost', size: 'sm', onClick: () => { onClose(); onNavigate('costs'); } }, '全部记录'),
+                  e(Button, { kind: 'ghost', size: 'sm', icon: 'x', onClick: onClose }, '')),
+              ),
+              activeOps.length
+                ? activeOps.map((op) => {
+                    const bookTitle = op.project_title || projectMap.get(op.project_id) || op.book || '全局任务';
+                    return e(
+                      'div',
+                      { key: op.id, className: 'cw-task-row' },
+                      e(
+                        'div',
+                        { className: 'cw-task-meta' },
+                        e('strong', { style: { color: 'var(--ink)' } }, `${bookTitle} · ${OP_KIND_LABELS[op.kind] || op.kind}`),
+                        e(Button, { size: 'sm', kind: 'ghost', onClick: () => onCancelOp(op.id) }, '取消'),
+                      ),
+                      e(TaskProgressBar, { op, compact: true }),
+                    );
+                  })
+                : e('div', { className: 'nh-muted', style: { padding: '6px 2px' } }, '当前没有正在运行的后台任务。'),
+              recentOps.length
+                ? e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 6, marginTop: 4 } },
+                    e('div', { className: 'nh-k' }, '最近结束'),
+                    recentOps.map((op) => {
+                      const bookTitle = op.project_title || projectMap.get(op.project_id) || op.book || '全局';
+                      return e(
+                        'div',
+                        { key: op.id, className: 'nh-kvrow' },
+                        e('span', { style: { fontSize: 12 } }, `${bookTitle} · ${OP_KIND_LABELS[op.kind] || op.kind}`),
+                        e(Badge, { tone: op.status === 'success' ? 'ok' : op.status === 'failed' ? 'err' : 'warn' }, OP_STATUS_LABELS[op.status] || op.status),
+                      );
+                    }),
+                  )
+                : null,
+            ),
+          );
+        }
+
+        function NewBookModal({ open, onClose, openCreatedProject }) {
+          const toast = useToast();
+          const [title, setTitle] = React.useState('');
+          const [genre, setGenre] = React.useState('玄幻');
+          const [premise, setPremise] = React.useState('');
+          const [outline, setOutline] = React.useState('');
+          const [busy, setBusy] = React.useState(false);
+          const [error, setError] = React.useState('');
+          const submit = async () => {
+            if (busy || !title.trim()) { setError('请填写书名'); return; }
+            setBusy(true);
+            setError('');
+            try {
+              const created = await api('/projects/create', {
+                method: 'POST',
+                body: { title: title.trim(), genre: genre.trim(), premise: premise.trim(), outline },
+              });
+              if (!created?.id) throw new Error('创建未返回作品 ID');
+              toast.push(`作品《${created.title || title}》已创建`, 'ok');
+              setTitle(''); setPremise(''); setOutline('');
+              onClose();
+              openCreatedProject(created, Boolean(premise.trim() || outline.trim()));
+            } catch (caught) {
+              setError(String(caught.message || caught));
+            } finally {
+              setBusy(false);
+            }
+          };
+          return e(Modal, {
+            open,
+            title: '新建小说作品',
+            onClose: () => { if (!busy) onClose(); },
+            children: e(
+              'div',
+              { className: 'nh-col', style: { gap: 12 } },
+              error ? e('div', { className: 'nh-inline-err' }, error) : null,
+              e(
+                'div',
+                { className: 'nh-formgrid' },
+                e(Field, { label: '书名' }, e(TextInput, { value: title, onChange: setTitle, placeholder: '给新故事起个名字' })),
+                e(Field, { label: '题材' }, e(TextInput, { value: genre, onChange: setGenre, placeholder: '玄幻、都市、悬疑……' })),
+              ),
+              e(Field, { label: '一句话创意（可选）' }, e(TextInput, { value: premise, onChange: setPremise, placeholder: '主角想做什么，会遇到什么阻碍？' })),
+              e(Field, { label: '已有章节细纲（可选）' }, e('textarea', { className: 'nh-textarea', rows: 4, value: outline, placeholder: '## 第1章 章节标题', onChange: (ev) => setOutline(ev.target.value) })),
+              e(
+                'div',
+                { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
+                e(Button, { disabled: busy, onClick: onClose }, '取消'),
+                e(Button, { kind: 'primary', busy, disabled: !title.trim(), onClick: submit }, '创建并进入创作'),
+              ),
+            ),
+          });
+        }
+
         /* ------------------------------------------------------------ 工作台 */
 
         function SetupPage(props) {
@@ -2711,18 +2925,26 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function DashboardPage(props) {
           const { overview } = props;
+          const toast = useToast();
           const queue = overview.queue || {};
           const project = (overview.projects || [])[0] || null;
           const job = props.job || (overview.jobs || []).find(item => matchesProject(item, project)) || null;
           const work = workHeadline(job), cycle = job && job.cycle || {}, stage = chapterStage(job);
-          const costs = usePoll(() => project ? api(`/costs?project_id=${encodeURIComponent(project.id)}`) : Promise.resolve(null), [project && project.id], POLL_MS);
-          const chapters = usePoll(() => project ? api(`/projects/${project.id}/chapters`) : Promise.resolve({ chapters: [] }), [project && project.id], LIVE_POLL_MS);
+          const allOps = props.allOperations || overview.operations || [];
+          const projectOps = allOps.filter(op => op && project && op.project_id === project.id && OP_ACTIVE_STATUSES.includes(op.status));
+          const globalOps = allOps.filter(op => op && !op.project_id && OP_ACTIVE_STATUSES.includes(op.status));
+          const activeOp = projectOps[0] || null;
+          const isRunning = stage.active || Boolean(activeOp);
+          const rev = project && project.chapters_revision ? project.chapters_revision : 0;
+          const costs = usePoll(() => project ? api(`/costs?project_id=${encodeURIComponent(project.id)}`) : Promise.resolve(null), [project && project.id, rev], POLL_MS);
+          const chapters = usePoll(() => project ? api(`/projects/${project.id}/chapters`) : Promise.resolve({ chapters: [] }), [project && project.id, rev, isRunning], isRunning ? LIVE_POLL_MS : POLL_MS);
           const rows = [...((chapters.data && chapters.data.chapters) || [])].sort((a, b) => Number(b.id) - Number(a.id));
-          const chapter = work.chapter || (rows[0] && rows[0].id) || 0;
+          const humanPendingRows = rows.filter(r => r && r.human_review_required);
+          const chapter = (activeOp && activeOp.progress && activeOp.progress.chapter) || work.chapter || (rows[0] && rows[0].id) || 0;
           const current = rows.find(row => Number(row.id) === Number(chapter));
-          const body = usePoll(() => project && current ? api(`/projects/${project.id}/chapters/${chapter}`) : Promise.resolve(null), [project && project.id, chapter, Boolean(current)], LIVE_POLL_MS);
-          const chapterCosts = usePoll(() => project && chapter ? api(`/costs?project_id=${encodeURIComponent(project.id)}&chapter=${chapter}`).then(value => ({ ...value, chapter })) : Promise.resolve(null), [project && project.id, chapter], LIVE_POLL_MS);
-          const flow = usePoll(() => project ? api(`/projects/${project.id}/workflow`) : Promise.resolve(null), [project && project.id], POLL_MS);
+          const body = usePoll(() => project && current ? api(`/projects/${project.id}/chapters/${chapter}`) : Promise.resolve(null), [project && project.id, chapter, Boolean(current), rev], isRunning ? LIVE_POLL_MS : 0);
+          const chapterCosts = usePoll(() => project && chapter ? api(`/costs?project_id=${encodeURIComponent(project.id)}&chapter=${chapter}`).then(value => ({ ...value, chapter })) : Promise.resolve(null), [project && project.id, chapter, rev], isRunning ? LIVE_POLL_MS : 0);
+          const flow = usePoll(() => project ? api(`/projects/${project.id}/workflow`) : Promise.resolve(null), [project && project.id, rev], POLL_MS);
           const flowSteps = flow.data && flow.data.steps || [], next = flowSteps.find(step => !step.done);
           const ledger = chapterCosts.data && Number(chapterCosts.data.chapter) === Number(chapter) ? chapterCosts.data : null;
           const savedBody = body.data && Number(body.data.id) === Number(chapter) ? body.data : null;
@@ -2779,7 +3001,26 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 e('div', { className: 'cw-gemini-track', style: { '--p': `${streamPct}%` } },
                   e('div', { className: 'cw-gemini-glow' }),
                   e('div', { className: 'cw-gemini-fill' }),
-                  e('div', { className: 'cw-gemini-comet' }))) : null),
+                  e('div', { className: 'cw-gemini-comet' }))) : activeOp ? e('div', { className: 'cw-gemini-box', role: 'status' }, e(TaskProgressBar, { op: activeOp })) : null),
+            !project ? e(Card, { title: '欢迎使用码章鲸', hint: '先创建或选择一部作品，再开始规划与写作' },
+              e('div', { className: 'nh-row', style: { gap: 10, flexWrap: 'wrap' } },
+                e(Button, { kind: 'primary', icon: 'plus', onClick: () => props.openNewBook && props.openNewBook() }, '新建小说作品'),
+                e(Button, { onClick: () => props.navigate('ai') }, '连接 AI 模型'))) : null,
+            humanPendingRows.length ? e('div', { className: 'cw-review-banner' },
+              e('div', null,
+                e('strong', null, `有 ${humanPendingRows.length} 章已达自动审查上限并转待人工复核`),
+                e('div', { className: 'nh-muted', style: { marginTop: 2 } }, '后续章节写作不被阻塞；确认通过后即可正常排队发布。')),
+              e('div', { className: 'nh-row', style: { gap: 8 } },
+                e(Button, { size: 'sm', onClick: () => props.onOpenChapter(humanPendingRows[0].id) }, `查看第 ${humanPendingRows[0].id} 章`),
+                e(Button, { size: 'sm', kind: 'primary', onClick: () => props.navigate('chapters') }, '前往处理'))) : null,
+            globalOps.length ? e('div', { className: 'nh-panel', style: { marginBottom: 'var(--nh-gap)' } },
+              e('div', { className: 'nh-row', style: { justifyContent: 'space-between', alignItems: 'center' } },
+                e('div', null,
+                  e('strong', null, '全局任务'),
+                  e('div', { className: 'nh-muted', style: { marginTop: 2 } }, `${globalOps.length} 项进行中 · 不属于当前作品`)),
+                e(Button, { size: 'sm', kind: 'ghost', onClick: () => props.navigate('operations') }, '查看操作历史')),
+              e('div', { className: 'nh-col', style: { gap: 10, marginTop: 8 } },
+                globalOps.map(op => e(TaskProgressBar, { key: op.id, op })))) : null,
             work.tone === 'err' ? e('div', { className: 'nh-alertblock' }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
             e('div', { className: 'cw-primary-grid' },
               e('section', { className: 'cw-glass-card cw-manuscript-card', 'aria-label': '正文预览' },
@@ -2847,22 +3088,36 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const toast = useToast();
           const project = (overview.projects || [])[0];
           const [query, setQuery] = React.useState('');
+          const [reviewFilter, setReviewFilter] = React.useState('all');
           const [busy, setBusy] = React.useState({});
 
+          const activeBookOps = (props.allOperations || overview.operations || []).filter(
+            (op) => op && (!project || op.project_id === project.id) && OP_ACTIVE_STATUSES.includes(op.status) && ['generate', 'review', 'polish', 'plan'].includes(op.kind),
+          );
           const chapters = usePoll(
             () => (project ? api(`/projects/${project.id}/chapters`) : Promise.resolve({ chapters: [] })),
+            [project && project.id],
+            activeBookOps.length ? LIVE_POLL_MS : POLL_MS,
+          );
+          const workflow = usePoll(
+            () => (project ? api(`/projects/${project.id}/workflow`) : Promise.resolve(null)),
             [project && project.id],
             POLL_MS,
           );
 
           const rows = (chapters.data && chapters.data.chapters) || [];
-          const filtered = query
-            ? rows.filter(
-                (row) =>
-                  String(row.id).includes(query) ||
-                  String(row.title || '').toLowerCase().includes(query.toLowerCase()),
-              )
-            : rows;
+          const humanPendingCount = rows.filter((row) => row.human_review_required).length;
+          const filtered = rows.filter((row) => {
+            if (reviewFilter === 'human_pending' && !row.human_review_required) return false;
+            if (!query) return true;
+            return (
+              String(row.id).includes(query) ||
+              String(row.title || '').toLowerCase().includes(query.toLowerCase())
+            );
+          });
+          const pendingBatches = (workflow.data && Array.isArray(workflow.data.pending_batches) ? workflow.data.pending_batches : []);
+          const pendingBatch = pendingBatches.find((batch) => pendingBatchId(batch)) || null;
+          const pendingId = pendingBatchId(pendingBatch);
 
           const act = async (label, path, body, busyKey) => {
             const key = busyKey || label;
@@ -2871,6 +3126,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               await api(path, { method: 'POST', body: body || {} });
               toast.push(`${label} 已提交`, 'ok');
               chapters.reload(true);
+              workflow.reload(true);
+              props.refreshOverview?.();
             } catch (error) {
               toast.push(`${label} 失败：${error.message}`, 'err');
             } finally {
@@ -2884,11 +3141,52 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           return e(
             'div',
             { className: 'nh-page' },
+            activeBookOps.length
+              ? e(
+                  Card,
+                  { title: '正在进行', hint: `${activeBookOps.length} 项任务` },
+                  e(
+                    'div',
+                    { className: 'nh-col', style: { gap: 10 } },
+                    activeBookOps.map((op) =>
+                      e(
+                        'div',
+                        { key: op.id, className: 'nh-panel' },
+                        e(
+                          'div',
+                          { className: 'nh-row', style: { justifyContent: 'space-between' } },
+                          e('strong', null, OP_KIND_LABELS[op.kind] || op.kind),
+                          e(Button, { size: 'sm', kind: 'ghost', onClick: () => act('取消任务', `/operations/${op.id}/cancel`, {}, `cancel-${op.id}`) }, '取消'),
+                        ),
+                        e(TaskProgressBar, { op }),
+                      ),
+                    ),
+                  ),
+                )
+              : null,
+            pendingBatch
+              ? e(
+                  'div',
+                  { className: 'cw-review-banner', style: { marginBottom: 'var(--nh-gap)' } },
+                  e(
+                    'div',
+                    null,
+                    e('strong', null, `检测到 ${pendingBatches.length} 个未完成批次`),
+                    e('div', { className: 'nh-muted' }, `最近批次 ${pendingId} · 如卡在第一章可选择继续或放弃旧批次。`),
+                  ),
+                  e(
+                    'div',
+                    { className: 'nh-row', style: { gap: 8 } },
+                    e(Button, { size: 'sm', busy: busy.resumeBatch, onClick: () => act('继续原批次', `/projects/${project.id}/batches/${encodeURIComponent(pendingId)}/resume`, {}, 'resumeBatch') }, '继续原批次'),
+                    e(Button, { size: 'sm', kind: 'danger', busy: busy.abandonBatch, onClick: () => act('放弃旧批次', `/projects/${project.id}/batches/${encodeURIComponent(pendingId)}/abandon`, {}, 'abandonBatch') }, '放弃旧批次'),
+                  ),
+                )
+              : null,
             e(
               'div',
               { className: 'nh-stats' },
               e(Stat, { label: '章节总数', value: num(rows.length) }),
-              e(Stat, { label: '已审查', value: num(reviewed), foot: `${rows.length - reviewed} 章待审查` }),
+              e(Stat, { label: '已通过', value: num(reviewed), foot: humanPendingCount ? `${humanPendingCount} 章待人工复核` : `${rows.length - reviewed} 章待审查` }),
               e(Stat, { label: '总字数', value: compact(totalWords), unit: '字' }),
               e(Stat, {
                 label: '平均章节',
@@ -2906,7 +3204,19 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   hint: project ? project.title : '',
                   actions: e(
                     'div',
-                    { className: 'nh-row', style: { gap: 8 } },
+                    { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
+                    e('button', {
+                      type: 'button',
+                      className: 'nh-tagbtn',
+                      'data-active': reviewFilter === 'all' ? 'true' : 'false',
+                      onClick: () => setReviewFilter('all'),
+                    }, `全部 (${rows.length})`),
+                    e('button', {
+                      type: 'button',
+                      className: 'nh-tagbtn',
+                      'data-active': reviewFilter === 'human_pending' ? 'true' : 'false',
+                      onClick: () => setReviewFilter('human_pending'),
+                    }, `待人工复核 (${humanPendingCount})`),
                     e(
                       'div',
                       { className: 'nh-row', style: { gap: 0 } },
@@ -2960,20 +3270,24 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                   Badge,
                                   {
                                     tone: row.reviewed
-                                      ? row.review_status === 'pass'
-                                        ? 'ok'
-                                        : 'warn'
-                                      : 'mute',
+                                      ? 'ok'
+                                      : row.human_review_required
+                                        ? 'warn'
+                                        : 'mute',
                                   },
                                   row.reviewed
-                                    ? row.review_status === 'pass'
-                                      ? 'D 通过'
-                                      : row.review_status === 'waived_by_E'
-                                        ? 'E 授权'
-                                        : row.review_status === 'waived_by_author_rule'
-                                          ? '按规则免审'
-                                          : row.review_status || '已审查'
-                                    : '未审查',
+                                    ? row.review_status === 'human_approved'
+                                      ? '人工复核通过'
+                                      : row.review_status === 'pass'
+                                        ? 'D 通过'
+                                        : row.review_status === 'waived_by_E'
+                                          ? 'E 授权'
+                                          : row.review_status === 'waived_by_author_rule'
+                                            ? '按规则免审'
+                                            : row.review_status || '已审查'
+                                    : row.human_review_required
+                                      ? '待人工复核'
+                                      : '未审查',
                                 ),
                               ),
                               e(
@@ -2981,18 +3295,32 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                 null,
                                 e(
                                   'div',
-                                  { className: 'nh-row', style: { gap: 5 } },
-                                  e(
-                                    Button,
-                                    {
-                                      size: 'sm',
-                                      kind: 'ghost',
-                                      busy: busy[`review-${row.id}`],
-                                      onClick: () =>
-                                        act('重新审查', `/projects/${project.id}/chapters/${row.id}/review`, undefined, `review-${row.id}`),
-                                    },
-                                    '审查',
-                                  ),
+                                  { className: 'nh-row', style: { gap: 5, flexWrap: 'wrap' } },
+                                  row.reviewed && row.review_status === 'human_approved'
+                                    ? e(Badge, { tone: 'ok' }, '已批准')
+                                    : row.human_review_required && !row.reviewed
+                                      ? e(
+                                          Button,
+                                          {
+                                            size: 'sm',
+                                            kind: 'primary',
+                                            busy: busy[`approve-${row.id}`],
+                                            onClick: () =>
+                                              act('人工复核通过', `/projects/${project.id}/chapters/${row.id}/approve-review`, { note: '作者人工确认通过' }, `approve-${row.id}`),
+                                          },
+                                          '复核通过',
+                                        )
+                                      : e(
+                                          Button,
+                                          {
+                                            size: 'sm',
+                                            kind: 'ghost',
+                                            busy: busy[`review-${row.id}`],
+                                            onClick: () =>
+                                              act('重新审查', `/projects/${project.id}/chapters/${row.id}/review`, undefined, `review-${row.id}`),
+                                          },
+                                          '审查',
+                                        ),
                                   e(
                                     Button,
                                     {
@@ -3895,12 +4223,45 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const job = props.job || (overview.jobs || []).find((item) => matchesProject(item, project)) || (overview.jobs || [])[0] || null;
           const accounts = overview.accounts || [];
           const [accountName, setAccountName] = React.useState('');
+          const [loginAccount, setLoginAccount] = React.useState('我的番茄账号');
           const account = accounts.find((item) => item.name === accountName) || accounts[0];
           const [platformBook, setPlatformBook] = React.useState(project ? project.title : '');
           React.useEffect(() => setPlatformBook(project ? project.title : ''), [project && project.id]);
           const [count, setCount] = React.useState('1');
           const [busy, setBusy] = React.useState(false);
           const [confirm, setConfirm] = React.useState(null);
+          const hasLoggedInAccount = accounts.some((item) => item && item.logged_in);
+          const pubOps = (props.allOperations || overview.operations || []).filter(
+            (op) => op && OP_ACTIVE_STATUSES.includes(op.status) && ['publish', 'stage', 'login'].includes(op.kind)
+              && (op.kind === 'login' || !project || op.project_id === project.id),
+          );
+
+          const startAccountLogin = async () => {
+            if (!loginAccount.trim() || busy) return;
+            setBusy(true);
+            try {
+              await api('/accounts/login', { method: 'POST', body: { name: loginAccount.trim() } });
+              toast.push('登录窗口正在打开，请完成扫码后点击确认', 'ok');
+              props.refreshOverview?.();
+            } catch (error) {
+              toast.push(error.message, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
+
+          const confirmAccountLogin = async (name) => {
+            setBusy(true);
+            try {
+              await api('/accounts/' + encodeURIComponent(name) + '/confirm-login', { method: 'POST', body: {} });
+              toast.push('正在核验登录状态，请稍候', 'ok');
+              props.refreshOverview?.();
+            } catch (error) {
+              toast.push(error.message, 'err');
+            } finally {
+              setBusy(false);
+            }
+          };
           const previewPublish = async () => {
             setBusy(true);
             try {
@@ -3948,9 +4309,48 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
+          const accountPanel = e(
+            'div',
+            { className: 'nh-col', style: { gap: 10 } },
+            e('div', { className: 'nh-muted' }, '登录会打开本机浏览器，自行扫码进入作家后台后再回来核验；发布前需先在番茄后台建好对应书名。'),
+            e(
+              'div',
+              { className: 'nh-row', style: { gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' } },
+              e(Field, { label: '账号备注名' }, e(TextInput, { value: loginAccount, onChange: setLoginAccount, placeholder: '我的番茄账号' })),
+              e(Button, { busy, disabled: !loginAccount.trim(), onClick: startAccountLogin }, '打开番茄登录窗口'),
+            ),
+            accounts.length
+              ? e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 6 } },
+                  accounts.map((item) =>
+                    e(
+                      'div',
+                      { key: item.name, className: 'nh-kvrow' },
+                      e('span', null, `${item.name} · ${item.logged_in ? '已保存登录状态' : '待登录'}`),
+                      item.login_operation && item.login_operation.status === 'awaiting_login'
+                        ? e(Button, { size: 'sm', kind: 'primary', busy, onClick: () => confirmAccountLogin(item.name) }, '我已扫码，完成核验')
+                        : e(Badge, { tone: item.logged_in ? 'ok' : 'warn' }, item.logged_in ? '就绪' : '未登录'),
+                    ),
+                  ),
+                )
+              : null,
+          );
+
           const fanqieBody = e(
             'div',
             null,
+            pubOps.length
+              ? e(
+                  'div',
+                  { style: { marginBottom: 'var(--nh-gap)' } },
+                  e(
+                    Card,
+                    { title: '发布与登录进度', hint: `${pubOps.length} 项进行中` },
+                    e('div', { className: 'nh-col', style: { gap: 10 } }, pubOps.map((op) => e(TaskProgressBar, { key: op.id, op }))),
+                  ),
+                )
+              : null,
             e(
               'div',
               { className: 'nh-stats' },
@@ -3958,6 +4358,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               e(Stat, { label: '已核验发布', value: num(queue.published || 0), unit: '章' }),
               e(Stat, { label: '未确认', value: num(queue.unconfirmed || 0), unit: '章' }),
               e(Stat, { label: '归档待核', value: num(queue.archive_unverified || 0), unit: '章' }),
+            ),
+            e(
+              'div',
+              { style: { marginTop: 'var(--nh-gap)' } },
+              e(
+                Card,
+                { title: '番茄账号连接', hint: hasLoggedInAccount ? '已就绪' : '发布前需登录' },
+                hasLoggedInAccount
+                  ? e('details', { className: 'cw-collapse-panel' }, e('summary', null, `已连接 ${accounts.filter((a) => a.logged_in).length} 个账号（点击管理或新增）`), accountPanel)
+                  : accountPanel,
+              ),
             ),
             e(
               'div',
@@ -4007,9 +4418,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 {
                   title: '提交发布',
                   hint: '真实提交到番茄，不可撤销',
-                  actions: (!account || !account.logged_in) && props.navigate
-                    ? e(Button, { size: 'sm', onClick: () => props.navigate('setup') }, '去登录番茄账号')
-                    : null,
                 },
                 e(
                   'div',
@@ -4066,25 +4474,29 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 onChange: setSubTab,
                 options: [
                   { value: 'fanqie', label: '番茄发布与队列' },
-                  { value: 'schedule', label: '番茄排期缓冲（候选）' },
-                  { value: 'platforms', label: '多平台契约与导出（含七猫·候选）' },
-                  { value: 'browser', label: '浏览器试点（候选）' },
+                  { value: 'advanced', label: '高级渠道与排期缓冲' },
                 ],
               }),
             ),
             subTab === 'fanqie'
               ? fanqieBody
-              : subTab === 'schedule'
-                ? e(ScheduleBufferPanel, { job, navigate: props.navigate, refreshOverview: props.refreshOverview })
-                : subTab === 'platforms'
-                  ? e(MultiPlatformPublishPanel, { project })
-                  : e(BrowserPilotPanel, { project }),
+              : e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 'var(--nh-gap)' } },
+                  e(ScheduleBufferPanel, { job, navigate: props.navigate, refreshOverview: props.refreshOverview }),
+                  e('details', { className: 'cw-collapse-panel' }, e('summary', null, '多平台契约与导出（含七猫 · 候选只读）'), e(MultiPlatformPublishPanel, { project })),
+                  e('details', { className: 'cw-collapse-panel' }, e('summary', null, '浏览器试点（高级）'), e(BrowserPilotPanel, { project })),
+                ),
           );
         }
 
         /* ---------------------------------------------------------------- 成本 */
 
-        function CostsPage() {
+        function CostsPage(props) {
+          const [subTab, setSubTab] = React.useState((props && props.initialTab) || 'cost');
+          React.useEffect(() => {
+            if (props && props.initialTab) setSubTab(props.initialTab);
+          }, [props && props.initialTab]);
           const costs = usePoll(() => api('/costs'), [], POLL_MS);
           const data = costs.data || {};
           const summary = data.summary || {};
@@ -4094,9 +4506,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const maxModelCost = Math.max(0.0001, ...models.map((row) => Number(row.cost_cny) || 0));
 
-          return e(
+          const costView = e(
             'div',
-            { className: 'nh-page' },
+            null,
             e(
               'div',
               { className: 'nh-stats' },
@@ -4204,6 +4616,23 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 ),
               ),
             ),
+          );
+
+          return e(
+            'div',
+            { className: 'nh-page' },
+            e(
+              'div',
+              { className: 'cw-subtabs' },
+              e('button', { type: 'button', className: 'cw-subtab', 'data-active': subTab === 'cost' ? 'true' : 'false', onClick: () => setSubTab('cost') }, '用量与成本'),
+              e('button', { type: 'button', className: 'cw-subtab', 'data-active': subTab === 'pricing' ? 'true' : 'false', onClick: () => setSubTab('pricing') }, '模型定价'),
+              e('button', { type: 'button', className: 'cw-subtab', 'data-active': subTab === 'logs' ? 'true' : 'false', onClick: () => setSubTab('logs') }, '后台任务与日志'),
+            ),
+            subTab === 'pricing'
+              ? e(PricingPage, { ...props, embedded: true })
+              : subTab === 'logs'
+                ? e(OperationsPage, { ...props, embedded: true })
+                : costView,
           );
         }
 
@@ -4399,6 +4828,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               setEditing(null);
               memory.reload(true);
               memoryState.reload(true);
+              continuity.reload(true);
             } catch (error) {
               toast.push(`保存失败：${error.message}`, 'err');
             } finally {
@@ -4415,6 +4845,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               });
               toast.push('已归档', 'ok');
               memory.reload(true);
+              memoryState.reload(true);
+              continuity.reload(true);
             } catch (error) {
               toast.push(`归档失败：${error.message}`, 'err');
             } finally {
@@ -4610,6 +5042,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   : e(
                       React.Fragment,
                       null,
+            (memory.error || people.error || continuity.error)
+              ? e('div', { className: 'nh-inline-err', style: { marginBottom: 10 } }, memory.error || people.error || continuity.error)
+              : null,
             e(
               'div',
               { className: 'nh-stats' },
@@ -4766,7 +5201,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             (person.aliases || []).map((alias) => e(Badge, { key: alias, tone: 'mute' }, alias)),
                             (person.unknown || []).length ? e(Badge, { tone: 'warn' }, `未知 ${person.unknown.length} 项`) : null,
                             e('span', { className: 'nh-spacer' }),
-                            e(Button, { size: 'sm', kind: 'ghost', onClick: () => setCorrecting({ id: person.id, name: person.name, field: 'identity', value: person.profile.identity || '', reason: '' }) }, '纠正'),
+                            e(Button, { size: 'sm', kind: 'ghost', onClick: () => setCorrecting({ id: person.id, name: person.name, _profile: person.profile || {}, field: 'identity', value: person.profile.identity || '', reason: '' }) }, '纠正'),
                           ),
                           e(
                             'div',
@@ -4926,7 +5361,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       { label: '字段' },
                       e(Select, {
                         value: correcting.field,
-                        onChange: (value) => setCorrecting({ ...correcting, field: value }),
+                        onChange: (value) => setCorrecting({
+                          ...correcting,
+                          field: value,
+                          value: (correcting._profile && correcting._profile[value]) || '',
+                        }),
                         options: [
                           { value: 'identity', label: '身份' },
                           { value: 'goal', label: '目标' },
@@ -5077,7 +5516,12 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             POLL_MS * 2,
           );
           const [seriesMetric, setSeriesMetric] = React.useState('chapter_completion_rate');
+          const [seriesWorkInput, setSeriesWorkInput] = React.useState('');
           const [seriesWorkId, setSeriesWorkId] = React.useState('');
+          React.useEffect(() => {
+            const timer = setTimeout(() => setSeriesWorkId(seriesWorkInput), 300);
+            return () => clearTimeout(timer);
+          }, [seriesWorkInput]);
           const seriesPoll = usePoll(
             () =>
               project
@@ -5086,7 +5530,12 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             [project && project.id, seriesMetric, seriesWorkId],
             0,
           );
+          const [commentChapterInput, setCommentChapterInput] = React.useState('1');
           const [commentChapter, setCommentChapter] = React.useState('1');
+          React.useEffect(() => {
+            const timer = setTimeout(() => setCommentChapter(commentChapterInput), 300);
+            return () => clearTimeout(timer);
+          }, [commentChapterInput]);
           const [commentDraft, setCommentDraft] = React.useState('');
           const commentsPoll = usePoll(
             () =>
@@ -5275,7 +5724,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 hint: `口径 ${dictData.caliber || 'v1'} · 跳出率平台未提供，绝不本地臆造`,
                 actions: e(
                   'label',
-                  { className: 'nh-btn nh-btn-sm', style: { cursor: 'pointer' } },
+                  { className: 'nh-btn', 'data-size': 'sm', style: { cursor: 'pointer' } },
                   '选择 CSV 文件',
                   e('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' }, onChange: onCsvFile }),
                 ),
@@ -5396,7 +5845,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         { value: 'comments', label: '评论数' },
                       ],
                 }),
-                e(TextInput, { value: seriesWorkId, placeholder: '筛选 work_id', onChange: setSeriesWorkId }),
+                e(TextInput, { value: seriesWorkInput, placeholder: '筛选 work_id', onChange: setSeriesWorkInput }),
                 e(Button, { size: 'sm', icon: 'refresh', onClick: () => seriesPoll.reload(true) }, '刷新'),
               ),
             },
@@ -5441,7 +5890,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             e(
               'div',
               { className: 'nh-formgrid' },
-              e(Field, { label: '所属章号' }, e(TextInput, { type: 'number', min: 1, value: commentChapter, onChange: setCommentChapter })),
+              e(Field, { label: '所属章号' }, e(TextInput, { type: 'number', min: 1, value: commentChapterInput, onChange: setCommentChapterInput })),
             ),
             e(Field, { label: '评论文本（每行一条）' }, e('textarea', { className: 'nh-textarea', rows: 4, value: commentDraft, placeholder: '每行粘贴一条读者评论…', onChange: (event) => setCommentDraft(event.target.value) })),
             e('div', { className: 'nh-row', style: { marginTop: 8, gap: 8 } },
@@ -5590,6 +6039,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           return e(
             'div',
             { className: 'nh-page' },
+            (dictPoll.error || seriesPoll.error || commentsPoll.error || obsPoll.error)
+              ? e('div', { className: 'nh-inline-err', style: { marginBottom: 12 } }, dictPoll.error || seriesPoll.error || commentsPoll.error || obsPoll.error)
+              : null,
             e(
               'div',
               { className: 'nh-stats', style: { marginBottom: 'var(--nh-gap)' } },
@@ -6287,7 +6739,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function scheduleDraft(job, project) {
           const times = dailyTimeList(job);
           return {
-            name: (job && job.name) || '日更任务',
+            name: (job && job.name) || (project && project.title ? `《${project.title}》· 日更` : '日更任务'),
             book: (job && job.book) || (project && project.title) || '',
             account: (job && job.account) || '',
             platform: (job && job.platform) || 'fanqie',
@@ -6348,7 +6800,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               ? form.publicationMode
               : 'draft_only';
             const body = {
-              name: String(form.name || '日更任务').slice(0, 96) || '日更任务',
+              name: String(form.name || (project && project.title ? `《${project.title}》· 日更` : '日更任务')).slice(0, 96) || '日更任务',
               project: (existing && existing.project) || (project && (project.path || project.id)) || '',
               book: String(form.book || (project && project.title) || '未命名作品').slice(0, 96),
               account: needsPlatform ? String(form.account || '') : '',
@@ -6905,45 +7357,83 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             return answer;
           };
 
+          const resolveAccountHandle = async (channel) => {
+            const list = await rpc('accounts', 'account.list', { provider: channel });
+            const rows = list && list.value && Array.isArray(list.value.accounts) ? list.value.accounts : [];
+            const withId = rows.filter((row) => row && (row.id || row.accountId));
+            const latest = withId[withId.length - 1];
+            return latest ? String(latest.id || latest.accountId) : '';
+          };
+
           const createAccount = async () => {
             if (!provider) {
               setError('先选一个渠道。');
               return;
             }
-            const answer = await rpc('account', 'account.create', { provider, zcodeProvider: provider });
+            const payload = provider === 'zcode' ? { provider, zcodeProvider: 'bigmodel' } : { provider };
+            const answer = await rpc('account', 'account.create', payload);
             if (!answer) return;
             const value = answer.value || {};
-            const accountId =
+            let accountId =
               (value.account && value.account.id) || value.id || value.accountId || '';
-            if (accountId) {
-              setLogin({ provider, accountId, state: 'polling', done: false, url: '', qr: '', message: '' });
-              setNotice('等待本人在渠道侧完成登录/验证，页面会自动读取状态。');
+            if (accountId === 'pending') accountId = '';
+            const loginUrl = value.url || value.loginUrl || value.verifyUrl || '';
+            const loginQr = value.qr || value.qrCode || value.qrDataUrl || '';
+            const loginMsg = value.message || value.hint || '';
+            if (!accountId && (loginUrl || loginQr)) {
+              /* account.create does not always echo the account id; without a
+                 handle login.poll can never run, so resolve the newest account
+                 of this channel once instead of parking the UI on 'pending'. */
+              accountId = await resolveAccountHandle(provider);
+            }
+            if (accountId || loginUrl || loginQr) {
+              setLogin({
+                provider,
+                accountId,
+                state: value.state || 'polling',
+                done: false,
+                url: loginUrl,
+                qr: loginQr,
+                message: loginMsg,
+              });
+              setNotice(accountId
+                ? '等待本人在渠道侧完成登录/验证，页面每 3 秒自动同步状态。'
+                : '账号已在渠道侧创建，但渠道没有返回账号标识；完成登录后点「读取登录状态」再试。');
             } else {
-              setNotice('账号已创建；后端没有返回账号标识，请用「拉取账号」再继续登录轮询。');
+              setNotice('账号已创建；后端没有返回账号标识，请用「读取登录状态」继续验证。');
             }
           };
 
-          const pollLogin = async (target) => {
+          const pollLogin = React.useCallback(async (target) => {
             const pair = target || login;
-            if (!pair || !pair.provider || !pair.accountId) {
-              setError('没有可轮询的账号标识。');
+            if (!pair || !pair.provider) {
+              if (!target) setError('没有可轮询的账号。');
               return;
             }
-            const answer = await rpc('poll', 'login.poll', { provider: pair.provider, accountId: pair.accountId });
+            let accountId = pair.accountId && pair.accountId !== 'pending' ? pair.accountId : '';
+            if (!accountId) {
+              accountId = await resolveAccountHandle(pair.provider);
+              if (!accountId) {
+                if (!target) setError('渠道尚未返回账号标识，请稍后重试或回渠道页面刷新账户列表。');
+                return;
+              }
+              setLogin((prev) => (prev ? { ...prev, accountId } : prev));
+            }
+            const answer = await rpc('poll', 'login.poll', { provider: pair.provider, accountId });
             if (!answer) return;
             const value = answer.value || {};
             const done = value.done === true;
             const success = value.success === true;
-            setLogin({
+            setLogin((prev) => ({
               provider: pair.provider,
-              accountId: pair.accountId,
+              accountId,
               done,
               success,
               state: value.state || (done ? (success ? 'success' : 'failed') : 'polling'),
-              url: value.url || value.loginUrl || value.verifyUrl || '',
-              qr: value.qr || value.qrCode || value.qrDataUrl || '',
-              message: value.message || value.hint || '',
-            });
+              url: value.url || value.loginUrl || value.verifyUrl || (prev && prev.url) || '',
+              qr: value.qr || value.qrCode || value.qrDataUrl || (prev && prev.qr) || '',
+              message: value.message || value.hint || (prev && prev.message) || '',
+            }));
             if (done && success) {
               setNotice('登录成功，正在刷新渠道清单。');
               await loadSummary();
@@ -6953,7 +7443,18 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               const rows = published && published.value && Array.isArray(published.value.models) ? published.value.models : [];
               setModels(rows);
             }
-          };
+          }, [login]);
+
+          const pollRef = React.useRef(pollLogin);
+          pollRef.current = pollLogin;
+          const pollingActive = loginPollReady(login);
+          React.useEffect(() => {
+            if (!pollingActive) return undefined;
+            const timer = setInterval(() => {
+              if (!document.hidden) pollRef.current();
+            }, 3000);
+            return () => clearInterval(timer);
+          }, [pollingActive]);
 
           const sendSms = async () => {
             if (!login || !login.provider || !sms.phone) {
@@ -7009,6 +7510,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             const answer = await call('pool', 'PUT', '/free-model/pool', {
               members,
               project: project.path || project.id,
+              project_id: project.id,
               authorize_project: true,
             });
             if (answer) {
@@ -7020,7 +7522,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          const channels = (summary && Array.isArray(summary.channels) ? summary.channels : []).filter(Boolean);
+          const channels = (summary && Array.isArray(summary.channels) ? summary.channels : FREE_CHANNEL_FALLBACKS).filter(Boolean);
           const options = channels.map((channel) => {
             const id = channel.id || channel.channel || channel.provider || '';
             return { value: id, label: channel.name || channel.label || id };
@@ -7030,13 +7532,18 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             : (summary && Array.isArray(summary.catalog) ? summary.catalog : []).filter((row) => row && row.routable !== false);
           const modelOptions = modelRows && modelRows.length ? modelRows : [];
           const modelKey = (row) => row.id || row.model_id || row.key || '';
+          const loginHref = login ? safeHttpUrl(login.url) : '';
+          const loginQrSrc = login ? safeQrSrc(login.qr) : '';
 
           return e(
             Card,
-            { title: '免费渠道（可选）', hint: '凭据只在后端编解码，前端不接触明文' },
+            { title: '免费渠道服务', hint: '凭据只在后端编解码，前端不接触明文' },
             e(
               'div',
               { className: 'nh-col' },
+              busy.start || busy.refresh || busy.summary || busy.pool
+                ? e(TaskProgressBar, { op: { status: 'running', progress: { label: busy.start ? '正在启动免费渠道服务…' : busy.refresh ? '正在刷新免费模型清单…' : busy.pool ? '正在保存并授权免费模型池…' : '正在读取状态…' } } })
+                : null,
               e(
                 'div',
                 { className: 'nh-chips' },
@@ -7076,7 +7583,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     e(
                       'div',
                       { className: 'nh-row' },
-                      e(Button, { icon: 'plus', busy: busy.account, onClick: createAccount }, '发起登录'),
+                      e(Button, { icon: 'plus', busy: busy.account, disabled: !summary, onClick: createAccount }, '发起登录'),
                       e(Button, { icon: 'refresh', busy: busy.poll, onClick: () => pollLogin() }, '读取登录状态'),
                     ),
                   ),
@@ -7091,8 +7598,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         e(Badge, { tone: login.done && login.success ? 'ok' : login.done ? 'err' : 'accent' }, login.state || 'polling'),
                         e(Badge, { tone: 'mute' }, login.accountId || '—'),
                       ),
-                      login.url ? e('a', { className: 'nh-link', href: login.url, target: '_blank', rel: 'noreferrer' }, '在浏览器打开登录页') : null,
-                      login.qr ? e('img', { className: 'nh-qr', src: login.qr, alt: '渠道登录二维码' }) : null,
+                      loginHref ? e('a', { className: 'nh-link', href: loginHref, target: '_blank', rel: 'noreferrer' }, '在浏览器打开登录页') : null,
+                      loginQrSrc ? e('img', { className: 'nh-qr', src: loginQrSrc, alt: '渠道登录二维码' }) : null,
                       login.message ? e('div', { className: 'nh-note' }, String(login.message)) : null,
                       e(
                         'div',
@@ -7869,7 +8376,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   { className: 'nh-col', style: { gap: 8 } },
                   e(Field, { label: '对账来源' }, e(TextInput, { value: reconcileSource, onChange: setReconcileSource })),
                   e('textarea', {
-                    className: 'nh-input',
+                    className: 'nh-textarea',
+                    style: { minHeight: 88 },
                     rows: 4,
                     value: reconcileText,
                     placeholder: '示例：\n12,scheduled,2026-11-24T08:00:00+08:00\n13,published,2026-11-23T08:00:00+08:00',
@@ -8155,12 +8663,32 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function JobsPage(props) {
           const { overview, refreshOverview } = props;
           const toast = useToast();
+          const project = (overview.projects || [])[0] || null;
           const jobsList = overview.jobs || [];
+          const accounts = (overview.accounts || []).filter((item) => item && item.logged_in);
           const [selectedJobId, setSelectedJobId] = React.useState('');
           const [subTab, setSubTab] = React.useState('config');
+          const [createOpen, setCreateOpen] = React.useState(false);
+          const [newJob, setNewJob] = React.useState(() => ({
+            name: project ? `《${project.title}》· 日更` : '日更任务',
+            daily_time: '09:00',
+            chapters_per_run: '1',
+            word_count: '3500',
+            max_revisions: '1',
+            publication_mode: 'draft_only',
+            book: project ? project.title : '',
+            account: '',
+            enabled: true,
+          }));
           const job = jobsList.find((item) => item.id === selectedJobId) || jobsList[0] || null;
           const [busy, setBusy] = React.useState({});
           const [draft, setDraft] = React.useState(null);
+
+          React.useEffect(() => {
+            if (project && !createOpen) {
+              setNewJob((cur) => ({ ...cur, name: `《${project.title}》· 日更`, book: cur.book || project.title }));
+            }
+          }, [project && project.id, createOpen]);
 
           React.useEffect(() => {
             if (job && (!draft || draft._jobId !== job.id)) {
@@ -8181,27 +8709,129 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           }, [job, draft]);
 
-          if (!job) {
-            return e('div', { className: 'nh-page' }, e(Empty, null, '还没有日更任务'));
-          }
-
-          const cycle = job.cycle || {};
-          const quota = job.effective_quota || {};
-          const runtime = job.runtime || {};
+          const cycle = (job && job.cycle) || {};
+          const quota = (job && job.effective_quota) || {};
+          const runtime = (job && job.runtime) || {};
           const budget = runtime.recovery_budget || {};
+          const activeDailyOp = (props.allOperations || overview.operations || []).find(
+            (op) => op && OP_ACTIVE_STATUSES.includes(op.status) && op.kind === 'daily' && (!job || op.identity === job.id || op.project_id === (project && project.id)),
+          ) || null;
 
-          const act = async (label, path, body, method) => {
-            setBusy((current) => ({ ...current, [label]: true }));
+          const act = async (label, path, body, method, busyKey) => {
+            const key = busyKey || label;
+            setBusy((current) => ({ ...current, [key]: true }));
             try {
-              await api(path, { method: method || 'POST', body: body || {} });
+              await api(path, { method: method || 'POST', ...(method === 'DELETE' ? {} : { body: body || {} }) });
               toast.push(`${label} 完成`, 'ok');
-              refreshOverview();
+              await Promise.resolve(refreshOverview());
             } catch (error) {
               toast.push(`${label} 失败：${error.message}`, 'err');
             } finally {
-              setBusy((current) => ({ ...current, [label]: false }));
+              setBusy((current) => ({ ...current, [key]: false }));
             }
           };
+
+          const createJob = async () => {
+            if (!project) { toast.push('请先创建或选择作品', 'err'); return; }
+            const mode = ['draft_only', 'publish_now', 'platform_scheduled'].includes(newJob.publication_mode) ? newJob.publication_mode : 'draft_only';
+            if (mode !== 'draft_only' && !(newJob.account || '').trim()) {
+              toast.push('立即发布或按平台排期必须先选择已登录账号', 'err');
+              return;
+            }
+            setBusy((c) => ({ ...c, create: true }));
+            try {
+              const created = await api('/jobs', {
+                method: 'POST',
+                body: {
+                  name: newJob.name.trim() || `《${project.title}》· 日更`,
+                  project: project.path || project.id,
+                  book: (newJob.book || project.title).trim(),
+                  account: mode === 'draft_only' ? '' : (newJob.account || '').trim(),
+                  platform: 'fanqie',
+                  publication_mode: mode,
+                  daily_time: newJob.daily_time || '09:00',
+                  daily_times: [newJob.daily_time || '09:00'],
+                  timezone: FLOW_DEFAULT_TIMEZONE,
+                  chapters_per_run: Number(newJob.chapters_per_run) || 1,
+                  word_count: Number(newJob.word_count) || 3500,
+                  max_revisions: Number.isFinite(Number(newJob.max_revisions)) ? Number(newJob.max_revisions) : 1,
+                  enabled: Boolean(newJob.enabled),
+                  approval_mode: 'unattended',
+                },
+              });
+              toast.push('日更任务已创建', 'ok');
+              setCreateOpen(false);
+              if (created && created.id) setSelectedJobId(created.id);
+              await Promise.resolve(refreshOverview());
+            } catch (error) {
+              toast.push(`创建失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, create: false }));
+            }
+          };
+
+          const deleteJob = async () => {
+            if (!job || busy.del) return;
+            if (!window.confirm(`确定删除日更任务「${job.name || job.id}」？`)) return;
+            setBusy((c) => ({ ...c, del: true }));
+            try {
+              await api(`/jobs/${encodeURIComponent(job.id)}`, { method: 'DELETE' });
+              toast.push('任务已删除', 'ok');
+              setSelectedJobId('');
+              setDraft(null);
+              await Promise.resolve(refreshOverview());
+            } catch (error) {
+              toast.push(`删除失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, del: false }));
+            }
+          };
+
+          if (!job) {
+            return e(
+              'div',
+              { className: 'nh-page' },
+              e(
+                Card,
+                { title: '日更与定时任务', hint: project ? `当前作品：${project.title}` : '' },
+                e(Empty, null, '当前作品还没有安排日更任务'),
+                project
+                  ? e(
+                      'div',
+                      { className: 'nh-col', style: { gap: 12, marginTop: 14 } },
+                      e(
+                        'div',
+                        { className: 'nh-formgrid' },
+                        e(Field, { label: '任务名称' }, e(TextInput, { value: newJob.name, onChange: (v) => setNewJob({ ...newJob, name: v }) })),
+                        e(Field, { label: '每日时段' }, e(TextInput, { value: newJob.daily_time, onChange: (v) => setNewJob({ ...newJob, daily_time: v }) })),
+                        e(Field, { label: '每时段章数' }, e(TextInput, { type: 'number', value: newJob.chapters_per_run, onChange: (v) => setNewJob({ ...newJob, chapters_per_run: v }) })),
+                        e(Field, { label: '每章字数' }, e(TextInput, { type: 'number', value: newJob.word_count, onChange: (v) => setNewJob({ ...newJob, word_count: v }) })),
+                        e(Field, { label: '投递方式' }, e(Select, {
+                          value: newJob.publication_mode,
+                          onChange: (v) => setNewJob({ ...newJob, publication_mode: v }),
+                          options: [
+                            { value: 'draft_only', label: '只存稿（推荐，安全免账号）' },
+                            { value: 'publish_now', label: '立即发布到番茄' },
+                            { value: 'platform_scheduled', label: '按平台排期发布' },
+                          ],
+                        })),
+                        e(Field, { label: '账号' }, accounts.length
+                          ? e(Select, {
+                              value: newJob.account,
+                              onChange: (v) => setNewJob({ ...newJob, account: v }),
+                              options: [{ value: '', label: newJob.publication_mode === 'draft_only' ? '只存稿可不选' : '选择已登录账号…' }, ...accounts.map((item) => ({ value: item.name, label: item.name }))],
+                            })
+                          : e('div', { className: 'nh-muted', style: { fontSize: 12 } }, '没有已登录账号；只存稿仍可创建，发布/排期请先到发布队列登录。')),
+                      ),
+                      newJob.publication_mode !== 'draft_only' && !accounts.length
+                        ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, '发布或排期任务必须绑定已登录的番茄账号。')
+                        : null,
+                      e('div', { className: 'nh-row', style: { gap: 8 } }, e(Button, { kind: 'primary', icon: 'plus', busy: busy.create, onClick: createJob }, '创建日更任务')),
+                    )
+                  : null,
+              ),
+            );
+          }
 
           const saveJob = async () => {
             setBusy((current) => ({ ...current, save: true }));
@@ -8236,13 +8866,18 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               if (job.schedule_buffer !== undefined && job.schedule_buffer !== null) {
                 body.schedule_buffer = job.schedule_buffer;
               }
+              if (mode !== 'draft_only' && !String(body.account || '').trim()) {
+                toast.push('立即发布或按平台排期必须先选择已登录账号', 'err');
+                setBusy((current) => ({ ...current, save: false }));
+                return;
+              }
               await api(`/jobs/${job.id}`, {
                 method: 'PUT',
                 body,
               });
               toast.push('任务配置已保存', 'ok');
               await Promise.resolve(refreshOverview());
-              setDraft((current) => (current ? { ...current, _jobId: '' } : null));
+              setDraft((current) => (current ? { ...current, _jobId: job.id } : null));
             } catch (error) {
               toast.push(`保存失败：${error.message}`, 'err');
             } finally {
@@ -8336,11 +8971,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       ),
                       e(
                         'div',
-                        { className: 'nh-row', style: { gap: 8 } },
+                        { className: 'nh-row', style: { gap: 8, flexWrap: 'wrap' } },
                         e(Button, { kind: 'primary', icon: 'save', busy: busy.save, onClick: saveJob }, '保存配置'),
-                        e(Button, { icon: 'play', busy: busy.run, onClick: () => act('立即执行', `/jobs/${job.id}/run`) }, '立即执行'),
-                        e(Button, { icon: 'refresh', busy: busy.recover, onClick: () => act('恢复', `/jobs/${job.id}/recover`) }, '恢复'),
+                        e(Button, { icon: 'play', busy: busy.run, onClick: () => act('立即执行', `/jobs/${job.id}/run`, {}, 'POST', 'run') }, '立即执行'),
+                        e(Button, { icon: 'refresh', busy: busy.recover, onClick: () => act('恢复', `/jobs/${job.id}/recover`, {}, 'POST', 'recover') }, '恢复'),
+                        e(Button, { kind: 'danger', busy: busy.del, onClick: deleteJob }, '删除任务'),
                       ),
+                      activeDailyOp ? e('div', { style: { marginTop: 6 } }, e(TaskProgressBar, { op: activeDailyOp })) : null,
                     )
                   : e(Skeleton, {}),
               ),
@@ -8396,19 +9033,57 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   { value: 'runs', label: '运行与通知' },
                 ],
               }),
-              jobsList.length > 1
-                ? e(
-                    'div',
-                    { className: 'nh-row', style: { gap: 8, alignItems: 'center' } },
-                    e('span', { className: 'nh-k' }, '切换任务'),
-                    e(Select, {
+              e(
+                'div',
+                { className: 'nh-row', style: { gap: 8, alignItems: 'center' } },
+                jobsList.length > 1
+                  ? e(Select, {
                       value: job.id,
                       onChange: setSelectedJobId,
                       options: jobsList.map((item) => ({ value: item.id, label: `${item.name || item.id} (${item.book || ''})` })),
-                    }),
-                  )
-                : null,
+                    })
+                  : null,
+                e(Button, { size: 'sm', icon: 'plus', onClick: () => setCreateOpen(true) }, '新建任务'),
+              ),
             ),
+            e(Modal, {
+              open: createOpen,
+              title: '新建日更任务',
+              onClose: () => { if (!busy.create) setCreateOpen(false); },
+              children: e(
+                'div',
+                { className: 'nh-col', style: { gap: 12 } },
+                e('div', { className: 'nh-formgrid' },
+                  e(Field, { label: '任务名称' }, e(TextInput, { value: newJob.name, onChange: (v) => setNewJob({ ...newJob, name: v }) })),
+                  e(Field, { label: '每日时段' }, e(TextInput, { value: newJob.daily_time, onChange: (v) => setNewJob({ ...newJob, daily_time: v }) })),
+                  e(Field, { label: '每时段章数' }, e(TextInput, { type: 'number', value: newJob.chapters_per_run, onChange: (v) => setNewJob({ ...newJob, chapters_per_run: v }) })),
+                  e(Field, { label: '每章字数' }, e(TextInput, { type: 'number', value: newJob.word_count, onChange: (v) => setNewJob({ ...newJob, word_count: v }) })),
+                  e(Field, { label: '投递方式' }, e(Select, {
+                    value: newJob.publication_mode,
+                    onChange: (v) => setNewJob({ ...newJob, publication_mode: v }),
+                    options: [
+                      { value: 'draft_only', label: '只存稿（不需要账号）' },
+                      { value: 'publish_now', label: '立即发布到番茄' },
+                      { value: 'platform_scheduled', label: '按平台排期发布' },
+                    ],
+                  })),
+                  e(Field, { label: '账号' }, accounts.length
+                    ? e(Select, {
+                        value: newJob.account,
+                        onChange: (v) => setNewJob({ ...newJob, account: v }),
+                        options: [{ value: '', label: newJob.publication_mode === 'draft_only' ? '只存稿可不选' : '选择已登录账号…' }, ...accounts.map((item) => ({ value: item.name, label: item.name }))],
+                      })
+                    : e('div', { className: 'nh-muted', style: { fontSize: 12 } }, '没有已登录账号；只存稿仍可创建。')),
+                ),
+                newJob.publication_mode !== 'draft_only' && !accounts.length
+                  ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, '发布或排期任务必须绑定已登录的番茄账号，请先到发布队列登录。')
+                  : null,
+                e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
+                  e(Button, { disabled: busy.create, onClick: () => setCreateOpen(false) }, '取消'),
+                  e(Button, { kind: 'primary', busy: busy.create, onClick: createJob }, '创建'),
+                ),
+              ),
+            }),
             subTab === 'config'
               ? configBody
               : subTab === 'schedule'
@@ -8422,11 +9097,24 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function AIPage(props) {
           const { overview, refreshOverview } = props;
           const toast = useToast();
-          const [tab, setTab] = React.useState('roles');
+          const project = (overview && overview.projects || [])[0] || null;
+          const [tab, setTab] = React.useState(props.initialTab || 'roles');
+          React.useEffect(() => {
+            if (props.initialTab) setTab(props.initialTab);
+          }, [props.initialTab]);
           const providers = usePoll(() => api('/ai/providers'), [], 0);
           const hostModels = usePoll(() => api('/ai/host-models'), [], 0);
+          const freeSnapshot = usePoll(() => api('/ai/free-channels'), [], POLL_MS * 2);
           const [busy, setBusy] = React.useState({});
           const [draft, setDraft] = React.useState(null);
+          const [customOpen, setCustomOpen] = React.useState(false);
+          const [customForm, setCustomForm] = React.useState({
+            name: '',
+            protocol: 'openai_compatible',
+            base_url: '',
+            api_key: '',
+            models: '',
+          });
 
           React.useEffect(() => {
             if (providers.data && !draft) {
@@ -8532,6 +9220,94 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             finally { setBusy((current) => ({ ...current, host: false })); }
           };
 
+          const addCustomProvider = async () => {
+            if (!customForm.name.trim() || !customForm.base_url.trim()) {
+              toast.push('请填写供应商名称和接口地址', 'err');
+              return;
+            }
+            setBusy((c) => ({ ...c, addProv: true }));
+            try {
+              const models = customForm.models.split(/[\n,，\s]+/).map((s) => s.trim()).filter(Boolean);
+              await api('/ai/providers', {
+                method: 'POST',
+                body: {
+                  name: customForm.name.trim(),
+                  protocol: customForm.protocol || 'openai_compatible',
+                  base_url: customForm.base_url.trim(),
+                  api_key: customForm.api_key.trim(),
+                  models,
+                  enabled: true,
+                },
+              });
+              toast.push('自定义供应商已添加', 'ok');
+              setCustomOpen(false);
+              setCustomForm({ name: '', protocol: 'openai_compatible', base_url: '', api_key: '', models: '' });
+              providers.reload(true);
+            } catch (error) {
+              toast.push(`添加失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, addProv: false }));
+            }
+          };
+
+          const discoverModels = async (provider) => {
+            setBusy((c) => ({ ...c, ['disc-' + provider.id]: true }));
+            try {
+              const res = await api(`/ai/providers/${encodeURIComponent(provider.id)}/models`, { method: 'POST', body: {} });
+              toast.push(`发现 ${(res.models || []).length} 个可用模型`, 'ok');
+              providers.reload(true);
+            } catch (error) {
+              toast.push(`发现模型失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, ['disc-' + provider.id]: false }));
+            }
+          };
+
+          const deleteProvider = async (provider) => {
+            if (!window.confirm(`确定删除供应商「${provider.name}」？`)) return;
+            setBusy((c) => ({ ...c, ['del-' + provider.id]: true }));
+            try {
+              await api(`/ai/providers/${encodeURIComponent(provider.id)}`, { method: 'DELETE' });
+              toast.push(`已删除 ${provider.name}`, 'ok');
+              providers.reload(true);
+            } catch (error) {
+              toast.push(`删除失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, ['del-' + provider.id]: false }));
+            }
+          };
+
+          const scanFreeChannels = async () => {
+            setBusy((c) => ({ ...c, freeScan: true }));
+            try {
+              await api('/ai/free-channels/scan', { method: 'POST', body: {} });
+              toast.push('免费渠道扫描完成', 'ok');
+              freeSnapshot.reload(true);
+            } catch (error) {
+              toast.push(`扫描失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, freeScan: false }));
+            }
+          };
+
+          const importFreeChannel = async (channelId) => {
+            setBusy((c) => ({ ...c, ['imp-' + channelId]: true }));
+            try {
+              await api('/ai/free-channels/import', {
+                method: 'POST',
+                body: { channel_id: channelId, authorize_project: Boolean(project), ...(project ? { project: project.path || project.id } : {}) },
+              });
+              toast.push('已接入该免费渠道到当前可用模型池', 'ok');
+              freeSnapshot.reload(true);
+              providers.reload(true);
+              refreshOverview?.();
+            } catch (error) {
+              toast.push(`接入失败：${error.message}`, 'err');
+            } finally {
+              setBusy((c) => ({ ...c, ['imp-' + channelId]: false }));
+            }
+          };
+
           return e(
             'div',
             { className: 'nh-page' },
@@ -8540,7 +9316,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               { className: 'nh-tabs' },
               [
                 ['roles', '模型与角色'],
-                ['providers', '供应商'],
+                ['free', '免费渠道'],
+                ['providers', '供应商管理'],
                 ['checks', '连接检查'],
               ].map((pair) =>
                 e(
@@ -8658,13 +9435,53 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 )
               : null,
 
+            tab === 'free'
+              ? e(
+                  'div',
+                  { className: 'nh-col', style: { gap: 'var(--nh-gap)' } },
+                  e(FreeChannelCard, { project, refreshOverview }),
+                  e(
+                    Card,
+                    {
+                      title: '本地免费额度网关渠道',
+                      hint: `${(freeSnapshot.data && freeSnapshot.data.connected_channels) || 0} 个已连接`,
+                      actions: e(Button, { size: 'sm', busy: busy.freeScan, onClick: scanFreeChannels }, '扫描本机免费渠道'),
+                    },
+                    ((freeSnapshot.data && freeSnapshot.data.channels) || []).length
+                      ? e(
+                          'div',
+                          { className: 'nh-catalog' },
+                          (freeSnapshot.data.channels || []).map((ch) =>
+                            e(
+                              'div',
+                              { key: ch.id, className: 'nh-panel' },
+                              e(
+                                'div',
+                                { className: 'nh-row', style: { justifyContent: 'space-between' } },
+                                e('strong', null, ch.name || ch.id),
+                                ch.imported ? e(Badge, { tone: 'ok' }, '已接入') : e(Badge, { tone: 'mute' }, ch.org || '免费额度'),
+                              ),
+                              e('div', { className: 'nh-muted' }, `账号 ${ch.enabled_accounts || 0}/${ch.accounts || 0} · 模型 ${(ch.models || []).length}`),
+                              e(Button, { size: 'sm', busy: busy['imp-' + ch.id], onClick: () => importFreeChannel(ch.id) }, ch.imported ? '重新同步' : '一键接入并授权'),
+                            ),
+                          ),
+                        )
+                      : e('div', { className: 'nh-muted' }, '点击右上角“扫描本机免费渠道”，也可直接在上方“免费渠道服务”登录后使用。'),
+                  ),
+                )
+              : null,
+
             tab === 'providers'
               ? e(
                   'div',
                   null,
                   e(
                     Card,
-                    { title: '供应商', hint: `${providerList.length} 个` },
+                    {
+                      title: '供应商',
+                      hint: `${providerList.length} 个`,
+                      actions: e(Button, { size: 'sm', kind: 'primary', icon: 'plus', onClick: () => setCustomOpen(true) }, '添加自定义供应商'),
+                    },
                     e(
                       'div',
                       { className: 'nh-col', style: { gap: 10 } },
@@ -8673,22 +9490,28 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           'div',
                           {
                             key: provider.id,
-                            style: { border: '1px solid var(--nh-border-soft)', padding: '11px 13px' },
+                            style: { border: '1px solid var(--nh-border-soft)', padding: '11px 13px', borderRadius: 'var(--radius-sm)' },
                           },
                           e(
                             'div',
-                            { className: 'nh-row', style: { gap: 9 } },
+                            { className: 'nh-row', style: { gap: 9, flexWrap: 'wrap' } },
                             e('span', { style: { fontSize: 13, fontWeight: 500 } }, provider.name),
                             e(Badge, { tone: provider.enabled ? 'ok' : 'mute' }, provider.enabled ? '启用' : '停用'),
                             e(Badge, { tone: 'mute' }, provider.id === (hostModels.data && hostModels.data.provider_id) ? '宿主连接' : provider.protocol),
                             provider.has_key ? e(Badge, { tone: 'accent' }, '已连接') : e(Badge, { tone: 'warn' }, '待配置'),
                             e('span', { className: 'nh-spacer' }),
                             e('span', { className: 'nh-k' }, `${(provider.models || []).length} 模型`),
+                            !['free_pool', 'ofm_standalone'].includes(provider.protocol)
+                              ? e(Button, { size: 'sm', kind: 'ghost', busy: busy['disc-' + provider.id], onClick: () => discoverModels(provider) }, '发现模型')
+                              : null,
                             e(
                               Button,
                               { size: 'sm', busy: busy[provider.id], onClick: () => toggleProvider(provider) },
                               provider.enabled ? '停用' : '启用',
                             ),
+                            !provider.builtin && !['free_pool', 'ofm_standalone'].includes(provider.protocol) && provider.id !== (hostModels.data && hostModels.data.provider_id)
+                              ? e(Button, { size: 'sm', kind: 'danger', busy: busy['del-' + provider.id], onClick: () => deleteProvider(provider) }, '删除')
+                              : null,
                           ),
                           e(
                             'div',
@@ -8772,6 +9595,33 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   ),
                 )
               : null,
+
+            e(Modal, {
+              open: customOpen,
+              title: '添加自定义 AI 供应商',
+              onClose: () => { if (!busy.addProv) setCustomOpen(false); },
+              children: e(
+                'div',
+                { className: 'nh-col', style: { gap: 12 } },
+                e('div', { className: 'nh-formgrid' },
+                  e(Field, { label: '名称' }, e(TextInput, { value: customForm.name, onChange: (v) => setCustomForm({ ...customForm, name: v }), placeholder: '例如：我的中转站' })),
+                  e(Field, { label: '协议' }, e(Select, {
+                    value: customForm.protocol,
+                    onChange: (v) => setCustomForm({ ...customForm, protocol: v }),
+                    options: [
+                      { value: 'openai_compatible', label: 'OpenAI 兼容 (/v1)' },
+                    ],
+                  })),
+                ),
+                e(Field, { label: '接口地址 (Base URL)' }, e(TextInput, { value: customForm.base_url, onChange: (v) => setCustomForm({ ...customForm, base_url: v }), placeholder: 'https://api.example.com/v1' })),
+                e(Field, { label: 'API Key（仅保存在本地安全存储）' }, e(TextInput, { type: 'password', value: customForm.api_key, onChange: (v) => setCustomForm({ ...customForm, api_key: v }), placeholder: 'sk-...' })),
+                e(Field, { label: '模型 ID（逗号或换行分隔，可留空后点击“发现模型”）' }, e('textarea', { className: 'nh-textarea', rows: 3, value: customForm.models, onChange: (ev) => setCustomForm({ ...customForm, models: ev.target.value }) })),
+                e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
+                  e(Button, { disabled: busy.addProv, onClick: () => setCustomOpen(false) }, '取消'),
+                  e(Button, { kind: 'primary', busy: busy.addProv, onClick: addCustomProvider }, '保存供应商'),
+                ),
+              ),
+            }),
           );
         }
 
@@ -8831,9 +9681,12 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
+          if (!project) {
+            return props.embedded ? e(Empty, null, '请先创建或选择一部作品') : e('div', { className: 'nh-page' }, e(Empty, null, '请先创建或选择一部作品'));
+          }
           return e(
             'div',
-            { className: 'nh-page' },
+            { className: props.embedded ? undefined : 'nh-page' },
             e(
               Card,
               {
@@ -8963,7 +9816,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               hint: data ? `${rows.length} 个样本` : '',
               actions: e(
                 'label',
-                { className: 'nh-btn nh-btn-sm', style: { cursor: 'pointer' } },
+                { className: 'nh-btn', 'data-size': 'sm', style: { cursor: 'pointer' } },
                 busy === 'upload' ? '上传中…' : '上传 TXT',
                 e('input', { type: 'file', accept: '.txt,text/plain', style: { display: 'none' }, onChange: upload }),
               ),
@@ -9012,8 +9865,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     value: strength === null ? (data ? data.strength : 60) : strength,
                     style: { flex: 1 },
                     onChange: (event) => setStrength(Number(event.target.value)),
-                    onMouseUp: () => save({ strength }),
-                    onTouchEnd: () => save({ strength }),
+                    onMouseUp: () => save({ strength: strength ?? (data ? data.strength : 60) }),
+                    onTouchEnd: () => save({ strength: strength ?? (data ? data.strength : 60) }),
+                    onKeyUp: () => save({ strength: strength ?? (data ? data.strength : 60) }),
                   }),
                   e('span', { className: 'nh-muted', style: { fontSize: 12 } }, '强度只是参考程度，不承诺线性效果'),
                 ),
@@ -9048,14 +9902,25 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function OutlinePage(props) {
           const project = (props.overview.projects || [])[0];
           const toast = useToast();
+          const [subTab, setSubTab] = React.useState(props.initialTab || 'outline');
+          React.useEffect(() => {
+            if (props.initialTab) setSubTab(props.initialTab);
+          }, [props.initialTab]);
           const draftKey = 'outline:' + project?.id;
           const [draft, setDraft] = React.useState(() => props.drafts?.get(draftKey) || null);
           const [busy, setBusy] = React.useState(false);
+          const planOp = (props.allOperations || props.overview.operations || []).find(
+            (op) => op && project && op.project_id === project.id && op.kind === 'plan' && OP_ACTIVE_STATUSES.includes(op.status),
+          ) || null;
           const outline = usePoll(
             () => (project ? api(`/projects/${project.id}/outline`) : Promise.resolve(null)),
-            [project?.id], POLL_MS,
+            [project?.id], planOp ? LIVE_POLL_MS : POLL_MS,
           );
           const data = outline.data?.project_id === project?.id ? outline.data : null;
+
+          if (!project) {
+            return e('div', { className: 'nh-page' }, e(Empty, null, '请先创建或选择一部作品'));
+          }
 
           const edit = (content) => {
             if (!data?.editable) return;
@@ -9095,26 +9960,47 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          return e('div', { className: 'nh-page' }, e(Card, {
+          const discardDraft = () => {
+            props.drafts?.delete(draftKey);
+            setDraft(null);
+            outline.reload(true);
+            toast.push('已放弃未保存草稿', 'ok');
+          };
+
+          const outlineCard = e(Card, {
             title: '大纲与规划',
             hint: project?.title,
-            actions: e('div', { className: 'nh-row', style: { gap: 7 } },
-              e(Button, { size: 'sm', icon: 'cpu', busy, disabled: !data || Boolean(draft) || (!project.chapters && project.ready), onClick: generate }, project?.chapters ? '生成规划' : '生成首章细纲'),
+            actions: e('div', { className: 'nh-row', style: { gap: 7, flexWrap: 'wrap' } },
+              draft ? e(Button, { size: 'sm', kind: 'ghost', disabled: busy, onClick: discardDraft }, '放弃草稿') : null,
+              e(Button, { size: 'sm', icon: 'cpu', busy, disabled: !data || Boolean(draft) || Boolean(planOp) || (!project.chapters && project.ready), onClick: generate }, project?.chapters ? '生成规划' : '生成首章细纲'),
               e(Button, { size: 'sm', kind: 'primary', icon: 'save', busy, disabled: !data?.editable || !draft, onClick: save }, '保存')),
           },
-            outline.error ? e('p', { role: 'alert' }, outline.error) : null,
+            planOp ? e('div', { style: { marginBottom: 10 } }, e(TaskProgressBar, { op: planOp })) : null,
+            outline.error ? e('div', { className: 'nh-inline-err', role: 'alert' }, outline.error) : null,
             !data && !outline.error ? e(Skeleton, {}) : null,
             data && !data.editable ? e('p', { className: 'nh-note' }, '此处合并预览各卷。请在作品目录里按卷编辑。') : null,
             data && draft && draft.revision !== data.revision ? e('div', { className: 'nh-row' },
               e('span', { role: 'alert' }, '大纲已更新，当前草稿仍保留。'),
               e(Button, { disabled: busy, onClick: () => {
                 if (!confirm('放弃本书的未保存草稿，重新载入？')) return;
-                props.drafts?.delete(draftKey); setDraft(null); outline.reload(false);
+                discardDraft();
               } }, '重新载入')) : null,
             data ? e('textarea', { className: 'nh-textarea', style: { minHeight: 420 },
               value: draft?.content ?? data.content, readOnly: !data.editable || busy,
               placeholder: '## 第1章 章节标题\n本章目标、冲突与结尾钩子',
-              onChange: (event) => edit(event.target.value) }) : null));
+              onChange: (event) => edit(event.target.value) }) : null);
+
+          return e(
+            'div',
+            { className: 'nh-page' },
+            e(
+              'div',
+              { className: 'cw-subtabs' },
+              e('button', { type: 'button', className: 'cw-subtab', 'data-active': subTab === 'outline' ? 'true' : 'false', onClick: () => setSubTab('outline') }, '章节细纲与卷纲'),
+              e('button', { type: 'button', className: 'cw-subtab', 'data-active': subTab === 'brief' ? 'true' : 'false', onClick: () => setSubTab('brief') }, '创作约定与文风'),
+            ),
+            subTab === 'outline' ? outlineCard : e(BriefPage, { ...props, embedded: true }),
+          );
         }
 
         function BookStart(props) {
@@ -9160,15 +10046,44 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function OperationsPage(props) {
           const { overview } = props;
+          const toast = useToast();
           const [expanded, setExpanded] = React.useState(null);
-          const operations = overview.operations || [];
+          const [onlyCurrent, setOnlyCurrent] = React.useState(false);
+          const project = (overview.projects || [])[0] || null;
+          const sourceOps = props.allOperations || overview.operations || [];
+          const projectMap = new Map(((overview && overview.projects) || []).map((p) => [p.id, p.title]));
+          const operations = onlyCurrent && project
+            ? sourceOps.filter((op) => op.project_id === project.id)
+            : sourceOps;
+
+          const cancelOp = async (id, event) => {
+            event.stopPropagation();
+            try {
+              await api(`/operations/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+              toast.push('已请求取消任务', 'ok');
+              props.refreshOverview?.();
+            } catch (error) {
+              toast.push(`取消失败：${error.message}`, 'err');
+            }
+          };
 
           return e(
             'div',
-            { className: 'nh-page' },
+            { className: props.embedded ? undefined : 'nh-page' },
             e(
               Card,
-              { title: '操作历史', hint: `${operations.length} 条` },
+              {
+                title: '操作历史',
+                hint: `${operations.length} 条`,
+                actions: project
+                  ? e('button', {
+                      type: 'button',
+                      className: 'nh-tagbtn',
+                      'data-active': onlyCurrent ? 'true' : 'false',
+                      onClick: () => setOnlyCurrent((v) => !v),
+                    }, onlyCurrent ? '仅看当前作品' : '全部作品')
+                  : null,
+              },
               e(
                 'div',
                 { className: 'nh-scroll' },
@@ -9181,45 +10096,58 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     e(
                       'tr',
                       null,
-                      e('th', { style: { width: 130 } }, '时间'),
-                      e('th', { style: { width: 80 } }, '类型'),
-                      e('th', null, '目标'),
-                      e('th', { style: { width: 90 } }, '状态'),
-                      e('th', { style: { width: 60 } }, ''),
+                      e('th', { style: { width: 120 } }, '时间'),
+                      e('th', { style: { width: 100 } }, '类型'),
+                      e('th', null, '作品 / 目标'),
+                      e('th', { style: { width: 160 } }, '状态与进度'),
+                      e('th', { style: { width: 100 } }, '操作'),
                     ),
                   ),
                   e(
                     'tbody',
                     null,
-                    operations.map((operation) =>
-                      e(
+                    operations.map((operation) => {
+                      const isActive = OP_ACTIVE_STATUSES.includes(operation.status);
+                      const bookLabel = operation.project_title || projectMap.get(operation.project_id) || '';
+                      return e(
                         React.Fragment,
                         { key: operation.id },
                         e(
                           'tr',
                           { 'data-clickable': 'true', onClick: () => setExpanded(expanded === operation.id ? null : operation.id) },
                           e('td', { className: 'nh-mono', style: { fontSize: 11 } }, shortTime(operation.created_at)),
-                          e('td', null, operation.kind),
-                          e('td', { className: 'nh-wrap' }, operation.identity),
+                          e('td', null, OP_KIND_LABELS[operation.kind] || operation.kind),
+                          e('td', { className: 'nh-wrap' }, bookLabel ? `${bookLabel} · ${operation.identity || ''}` : (operation.identity || '—')),
+                          e(
+                            'td',
+                            null,
+                            isActive
+                              ? e(TaskProgressBar, { op: operation, compact: true })
+                              : e(
+                                  Badge,
+                                  {
+                                    tone:
+                                      operation.status === 'success'
+                                        ? 'ok'
+                                        : operation.status === 'failed'
+                                          ? 'err'
+                                          : 'mute',
+                                  },
+                                  OP_STATUS_LABELS[operation.status] || operation.status,
+                                ),
+                          ),
                           e(
                             'td',
                             null,
                             e(
-                              Badge,
-                              {
-                                tone:
-                                  operation.status === 'success'
-                                    ? 'ok'
-                                    : operation.status === 'failed'
-                                      ? 'err'
-                                      : operation.status === 'running'
-                                        ? 'accent'
-                                        : 'mute',
-                              },
-                              operation.status,
+                              'div',
+                              { className: 'nh-row', style: { gap: 6 } },
+                              isActive
+                                ? e(Button, { size: 'sm', kind: 'ghost', onClick: (ev) => cancelOp(operation.id, ev) }, '取消')
+                                : null,
+                              e('span', { className: 'nh-k' }, expanded === operation.id ? '收起' : '日志'),
                             ),
                           ),
-                          e('td', { className: 'nh-k' }, expanded === operation.id ? '收起' : '展开'),
                         ),
                         expanded === operation.id
                           ? e(
@@ -9245,8 +10173,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                               ),
                             )
                           : null,
-                      ),
-                    ),
+                      );
+                    }),
                   ),
                 ),
               ),
@@ -9313,18 +10241,58 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         /* ---------------------------------------------------------- 模型定价 */
 
-        function PricingPage() {
+        function PricingPage(props) {
+          const toast = useToast();
           const pricing = usePoll(() => api('/costs/pricing'), [], 0);
           const data = pricing.data || {};
-          const rates = data.rates || [];
+          const serverRates = data.rates || [];
           const models = data.models || [];
+          const [edits, setEdits] = React.useState({});
+          const [saving, setSaving] = React.useState(false);
+
+          const rateFor = (rate, field) => {
+            const rowEdit = edits[pricingRateKey(rate)];
+            if (rowEdit && rowEdit[field] !== undefined) return rowEdit[field];
+            return rate[field] ?? '';
+          };
+          const setRate = (key, field, val) => {
+            setEdits((cur) => ({ ...cur, [key]: { ...(cur[key] || {}), [field]: val } }));
+          };
+          const savePricing = async () => {
+            if (saving) return;
+            const payload = buildPricingPayload(data, edits);
+            if (!payload.rates.length) {
+              toast.push('没有可保存的定价：每行都需要接口地址与模型名', 'err');
+              return;
+            }
+            setSaving(true);
+            try {
+              await api('/costs/pricing', {
+                method: 'PUT',
+                body: payload,
+              });
+              setEdits({});
+              toast.push('模型定价已更新并重算历史未计价记录', 'ok');
+              pricing.reload(true);
+            } catch (error) {
+              toast.push(`保存定价失败：${error.message}`, 'err');
+            } finally {
+              setSaving(false);
+            }
+          };
 
           return e(
             'div',
-            { className: 'nh-page' },
+            { className: props && props.embedded ? undefined : 'nh-page' },
             e(
               Card,
-              { title: '模型定价', hint: `revision ${data.revision || 0}` },
+              {
+                title: '模型定价（每百万 Token）',
+                hint: `revision ${data.revision || 0}`,
+                actions: Object.keys(edits).length
+                  ? e(Button, { size: 'sm', kind: 'primary', icon: 'save', busy: saving, onClick: savePricing }, '保存定价并重算')
+                  : null,
+              },
               e(
                 'div',
                 { className: 'nh-scroll' },
@@ -9347,15 +10315,40 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   e(
                     'tbody',
                     null,
-                    rates.map((rate) =>
+                    serverRates.map((rate) =>
                       e(
                         'tr',
-                        { key: rate.model },
+                        { key: pricingRateKey(rate) },
                         e('td', { className: 'nh-mono', style: { fontSize: 11 } }, rate.model),
                         e('td', null, rate.currency),
-                        e('td', { className: 'nh-right nh-mono' }, rate.input),
-                        e('td', { className: 'nh-right nh-mono' }, rate.output),
-                        e('td', { className: 'nh-right nh-mono' }, rate.cached || '—'),
+                        e('td', { className: 'nh-right' }, e('input', {
+                          type: 'number',
+                          step: '0.01',
+                          min: '0',
+                          className: 'nh-input nh-mono',
+                          style: { width: 86, textAlign: 'right' },
+                          value: rateFor(rate, 'input'),
+                          onChange: (ev) => setRate(pricingRateKey(rate), 'input', ev.target.value),
+                        })),
+                        e('td', { className: 'nh-right' }, e('input', {
+                          type: 'number',
+                          step: '0.01',
+                          min: '0',
+                          className: 'nh-input nh-mono',
+                          style: { width: 86, textAlign: 'right' },
+                          value: rateFor(rate, 'output'),
+                          onChange: (ev) => setRate(pricingRateKey(rate), 'output', ev.target.value),
+                        })),
+                        e('td', { className: 'nh-right' }, e('input', {
+                          type: 'number',
+                          step: '0.01',
+                          min: '0',
+                          className: 'nh-input nh-mono',
+                          style: { width: 86, textAlign: 'right' },
+                          placeholder: '—',
+                          value: rateFor(rate, 'cached'),
+                          onChange: (ev) => setRate(pricingRateKey(rate), 'cached', ev.target.value),
+                        })),
                       ),
                     ),
                   ),
@@ -9413,26 +10406,34 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [tab, setTab] = React.useState('body');
           const [tick, setTick] = React.useState(0);
           const [loading, setLoading] = React.useState(false);
+          const [loadError, setLoadError] = React.useState('');
+          const loadedKeyRef = React.useRef('');
           const toast = useToast();
 
           React.useEffect(() => {
             if (!props.open || !props.projectId || !props.chapter) return undefined;
             let alive = true;
-            setLoading(true);
-            setData(null);
-            setQuality(null);
-            setRevision(null);
-            setBench(null);
-            setPrecheck(null);
-            setVersionBody(null);
-            setPrecheckNote('');
-            setIgnoreDraft('');
+            const key = `${props.projectId}:${props.chapter}`;
+            const switching = loadedKeyRef.current !== key;
+            loadedKeyRef.current = key;
+            setLoadError('');
+            if (switching) {
+              setLoading(true);
+              setData(null);
+              setQuality(null);
+              setRevision(null);
+              setBench(null);
+              setPrecheck(null);
+              setVersionBody(null);
+              setPrecheckNote('');
+              setIgnoreDraft('');
+            }
             api(`/projects/${props.projectId}/chapters/${props.chapter}`)
               .then((value) => {
                 if (alive) setData(value);
               })
-              .catch(() => {
-                if (alive) setData(null);
+              .catch((err) => {
+                if (alive) setLoadError(String((err && err.message) || err || '读取失败'));
               })
               .finally(() => {
                 if (alive) setLoading(false);
@@ -9492,6 +10493,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               await api(path, { method: 'POST', body: body || {} });
               toast.push(`${label} 已提交`, 'ok');
               setTick((value) => value + 1);
+              props.onChanged?.();
             } catch (error) {
               toast.push(`${label} 失败：${error.message}`, 'err');
             } finally {
@@ -9606,16 +10608,48 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 ? e(
                     'div',
                     null,
+                    loadError
+                      ? e('div', { className: 'nh-inline-err', style: { marginBottom: 10 } }, `本章刷新失败：${loadError}。以下为上一次成功读取的内容，可能已过期。`)
+                      : null,
                     e(
                       'div',
                       { className: 'nh-row', style: { gap: 10, marginBottom: 10 } },
                       e(Badge, { tone: 'mute' }, `${num(data.words)} 字`),
-                      data.reviewed ? e(Badge, { tone: 'ok' }, '已审查') : e(Badge, { tone: 'warn' }, '未审查'),
+                      data.reviewed
+                        ? e(Badge, { tone: 'ok' }, data.review_status === 'human_approved' ? '人工复核通过' : '已审查')
+                        : data.human_review_required
+                          ? e(Badge, { tone: 'warn' }, '待人工复核')
+                          : e(Badge, { tone: 'warn' }, '未审查'),
                       e(Badge, { tone: qualityTone }, qualityLabel),
                       report && report.total != null
                         ? e(Badge, { tone: 'mute' }, `总分 ${report.total}`)
                         : null,
                     ),
+                    data.human_review_required && !data.reviewed
+                      ? e(
+                          'div',
+                          { className: 'cw-review-banner', style: { marginBottom: 10 } },
+                          e(
+                            'div',
+                            null,
+                            e('strong', null, data.auto_review_count ? `本章已完成 ${data.auto_review_count} 次自动审查，已转交人工复核` : '本章已达自动审查上限，已转交人工复核'),
+                            e('div', { className: 'nh-muted' }, '作者确认正文无误后点击右侧按钮即可标记通过，不阻断后续章节写作。'),
+                          ),
+                          e(
+                            Button,
+                            {
+                              size: 'sm',
+                              kind: 'primary',
+                              busy: revBusy,
+                              onClick: () =>
+                                revCall('人工复核通过', `/projects/${props.projectId}/chapters/${props.chapter}/approve-review`, {
+                                  note: '章节详情弹窗人工确认通过',
+                                }),
+                            },
+                            '人工复核通过',
+                          ),
+                        )
+                      : null,
                     staleText
                       ? e('div', { className: 'nh-muted', style: { marginBottom: 8 } }, staleText)
                       : null,
@@ -9642,6 +10676,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         ),
                       ),
                     ),
+                    tab === 'quality' && !report
+                      ? e('div', { className: 'nh-note', style: { marginBottom: 8 } }, '暂无质量报告；可对本章重新发起审查或人工确认。')
+                      : null,
                     tab === 'quality' && report && report.scores
                       ? e(
                           'div',
@@ -9902,7 +10939,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                   { className: 'nh-panel' },
                                   e('div', { className: 'nh-k', style: { marginBottom: 6 } }, '忽略词表（每行或逗号分隔一条）'),
                                   e('textarea', {
-                                    className: 'nh-input',
+                                    className: 'nh-textarea',
+                                    style: { minHeight: 80 },
                                     rows: 3,
                                     value: ignoreDraft,
                                     placeholder: '输入需要跳过预检检查的专有名词或习惯表达',
@@ -9927,7 +10965,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         )
                       : null,
                   )
-                : e(Empty, null, '读取失败'),
+                : loadError
+                  ? e('div', { className: 'nh-inline-err' }, `读取失败：${loadError}`)
+                  : e(Empty, null, '读取失败'),
           });
         }
 
@@ -10288,6 +11328,74 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const index = complete || publishing ? 4 : belongs ? (roleIndex >= 0 ? roleIndex : stageIndex ?? (active ? 1 : -1)) : active ? 1 : -1;
           return { index, complete, active: active && !/retry_wait|blocked|failed/.test(cycle.stage || '') };
         }
+        function loginPollReady(login) {
+          /* `pending` was a dead end: the old polling gate rejected it, so the
+             card claimed auto-refresh but never polled. No real handle means no
+             interval; the manual "读取登录状态" button resolves one first. */
+          return Boolean(login && !login.done && login.provider && login.accountId && login.accountId !== 'pending');
+        }
+        function safeHttpUrl(value) {
+          const text = String(value || '').trim();
+          if (!text) return '';
+          try {
+            const parsed = new URL(text);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+          } catch {
+            return '';
+          }
+        }
+        function safeQrSrc(value) {
+          const text = String(value || '').trim();
+          if (!text) return '';
+          if (/^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);/i.test(text)) return text;
+          return safeHttpUrl(text);
+        }
+        function pricingRateKey(rate) {
+          /* A model id alone is not unique: the same model can be priced at
+             several base URLs, and each row must keep its own edit state. */
+          return `${String((rate && rate.base_url) || '')}\u0000${String((rate && rate.model) || '')}`;
+        }
+        function buildPricingPayload(data, edits) {
+          /* Mirrors CostRateInput: base_url/model/currency/input_per_million/
+             output_per_million/cached_per_million. usd_to_cny is optional, so a
+             null server value stays null instead of being rewritten to 7.2. */
+          const rates = [];
+          for (const rate of (data && data.rates) || []) {
+            const edit = (edits && edits[pricingRateKey(rate)]) || {};
+            const baseUrl = String((rate && rate.base_url) || '').trim();
+            const model = String((rate && rate.model) || '').trim();
+            if (!baseUrl || !model) continue;
+            const inputValue = Number(edit.input !== undefined ? edit.input : rate.input);
+            const outputValue = Number(edit.output !== undefined ? edit.output : rate.output);
+            const cachedRaw = edit.cached !== undefined ? edit.cached : rate.cached;
+            const cachedValue = Number(cachedRaw);
+            rates.push({
+              base_url: baseUrl,
+              model,
+              currency: ['CNY', 'USD'].includes(rate.currency) ? rate.currency : 'CNY',
+              input_per_million: Number.isFinite(inputValue) && inputValue >= 0 ? inputValue : Number(rate.input) || 0,
+              output_per_million: Number.isFinite(outputValue) && outputValue >= 0 ? outputValue : Number(rate.output) || 0,
+              ...(cachedRaw !== '' && cachedRaw !== null && cachedRaw !== undefined && Number.isFinite(cachedValue) && cachedValue >= 0
+                ? { cached_per_million: cachedValue }
+                : {}),
+            });
+          }
+          const payload = {
+            revision: Number((data && data.revision) || 0),
+            rates,
+            reprice_unpriced: true,
+          };
+          const fx = data && data.usd_to_cny;
+          if (fx !== null && fx !== undefined && fx !== '' && Number.isFinite(Number(fx)) && Number(fx) > 0) {
+            payload.usd_to_cny = Number(fx);
+          }
+          return payload;
+        }
+        function pendingBatchId(batch) {
+          /* studio.pending_batches() returns rows keyed by `id`; the old UI read
+             `batch_id` and encoded "undefined" into the resume/abandon URL. */
+          return batch && batch.id ? String(batch.id) : '';
+        }
         function matchesProject(job, project) {
           if (!job || !project) return false;
           const normalize = path => String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
@@ -10309,16 +11417,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         const HUBS = [
           { id: 'work', label: '工作台', groupId: 'overview', routes: ['dashboard'] },
-          { id: 'studio', label: '创作室', groupId: 'creation', routes: ['chapters', 'outline', 'brief', 'flow'] },
-          { id: 'insights', label: '记忆与洞察', groupId: 'creation', routes: ['memory', 'readers'] },
-          { id: 'publish', label: '发布与排期', groupId: 'publish', routes: ['publish', 'setup'] },
-          { id: 'ops', label: '日更与运行', groupId: 'publish', routes: ['jobs', 'operations'] },
-          { id: 'system', label: '模型与系统', groupId: 'system', routes: ['ai', 'providers', 'free', 'costs'] },
+          { id: 'studio', label: '创作室', groupId: 'creation', routes: ['chapters', 'outline', 'memory', 'readers'] },
+          { id: 'publish', label: '发布与日更', groupId: 'publish', routes: ['jobs', 'publish'] },
+          { id: 'system', label: '模型与系统', groupId: 'system', routes: ['ai', 'costs'] },
         ];
 
         function Shell() {
           const service = useService();
           const [route, setRoute] = React.useState('dashboard');
+          const [subTabs, setSubTabs] = React.useState({ outline: '', ai: '', costs: '' });
+          const [newBookOpen, setNewBookOpen] = React.useState(false);
+          const [taskPopOpen, setTaskPopOpen] = React.useState(false);
           const [selectedProject, setSelectedProject] = React.useState(() => {
             try { return localStorage.getItem('chapter-whale-project') || ''; } catch { return ''; }
           });
@@ -10332,9 +11441,45 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const openCreatedProject = (project, hasMaterial) => {
             setCreatedProject(project);
             selectProject(project.id);
-            setRoute(project.ready || hasMaterial ? 'outline' : 'brief');
+            if (project.ready || hasMaterial) {
+              setSubTabs((s) => ({ ...s, outline: 'outline' }));
+            } else {
+              setSubTabs((s) => ({ ...s, outline: 'brief' }));
+            }
+            setRoute('outline');
             overview.reload(true);
           };
+          const navigate = React.useCallback((nextRoute) => {
+            if (nextRoute === 'setup') {
+              setNewBookOpen(true);
+              return;
+            }
+            if (nextRoute === 'flow') {
+              setRoute('chapters');
+              return;
+            }
+            if (nextRoute === 'brief') {
+              setSubTabs((s) => ({ ...s, outline: 'brief' }));
+              setRoute('outline');
+              return;
+            }
+            if (nextRoute === 'free') {
+              setSubTabs((s) => ({ ...s, ai: 'free' }));
+              setRoute('ai');
+              return;
+            }
+            if (nextRoute === 'providers') {
+              setSubTabs((s) => ({ ...s, costs: 'pricing' }));
+              setRoute('costs');
+              return;
+            }
+            if (nextRoute === 'operations') {
+              setSubTabs((s) => ({ ...s, costs: 'logs' }));
+              setRoute('costs');
+              return;
+            }
+            setRoute(nextRoute);
+          }, []);
           const [appearance, setAppearance] = React.useState(readAppearance);
           const [appearanceOpen, setAppearanceOpen] = React.useState(false);
           const [projectPopOpen, setProjectPopOpen] = React.useState(false);
@@ -10366,7 +11511,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const liveJobs = usePoll(() => (service.state.running ? api('/jobs') : Promise.resolve(null)), [service.state.running], LIVE_POLL_MS);
 
           React.useEffect(() => {
-            const timer = setInterval(() => service.refresh(), POLL_MS);
+            const timer = setInterval(() => { if (!document.hidden) service.refresh(); }, POLL_MS);
             return () => clearInterval(timer);
           }, [service.refresh]);
 
@@ -10378,29 +11523,38 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             ? allProjects.find((item) => item.id === selectedProject) || null
             : allProjects[0] || null;
           React.useEffect(() => { if (nowListed) setCreatedProject(null); }, [nowListed]);
-          const selectedOverview = overview.data ? { ...overview.data, projects: project ? [project, ...allProjects.filter((item) => item.id !== project.id)] : [], jobs: (overview.data.jobs || []).filter(item => matchesProject(item, project)) } : null;
+          React.useEffect(() => {
+            if (selectedProject && allProjects.length && !allProjects.some((item) => item.id === selectedProject)) {
+              selectProject(allProjects[0].id);
+            }
+          }, [selectedProject, allProjects.length]);
+          const allOperations = (overview.data && overview.data.operations) || [];
+          const activeOps = allOperations.filter((op) => op && OP_ACTIVE_STATUSES.includes(op.status));
+          const leadOp = activeOps[0] || null;
+          const leadPct = leadOp ? resolveTaskProgress(leadOp) : null;
+          const selectedOverview = overview.data
+            ? {
+                ...overview.data,
+                projects: project ? [project, ...allProjects.filter((item) => item.id !== project.id)] : [],
+                jobs: (overview.data.jobs || []).filter((item) => matchesProject(item, project)),
+                operations: allOperations.filter((op) => !op.project_id || (project && op.project_id === project.id)),
+              }
+            : null;
 
           const liveList = Array.isArray(liveJobs.data) ? liveJobs.data : (liveJobs.data && liveJobs.data.jobs) || null;
           const jobs = liveList || (overview.data && overview.data.jobs) || [];
           const liveJob = jobs.find(item => matchesProject(item, project)) || null;
           const stripWork = workHeadline(liveJob);
-          const stripTarget = stripWork.target || 100;
-          const stripCurrent = (project && project.chapters) || 0;
-          const stripRatio = stripTarget ? Math.min(1, stripCurrent / stripTarget) : 0;
-          const stripStartedAt = liveJob && liveJob.runtime && liveJob.runtime.last_request
-            ? Date.parse(liveJob.runtime.last_request.created_at)
-            : 0;
-          const stripElapsed = stripWork.active && Number.isFinite(stripStartedAt)
-            ? Math.max(0, Date.now() - stripStartedAt)
-            : 0;
 
           const pageProps = {
             overview: selectedOverview || { projects: [], jobs: [], operations: [], queue: {}, diagnostics: {} },
             allJobs: jobs,
+            allOperations,
             selectProject,
             openCreatedProject,
+            openNewBook: () => setNewBookOpen(true),
             drafts: drafts.current,
-            navigate: setRoute,
+            navigate,
             job: liveJob,
             refreshOverview: () => overview.reload(true),
             service: service.state,
@@ -10446,13 +11600,16 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           }, [activeHub.id, route, ready, allProjects.length]);
 
           React.useEffect(() => {
-            if (!projectPopOpen || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return undefined;
+            if ((!projectPopOpen && !taskPopOpen) || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return undefined;
             const onKeyDown = (event) => {
-              if (event.key === 'Escape') setProjectPopOpen(false);
+              if (event.key === 'Escape') {
+                setProjectPopOpen(false);
+                setTaskPopOpen(false);
+              }
             };
             document.addEventListener('keydown', onKeyDown);
             return () => document.removeEventListener('keydown', onKeyDown);
-          }, [projectPopOpen]);
+          }, [projectPopOpen, taskPopOpen]);
           React.useEffect(() => {
             const root = rootRef.current;
             if (!root || typeof root.addEventListener !== 'function') return undefined;
@@ -10538,30 +11695,23 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             body = e('div', { className: 'nh-page' }, e(Empty, null, '加载总览失败'));
           } else {
             const map = {
-              flow: () => e(FlowPage, { ...pageProps, key: project?.id || 'empty' }),
-              setup: () => e(SetupPage, pageProps),
+              flow: () => e(ChaptersPage, { ...pageProps, key: project?.id || 'empty' }),
+              setup: () => e(DashboardPage, { ...pageProps, key: project ? project.id : 'empty' }),
               dashboard: () => e(DashboardPage, { ...pageProps, key: project ? project.id : 'empty' }),
               chapters: () => e(ChaptersPage, { ...pageProps, key: project?.id || 'empty' }),
               memory: () => e(MemoryPage, { ...pageProps, key: project?.id || 'empty' }),
-              brief: () => e(BriefPage, { ...pageProps, key: project?.id || 'empty' }),
-              outline: () => e(OutlinePage, { ...pageProps, key: project?.id || 'empty' }),
+              brief: () => e(OutlinePage, { ...pageProps, initialTab: 'brief', key: project?.id || 'empty' }),
+              outline: () => e(OutlinePage, { ...pageProps, initialTab: subTabs.outline || undefined, key: project?.id || 'empty' }),
               readers: () => e(ReadersPage, { ...pageProps, key: project?.id || 'empty' }),
               publish: () => e(PublishPage, { ...pageProps, key: project?.id || 'empty' }),
               jobs: () => e(JobsPage, { ...pageProps, key: project?.id || 'empty' }),
-              ai: () => e(AIPage, pageProps),
-              providers: () => e(PricingPage, pageProps),
-              free: () => e(FreeChannelsPage, { ...pageProps, key: project?.id || 'empty' }),
-              costs: () => e(CostsPage, pageProps),
-              operations: () => e(OperationsPage, pageProps),
+              ai: () => e(AIPage, { ...pageProps, initialTab: subTabs.ai || undefined }),
+              providers: () => e(CostsPage, { ...pageProps, initialTab: 'pricing' }),
+              free: () => e(AIPage, { ...pageProps, initialTab: 'free' }),
+              costs: () => e(CostsPage, { ...pageProps, initialTab: subTabs.costs || undefined }),
+              operations: () => e(CostsPage, { ...pageProps, initialTab: 'logs' }),
             };
-            if (selectedProject && !project && !['ai', 'operations', 'setup', 'flow', 'providers', 'costs', 'free'].includes(route)) {
-              body = e(Card, { title: '当前作品暂不可用' },
-                e(Button, { onClick: () => overview.reload(false) }, '刷新作品'),
-                e(Button, { onClick: () => setProjectPopOpen(true) }, '切换作品'),
-                e(Button, { onClick: () => setRoute('setup') }, '新建作品'));
-            } else {
-              body = (!project && !['ai', 'free', 'operations', 'flow', 'providers', 'costs'].includes(route) ? map.setup : (map[route] || map.dashboard))();
-            }
+            body = (map[route] || map.dashboard)();
           }
 
           if (service.state.upgradeRequired) {
@@ -10600,7 +11750,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   '--glass-refract': (appearance.refract / 100).toFixed(2),
                   '--backdrop-light': (appearance.backdrop / 100).toFixed(2),
                 },
-                onClick: () => { if (projectPopOpen) setProjectPopOpen(false); },
+                onClick: () => { if (projectPopOpen) setProjectPopOpen(false); if (taskPopOpen) setTaskPopOpen(false); },
               },
               e(CosmosBackdrop, {
                 theme: activeTheme,
@@ -10623,7 +11773,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       type: 'button',
                       className: 'cw-lens-circle cw-project-lens',
                       title: '切换作品上下文',
-                      onClick: (event) => { event.stopPropagation(); setProjectPopOpen((open) => !open); },
+                      onClick: (event) => { event.stopPropagation(); setTaskPopOpen(false); setProjectPopOpen((open) => !open); },
                     },
                     e('span', { className: 'cw-project-badge' }, bookMark),
                     e('span', { className: 'cw-project-title' }, bookTitle),
@@ -10647,6 +11797,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                             title: t('nav.group.' + hub.groupId, hub.label),
                             onClick: () => {
                               setProjectPopOpen(false);
+                              setTaskPopOpen(false);
                               if (!hub.routes.includes(route)) setRoute(hub.routes[0]);
                             },
                           },
@@ -10664,15 +11815,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       'button',
                       {
                         type: 'button',
-                        className: `cw-lens-circle${stripWork.active ? ' is-streaming is-on' : ''}`,
-                        title: stripWork.active ? '正在执行 · 查看任务' : 'AI 设置与运行状态',
-                        onClick: () => setRoute(stripWork.active ? 'jobs' : 'ai'),
+                        className: 'cw-task-trigger',
+                        'data-busy': activeOps.length ? 'true' : 'false',
+                        title: activeOps.length ? `${activeOps.length} 个后台任务进行中` : '查看后台任务进度与日志',
+                        onClick: (event) => { event.stopPropagation(); setProjectPopOpen(false); setTaskPopOpen((open) => !open); },
                       },
-                      e(
-                        'span',
-                        { className: 'cw-gemini-orb' },
-                        e('span', { className: 'cw-gemini-orb-core' }, e(Icon, { name: 'spark', size: 11, fill: true })),
-                      ),
+                      e(Icon, { name: 'list', size: 13 }),
+                      e('span', null, activeOps.length ? (leadPct && leadPct.hasPercent ? `${leadPct.percent}%` : '任务') : '任务'),
+                      activeOps.length ? e('span', { className: 'cw-task-badge' }, activeOps.length) : null,
                     ),
                     e(
                       'button',
@@ -10742,11 +11892,23 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         e('span', { className: 'cw-chapter-row-title' }, item.title, e('small', null, `${num(item.chapters)} 章`)),
                         project && item.id === project.id ? e('span', { className: 'nh-badge', 'data-tone': 'info' }, '当前') : null,
                       )),
-                      e(Button, { size: 'sm', icon: 'plus', onClick: () => { setProjectPopOpen(false); setRoute('setup'); } }, '管理作品与开书'),
+                      e(Button, { size: 'sm', icon: 'plus', onClick: () => { setProjectPopOpen(false); setNewBookOpen(true); } }, '新建小说作品'),
                     ),
                   )
                 : null,
-              route !== 'dashboard' && liveJob ? e(StatusBar, { work: stripWork, ratio: stripRatio, elapsedMs: stripElapsed }) : null,
+              e(TaskCenterPopover, {
+                open: taskPopOpen,
+                onClose: () => setTaskPopOpen(false),
+                allOperations,
+                projects: allProjects,
+                onCancelOp: async (opId) => {
+                  try {
+                    await api(`/operations/${encodeURIComponent(opId)}/cancel`, { method: 'POST', body: {} });
+                    overview.reload(true);
+                  } catch {}
+                },
+                onNavigate: (nextRoute) => navigate(nextRoute),
+              }),
               e(
                 'div',
                 { className: 'nh-body' },
@@ -10754,20 +11916,18 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   'main',
                   { className: 'nh-main' },
                   route !== 'dashboard' && ready ? e('div', { className: 'cw-page-heading cw-route-heading' }, e('h1', null, current ? t('nav.' + route, current.label) : t('panel.title', '码章鲸'))) : null,
-                  e(AppearanceContext.Provider, { value: appearance },
-                    project && !project.chapters && ['dashboard', 'flow', 'brief', 'outline', 'chapters'].includes(route)
-                      ? e(BookStart, { ...pageProps, project, key: project.id })
-                      : null,
-                    body),
+                  e(AppearanceContext.Provider, { value: appearance }, body),
                 ),
               ),
               e(AppearancePanel, { open: appearanceOpen, onClose: () => setAppearanceOpen(false), value: appearance, onChange: setAppearance }),
+              e(NewBookModal, { open: newBookOpen, onClose: () => setNewBookOpen(false), openCreatedProject }),
               e(ChapterModal, {
                 key: project?.id || 'empty',
                 open: chapter !== null,
                 chapter,
                 projectId: project ? project.id : null,
                 onClose: () => setChapter(null),
+                onChanged: () => overview.reload(true),
               }),
             ),
           );
@@ -10831,7 +11991,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         exports.apply = apply;
         /* Pure functions the panel's own test harness drives across every cycle
            shape. Exposed read-only: nothing here touches React or the DOM. */
-        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage };
+        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES };
         return module.exports;
       },
     });

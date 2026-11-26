@@ -15,6 +15,10 @@ try {
   source_revision:'25151bab43ff28bfc0eef5a3dbec4443ecc6d2f2'}
  info.source_lock_sha256=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'vendor/ofm-source-lock.json'))).digest('hex')
  const temp=marker+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(info),{mode:0o600});fs.renameSync(temp,marker)
+ // Refresh model catalog asynchronously after binding so built-in free models stay current.
+ if (typeof service.runtime?.refreshCatalog === 'function') {
+  Promise.resolve().then(() => service.runtime.refreshCatalog({ probe: false })).catch(() => {})
+ }
  let closing=false
  const close=async()=>{if(closing)return;closing=true;await service.close()}
  process.once('SIGINT',()=>void close());process.once('SIGTERM',()=>void close())

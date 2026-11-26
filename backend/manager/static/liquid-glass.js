@@ -14,11 +14,9 @@
 
   const HUBS = [
     { id: "work", label: "工作台", routes: ["dashboard"] },
-    { id: "studio", label: "创作室", routes: ["creative", "projects"] },
-    { id: "insights", label: "记忆与洞察", routes: ["insights"] },
-    { id: "publish", label: "发布与排期", routes: ["queue", "accounts"] },
-    { id: "ops", label: "日更与运行", routes: ["jobs", "logs"] },
-    { id: "system", label: "模型与系统", routes: ["ai", "costs", "diagnostics"] },
+    { id: "studio", label: "创作室", routes: ["creative", "projects", "insights"] },
+    { id: "publish", label: "发布与日更", routes: ["jobs", "queue", "accounts"] },
+    { id: "system", label: "模型与系统", routes: ["ai", "logs", "costs", "diagnostics"] },
   ];
 
   const ROUTE_LABELS = {

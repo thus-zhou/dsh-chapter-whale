@@ -105,18 +105,29 @@ def legacy_passed(review):
     return bool(isinstance(review, dict) and review.get("success") is True and review.get("needs_revision") is False)
 
 
+def _allow_unscored_pass(config=None):
+    """旧无分回执只有在配置显式开启兼容时才可视为通过；默认 fail-closed。"""
+    config = _config() if config is None else config
+    section = config.get("review_quality") if isinstance(config, dict) else None
+    return isinstance(section, dict) and section.get("allow_unscored_pass") is True
+
+
 def review_passed(review, config=None):
     """review_passed 的新实现：旧语义 + 按**当前**门槛重算的质量判断。
 
     缓存里的 quality_gate 只是当时的结论；门槛改过之后必须重新计算，不能沿用旧通过。
+    模型未给分项（quality_pass=None）默认不通过；只有显式 allow_unscored_pass 才兼容。
     """
     if not legacy_passed(review):
         return False
-    return judge(review, config).get("quality_pass") is not False
+    result = judge(review, config)
+    if result.get("quality_pass") is True:
+        return True
+    return result.get("quality_pass") is None and _allow_unscored_pass(config)
 
 
 def pass_ok(review, body_sha256=None, project=None, chapter=None, config=None):
-    """质量通过分支的唯一判定：旧的无分项回执仍可兼容，但必须按当前门槛重算。"""
+    """质量通过分支的唯一判定：默认必须 quality_pass is True。"""
     if not isinstance(review, dict):
         return False
     result = judge(review, config)
@@ -124,9 +135,10 @@ def pass_ok(review, body_sha256=None, project=None, chapter=None, config=None):
         bound = review.get("body_sha256") or (review.get("quality") or {}).get("body_sha256")
         if bound and bound != body_sha256:
             return False
-    if result.get("quality_pass") is False:
-        return False
-    return True
+    verdict = result.get("quality_pass")
+    if verdict is True:
+        return True
+    return verdict is None and _allow_unscored_pass(config)
 
 
 def blocked_reason(review):

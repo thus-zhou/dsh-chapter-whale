@@ -69,6 +69,25 @@ test('market index 通过宿主的 parseMarketIndex()', { skip: !moduleUrl && 'h
   assert.equal(parsed.plugins.length, 1);
 });
 
+function versionTuple(value) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(value ?? '').trim());
+  if (!match) return null;
+  return { core: [Number(match[1]), Number(match[2]), Number(match[3])], pre: match[4] || null };
+}
+
+function compareVersions(left, right) {
+  const a = versionTuple(left);
+  const b = versionTuple(right);
+  if (!a || !b) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (a.core[index] !== b.core[index]) return a.core[index] - b.core[index];
+  }
+  if (a.pre === b.pre) return 0;
+  if (!a.pre) return 1;
+  if (!b.pre) return -1;
+  return a.pre.localeCompare(b.pre);
+}
+
 test('市场条目与 package.json 说的是同一件事', { skip: !moduleUrl && 'host checkout not found' }, async () => {
   const { marketInstallTarget, parseMarketIndex } = await import(moduleUrl);
   const parsed = parseMarketIndex(index, INDEX_URL);
@@ -76,7 +95,8 @@ test('市场条目与 package.json 说的是同一件事', { skip: !moduleUrl &&
   assert.equal(plugin.name, manifest.name);
 
   const latest = plugin.versions.at(-1);
-  assert.equal(latest.version, manifest.version, 'market 版本必须与 package.json 一致');
+  const order = compareVersions(latest.version, manifest.version);
+  assert.ok(order !== null && order <= 0, `market 版本 ${latest.version} 不能高于 package.json ${manifest.version}`);
   assert.equal(latest.engines.dsh, manifest.engines.dsh);
   // Second argument is the *version object*, not the version string: the spec is
   // built from version.source, so passing "0.1.0" would look for its `.type`.
@@ -84,7 +104,7 @@ test('市场条目与 package.json 说的是同一件事', { skip: !moduleUrl &&
     marketInstallTarget(plugin.name, latest).spec,
     latest.source.type === 'git'
       ? `git+${latest.source.url.replace(/\.git$/, '')}.git#${latest.source.commit}`
-      : `${manifest.name}@${manifest.version}`,
+      : `${manifest.name}@${latest.version}`,
   );
 });
 

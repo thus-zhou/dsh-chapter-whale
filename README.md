@@ -1,12 +1,12 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**0.7.4（GPL-3.0-only）：修复 0.7.3 全量审计确认的 14 项缺陷，覆盖实体同步、安全升级、存稿恢复、场景缓存和审查门禁。**
+**0.7.5（GPL-3.0-only）：全方位用户体验优化——4 工作区顶栏与右上角任务中心、全任务进度条、多书日更去重、免费模型连接修复、首章死结破解与自动审查 2 次封顶转人工复核。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，在 Windows 上也可接入部分免费模型渠道。
 
 **[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.4
+Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.5
 
 > Windows 上已使用独立 DSH 环境实装；macOS 插件首发安装与独立工作区 `.venv` 服务启动已在 GitHub Actions `macos-latest` 跑通，真实番茄及七猫页面、真实模型调用、物理机 Intel Mac 与外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
 
@@ -16,6 +16,13 @@ Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档
 - **macOS（arm64 / x64）**：需本机已安装 Python 3.11+（`brew install python@3.13` 或 Python 官网安装包），首次启动自动在 `~/Library/Application Support/ChapterWhale/workspace/.venv` 创建隔离环境并安装依赖；若需在 Mac 上启用浏览器发布，按[上手指南](docs/quickstart.md)安装 Chromium 一次即可。作品与账号数据留在独立工作区，卸载插件不会删除。
 
 ![码章鲸 0.7.0：液态玻璃工作台、全自动小说写作与番茄发布](assets/screenshots/02-dashboard.jpg)
+
+## 0.7.5 修复与改进
+
+- 修复 Windows 轻量包全新安装：运行时清单恢复为 v0.7.0 归档的原始字节哈希，`downloadRuntime` 不再因 182 项 CRLF 差异拒绝安装。
+- 修复多书日更去重覆盖任务配置、handoff 章节候选污染共享记忆/人物档案、排期路径绕过人工复核门禁。
+- 修复成本分析默认页崩溃、模型定价/自定义供应商/发布账号的 API 契约、批次恢复按钮与 13 个免费渠道兜底 ID。
+- 补充 Node 代理版本校验、端口自愈的真实客户端更新、隐私授权显式化与网关密钥 owner 校验。
 
 ## 0.7.4 审计修复
 
@@ -240,7 +247,7 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 
 **支持什么系统和平台？**
 
-当前 `0.7.4` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
+当前 `0.7.5` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
 
 ## 许可证与第三方组件
 
@@ -256,6 +263,6 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前版本为 `0.7.4`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
+包名为 `dsh-chapter-whale`，当前版本为 `0.7.5`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
 
-**[查看 0.7.4 发布状态与验证边界 →](RELEASE_STATUS.md)**
+**[查看 0.7.5 发布状态与验证边界 →](RELEASE_STATUS.md)**
