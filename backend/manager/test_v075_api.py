@@ -464,7 +464,8 @@ class V075ManagerApiTests(unittest.TestCase):
                 clear_rec.assert_called_once()
                 saved = json.loads(cfg_path.read_text(encoding="utf-8"))
                 self.assertEqual(saved["default_binding"]["provider_id"], "free-pool")
-                self.assertIn(str(proj), saved["providers"]["free-pool"]["allowed_projects"])
+                self.assertIn(str(proj.resolve()),
+                              [str(Path(p).resolve()) for p in saved["providers"]["free-pool"]["allowed_projects"]])
 
 
 if __name__ == "__main__":
