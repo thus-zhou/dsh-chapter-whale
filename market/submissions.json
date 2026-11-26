@@ -1,46 +1,47 @@
 {
-  "checkedAt": "2026-11-25T07:46:20+08:00",
+  "checkedAt": "2026-11-26T08:13:53+08:00",
   "npm": {
     "name": "dsh-chapter-whale",
-    "version": "0.7.3",
+    "version": "0.7.4",
     "tag": "latest",
     "url": "https://www.npmjs.com/package/dsh-chapter-whale",
-    "registryDownloadVerified": true,
-    "provenanceVerified": true,
+    "registryDownloadVerified": false,
+    "provenanceVerified": false,
     "isolatedDshInstallVerified": false,
-    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511406123",
-    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511334800",
-    "runtimeBaseline": "0.7.3 cross-platform plugin (code buildId 5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46; Windows x64 reuses v0.7.0 runtime b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f; macOS darwin auto-venv verified on macos-latest arm64)",
-    "isolatedDshNativeLoadVerified": true,
-    "shasum": "40a9b8c3626ffd46842c4229072b5e06b712bfa0",
-    "sha256": "07801973764488ac33f76f5d3c210cb2239786a696610ce51b7bc911d8f6aa52",
-    "bytes": 12465536,
-    "checkedAt": "2026-11-25T07:46:20+08:00",
-    "publishCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45512631920"
+    "installerCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726703953",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726135357",
+    "isolatedDshNativeLoadVerified": false,
+    "checkedAt": "2026-11-26T08:13:53+08:00",
+    "publishCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726707784",
+    "status": "pending-registry",
+    "managedPackageFirstStartVerified": true,
+    "runtimeBaseline": "0.7.4 backend; Windows x64 pinned v0.7.0 runtime; macOS isolated venv verified in CI"
   },
   "markets": [
     {
       "market": "awesome-dsh-plugin / dshmarket",
-      "status": "submitted",
+      "status": "update-pr-open",
       "url": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14316",
-      "latestUpdatePr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18605",
+      "latestUpdatePr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18894",
       "method": "catalog-pr"
     },
     {
       "market": "losebird DSH Plugin Market",
-      "status": "submitted",
+      "status": "listed-awaiting-refresh",
       "url": "https://github.com/losebird/dsh-plugin-market/pull/90",
-      "method": "curated-pr"
+      "method": "curated-pr",
+      "evidence": "https://raw.githubusercontent.com/losebird/dsh-plugin-market/main/registry/all.json",
+      "observedVersion": "v0.7.3"
     },
     {
       "market": "Open Plugin Market / dshopen.org",
-      "status": "submitted",
+      "status": "listed-auto-refresh",
       "url": "https://github.com/polang233/dsh-plugin-index/issues/430",
       "method": "issue"
     },
     {
       "market": "DSH Plugin Hub / dsh-plugin.org",
-      "status": "submitted",
+      "status": "listed-auto-refresh",
       "url": "https://github.com/dshplugin/dsh-plugin-hub/issues/738",
       "method": "issue"
     },
@@ -53,10 +54,11 @@
     },
     {
       "market": "bradeGithub DSH Plugins Marketplace",
-      "status": "listed",
+      "status": "listed-awaiting-refresh",
       "url": "https://github.com/bradeGithub/DSH-Plugins-Marketplace",
       "evidence": "https://raw.githubusercontent.com/bradeGithub/DSH-Plugins-Marketplace/main/registry.json",
-      "method": "topic-scan"
+      "method": "topic-scan",
+      "observedVersion": "0.7.3"
     },
     {
       "market": "LivXue DSH Plugin Shop",
@@ -67,28 +69,28 @@
     }
   ],
   "currentUpdate": {
-    "version": "0.7.3",
-    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.3",
-    "buildId": "5d373751c849b159df18f80337e3ccdc6758ce5eb27e1617d3c575860f424a46",
+    "version": "0.7.4",
+    "release": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.4",
+    "buildId": "08969775b62761f3c792fd54c1fc9af9285b1288693cf267900d19023e2bc8e7",
     "runtimeAssetBuildId": "b181c5765a6e17a54fdc503b1aab0701a109428fbca8969a08bfc88c82957e4f",
-    "pluginAssetBytes": 12465536,
-    "pluginAssetSha1": "40a9b8c3626ffd46842c4229072b5e06b712bfa0",
-    "pluginAssetSha256": "07801973764488ac33f76f5d3c210cb2239786a696610ce51b7bc911d8f6aa52",
+    "pluginAssetBytes": 12472213,
+    "pluginAssetSha1": "78fbdce0a90537ef932a55bda83158a34a3a6c80",
+    "pluginAssetSha256": "cda1984aafaf967a02c92d516266233d90f15c763991b9fdffa01e86a8180b50",
     "windowsRuntimeRelease": "https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0",
     "windowsRuntimeBytes": 282727542,
     "windowsRuntimeSha256": "bdb594c6ca122f215ba8068e75453c3688e6cd9e720f40eaa0ae6ac175b8d52d",
-    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511406123",
-    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45511334800",
-    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18605",
+    "distributionCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726703953",
+    "sourceChecksCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726135357",
+    "catalogPr": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18894",
     "catalogState": "open",
-    "npmStatus": "published",
-    "checkedAt": "2026-11-25T07:46:20+08:00",
+    "npmStatus": "pending-registry",
+    "checkedAt": "2026-11-26T08:13:53+08:00",
     "screenshots": "https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
     "screenshotCount": 9,
     "personalInstallUpdated": false,
-    "personalInstallNote": "User desktop profile kept untouched; GitHub v0.7.3 Release, npm latest 0.7.3 (with SLSA provenance), Windows+macOS CI, README/CHANGELOG/RELEASE_STATUS and market entries synced.",
+    "personalInstallNote": "Personal plugin installation left untouched. Published GitHub 0.7.4; npm public propagation and third-party cache refresh tracked separately.",
     "sha256SumsBytes": 94,
-    "sha256SumsSha256": "8067dcac9243aec9d4428b9baa0c28baa07df9c706c3300c7531c7a491b0f30f",
-    "npmPublishCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45512631920"
+    "npmPublishCi": "https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726707784",
+    "sha256SumsSha256": "0bc8b69b0d6b3174785a5e9d2bf4e7e88a7ef1dce2e181ffbca230007eaaaaa2"
   }
 }

@@ -18,6 +18,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -51,7 +52,9 @@ jobs:
             echo "The npm version exists with a different package digest." >&2
             exit 1
           fi
-          for attempt in {1..12}; do
+          # npm scans accepted uploads before making them installable. Allow
+          # propagation to finish before treating publication as a failure.
+          for attempt in {1..240}; do
             if [[ "$(npm view "$package@$version" dist.integrity --prefer-online 2>/dev/null)" == "$integrity" &&
                   "$(npm view "$package@latest" version --prefer-online 2>/dev/null)" == "$version" ]]; then
               curl --fail --silent --show-error --retry 3 --max-time 60 \
