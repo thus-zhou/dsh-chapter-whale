@@ -31,3 +31,5 @@ node scripts/check-release.mjs --local
 首次安装由 `scripts/verify-package.mjs` 在独立工作区验证，跨版本升级由 `scripts/verify-upgrade.mjs` 对照实际包验证。代码复审使用 `codex review --uncommitted`，确认的问题修复后复测并重新审查。公开发行和市场回读状态见 [发行记录](../RELEASE_STATUS.md) 和 [市场记录](../market/submissions.json)。
 
 这些验证不等于真实模型文笔、真实平台发布或所有物理设备验收；本轮没有调用真实模型及发布账号。
+
+公开验收：三平台源码检查、Windows/macOS 公开包首装通过；npm latest=0.7.4，公开包 SHA-256 与 GitHub 附件一致。最后一轮自动复审因周额度中断，未声明复审无问题。具体链接与社区目录待审状态见发行及市场记录。

@@ -5,7 +5,7 @@
 | 渠道 | 本轮状态 | 证据 |
 | --- | --- | --- |
 | GitHub Release | 已公开，包 12,472,213 字节 | [v0.7.4](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.4) |
-| npm | 已接受上传，公开 registry 正在核对 | [发布流水线](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726707784) |
+| npm | 已公开，latest=0.7.4，公开下载与GitHub包逐字节一致 | [发布后校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45727636091) |
 | 自托管市场 | index.json、catalog-entry.yml、losebird-entry.json 已更新为0.7.4 | [索引](index.json) |
 | awesome-dsh-plugin / dshmarket | 0.7.3 更新已合并；0.7.4 更新已提交，等待审核 | [PR #18894](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18894) |
 | losebird | 已收录，当前公开快照仍为v0.7.3，等待自动刷新 | [公开目录](https://raw.githubusercontent.com/losebird/dsh-plugin-market/main/registry/all.json) |

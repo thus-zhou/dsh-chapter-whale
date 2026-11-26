@@ -18,4 +18,4 @@ Windows 轻量插件复用 [v0.7.0 固定 Python 与浏览器运行时](https://
 - [公开发行包首装](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45726703953) Windows 与 macOS 两项通过。实际 0.7.3→0.7.4 包升级在独立 Windows 工作区通过；不支持派发屏障的旧版先点击“停止旧后端”，再重试升级。
 - GitHub 插件包 12,472,213 字节，SHA-256 `cda1984aafaf967a02c92d516266233d90f15c763991b9fdffa01e86a8180b50`。代码 buildId `08969775b62761f3c792fd54c1fc9af9285b1288693cf267900d19023e2bc8e7`。
 - 自动复审确认的问题均已修复并回归验证。最后一轮 `codex review --uncommitted` 被周额度限制中断，**不能视作无问题结论**。
-- npm 已接受上传，公开索引与下载字节仍在核对；最终状态见 [市场机器记录](market/submissions.json)。社区目录更新为 [PR #18894](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18894)，维护者审核与第三方目录刷新分别记录。
+- npm `latest = 0.7.4` 已公开，registry 实际下载与上述 GitHub 包逐字节一致；[发布后校验](https://github.com/thus-zhou/dsh-chapter-whale/actions/runs/45727636091) 已通过。最终状态见 [市场机器记录](market/submissions.json)。社区目录更新为 [PR #18894](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18894)，维护者审核与第三方目录刷新分别记录。
