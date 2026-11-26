@@ -128,17 +128,17 @@ test('P3-3 buildId 必须按 Python json.dumps 复算，packageVersion 必须等
   });
 });
 
-test('P2-23 market 保持已发布的 0.7.4；落后允许并给出 note，超前拒绝', async () => {
+test('P2-23 market 已同步至已发布的 0.7.5；落后允许并给出 note，超前拒绝', async () => {
   const index = JSON.parse(await readFile(join(REPO, 'market', 'index.json'), 'utf8'));
   const losebird = JSON.parse(await readFile(join(REPO, 'market', 'losebird-entry.json'), 'utf8'));
   const catalog = await readFile(join(REPO, 'market', 'catalog-entry.yml'), 'utf8');
   assert.equal(index.plugins[0].versions.length, 1);
-  assert.equal(index.plugins[0].versions[0].version, '0.7.4');
-  assert.equal(losebird.version, '0.7.4');
-  assert.equal(losebird.latestVersion, '0.7.4');
-  assert.match(catalog, /releases\/download\/v0\.7\.4\//);
+  assert.equal(index.plugins[0].versions[0].version, '0.7.5');
+  assert.equal(losebird.version, '0.7.5');
+  assert.equal(losebird.latestVersion, '0.7.5');
+  assert.match(catalog, /releases\/download\/v0\.7\.5\//);
   for (const text of [JSON.stringify(index), JSON.stringify(losebird), catalog]) {
-    assert.equal(text.includes('0.7.5'), false, '市场元数据不得指向尚未发布的 0.7.5');
+    assert.equal(text.includes('0.7.4'), false, '市场元数据已同步至 0.7.5，不得残留 0.7.4');
   }
 
   const market = (version) => JSON.stringify({
