@@ -170,6 +170,26 @@ def human_review_handoff(review: Any, body_sha256: str) -> bool:
     )
 
 
+def human_handoff_review(base: Any, body_sha256: str, auto_review_count: int,
+                         *, reason: str = "auto_review_cap") -> Dict[str, Any]:
+    """Build the single handoff receipt shape shared by generation and polish.
+
+    The failing review is kept (it still carries the author-facing issues and D
+    candidates), but the decision is always a non-publishable human handoff.
+    """
+    review = dict(base) if isinstance(base, dict) else {}
+    review.update({
+        "success": True,
+        "review_decision": "needs_human_review",
+        "human_review_required": True,
+        "review_capped": reason == "auto_review_cap",
+        "auto_review_count": int(auto_review_count),
+        "body_sha256": body_sha256,
+        "handoff_reason": reason,
+    })
+    return review
+
+
 def _receipt_collection(project_root: Path, include_handoff: bool = False) -> Dict[int, Dict[str, Any]]:
     """Return receipts bound to the exact, uniquely named saved body."""
     from fanqie_auto_publish.publication_safety import qualification_contract_matches
@@ -214,8 +234,9 @@ def committed_chapters(project_root: Path) -> Dict[int, Dict[str, Any]]:
     return {**extra, **base}
 
 
-def approve_chapter_review(project_path: Path, chapter_id: int, note: str = "") -> Dict[str, Any]:
-    """Mark a saved chapter (including needs_human_review) as human-approved for publishing."""
+def approve_chapter_review(project_path: Path, chapter_id: int, note: str = "",
+                           expected_sha256: Optional[str] = None) -> Dict[str, Any]:
+    """Approve only a genuine two-review handoff bound to the current body."""
     if type(chapter_id) is not int or chapter_id <= 0:
         raise ValueError("chapter_id 必须是正整数")
     root = Path(project_path).expanduser().resolve()
@@ -224,15 +245,30 @@ def approve_chapter_review(project_path: Path, chapter_id: int, note: str = "") 
         if len(paths) != 1:
             raise ValueError("指定章节必须唯一对应一个正文文件")
         source = paths[0]
+        if source.is_symlink() or (root / "正文").resolve() not in source.resolve().parents:
+            raise ValueError("不安全的正文路径")
         raw = source.read_bytes()
         text = raw.decode("utf-8-sig")
         digest = body_digest(text)
+        expected = str(expected_sha256 or "").strip().lower()
+        if expected and expected not in {hashlib.sha256(raw).hexdigest(), digest}:
+            raise ValueError("正文已变化，请刷新后重新确认人工复核")
         receipts_path = root / ".webnovel" / "writer_receipts.json"
         receipts = strict_json(receipts_path, {})
         if not isinstance(receipts, dict):
             raise ValueError("writer_receipts.json 必须是对象")
         existing = receipts.get(str(chapter_id)) if isinstance(receipts.get(str(chapter_id)), dict) else {}
         review = dict(existing.get("review") or {})
+        # 只有真正走完两次自动审查并交回人工的章节才可批准；普通未审/需修订
+        # 章节不能借这个接口直接取得发布资格。
+        if not (review.get("review_decision") == "needs_human_review"
+                and review.get("human_review_required") is True):
+            raise ValueError("该章不是待人工复核的交接稿，不能直接批准")
+        count = review.get("auto_review_count")
+        if type(count) is not int or count < MAX_AUTO_REVIEWS:
+            raise ValueError(f"该章自动审查次数不足 {MAX_AUTO_REVIEWS} 次，不能按交接稿批准")
+        if review.get("body_sha256") and review.get("body_sha256") != digest:
+            raise ValueError("待复核正文已变化，请重新审查后再批准")
         review.update({
             "success": True,
             "review_decision": "human_approved",
@@ -253,6 +289,10 @@ def approve_chapter_review(project_path: Path, chapter_id: int, note: str = "") 
             "human_approved_at": review["human_approved_at"],
         }
         receipts[str(chapter_id)] = receipt
+        atomic_json(receipts_path, receipts)
+        # 交接时只保存了 pending 候选；人工批准后才写入共享记忆与人物档案。
+        receipt["candidates"] = _commit_review_candidates(
+            root, chapter_id, text, review, _writer_locked=True, force_commit=True)
         atomic_json(receipts_path, receipts)
         _save_progress(root, chapter_id)
         return {"status": "approved", "chapter_id": chapter_id, "review_decision": "human_approved", "receipt": receipt}
@@ -479,14 +519,27 @@ def _record_review_attempt(project,chapter,content,review):
         pass  # 报告留档失败不阻断既有回执写入；过期状态由 no_report 表达
 
 
-def _commit_review_candidates(project, chapter, content, review, *, _writer_locked=False):
-    """正文落盘后才核对并提交 D 的候选；失败保留待处理文件，不重新生成正文。"""
+def _commit_review_candidates(project, chapter, content, review, *, _writer_locked=False,
+                              force_commit=False):
+    """正文落盘后才核对并提交 D 的候选；失败保留待处理文件，不重新生成正文。
+
+    ``needs_human_review``/``human_review_required`` 的交接稿只保存候选为
+    pending，绝不写入共享记忆或人物档案；人工批准后再用 ``force_commit`` 提交。
+    """
     digest = body_digest(content)
+    pending_only = not force_commit and isinstance(review, dict) and (
+        review.get("review_decision") == "needs_human_review"
+        or review.get("human_review_required") is True
+    )
     out = {}
     for name in ("memory_library", "character_state"):
         try:
             module = __import__(f"integration.{name}", fromlist=["save_candidates"])
             saved = module.save_candidates(project, chapter, review, body_sha256=digest)
+            if pending_only:
+                out[name] = {"saved": saved.get("status"), "committed": "pending_review",
+                             "added": 0}
+                continue
             options = {"_writer_locked": _writer_locked} if name == "character_state" else {}
             committed = module.commit_candidates(project, chapter, digest, **options)
             out[name] = {"saved": saved.get("status"), "committed": committed.get("status"),
@@ -616,6 +669,10 @@ async def _generate_and_review(
     def record_completed_review(current):
         nonlocal auto_review_count
         if isinstance(current, dict) and current.get('success') is True:
+            if auto_review_count >= MAX_AUTO_REVIEWS:
+                # Hard cap: no code path may buy a third D review. Callers must
+                # convert to handoff with the last review instead.
+                raise RuntimeError(f'第{chapter_id}章自动审查已达 {MAX_AUTO_REVIEWS} 次上限，禁止再次审查')
             auto_review_count += 1
             checkpoint['auto_review_count'] = auto_review_count
             checkpoint['last_reviewed_sha256'] = body_digest(content)
@@ -623,17 +680,37 @@ async def _generate_and_review(
             _record_review_attempt(project_root, chapter_id, content, current)
             remember_review(current)
 
+    def count_existing_review(current):
+        """Count a review that arrived with the B stream without ever exceeding the cap."""
+        nonlocal auto_review_count
+        if isinstance(current, dict) and current.get('success') is True:
+            if auto_review_count < MAX_AUTO_REVIEWS:
+                auto_review_count += 1
+            checkpoint['auto_review_count'] = auto_review_count
+            checkpoint['last_reviewed_sha256'] = body_digest(content)
+            checkpoint['last_review'] = current
+
+    def capped_handoff(current):
+        """Use the review already in hand; never call D just to discover the cap."""
+        nonlocal review
+        review = human_handoff_review(current, body_digest(content), auto_review_count)
+        checkpoint['last_reviewed_sha256'] = body_digest(content)
+        checkpoint['last_review'] = review
+        preserve('polished', content)
+        return review
+
+    async def review_with_budget(current, label, percent):
+        """The only path allowed to call D for the generated body."""
+        if auto_review_count >= MAX_AUTO_REVIEWS:
+            return capped_handoff(current)
+        emit_progress('D', label, percent)
+        current = await executor.execute_review(chapter_id=chapter_id, content=content)
+        record_completed_review(current)
+        return current
+
     def make_human_handoff(current):
         studio.reject_sample_copy(project_root, content)
-        handoff = {
-            **(current if isinstance(current, dict) else {}),
-            'success': True,
-            'review_decision': 'needs_human_review',
-            'human_review_required': True,
-            'review_capped': True,
-            'auto_review_count': auto_review_count,
-            'body_sha256': body_digest(content),
-        }
+        handoff = human_handoff_review(current, body_digest(content), auto_review_count)
         checkpoint['last_reviewed_sha256'] = body_digest(content)
         checkpoint['last_review'] = handoff
         preserve('polished', content)
@@ -680,10 +757,7 @@ async def _generate_and_review(
     if isinstance(review, dict):
         reviews.append(review)
         if review.get("success") is True:
-            auto_review_count += 1
-            checkpoint['auto_review_count'] = auto_review_count
-            checkpoint['last_reviewed_sha256'] = body_digest(content)
-            checkpoint['last_review'] = review
+            count_existing_review(review)
     from . import editorial_release
     if editorial_release.public(config).get('enabled'):
         content,review=await editorial_release.run(project_root,chapter_id,content,executor,config,
@@ -709,9 +783,7 @@ async def _generate_and_review(
         ):
             review = checkpoint['last_review']
         else:
-            emit_progress('D', f'模型 D 审查第{chapter_id}章', 65)
-            review=await executor.execute_review(chapter_id,content)
-            record_completed_review(review)
+            review = await review_with_budget(review, f'模型 D 审查第{chapter_id}章', 65)
         reviews.append(review)
     elif reused or multi or review is None:
         content = normalize_title(content)
@@ -724,23 +796,19 @@ async def _generate_and_review(
         ):
             review = checkpoint['last_review']
         else:
-            emit_progress('D', f'模型 D 审查第{chapter_id}章', 65)
-            review=await executor.execute_review(chapter_id,content)
-            record_completed_review(review)
+            review = await review_with_budget(review, f'模型 D 审查第{chapter_id}章', 65)
         reviews.append(review)
 
     if minimum_words and body_chars(content,chapter_id)<minimum_words:
         content=normalize_title(await ensure_length(content))
         preserve('polished',content)
-        review=await executor.execute_review(chapter_id,content)
-        record_completed_review(review)
+        review = await review_with_budget(review, f'模型 D 复审字数补写后的第{chapter_id}章', 65)
         reviews.append(review)
     checked=await ensure_counts(content)
     if body_digest(checked)!=body_digest(content):
         content=normalize_title(checked)
         preserve('polished',content)
-        review=await executor.execute_review(chapter_id,content)
-        record_completed_review(review)
+        review = await review_with_budget(review, f'模型 D 复审计数纠错后的第{chapter_id}章', 65)
         reviews.append(review)
     if not history and isinstance(review, dict):
         _record_review_attempt(project_root,chapter_id,content,review)
@@ -775,6 +843,11 @@ async def _generate_and_review(
         if decision != "needs_revision":
             raise RuntimeError("审查结论不明确，已阻止发布")
         if revision_round >= max_revisions:
+            if max_revisions == 0:
+                # 资源策略允许 0 轮自动修改：首次未通过就应转人工，而不是
+                # 抛出没有 handoff、没有正文的错误。
+                emit_progress('D', f'第{chapter_id}章转待人工复核', 90)
+                return make_human_handoff(review)
             if max_revisions and attempts < editorial.MAX_CORRECTIONS:
                 raise editorial.EditorialReviewPending(chapter_id,max_revisions,checkpoint_path,body_digest(content))
             raise RuntimeError(
@@ -806,9 +879,7 @@ async def _generate_and_review(
                 raise RuntimeError(f'第{chapter_id}章修订没有产生实际有效修改，已保留中间稿，未提交')
         content = normalize_title(await ensure_counts(await ensure_length(str(polished["content"]).strip())))
         preserve('polished',content)
-        emit_progress('D', f'模型 D 第 2 次审查第{chapter_id}章', 85)
-        review = await executor.execute_review(chapter_id=chapter_id, content=content)
-        record_completed_review(review)
+        review = await review_with_budget(review, f'模型 D 第 {revision_round + 2} 次审查第{chapter_id}章', 85)
         reviews.append(review)
 
     raise RuntimeError("审查流程异常结束")
@@ -846,6 +917,22 @@ async def _sync_committed_artifacts(
     executor: Any, chapter: int, content: str, receipt: Dict[str, Any],
     receipts: Dict[str, Any], receipts_path: Path,
 ) -> Dict[str, Any]:
+    review = receipt.get("review") if isinstance(receipt.get("review"), dict) else {}
+    if review.get("review_decision") == "needs_human_review" and review.get("human_review_required") is True:
+        # 交接稿尚未通过审查：只落一个明确的 pending 回执，不提取事实、人物或实体。
+        post_save = {
+            "status": "pending_review",
+            "entities": {"status": "pending_review"},
+            "shared_memory": {"status": "pending_review", "reason": "human_review_required"},
+            "rag_indexed": False,
+            "continuity_written": False,
+        }
+        receipt["post_save"] = post_save
+        try:
+            atomic_json(receipts_path, receipts)
+        except OSError:
+            post_save = {"status": "receipt_update_failed", "result": post_save}
+        return post_save
     previous=receipt.get('post_save',{})
     if not isinstance(previous,dict):previous={}
     router=getattr(executor,'ai_service',None)
@@ -951,13 +1038,25 @@ async def _generate_chapter_locked(
                     "review_decision": receipt["review"].get("review_decision"), "review": receipt["review"],
                     "revision_rounds": receipt.get("revision_rounds", 0),
                     "post_save": receipt.get("post_save", {"status": "unknown"})}
+        handoff = committed_chapters(project_root).get(selected_chapter)
+        if handoff and not dry_run:
+            # 正文已写、批次 completed 未更新的崩溃窗口：不要再报 FileExistsError，
+            # 让调度器恢复成“待人工复核”，人工批准后即可继续。
+            review = handoff.get("review") if isinstance(handoff.get("review"), dict) else {}
+            return {"project": str(project_root), "chapter_id": selected_chapter,
+                    "destination": handoff["destination"], "status": "needs_human_review",
+                    "recovered": True,
+                    "review_decision": review.get("review_decision"), "review": review,
+                    "human_review_required": True,
+                    "revision_rounds": handoff.get("revision_rounds", 0),
+                    "post_save": handoff.get("post_save", {"status": "unknown"})}
         raise FileExistsError(
             f"第{selected_chapter}章已经存在，自动写作不会覆盖已有正文：{project_root / '正文'}"
         )
     # Known failures from the new shared-memory path must be repaired before
     # another draft, rather than silently writing with missing historical facts.
     from integration import memory_library
-    qualified={} if dry_run else committed_chapters(project_root)
+    qualified={} if dry_run else reviewed_chapters(project_root)
     for previous,record in sorted(qualified.items()):
         if previous>=selected_chapter or record.get("post_save",{}).get("shared_memory",{}).get("status")!="failed":continue
         try:
@@ -1110,6 +1209,17 @@ async def review_existing_chapter_async(
         content = payload.decode("utf-8-sig")
         if not content.strip():
             raise ValueError("正文不能为空")
+        # 待人工复核的回执不得被一次“最终审查”不可逆覆盖；否则新结论若仍是
+        # needs_revision，该章会从 committed 消失，复核按钮也一起消失。
+        receipts_path = project / ".webnovel" / "writer_receipts.json"
+        existing_receipts = strict_json(receipts_path, {})
+        previous_receipt = existing_receipts.get(str(chapter_id)) if isinstance(existing_receipts, dict) else {}
+        previous_review = previous_receipt.get("review") if isinstance(previous_receipt, dict) else {}
+        if (isinstance(previous_review, dict)
+                and previous_review.get("review_decision") == "needs_human_review"
+                and previous_review.get("human_review_required") is True
+                and previous_receipt.get("sha256") == hashlib.sha256(payload).hexdigest()):
+            raise ValueError("该章仍在等待人工复核；请先人工批准，或改稿后再重新审查")
         SkillExecutor, get_ai_service = _load_webnovel_services()
         contract_hash = creative_contract_hash(project)
         ai=get_ai_service()

@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -43,6 +44,20 @@ from integration import costs
 DATA = bridge.COMBINED_ROOT / "integration_data"
 # main() 在监听前写入实际端口；进程内 create_app() 测试时保持 None。
 _LISTEN_PORT = None
+# Serializes "find existing (project, publication_mode) + create/update" in this
+# process. Lock order is always _JOBS_CREATE_LOCK -> scheduler config lock.
+_JOBS_CREATE_LOCK = threading.Lock()
+
+
+def project_path_key(path_str: str) -> str:
+    """Stable, non-empty project key for unregistered/CLI paths."""
+    try:
+        target = str(Path(path_str).expanduser().resolve())
+    except (OSError, RuntimeError):
+        target = str(path_str or "").strip()
+    if not target:
+        return ""
+    return "path:" + hashlib.sha1(target.casefold().encode("utf-8")).hexdigest()
 
 
 def _deliver_notifications_once(owner):
@@ -223,10 +238,20 @@ class Operations:
             if any(x.get("identity") == identity for x in active):
                 raise HTTPException(409, "同一操作正在执行，请查看运行记录")
             meta_pid = (metadata or {}).get("project_id")
-            if meta_pid and kind in {"generate", "daily"}:
-                if any(
+            if kind in {"generate", "daily"}:
+                if not meta_pid:
+                    # Unregistered/CLI paths still get a stable key; an empty
+                    # project_id must never silently disable the project mutex.
+                    try:
+                        position = list(args).index("--project")
+                        meta_pid = project_path_key(str(args[position + 1]))
+                    except (ValueError, IndexError):
+                        meta_pid = ""
+                    if meta_pid:
+                        metadata = {**(metadata or {}), "project_id": meta_pid}
+                if meta_pid and any(
                     x.get("project_id") == meta_pid and x.get("kind") in {"generate", "daily"}
-                    and x.get("status") in {"queued", "running", "awaiting_login"}
+                    and x.get("status") in {"queued", "running", "awaiting_login", "waiting"}
                     for x in active
                 ):
                     raise HTTPException(409, "该作品已有写作或日更任务正在执行，请等待完成后再试")
@@ -249,6 +274,36 @@ class Operations:
             thread.start()
         return payload
 
+    @staticmethod
+    def _percent(value, default=0):
+        if isinstance(value, bool):
+            return default
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(number):
+            return default
+        return max(0, min(100, int(round(number))))
+
+    @classmethod
+    def _merge_progress(cls, current, incoming):
+        """Monotonic, type-checked progress; malformed values are ignored, not fatal."""
+        cur = dict(current or {})
+        previous = cls._percent(cur.get("percent"), 0)
+        if "percent" in incoming:
+            cur["percent"] = max(previous, cls._percent(incoming.get("percent"), previous))
+        if isinstance(incoming.get("stage"), str):
+            cur["stage"] = incoming["stage"][:40]
+        if isinstance(incoming.get("label"), str):
+            cur["label"] = incoming["label"][:200]
+        for key in ("current", "total", "chapter"):
+            value = incoming.get(key)
+            if type(value) is int and value >= 0:
+                cur[key] = value
+        cur["indeterminate"] = False
+        return cur
+
     def resume_due(self, now=None):
         """Wake only durable, explicitly deferred creation batches, never publish."""
         from datetime import datetime, timezone
@@ -265,7 +320,25 @@ class Operations:
                     if target.tzinfo is None:raise ValueError('等待时间缺少时区')
                     if target>now:continue
                     if any(x['id']!=payload['id'] and x.get('identity')==payload.get('identity') for x in records):continue
-                    project=next(x for x in self.store.projects() if x['id']==payload['project_id'])
+                    project=next((x for x in self.store.projects() if x['id']==payload.get('project_id')),None)
+                    if project is None:
+                        try:
+                            wanted=Path(str(result.get('project') or '')).expanduser().resolve()
+                        except (OSError, RuntimeError):
+                            wanted=None
+                        project=next((x for x in self.store.projects()
+                                      if wanted is not None and Path(x['path']).expanduser().resolve()==wanted),None)
+                    if project is None:
+                        raise ValueError('等待批次的作品已不在登记表中')
+                    project_key=project['id']
+                    if payload.get('project_id')!=project_key:
+                        payload['project_id']=project_key
+                    # 在唤醒前复检项目互斥：另一个同项目操作可能已排队/运行/等待。
+                    if any(x['id']!=payload['id'] and x.get('kind') in {'generate','daily'}
+                           and x.get('project_id')==project_key
+                           and x.get('status') in {'queued','running','awaiting_login','waiting'}
+                           for x in records):
+                        continue
                     if payload.get('kind')!='generate' or Path(project['path']).resolve()!=Path(result['project']).resolve():
                         raise ValueError('等待批次作品身份不一致')
                     if result.get('batch_id')!=payload['batch_id']:raise ValueError('等待批次身份不一致')
@@ -328,7 +401,7 @@ class Operations:
                     **(payload.get("progress") or {}),
                     "stage": "running",
                     "label": "正在执行",
-                    "percent": max(5, int((payload.get("progress") or {}).get("percent") or 5)),
+                    "percent": max(5, self._percent((payload.get("progress") or {}).get("percent"), 0)),
                     "indeterminate": True,
                 },
             )
@@ -348,10 +421,7 @@ class Operations:
                         try:
                             prog = json.loads(stripped[len("NOVEL_HELPER_PROGRESS:"):])
                             if isinstance(prog, dict):
-                                cur = dict(payload.get("progress") or {})
-                                cur.update({k: v for k, v in prog.items() if k in {"percent", "stage", "label", "current", "total", "chapter"}})
-                                cur["indeterminate"] = False
-                                payload["progress"] = cur
+                                payload["progress"] = self._merge_progress(payload.get("progress"), prog)
                                 self.store.save_operation(payload)
                                 continue
                         except ValueError:
@@ -379,7 +449,7 @@ class Operations:
                             inferred = ("memory", stripped[:40], 60, False)
                         if inferred:
                             cur = dict(payload.get("progress") or {})
-                            cur.update(stage=inferred[0], label=inferred[1], percent=max(int(cur.get("percent") or 0), inferred[2]), indeterminate=inferred[3])
+                            cur.update(stage=inferred[0], label=inferred[1], percent=max(self._percent(cur.get("percent"), 0), inferred[2]), indeterminate=inferred[3])
                             payload["progress"] = cur
                     self.store.save_operation(payload)
                 code = process.wait(timeout=30)
@@ -1040,16 +1110,17 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
     def project_id_for_path(path_str: str) -> str:
         try:
-            target = str(Path(path_str).resolve())
-        except OSError:
-            return ""
+            target = str(Path(path_str).expanduser().resolve())
+        except (OSError, RuntimeError):
+            target = str(path_str or "")
         for p in store.projects():
             try:
                 if str(Path(p["path"]).resolve()) == target:
                     return p["id"]
             except OSError:
                 continue
-        return ""
+        # 未登记/CLI 项目也必须有稳定身份，项目互斥才不会被空串跳过。
+        return project_path_key(target)
 
     async def dispatch():
         while True:
@@ -1901,7 +1972,9 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             raise ValueError("章节号无效")
         item = project(identity)
         note = str((data or {}).get("note") or "")
-        return writer_runner.approve_chapter_review(Path(item["path"]), chapter, note=note)
+        expected = str((data or {}).get("expected_sha256") or "").strip() or None
+        return writer_runner.approve_chapter_review(Path(item["path"]), chapter, note=note,
+                                                    expected_sha256=expected)
 
     @app.get("/api/projects/{identity}/chapters/{chapter}/quality")
     def chapter_quality(identity: str, chapter: int):
@@ -2101,30 +2174,52 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def add_job(data: JobInput):
         if not any(Path(x["path"]).resolve() == Path(data.project).resolve() for x in store.projects()):
             raise ValueError("请先登记写作项目")
-        values = data.model_dump()
-        if not values.get("name") or values["name"].strip() in {"", "日更任务"}:
-            values["name"] = f"{data.book.strip()} · 日更"
-        if values.get("publication_mode") is None:
-            # 新客户端没指定就用默认 draft_only；显式传了 platform_scheduled 会由调度器拒绝。
-            values.pop("publication_mode", None)
+        supplied = set(data.model_fields_set)
+        values = data.model_dump(exclude={"id", "job_id"})
+        if "name" not in supplied or not values.get("name") or values["name"].strip() in {"", "日更任务"}:
+            values["name"] = f"《{data.book.strip()}》 · 日更"
         explicit_id = data.job_id or data.id
-        if not explicit_id:
-            target_proj = str(Path(data.project).resolve())
-            target_mode = values.get("publication_mode") or "draft_only"
-            existing_id = next(
-                (jid for jid, job in scheduler.load_scheduler().get("jobs", {}).items()
-                 if isinstance(job, dict)
-                 and str(Path(job.get("project", "")).resolve()) == target_proj
-                 and scheduler.publication_mode(job) == target_mode),
-                None,
-            )
+        target_project = str(Path(data.project).expanduser().resolve())
+        # 查重与创建/更新必须串行；否则两个并发 POST 都看不到对方而各写一条。
+        # 锁序：_JOBS_CREATE_LOCK -> scheduler config lock，反向不存在。
+        with _JOBS_CREATE_LOCK:
+            snapshot = scheduler.load_scheduler()
+            jobs = snapshot.get("jobs", {})
+            normalized_explicit = scheduler.normalize_job_id(explicit_id) if explicit_id else None
+            existing_id = None
+            if normalized_explicit and isinstance(jobs.get(normalized_explicit), dict):
+                existing_job = jobs[normalized_explicit]
+                if str(Path(existing_job.get("project", "")).expanduser().resolve()) != target_project:
+                    raise HTTPException(409, "该任务 ID 已用于其他作品，不能重复使用")
+                existing_id = normalized_explicit
+            if existing_id is None:
+                target_mode = values.get("publication_mode") if "publication_mode" in supplied else None
+                target_mode = target_mode or "draft_only"
+                existing_id = next(
+                    (jid for jid, job in jobs.items()
+                     if isinstance(job, dict)
+                     and str(Path(job.get("project", "")).expanduser().resolve()) == target_project
+                     and scheduler.publication_mode(job) == target_mode),
+                    None,
+                )
+                if existing_id and normalized_explicit and existing_id != normalized_explicit:
+                    raise HTTPException(409, f"该作品已有同发布方式的任务：{existing_id}")
             if existing_id:
-                update_values = {k: v for k, v in values.items() if k not in {"id", "job_id"}}
-                return scheduler.update_job(existing_id, update_values)
-        values["job_id"] = explicit_id or uuid.uuid4().hex[:12]
-        values["disabled"] = not data.enabled
-        values["volume"] = None
-        return scheduler.add_job(argparse.Namespace(**values))
+                # P0-2: 只合并客户端真正提交的字段，绝不拿 model_dump 默认值
+                # 覆盖 serial/配额/时段/排期/enabled 等已保存配置。
+                changes = {k: v for k, v in values.items() if k in supplied}
+                if changes.get("publication_mode") is None:
+                    changes.pop("publication_mode", None)
+                return scheduler.update_job(existing_id, changes)
+            if normalized_explicit and normalized_explicit in jobs:
+                raise HTTPException(409, f"任务已存在：{normalized_explicit}")
+            values["job_id"] = normalized_explicit or uuid.uuid4().hex[:12]
+            values["disabled"] = not data.enabled
+            values["volume"] = None
+            if values.get("publication_mode") is None:
+                # 新客户端没指定就用默认 draft_only。
+                values.pop("publication_mode", None)
+            return scheduler.add_job(argparse.Namespace(**values))
 
     @app.delete("/api/jobs/{identity}")
     def delete_job(identity: str):

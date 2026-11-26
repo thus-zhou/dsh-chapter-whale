@@ -306,6 +306,8 @@ def abandon_batch(project, batch_id=None):
         if root.is_dir():
             if batch_id and batch_id != "all":
                 targets = [project_file(project, "batches", batch_id)]
+                if not targets[0].is_file():
+                    raise ValueError("找不到要放弃的批次")
             else:
                 targets = [p for p in root.glob("*.json") if re.fullmatch(r"[a-f0-9]{32}", p.stem)]
             for target in targets:
@@ -317,6 +319,14 @@ def abandon_batch(project, batch_id=None):
                     writer.atomic_json(target, doc)
                     abandoned.append(doc.get("id") or target.stem)
         return {"status": "abandoned", "abandoned": abandoned}
+
+
+def _completed_with_bodies(project, doc):
+    """Batch `completed` is only trustworthy when the body still exists."""
+    recorded = {c for c in doc.get("completed") or [] if type(c) is int and c > 0}
+    existing = writer.existing_chapter_ids(project)
+    return ([c for c in sorted(recorded) if c in existing],
+            [c for c in sorted(recorded) if c not in existing])
 
 
 def batch(project,count,word_count,max_revisions,identity,scenes=0):
@@ -365,8 +375,17 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
         doc.pop('finished_at',None)
         writer.atomic_json(path,doc)
         completed_set = set(doc.get("completed") or [])
+        completed, missing_bodies = _completed_with_bodies(project, doc)
+        if missing_bodies:
+            # Recorded as completed but the body was deleted/moved: regenerate it
+            # instead of silently skipping the chapter and still reporting success.
+            print(f"批次记录第{missing_bodies}章已完成但正文缺失，重新生成", flush=True)
+            doc["completed"] = completed
+            completed_set = set(completed)
         remaining_targets = [c for c in doc["targets"] if c not in completed_set]
-        result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":list(doc.get("completed") or [])}
+        result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":completed}
+        if missing_bodies:
+            result["recovered_missing_bodies"] = missing_bodies
         total = max(1, len(doc["targets"]))
         try:
             for idx, chapter in enumerate(remaining_targets):
@@ -376,6 +395,9 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
                 print(f"创作第{chapter}章",flush=True)
                 asyncio.run(writer._generate_chapter_locked(project,doc["word_count"],doc["max_revisions"],chapter,False,int(doc.get("scenes") or 0)))
                 result["completed"].append(chapter);doc.update(result,status="running");writer.atomic_json(path,doc)
+            missing_after = [c for c in doc["targets"] if c not in writer.existing_chapter_ids(project)]
+            if missing_after:
+                raise RuntimeError(f"批次第{missing_after}章没有正文落盘，未标记完成")
             print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'done', 'label': '创作完成', 'percent': 100, 'current': total, 'total': total}, ensure_ascii=False)}", flush=True)
             doc.update(result,status="generated",finished_at=bridge.now_iso());writer.atomic_json(path,doc)
             return doc
@@ -435,11 +457,19 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         payload=rewritten.encode("utf-8");receipts_path=project/".webnovel"/"writer_receipts.json"
         receipts=writer.strict_json(receipts_path,{})
         receipt={"destination":str(source.resolve()),"sha256":hashlib.sha256(payload).hexdigest(),"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
+        handoff=isinstance(review,dict) and review.get("review_decision")=="needs_human_review" and review.get("human_review_required") is True
+        if handoff:
+            # 非预览润色到达两次审查上限：正文保留为交接稿，候选只存 pending，
+            # 人工 approve-review 时再提交，避免未审定内容进入记忆。
+            receipt["candidates"]=writer._commit_review_candidates(project,chapter,rewritten,review,_writer_locked=True)
         receipts[str(chapter)]=receipt
         writer.atomic_json(receipts_path,receipts)
         bridge._write_text_atomic(source,rewritten)
         post=asyncio.run(writer._sync_committed_artifacts(executor,chapter,rewritten,receipt,receipts,receipts_path))
-        return {"status":"polished","chapter_id":chapter,"post_save":post,"backup_saved":True}
+        return {"status":"polished","chapter_id":chapter,
+                "post_save":post,"backup_saved":True,
+                "review_decision":(review or {}).get("review_decision") if isinstance(review,dict) else "",
+                "human_review_required":handoff}
 
 
 def reject_sample_copy(project,content):

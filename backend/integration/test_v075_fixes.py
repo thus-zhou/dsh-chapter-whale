@@ -65,7 +65,8 @@ class V075FixesIntegrationTests(unittest.TestCase):
                 "review_decision": "needs_human_review",
                 "human_review_required": True,
                 "auto_review_count": 2,
-                "review": {"success": True, "review_decision": "needs_human_review", "auto_review_count": 2},
+                "review": {"success": True, "review_decision": "needs_human_review", "human_review_required": True,
+                           "auto_review_count": 2, "body_sha256": digest},
             }
             self.assertFalse(publication_safety.review_eligible(handoff_receipt["review"], digest))
 

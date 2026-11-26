@@ -553,6 +553,11 @@ async def sync_chapter(project, chapter, content, config=None):
     receipts = writer.committed_chapters(project)
     if chapter not in receipts:
         raise ValueError("只能从具备当前有效审查／E 授权的已保存正文提取记忆")
+    if chapter not in writer.reviewed_chapters(project):
+        # Handoff bodies are committed locally but not reviewed; never turn
+        # their D candidates into shared canon before human approval.
+        return {"status": "skipped_pending_review", "chapter": chapter,
+                "reason": "human_review_required"}
     body, digest = _chapter(project, chapter)
     if _normalize(body) != _normalize(content):
         raise ValueError("定稿正文与记忆提取来源不一致")
@@ -844,7 +849,9 @@ def commit_candidates(project, chapter, body_sha256=None):
 def rebuild(project):
     project = Path(project).resolve()
     with writer.file_lock(_path(project, "writer.lock")):
-        chapters = sorted(writer.committed_chapters(project))
+        # Only reviewed receipts may feed shared memory; handoff chapters wait
+        # for approve-review and must not trigger a wasted extraction call.
+        chapters = sorted(writer.reviewed_chapters(project))
         doc = read(project);pending = [c for c in chapters if doc["chapters"].get(str(c), {}).get("sha256") != _chapter(project, c)[1]]
         selected = pending[:30]
         for chapter in selected:

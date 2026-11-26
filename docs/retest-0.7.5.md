@@ -16,13 +16,29 @@
 | 8 | 新书陷入死结无法开始第一章 | 统一 `writer_runner` 与 `skill_executor` 细纲章节编号识别（支持前导零、中文数字及 Markdown 变体），单模型无首章细纲时自动兜底规划；`studio.batch()` 自动清理遗留空首章冻结批次并提供前端「继续 / 放弃旧批次」按钮；规划缓存键纳入 Role A 模型配置与开关。 |
 | 9 | 审查过多阻断新章节产出 | 所有章节自动审查固定为 **最多 2 次**（`MAX_AUTO_REVIEWS = 2`）；第 2 次仍未通过时立即停止自动审查，将正文、回执与进度以 `needs_human_review` 落盘提交以放行后续第 N+1 章创作，仅平台发布门禁须人工点击「人工复核通过」（`POST /api/projects/{id}/chapters/{ch}/approve-review`）解锁；默认日更 `max_revisions` 下调至 `1`。 |
 
-## 离线自动化验证结果（2026-11-26）
+## 0.7.5 审计后修复（2026-11-26）
 
-- **JS / 前端门禁与包契约（`npm test`）**：`113 pass / 0 fail / 1 skipped (macOS 仅在 Darwin 环境运行)`（共 114 项，涵盖 `client.test.mjs`、`gate.test.mjs` `WRITE_ROUTES` 防漂移、`manifest.test.mjs`、`p04-bridge.test.mjs` 等）。
-- **后端集成层（`backend/integration`）**：`736 tests` 通过（`0 fail / 0 error / 4 skipped`），耗时 `104.046s`。
-- **后端管理服务层（`backend/manager`）**：`168 tests` 通过（`0 fail / 0 error`），耗时 `49.176s`。
-- **发布清单与纯 LF 校验（`node scripts/check-release.mjs --local`）**：全部受管文件哈希、纯 LF 行尾、`market/*`、`runtime-manifest.json` 与 `runtime-download.json` 校验通过。
+全量审计（4 个 P0、27 个 P1）发现的阻塞项已在 `feat/v0.7.5` 修复并补回归测试：
+
+- **运行时安装**：恢复 v0.7.0 归档的 182 个原始 CRLF/LF 字节哈希，`runtime-download.json` 与新 `buildId` 对齐；当前轻量包全新 Windows 安装不再在 `downloadRuntime()` 拒绝。
+- **任务去重**：`POST /api/jobs` 只合并客户端 `model_fields_set` 中的字段，不再用默认值清空 `serial`、配额、时段、排期或 `enabled`。
+- **人工复核隔离**：handoff 章节的事实/人物候选只保存为 pending，不写入共享记忆/人物档案；人工 `approve-review` 后才提交。
+- **排期门禁**：`platform_scheduled` 在生成前后都检查待复核章，禁止跳过第 N 章继续排第 N+1 章。
+- **审查预算**：长度补写/字数纠错不再产生第 3 次 D 审查；`max_revisions=0` 首次未通过直接转人工。
+- **前端契约**：批次 `id`、`CostRateInput`、自定义供应商 `models`、发布账号、13 个渠道真实 ID、成本页 `Bars` 崩溃、双端新建任务的 `publication_mode` 均已修复。
+- **免费模型/安全**：端口自愈更新真实 client、Node ≥22.21 校验、显式作品授权、`set_default` 不再隐式改全局、`owned_ports` owner 校验、tokenSaver fail-closed。
+
+## 离线自动化验证结果（2026-11-26，审计修复后）
+
+- **JS / 前端门禁与包契约（`npm test`）**：**125 项，109 pass / 0 fail / 16 skipped**（Linux；Windows/macOS 条件用例跳过），含 `test/client-ui.test.mjs` 的真实递归渲染回归。
+- **后端集成层（`backend/integration`）**：**768 tests OK（skipped=8）**，25.43s。
+- **后端管理服务层（`backend/manager`）**：**175 tests OK**，27.86s。
+- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `5c8586f8bb2111c65bb4d8fbabeb51d3fe6f67ee6ea8b7c416d6f8cbda15f62d`。
+- **完整包校验（HEAD 源码 + 真实 v0.7.0 runtime）**：**3421 个文件全部通过**，同一 buildId；`downloadRuntime()` 用真实归档字节复现成功。
+- **CSS 内联**：`scripts/build-client-ui.py` 生成结果与 `client.js` 字节一致；新增 26 个唯一 `.nh-*` 选择器。
 
 ## 真实环境边界声明
 
 - 上述自动化测试均在离线隔离目录及本地 mock 夹具下完成，**未消耗真实付费模型额度**，**未向真实番茄/七猫作家后台写入数据**，也**未在本任务中实机运行 macOS / Linux 物理机客户端或合并 PR / 打 Tag / 发布 npm**。
+- `--local` 跳过 2253 个 runtime 项；完整包校验使用真实 v0.7.0 归档，二者不可混为一个数字。
+- Node 版本/代理、Windows DPAPI/PowerShell、macOS `lsof` 跨用户等平台边界仍以代码审查与平台条件测试为准，未做三平台实机点验。

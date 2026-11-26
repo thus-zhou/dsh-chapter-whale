@@ -105,9 +105,16 @@ def save(config, identity, payload):
     doc = migrate(config)
     identity = identity or 'provider-' + uuid.uuid4().hex[:12]
     old = doc['providers'].get(identity, {})
-    allowed = {'name', 'base_url', 'api_key', 'protocol', 'enabled', 'pricing', 'free_models', 'allowed_projects'}
+    allowed = {'name', 'base_url', 'api_key', 'protocol', 'enabled', 'pricing', 'free_models', 'allowed_projects', 'models'}
     if not isinstance(payload,dict) or set(payload) - allowed:raise ValueError('供应商包含未知字段')
     if 'enabled' in payload and type(payload['enabled']) is not bool:raise ValueError('启用状态必须为布尔值')
+    models_payload = payload.get('models') if 'models' in payload else None
+    if models_payload is not None:
+        if not isinstance(models_payload, list) or len(models_payload) > 1000:
+            raise ValueError('模型清单无效')
+        if any(not isinstance(x, str) or not x.strip() or len(x) > 200 for x in models_payload):
+            raise ValueError('模型清单无效')
+        models_payload = list(dict.fromkeys(x.strip() for x in models_payload))
     url = validate_url(payload.get('base_url', old.get('base_url', '')))
     protocol = payload.get('protocol', old.get('protocol', 'openai_compatible'))
     if protocol not in PROTOCOLS:raise ValueError('不支持的供应商协议')
@@ -143,7 +150,7 @@ def save(config, identity, payload):
         'revision': old.get('revision', 0) + 1, 'pricing': price,
         'free_models': free,
         'allowed_projects': permitted,
-        'models': [] if changed or supplied is not None and supplied != old.get('api_key') else old.get('models', []),
+        'models': models_payload if models_payload is not None else ([] if changed or supplied is not None and supplied != old.get('api_key') else old.get('models', [])),
         'last_check': None if changed or supplied is not None and supplied != old.get('api_key') else old.get('last_check')}
     refresh_legacy(doc)
     return doc, identity
@@ -202,24 +209,22 @@ def verify_dsh_gateway(base_url):
 def import_dsh(config, settings_path=None, projects=None):
     """Read only the named plugin's local forward configuration; never its accounts."""
     from .writer_runner import strict_json
-    path = Path(settings_path) if settings_path else Path.home() / '.dsh' / 'our-free-model' / 'settings.json'
+    from .free_channels import home as dsh_home, token_saver_enabled
+    path = Path(settings_path) if settings_path else dsh_home() / 'our-free-model' / 'settings.json'
     settings = strict_json(path, {})
     forward = settings.get('forward') or settings.get('forwarding') or {}
     if not isinstance(forward, dict) or not forward.get('enabled'):
         raise ValueError('请先在 dsh → Our Free Model → 本地转发中启用网关')
-    if isinstance(settings, dict) and settings.get('tokenSaver',{}).get('enabled') is True:
-        raise ValueError('dsh 提示词压缩仍开启，尚不能用于正式小说；请先关闭插件的提示词压缩，再连接。本助手不会擅自修改其他 dsh 使用场景')
+    if token_saver_enabled(settings):
+        raise ValueError('dsh 提示词压缩已开启或状态未知，尚不能用于正式小说；请先关闭插件的提示词压缩，再连接。本助手不会擅自修改其他 dsh 使用场景')
     port = forward.get('port')
     key = settings.get('forwardKey') or forward.get('key')
     if type(port) is not int or not 1 <= port <= 65535 or not isinstance(key, str) or not key:
         raise ValueError('dsh 本地转发端口或密钥不可用；请在插件中核对')
     verify_dsh_gateway(f'http://127.0.0.1:{port}/v1')
     existing = next((k for k,v in config.get('providers',{}).items() if v.get('protocol') == 'dsh_local'), None)
-    from . import scheduler
-    allowed = list(projects or [])
-    if not allowed:
-        allowed = list({job['project'] for job in scheduler.load_scheduler().get('jobs',{}).values() if job.get('enabled')})
-    if not allowed:
-        raise ValueError('请先选择或创建需要授权的作品，再导入 dsh 本地转发')
+    # An empty, explicitly supplied list means “authorize nothing”; only the
+    # caller decides scope, and a missing list must never grant every book.
+    allowed = list(dict.fromkeys(projects or []))
     return save(config, existing, {'name': 'Our Free Model · 本机', 'base_url': f'http://127.0.0.1:{port}/v1',
         'api_key': key, 'protocol': 'dsh_local', 'enabled': True,'allowed_projects':allowed})

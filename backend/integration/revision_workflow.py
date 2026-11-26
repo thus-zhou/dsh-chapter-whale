@@ -126,7 +126,9 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
                     raise revision_plan.RevisionStopped('human_review_required',
                         f'已完成 {writer.MAX_AUTO_REVIEWS} 次自动审查，后续交由人工复核',
                         candidate=rewritten,author_issues=(plan or {}).get('author',[]))
-                raise ValueError('已完成 2 次自动审查，请人工复核候选正文')
+                review=writer.human_handoff_review(state.get('review'),digest,auto_reviews)
+                state.update(review=review,review_body_sha256=digest,phase='needs_human_review');save()
+                return rewritten,review
             review=await executor.execute_review(chapter,rewritten)
             writer._record_review_attempt(project,chapter,rewritten,review)
             if not isinstance(review,dict) or review.get('success') is not True:
@@ -142,11 +144,15 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
         if bridge.review_eligible(qualified,digest):
             state.update(phase='qualified',qualified_review=qualified);save()
             return rewritten,qualified
-        if auto_reviews >= writer.MAX_AUTO_REVIEWS and strict:
-            state['phase']='stopped';save()
-            raise revision_plan.RevisionStopped('human_review_required',
-                f'已完成 {writer.MAX_AUTO_REVIEWS} 次自动审查，后续交由人工复核',
-                candidate=rewritten,author_issues=(plan or {}).get('author',[]))
+        if auto_reviews >= writer.MAX_AUTO_REVIEWS:
+            if strict:
+                state['phase']='stopped';save()
+                raise revision_plan.RevisionStopped('human_review_required',
+                    f'已完成 {writer.MAX_AUTO_REVIEWS} 次自动审查，后续交由人工复核',
+                    candidate=rewritten,author_issues=(plan or {}).get('author',[]))
+            handoff=writer.human_handoff_review(review,digest,auto_reviews)
+            state.update(review=handoff,review_body_sha256=digest,phase='needs_human_review');save()
+            return rewritten,handoff
         if not min_words and (not roles.enabled(config) or config.get('review_policy')!='e_decides'):
             # Preserve the existing strict manual-polish contract. A
             # later explicit retry rechecks D, but never overwrites its source.

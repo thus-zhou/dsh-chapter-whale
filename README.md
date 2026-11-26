@@ -17,6 +17,13 @@ Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档
 
 ![码章鲸 0.7.0：液态玻璃工作台、全自动小说写作与番茄发布](assets/screenshots/02-dashboard.jpg)
 
+## 0.7.5 审计修复（开发分支）
+
+- 修复 Windows 轻量包全新安装：运行时清单恢复为 v0.7.0 归档的原始字节哈希，`downloadRuntime` 不再因 182 项 CRLF 差异拒绝安装。
+- 修复多书日更去重覆盖任务配置、handoff 章节候选污染共享记忆/人物档案、排期路径绕过人工复核门禁。
+- 修复成本分析默认页崩溃、模型定价/自定义供应商/发布账号的 API 契约、批次恢复按钮与 13 个免费渠道兜底 ID。
+- 补充 Node 代理版本校验、端口自愈的真实客户端更新、隐私授权显式化与网关密钥 owner 校验。
+
 ## 0.7.4 审计修复
 
 - 实体提取恢复正常；存稿必须完成记忆、实体、RAG 与连续性同步后才算完成。补同步复用当前正文。
@@ -256,6 +263,6 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前版本为 `0.7.4`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
+包名为 `dsh-chapter-whale`，当前分支版本为 `0.7.5`（尚未发布；公开下载仍为 `0.7.4`，许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
 
-**[查看 0.7.4 发布状态与验证边界 →](RELEASE_STATUS.md)**
+**[查看 0.7.4 发布状态与验证边界（0.7.5 待验收） →](RELEASE_STATUS.md)**

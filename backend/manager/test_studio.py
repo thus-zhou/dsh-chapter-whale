@@ -50,8 +50,8 @@ class StudioTests(unittest.TestCase):
                 return PASS if len(contexts)>1 else {'success':True,'review_decision':'needs_revision',
                     'needs_revision':True,'raw_review':'持久化历史标记：核对原文铜牌凿痕。'}
         with patch.object(writer,'_load_webnovel_services',return_value=(Executor,lambda:Mock())):
-            with self.assertRaises(RuntimeError):
-                asyncio.run(writer._generate_and_review(self.project,1,3000,0))
+            first=asyncio.run(writer._generate_and_review(self.project,1,3000,0))
+            self.assertEqual(first['review']['review_decision'],'needs_human_review')
             result=asyncio.run(writer._generate_and_review(self.project,1,3000,0))
         self.assertIn('持久化历史标记',contexts[1])
         self.assertEqual(result['review']['review_decision'],'pass')

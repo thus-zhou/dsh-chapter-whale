@@ -31,9 +31,24 @@ def _post_failure(post):
     post = post if isinstance(post, dict) else {}
     for key in ("continuity_failure", "rag_failure", "entities", "shared_memory"):
         value = post.get(key)
-        if isinstance(value, dict) and value.get("status") != "synced":
+        if isinstance(value, dict) and value.get("status") not in {"synced", "pending_review", "skipped_pending_review"}:
             return value
     return {}
+
+
+def _post_ok(post, review=None):
+    if _post_save_complete(post):
+        return True
+    return (isinstance(review, dict)
+            and review.get("review_decision") == "needs_human_review"
+            and review.get("human_review_required") is True
+            and isinstance(post, dict)
+            and (post.get("shared_memory") or {}).get("status") == "pending_review")
+
+
+def _metadata_complete(receipt):
+    """Handoff bodies are settled at 'pending_review'; they never need re-extraction."""
+    return _post_ok((receipt or {}).get("post_save"), (receipt or {}).get("review"))
 
 
 def _require_model() -> Optional[str]:
@@ -255,7 +270,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
                              "message": str(exc)[:300]}
         record.update(failure)
         record["saved_ids"] = sorted(c for c, r in writer.committed_chapters(project).items()
-                                     if c in targets and _post_save_complete(r.get("post_save")))
+                                     if c in targets and _metadata_complete(r))
         cycle["draft_chapters"] = [entries[i] for i in sorted(entries)]
         return finish(cycle, record, "waiting" if waiting else status,
                       "等待模型恢复，将继续原批次" if waiting else (
@@ -265,10 +280,10 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
                       "到恢复时间继续原批次" if waiting else "重新运行任务，只补同步当前正文的记忆、实体和索引")
 
     def repair(chapter, receipt):
-        if not _post_save_complete(receipt.get("post_save")):
+        if not _metadata_complete(receipt):
             from . import studio
             post = studio.sync_existing_artifacts(project, chapter)
-            if not _post_save_complete(post):
+            if not _post_ok(post, receipt.get("review")):
                 raise PostSaveIncomplete(_post_failure(post))
 
     for index, chapter in enumerate(targets):
@@ -334,7 +349,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
                 issue="正文已生成但审查未通过" if saved else "正文没有落盘")
         else:
             entries[chapter] = _entry(chapter, fresh, reviewed=True)
-            if not _post_save_complete(fresh.get("post_save")):
+            if not _metadata_complete(fresh):
                 return defer(PostSaveIncomplete(_post_failure(fresh.get("post_save"))), chapter)
         cycle["completed_count"] = index + 1
         cycle["draft_chapters"] = [entries[i] for i in sorted(entries)]
@@ -344,7 +359,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
     # 收尾复核：回执必须仍与正文、创作约定、章版本一致（作者可能在中途改了稿）。
     receipts = writer.committed_chapters(project)
     missing = [c for c in targets if c not in receipts]
-    incomplete = [c for c in targets if c in receipts and not _post_save_complete(receipts[c].get("post_save"))]
+    incomplete = [c for c in targets if c in receipts and not _metadata_complete(receipts[c])]
     if incomplete:
         return defer(PostSaveIncomplete({}), incomplete[0])
     for chapter in missing:

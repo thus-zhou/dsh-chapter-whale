@@ -4,12 +4,16 @@
 
 Windows 轻量插件复用 [v0.7.0 固定 Python 与浏览器运行时](https://github.com/thus-zhou/dsh-chapter-whale/releases/tag/v0.7.0)，始终从 0.7.5 插件包安装后端代码。代码包与运行时清单分别计算 SHA-256 与 `buildId` 校验。
 
-## 2026-11-26 离线验收规模
+## 2026-11-26 审计后离线验收规模
 
-- **Node / 面板与宿主桥契约（`npm test`）**：共 114 项，`113 pass / 0 fail / 1 skipped`（macOS 首装用例在 Windows 跳过）。
-- **后端集成层（`python -B -X utf8 -m unittest discover -s backend/integration -t backend`）**：共 `736` 项，全部通过（`0 fail / 0 error / 4 skipped`）。
-- **后端管理层（`python -B -X utf8 -m unittest discover -s backend/manager -t backend`）**：共 `168` 项，全部通过（`0 fail / 0 error`）。
-- **发行门禁校验（`node scripts/check-release.mjs --local`）**：通过（受管清单、纯 LF 行尾、`runtime-download.json` 对齐及市场条目一致性全部核验）。
+- **Node / 面板与宿主桥契约（`npm test`）**：共 125 项，`109 pass / 0 fail / 16 skipped`（Linux；Windows/macOS 条件用例跳过）。
+- **后端集成层（`python -B -X utf8 -m unittest discover -s backend/integration -t backend`）**：共 `768` 项，全部通过（`0 fail / 0 error / 8 skipped`）。
+- **后端管理层（`python -B -X utf8 -m unittest discover -s backend/manager -t backend`）**：共 `175` 项，全部通过（`0 fail / 0 error`）。
+- **干净源码门禁（`node scripts/check-release.mjs --local`）**：1168 个文件通过，跳过 2253 个缺席 runtime 项，buildId `5c8586f8bb2111c65bb4d8fbabeb51d3fe6f67ee6ea8b7c416d6f8cbda15f62d`。
+- **完整包门禁（HEAD 源码 + 真实 v0.7.0 runtime）**：3421 个文件全部通过，`downloadRuntime()` 用真实归档字节复现成功。
+
+> `--local` 的 1168 与完整包的 3421 不是同一个口径；前者不校验缺席的 runtime 项，不能单独证明运行时归档对齐。
+> `buildId` 覆盖 `backend/` 与 `runtime/` 受管文件（3421 项），不包含 `client.js`、`index.js`、`managed-runtime.mjs` 等根入口；这些文件由客户端/宿主契约测试覆盖。
 
 ## 未实测边界说明
 

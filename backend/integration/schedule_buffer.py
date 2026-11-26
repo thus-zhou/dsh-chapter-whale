@@ -179,8 +179,12 @@ def approved_candidates(project: Any) -> List[Dict[str, Any]]:
     path = Path(project)
     try:
         receipts = writer.reviewed_chapters(path)
+        committed = writer.committed_chapters(path)
     except Exception:  # noqa: BLE001 - 项目不可读时按“没有可用稿件”处理
         return []
+    existing = writer.existing_chapter_ids(path)
+    handoff = sorted((set(committed) - set(receipts)) & existing)
+    first_pending = handoff[0] if handoff else 0
     candidates: List[Dict[str, Any]] = []
     for chapter_id, receipt in sorted((receipts or {}).items()):
         if not isinstance(receipt, Mapping):
@@ -191,6 +195,10 @@ def approved_candidates(project: Any) -> List[Dict[str, Any]]:
         try:
             number = int(chapter_id)
         except (TypeError, ValueError):
+            continue
+        if first_pending and number >= first_pending:
+            # A later reviewed chapter must not jump over an earlier handoff
+            # that is still waiting for human approval.
             continue
         candidates.append({"chapter_id": number, "version_sha256": version,
                            "words": int(receipt.get("word_count") or receipt.get("words") or 0),

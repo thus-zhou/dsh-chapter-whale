@@ -91,6 +91,12 @@ def _submit_planned(job_id: str, job: Mapping[str, Any], capability: Mapping[str
     stats: Dict[str, Any] = {"submitted": 0, "stale": 0, "expired": 0, "unknown": 0,
                              "rejected": 0, "too_soon": 0, "duplicate": 0, "blocked": ""}
     project = Path(str(job["project"]))
+    try:
+        pending = sorted(set(writer.committed_chapters(project)) - set(writer.reviewed_chapters(project)))
+        pending = [c for c in pending if c in writer.existing_chapter_ids(project)]
+    except Exception:  # noqa: BLE001 - 项目不可读时由后续逐章回执校验兜底
+        pending = []
+    first_pending = pending[0] if pending else 0
     # 有待对账的章时，本轮一条都不写：先把“可能已收”的那条弄清，否则就会重复预约（T06）。
     if any(isinstance(item, Mapping) and item.get("state") == "needs_review"
            for item in store.get("intents", [])):
@@ -98,6 +104,9 @@ def _submit_planned(job_id: str, job: Mapping[str, Any], capability: Mapping[str
         return stats
     for intent in intents:
         chapter = int(intent.get("chapter_id") or 0)
+        if first_pending and chapter >= first_pending:
+            stats["blocked"] = f"第 {pending} 章待人工复核，已停止排期后续章节"
+            break
         if str(chapter) in done_chapters:
             stats["duplicate"] += 1
             continue

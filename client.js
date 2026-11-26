@@ -2202,35 +2202,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   ),
                 )
               : null,
-
-            e(Modal, {
-              open: customOpen,
-              title: '添加自定义 AI 供应商',
-              onClose: () => { if (!busy.addProv) setCustomOpen(false); },
-              children: e(
-                'div',
-                { className: 'nh-col', style: { gap: 12 } },
-                e('div', { className: 'nh-formgrid' },
-                  e(Field, { label: '名称' }, e(TextInput, { value: customForm.name, onChange: (v) => setCustomForm({ ...customForm, name: v }), placeholder: '例如：我的中转站' })),
-                  e(Field, { label: '协议' }, e(Select, {
-                    value: customForm.protocol,
-                    onChange: (v) => setCustomForm({ ...customForm, protocol: v }),
-                    options: [
-                      { value: 'openai_compatible', label: 'OpenAI 兼容 (/v1)' },
-                      { value: 'anthropic', label: 'Anthropic Messages' },
-                      { value: 'gemini', label: 'Google Gemini' },
-                    ],
-                  })),
-                ),
-                e(Field, { label: '接口地址 (Base URL)' }, e(TextInput, { value: customForm.base_url, onChange: (v) => setCustomForm({ ...customForm, base_url: v }), placeholder: 'https://api.example.com/v1' })),
-                e(Field, { label: 'API Key（仅保存在本地安全存储）' }, e(TextInput, { type: 'password', value: customForm.api_key, onChange: (v) => setCustomForm({ ...customForm, api_key: v }), placeholder: 'sk-...' })),
-                e(Field, { label: '模型 ID（逗号或换行分隔，可留空后点击“发现模型”）' }, e('textarea', { className: 'nh-textarea', rows: 3, value: customForm.models, onChange: (ev) => setCustomForm({ ...customForm, models: ev.target.value }) })),
-                e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
-                  e(Button, { disabled: busy.addProv, onClick: () => setCustomOpen(false) }, '取消'),
-                  e(Button, { kind: 'primary', busy: busy.addProv, onClick: addCustomProvider }, '保存供应商'),
-                ),
-              ),
-            }),
           );
         }
 
@@ -2719,6 +2690,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           queued: '排队中',
           running: '进行中',
           waiting: '等待处理',
+          awaiting_login: '等待扫码登录',
           cancelling: '取消中',
           success: '已完成',
           failed: '失败',
@@ -2726,7 +2698,26 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           interrupted: '已中断',
           cancelled: '已取消',
         };
-        const OP_ACTIVE_STATUSES = ['queued', 'running', 'waiting', 'cancelling'];
+        const OP_ACTIVE_STATUSES = ['queued', 'running', 'waiting', 'awaiting_login', 'cancelling'];
+
+        /* Must stay identical to integration/free_channels.py CHANNELS: the
+           fallback list is used before the summary loads, and ofm_runtime.rpc
+           rejects any provider id that is not in CHANNEL_IDS. */
+        const FREE_CHANNEL_FALLBACKS = [
+          { id: 'codearts', name: 'CodeArts' },
+          { id: 'buddy', name: 'WorkBuddy 国内版' },
+          { id: 'workbuddy', name: 'WorkBuddy 国际版' },
+          { id: 'lobsterai', name: 'LobsterAI' },
+          { id: 'qoder', name: 'Qoder' },
+          { id: 'qodercn', name: 'Qoder 中国版' },
+          { id: 'trae', name: 'TRAE' },
+          { id: 'cline', name: 'Cline' },
+          { id: 'loomy', name: 'Loomy' },
+          { id: 'raccoon', name: 'Raccoon' },
+          { id: 'minimax', name: 'MiniMax Code' },
+          { id: 'zcode', name: 'ZCode' },
+          { id: 'gemini', name: 'Gemini' },
+        ];
 
         function resolveTaskProgress(op) {
           const p = op && op.progress;
@@ -2939,7 +2930,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const project = (overview.projects || [])[0] || null;
           const job = props.job || (overview.jobs || []).find(item => matchesProject(item, project)) || null;
           const work = workHeadline(job), cycle = job && job.cycle || {}, stage = chapterStage(job);
-          const projectOps = (props.allOperations || overview.operations || []).filter(op => op && (!project || op.project_id === project.id || !op.project_id) && OP_ACTIVE_STATUSES.includes(op.status));
+          const allOps = props.allOperations || overview.operations || [];
+          const projectOps = allOps.filter(op => op && project && op.project_id === project.id && OP_ACTIVE_STATUSES.includes(op.status));
+          const globalOps = allOps.filter(op => op && !op.project_id && OP_ACTIVE_STATUSES.includes(op.status));
           const activeOp = projectOps[0] || null;
           const isRunning = stage.active || Boolean(activeOp);
           const rev = project && project.chapters_revision ? project.chapters_revision : 0;
@@ -3020,6 +3013,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               e('div', { className: 'nh-row', style: { gap: 8 } },
                 e(Button, { size: 'sm', onClick: () => props.onOpenChapter(humanPendingRows[0].id) }, `查看第 ${humanPendingRows[0].id} 章`),
                 e(Button, { size: 'sm', kind: 'primary', onClick: () => props.navigate('chapters') }, '前往处理'))) : null,
+            globalOps.length ? e('div', { className: 'nh-panel', style: { marginBottom: 'var(--nh-gap)' } },
+              e('div', { className: 'nh-row', style: { justifyContent: 'space-between', alignItems: 'center' } },
+                e('div', null,
+                  e('strong', null, '全局任务'),
+                  e('div', { className: 'nh-muted', style: { marginTop: 2 } }, `${globalOps.length} 项进行中 · 不属于当前作品`)),
+                e(Button, { size: 'sm', kind: 'ghost', onClick: () => props.navigate('operations') }, '查看操作历史')),
+              e('div', { className: 'nh-col', style: { gap: 10, marginTop: 8 } },
+                globalOps.map(op => e(TaskProgressBar, { key: op.id, op })))) : null,
             work.tone === 'err' ? e('div', { className: 'nh-alertblock' }, e(Icon, { name: 'alert' }), e('span', null, work.subtitle), e(Button, { onClick: () => props.navigate('jobs') }, '处理任务')) : null,
             e('div', { className: 'cw-primary-grid' },
               e('section', { className: 'cw-glass-card cw-manuscript-card', 'aria-label': '正文预览' },
@@ -3115,6 +3116,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             );
           });
           const pendingBatches = (workflow.data && Array.isArray(workflow.data.pending_batches) ? workflow.data.pending_batches : []);
+          const pendingBatch = pendingBatches.find((batch) => pendingBatchId(batch)) || null;
+          const pendingId = pendingBatchId(pendingBatch);
 
           const act = async (label, path, body, busyKey) => {
             const key = busyKey || label;
@@ -3161,7 +3164,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   ),
                 )
               : null,
-            pendingBatches.length
+            pendingBatch
               ? e(
                   'div',
                   { className: 'cw-review-banner', style: { marginBottom: 'var(--nh-gap)' } },
@@ -3169,13 +3172,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     'div',
                     null,
                     e('strong', null, `检测到 ${pendingBatches.length} 个未完成批次`),
-                    e('div', { className: 'nh-muted' }, `最近批次 ${pendingBatches[0].batch_id || ''} · 如卡在第一章可选择继续或放弃旧批次。`),
+                    e('div', { className: 'nh-muted' }, `最近批次 ${pendingId} · 如卡在第一章可选择继续或放弃旧批次。`),
                   ),
                   e(
                     'div',
                     { className: 'nh-row', style: { gap: 8 } },
-                    e(Button, { size: 'sm', busy: busy.resumeBatch, onClick: () => act('继续原批次', `/projects/${project.id}/batches/${encodeURIComponent(pendingBatches[0].batch_id)}/resume`, {}, 'resumeBatch') }, '继续原批次'),
-                    e(Button, { size: 'sm', kind: 'danger', busy: busy.abandonBatch, onClick: () => act('放弃旧批次', `/projects/${project.id}/batches/${encodeURIComponent(pendingBatches[0].batch_id)}/abandon`, {}, 'abandonBatch') }, '放弃旧批次'),
+                    e(Button, { size: 'sm', busy: busy.resumeBatch, onClick: () => act('继续原批次', `/projects/${project.id}/batches/${encodeURIComponent(pendingId)}/resume`, {}, 'resumeBatch') }, '继续原批次'),
+                    e(Button, { size: 'sm', kind: 'danger', busy: busy.abandonBatch, onClick: () => act('放弃旧批次', `/projects/${project.id}/batches/${encodeURIComponent(pendingId)}/abandon`, {}, 'abandonBatch') }, '放弃旧批次'),
                   ),
                 )
               : null,
@@ -4227,7 +4230,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [confirm, setConfirm] = React.useState(null);
           const hasLoggedInAccount = accounts.some((item) => item && item.logged_in);
           const pubOps = (props.allOperations || overview.operations || []).filter(
-            (op) => op && OP_ACTIVE_STATUSES.includes(op.status) && ['publish', 'stage', 'login'].includes(op.kind),
+            (op) => op && OP_ACTIVE_STATUSES.includes(op.status) && ['publish', 'stage', 'login'].includes(op.kind)
+              && (op.kind === 'login' || !project || op.project_id === project.id),
           );
 
           const startAccountLogin = async () => {
@@ -6733,7 +6737,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function scheduleDraft(job, project) {
           const times = dailyTimeList(job);
           return {
-            name: (job && job.name) || '日更任务',
+            name: (job && job.name) || (project && project.title ? `《${project.title}》· 日更` : '日更任务'),
             book: (job && job.book) || (project && project.title) || '',
             account: (job && job.account) || '',
             platform: (job && job.platform) || 'fanqie',
@@ -6794,7 +6798,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               ? form.publicationMode
               : 'draft_only';
             const body = {
-              name: String(form.name || '日更任务').slice(0, 96) || '日更任务',
+              name: String(form.name || (project && project.title ? `《${project.title}》· 日更` : '日更任务')).slice(0, 96) || '日更任务',
               project: (existing && existing.project) || (project && (project.path || project.id)) || '',
               book: String(form.book || (project && project.title) || '未命名作品').slice(0, 96),
               account: needsPlatform ? String(form.account || '') : '',
@@ -7351,6 +7355,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             return answer;
           };
 
+          const resolveAccountHandle = async (channel) => {
+            const list = await rpc('accounts', 'account.list', { provider: channel });
+            const rows = list && list.value && Array.isArray(list.value.accounts) ? list.value.accounts : [];
+            const withId = rows.filter((row) => row && (row.id || row.accountId));
+            const latest = withId[withId.length - 1];
+            return latest ? String(latest.id || latest.accountId) : '';
+          };
+
           const createAccount = async () => {
             if (!provider) {
               setError('先选一个渠道。');
@@ -7360,22 +7372,31 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             const answer = await rpc('account', 'account.create', payload);
             if (!answer) return;
             const value = answer.value || {};
-            const accountId =
+            let accountId =
               (value.account && value.account.id) || value.id || value.accountId || '';
+            if (accountId === 'pending') accountId = '';
             const loginUrl = value.url || value.loginUrl || value.verifyUrl || '';
             const loginQr = value.qr || value.qrCode || value.qrDataUrl || '';
             const loginMsg = value.message || value.hint || '';
+            if (!accountId && (loginUrl || loginQr)) {
+              /* account.create does not always echo the account id; without a
+                 handle login.poll can never run, so resolve the newest account
+                 of this channel once instead of parking the UI on 'pending'. */
+              accountId = await resolveAccountHandle(provider);
+            }
             if (accountId || loginUrl || loginQr) {
               setLogin({
                 provider,
-                accountId: accountId || 'pending',
+                accountId,
                 state: value.state || 'polling',
                 done: false,
                 url: loginUrl,
                 qr: loginQr,
                 message: loginMsg,
               });
-              setNotice('等待本人在渠道侧完成登录/验证，页面每 3 秒自动同步状态。');
+              setNotice(accountId
+                ? '等待本人在渠道侧完成登录/验证，页面每 3 秒自动同步状态。'
+                : '账号已在渠道侧创建，但渠道没有返回账号标识；完成登录后点「读取登录状态」再试。');
             } else {
               setNotice('账号已创建；后端没有返回账号标识，请用「读取登录状态」继续验证。');
             }
@@ -7383,18 +7404,27 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const pollLogin = React.useCallback(async (target) => {
             const pair = target || login;
-            if (!pair || !pair.provider || !pair.accountId || pair.accountId === 'pending') {
-              if (!target) setError('没有可轮询的账号标识。');
+            if (!pair || !pair.provider) {
+              if (!target) setError('没有可轮询的账号。');
               return;
             }
-            const answer = await rpc('poll', 'login.poll', { provider: pair.provider, accountId: pair.accountId });
+            let accountId = pair.accountId && pair.accountId !== 'pending' ? pair.accountId : '';
+            if (!accountId) {
+              accountId = await resolveAccountHandle(pair.provider);
+              if (!accountId) {
+                if (!target) setError('渠道尚未返回账号标识，请稍后重试或回渠道页面刷新账户列表。');
+                return;
+              }
+              setLogin((prev) => (prev ? { ...prev, accountId } : prev));
+            }
+            const answer = await rpc('poll', 'login.poll', { provider: pair.provider, accountId });
             if (!answer) return;
             const value = answer.value || {};
             const done = value.done === true;
             const success = value.success === true;
             setLogin((prev) => ({
               provider: pair.provider,
-              accountId: pair.accountId,
+              accountId,
               done,
               success,
               state: value.state || (done ? (success ? 'success' : 'failed') : 'polling'),
@@ -7415,7 +7445,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const pollRef = React.useRef(pollLogin);
           pollRef.current = pollLogin;
-          const pollingActive = Boolean(login && !login.done && login.accountId && login.accountId !== 'pending');
+          const pollingActive = loginPollReady(login);
           React.useEffect(() => {
             if (!pollingActive) return undefined;
             const timer = setInterval(() => {
@@ -7480,7 +7510,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               project: project.path || project.id,
               project_id: project.id,
               authorize_project: true,
-              set_default: true,
             });
             if (answer) {
               toast.push('免费池已保存，并授权到当前作品', 'ok');
@@ -7491,22 +7520,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          const KNOWN_FREE_CHANNELS = [
-            { id: 'opencode', name: 'OpenCode Free' },
-            { id: 'kilo', name: 'KiloCode Free' },
-            { id: 'aistudio', name: 'Google AI Studio' },
-            { id: 'cerebras', name: 'Cerebras' },
-            { id: 'groq', name: 'Groq' },
-            { id: 'nvidia', name: 'NVIDIA NIM' },
-            { id: 'openrouter', name: 'OpenRouter' },
-            { id: 'siliconflow', name: '硅基流动 SiliconFlow' },
-            { id: 'zhipu', name: '智谱 BigModel' },
-            { id: 'deepseek', name: 'DeepSeek' },
-            { id: 'qwen', name: '通义千问 Qwen' },
-            { id: 'kimi', name: 'Kimi Moonshot' },
-            { id: 'minimax', name: 'MiniMax' },
-          ];
-          const channels = (summary && Array.isArray(summary.channels) ? summary.channels : KNOWN_FREE_CHANNELS).filter(Boolean);
+          const channels = (summary && Array.isArray(summary.channels) ? summary.channels : FREE_CHANNEL_FALLBACKS).filter(Boolean);
           const options = channels.map((channel) => {
             const id = channel.id || channel.channel || channel.provider || '';
             return { value: id, label: channel.name || channel.label || id };
@@ -7516,6 +7530,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             : (summary && Array.isArray(summary.catalog) ? summary.catalog : []).filter((row) => row && row.routable !== false);
           const modelOptions = modelRows && modelRows.length ? modelRows : [];
           const modelKey = (row) => row.id || row.model_id || row.key || '';
+          const loginHref = login ? safeHttpUrl(login.url) : '';
+          const loginQrSrc = login ? safeQrSrc(login.qr) : '';
 
           return e(
             Card,
@@ -7565,7 +7581,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     e(
                       'div',
                       { className: 'nh-row' },
-                      e(Button, { icon: 'plus', busy: busy.account, onClick: createAccount }, '发起登录'),
+                      e(Button, { icon: 'plus', busy: busy.account, disabled: !summary, onClick: createAccount }, '发起登录'),
                       e(Button, { icon: 'refresh', busy: busy.poll, onClick: () => pollLogin() }, '读取登录状态'),
                     ),
                   ),
@@ -7580,8 +7596,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                         e(Badge, { tone: login.done && login.success ? 'ok' : login.done ? 'err' : 'accent' }, login.state || 'polling'),
                         e(Badge, { tone: 'mute' }, login.accountId || '—'),
                       ),
-                      login.url ? e('a', { className: 'nh-link', href: login.url, target: '_blank', rel: 'noreferrer' }, '在浏览器打开登录页') : null,
-                      login.qr ? e('img', { className: 'nh-qr', src: login.qr, alt: '渠道登录二维码' }) : null,
+                      loginHref ? e('a', { className: 'nh-link', href: loginHref, target: '_blank', rel: 'noreferrer' }, '在浏览器打开登录页') : null,
+                      loginQrSrc ? e('img', { className: 'nh-qr', src: loginQrSrc, alt: '渠道登录二维码' }) : null,
                       login.message ? e('div', { className: 'nh-note' }, String(login.message)) : null,
                       e(
                         'div',
@@ -7984,35 +8000,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   ),
                 )
               : null,
-
-            e(Modal, {
-              open: customOpen,
-              title: '添加自定义 AI 供应商',
-              onClose: () => { if (!busy.addProv) setCustomOpen(false); },
-              children: e(
-                'div',
-                { className: 'nh-col', style: { gap: 12 } },
-                e('div', { className: 'nh-formgrid' },
-                  e(Field, { label: '名称' }, e(TextInput, { value: customForm.name, onChange: (v) => setCustomForm({ ...customForm, name: v }), placeholder: '例如：我的中转站' })),
-                  e(Field, { label: '协议' }, e(Select, {
-                    value: customForm.protocol,
-                    onChange: (v) => setCustomForm({ ...customForm, protocol: v }),
-                    options: [
-                      { value: 'openai_compatible', label: 'OpenAI 兼容 (/v1)' },
-                      { value: 'anthropic', label: 'Anthropic Messages' },
-                      { value: 'gemini', label: 'Google Gemini' },
-                    ],
-                  })),
-                ),
-                e(Field, { label: '接口地址 (Base URL)' }, e(TextInput, { value: customForm.base_url, onChange: (v) => setCustomForm({ ...customForm, base_url: v }), placeholder: 'https://api.example.com/v1' })),
-                e(Field, { label: 'API Key（仅保存在本地安全存储）' }, e(TextInput, { type: 'password', value: customForm.api_key, onChange: (v) => setCustomForm({ ...customForm, api_key: v }), placeholder: 'sk-...' })),
-                e(Field, { label: '模型 ID（逗号或换行分隔，可留空后点击“发现模型”）' }, e('textarea', { className: 'nh-textarea', rows: 3, value: customForm.models, onChange: (ev) => setCustomForm({ ...customForm, models: ev.target.value }) })),
-                e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
-                  e(Button, { disabled: busy.addProv, onClick: () => setCustomOpen(false) }, '取消'),
-                  e(Button, { kind: 'primary', busy: busy.addProv, onClick: addCustomProvider }, '保存供应商'),
-                ),
-              ),
-            }),
           );
         }
 
@@ -8676,11 +8663,12 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const toast = useToast();
           const project = (overview.projects || [])[0] || null;
           const jobsList = overview.jobs || [];
+          const accounts = (overview.accounts || []).filter((item) => item && item.logged_in);
           const [selectedJobId, setSelectedJobId] = React.useState('');
           const [subTab, setSubTab] = React.useState('config');
           const [createOpen, setCreateOpen] = React.useState(false);
           const [newJob, setNewJob] = React.useState(() => ({
-            name: project ? `${project.title} · 日更` : '日更任务',
+            name: project ? `《${project.title}》· 日更` : '日更任务',
             daily_time: '09:00',
             chapters_per_run: '1',
             word_count: '3500',
@@ -8696,7 +8684,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           React.useEffect(() => {
             if (project && !createOpen) {
-              setNewJob((cur) => ({ ...cur, name: `${project.title} · 日更`, book: cur.book || project.title }));
+              setNewJob((cur) => ({ ...cur, name: `《${project.title}》· 日更`, book: cur.book || project.title }));
             }
           }, [project && project.id, createOpen]);
 
@@ -8743,13 +8731,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const createJob = async () => {
             if (!project) { toast.push('请先创建或选择作品', 'err'); return; }
+            const mode = ['draft_only', 'publish_now', 'platform_scheduled'].includes(newJob.publication_mode) ? newJob.publication_mode : 'draft_only';
+            if (mode !== 'draft_only' && !(newJob.account || '').trim()) {
+              toast.push('立即发布或按平台排期必须先选择已登录账号', 'err');
+              return;
+            }
             setBusy((c) => ({ ...c, create: true }));
             try {
-              const mode = ['draft_only', 'publish_now', 'platform_scheduled'].includes(newJob.publication_mode) ? newJob.publication_mode : 'draft_only';
               const created = await api('/jobs', {
                 method: 'POST',
                 body: {
-                  name: newJob.name.trim() || `${project.title} · 日更`,
+                  name: newJob.name.trim() || `《${project.title}》· 日更`,
                   project: project.path || project.id,
                   book: (newJob.book || project.title).trim(),
                   account: mode === 'draft_only' ? '' : (newJob.account || '').trim(),
@@ -8818,9 +8810,20 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           options: [
                             { value: 'draft_only', label: '只存稿（推荐，安全免账号）' },
                             { value: 'publish_now', label: '立即发布到番茄' },
+                            { value: 'platform_scheduled', label: '按平台排期发布' },
                           ],
                         })),
+                        e(Field, { label: '账号' }, accounts.length
+                          ? e(Select, {
+                              value: newJob.account,
+                              onChange: (v) => setNewJob({ ...newJob, account: v }),
+                              options: [{ value: '', label: newJob.publication_mode === 'draft_only' ? '只存稿可不选' : '选择已登录账号…' }, ...accounts.map((item) => ({ value: item.name, label: item.name }))],
+                            })
+                          : e('div', { className: 'nh-muted', style: { fontSize: 12 } }, '没有已登录账号；只存稿仍可创建，发布/排期请先到发布队列登录。')),
                       ),
+                      newJob.publication_mode !== 'draft_only' && !accounts.length
+                        ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, '发布或排期任务必须绑定已登录的番茄账号。')
+                        : null,
                       e('div', { className: 'nh-row', style: { gap: 8 } }, e(Button, { kind: 'primary', icon: 'plus', busy: busy.create, onClick: createJob }, '创建日更任务')),
                     )
                   : null,
@@ -8860,6 +8863,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               };
               if (job.schedule_buffer !== undefined && job.schedule_buffer !== null) {
                 body.schedule_buffer = job.schedule_buffer;
+              }
+              if (mode !== 'draft_only' && !String(body.account || '').trim()) {
+                toast.push('立即发布或按平台排期必须先选择已登录账号', 'err');
+                setBusy((current) => ({ ...current, save: false }));
+                return;
               }
               await api(`/jobs/${job.id}`, {
                 method: 'PUT',
@@ -9048,7 +9056,26 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   e(Field, { label: '每日时段' }, e(TextInput, { value: newJob.daily_time, onChange: (v) => setNewJob({ ...newJob, daily_time: v }) })),
                   e(Field, { label: '每时段章数' }, e(TextInput, { type: 'number', value: newJob.chapters_per_run, onChange: (v) => setNewJob({ ...newJob, chapters_per_run: v }) })),
                   e(Field, { label: '每章字数' }, e(TextInput, { type: 'number', value: newJob.word_count, onChange: (v) => setNewJob({ ...newJob, word_count: v }) })),
+                  e(Field, { label: '投递方式' }, e(Select, {
+                    value: newJob.publication_mode,
+                    onChange: (v) => setNewJob({ ...newJob, publication_mode: v }),
+                    options: [
+                      { value: 'draft_only', label: '只存稿（不需要账号）' },
+                      { value: 'publish_now', label: '立即发布到番茄' },
+                      { value: 'platform_scheduled', label: '按平台排期发布' },
+                    ],
+                  })),
+                  e(Field, { label: '账号' }, accounts.length
+                    ? e(Select, {
+                        value: newJob.account,
+                        onChange: (v) => setNewJob({ ...newJob, account: v }),
+                        options: [{ value: '', label: newJob.publication_mode === 'draft_only' ? '只存稿可不选' : '选择已登录账号…' }, ...accounts.map((item) => ({ value: item.name, label: item.name }))],
+                      })
+                    : e('div', { className: 'nh-muted', style: { fontSize: 12 } }, '没有已登录账号；只存稿仍可创建。')),
                 ),
+                newJob.publication_mode !== 'draft_only' && !accounts.length
+                  ? e('div', { className: 'nh-note', 'data-tone': 'warn' }, '发布或排期任务必须绑定已登录的番茄账号，请先到发布队列登录。')
+                  : null,
                 e('div', { className: 'nh-row', style: { justifyContent: 'flex-end', gap: 8 } },
                   e(Button, { disabled: busy.create, onClick: () => setCreateOpen(false) }, '取消'),
                   e(Button, { kind: 'primary', busy: busy.create, onClick: createJob }, '创建'),
@@ -9581,8 +9608,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     onChange: (v) => setCustomForm({ ...customForm, protocol: v }),
                     options: [
                       { value: 'openai_compatible', label: 'OpenAI 兼容 (/v1)' },
-                      { value: 'anthropic', label: 'Anthropic Messages' },
-                      { value: 'gemini', label: 'Google Gemini' },
                     ],
                   })),
                 ),
@@ -10224,40 +10249,25 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const [saving, setSaving] = React.useState(false);
 
           const rateFor = (rate, field) => {
-            const rowEdit = edits[rate.model];
+            const rowEdit = edits[pricingRateKey(rate)];
             if (rowEdit && rowEdit[field] !== undefined) return rowEdit[field];
             return rate[field] ?? '';
           };
-          const setRate = (model, field, val) => {
-            setEdits((cur) => ({ ...cur, [model]: { ...(cur[model] || {}), [field]: val } }));
+          const setRate = (key, field, val) => {
+            setEdits((cur) => ({ ...cur, [key]: { ...(cur[key] || {}), [field]: val } }));
           };
           const savePricing = async () => {
             if (saving) return;
+            const payload = buildPricingPayload(data, edits);
+            if (!payload.rates.length) {
+              toast.push('没有可保存的定价：每行都需要接口地址与模型名', 'err');
+              return;
+            }
             setSaving(true);
             try {
-              const mergedRates = serverRates.map((rate) => {
-                const ed = edits[rate.model] || {};
-                const inputVal = Number(ed.input !== undefined ? ed.input : rate.input);
-                const outputVal = Number(ed.output !== undefined ? ed.output : rate.output);
-                const cachedRaw = ed.cached !== undefined ? ed.cached : rate.cached;
-                return {
-                  model: rate.model,
-                  currency: rate.currency || 'USD',
-                  input: Number.isFinite(inputVal) && inputVal >= 0 ? inputVal : Number(rate.input) || 0,
-                  output: Number.isFinite(outputVal) && outputVal >= 0 ? outputVal : Number(rate.output) || 0,
-                  ...(cachedRaw !== '' && cachedRaw !== null && cachedRaw !== undefined && Number.isFinite(Number(cachedRaw))
-                    ? { cached: Number(cachedRaw) }
-                    : {}),
-                };
-              });
               await api('/costs/pricing', {
                 method: 'PUT',
-                body: {
-                  revision: data.revision || 0,
-                  usd_to_cny: data.usd_to_cny || 7.2,
-                  rates: mergedRates,
-                  reprice_unpriced: true,
-                },
+                body: payload,
               });
               setEdits({});
               toast.push('模型定价已更新并重算历史未计价记录', 'ok');
@@ -10306,7 +10316,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                     serverRates.map((rate) =>
                       e(
                         'tr',
-                        { key: rate.model },
+                        { key: pricingRateKey(rate) },
                         e('td', { className: 'nh-mono', style: { fontSize: 11 } }, rate.model),
                         e('td', null, rate.currency),
                         e('td', { className: 'nh-right' }, e('input', {
@@ -10316,7 +10326,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           className: 'nh-input nh-mono',
                           style: { width: 86, textAlign: 'right' },
                           value: rateFor(rate, 'input'),
-                          onChange: (ev) => setRate(rate.model, 'input', ev.target.value),
+                          onChange: (ev) => setRate(pricingRateKey(rate), 'input', ev.target.value),
                         })),
                         e('td', { className: 'nh-right' }, e('input', {
                           type: 'number',
@@ -10325,7 +10335,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           className: 'nh-input nh-mono',
                           style: { width: 86, textAlign: 'right' },
                           value: rateFor(rate, 'output'),
-                          onChange: (ev) => setRate(rate.model, 'output', ev.target.value),
+                          onChange: (ev) => setRate(pricingRateKey(rate), 'output', ev.target.value),
                         })),
                         e('td', { className: 'nh-right' }, e('input', {
                           type: 'number',
@@ -10335,7 +10345,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           style: { width: 86, textAlign: 'right' },
                           placeholder: '—',
                           value: rateFor(rate, 'cached'),
-                          onChange: (ev) => setRate(rate.model, 'cached', ev.target.value),
+                          onChange: (ev) => setRate(pricingRateKey(rate), 'cached', ev.target.value),
                         })),
                       ),
                     ),
@@ -10596,6 +10606,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 ? e(
                     'div',
                     null,
+                    loadError
+                      ? e('div', { className: 'nh-inline-err', style: { marginBottom: 10 } }, `本章刷新失败：${loadError}。以下为上一次成功读取的内容，可能已过期。`)
+                      : null,
                     e(
                       'div',
                       { className: 'nh-row', style: { gap: 10, marginBottom: 10 } },
@@ -11313,6 +11326,74 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const index = complete || publishing ? 4 : belongs ? (roleIndex >= 0 ? roleIndex : stageIndex ?? (active ? 1 : -1)) : active ? 1 : -1;
           return { index, complete, active: active && !/retry_wait|blocked|failed/.test(cycle.stage || '') };
         }
+        function loginPollReady(login) {
+          /* `pending` was a dead end: the old polling gate rejected it, so the
+             card claimed auto-refresh but never polled. No real handle means no
+             interval; the manual "读取登录状态" button resolves one first. */
+          return Boolean(login && !login.done && login.provider && login.accountId && login.accountId !== 'pending');
+        }
+        function safeHttpUrl(value) {
+          const text = String(value || '').trim();
+          if (!text) return '';
+          try {
+            const parsed = new URL(text);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+          } catch {
+            return '';
+          }
+        }
+        function safeQrSrc(value) {
+          const text = String(value || '').trim();
+          if (!text) return '';
+          if (/^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);/i.test(text)) return text;
+          return safeHttpUrl(text);
+        }
+        function pricingRateKey(rate) {
+          /* A model id alone is not unique: the same model can be priced at
+             several base URLs, and each row must keep its own edit state. */
+          return `${String((rate && rate.base_url) || '')}\u0000${String((rate && rate.model) || '')}`;
+        }
+        function buildPricingPayload(data, edits) {
+          /* Mirrors CostRateInput: base_url/model/currency/input_per_million/
+             output_per_million/cached_per_million. usd_to_cny is optional, so a
+             null server value stays null instead of being rewritten to 7.2. */
+          const rates = [];
+          for (const rate of (data && data.rates) || []) {
+            const edit = (edits && edits[pricingRateKey(rate)]) || {};
+            const baseUrl = String((rate && rate.base_url) || '').trim();
+            const model = String((rate && rate.model) || '').trim();
+            if (!baseUrl || !model) continue;
+            const inputValue = Number(edit.input !== undefined ? edit.input : rate.input);
+            const outputValue = Number(edit.output !== undefined ? edit.output : rate.output);
+            const cachedRaw = edit.cached !== undefined ? edit.cached : rate.cached;
+            const cachedValue = Number(cachedRaw);
+            rates.push({
+              base_url: baseUrl,
+              model,
+              currency: ['CNY', 'USD'].includes(rate.currency) ? rate.currency : 'CNY',
+              input_per_million: Number.isFinite(inputValue) && inputValue >= 0 ? inputValue : Number(rate.input) || 0,
+              output_per_million: Number.isFinite(outputValue) && outputValue >= 0 ? outputValue : Number(rate.output) || 0,
+              ...(cachedRaw !== '' && cachedRaw !== null && cachedRaw !== undefined && Number.isFinite(cachedValue) && cachedValue >= 0
+                ? { cached_per_million: cachedValue }
+                : {}),
+            });
+          }
+          const payload = {
+            revision: Number((data && data.revision) || 0),
+            rates,
+            reprice_unpriced: true,
+          };
+          const fx = data && data.usd_to_cny;
+          if (fx !== null && fx !== undefined && fx !== '' && Number.isFinite(Number(fx)) && Number(fx) > 0) {
+            payload.usd_to_cny = Number(fx);
+          }
+          return payload;
+        }
+        function pendingBatchId(batch) {
+          /* studio.pending_batches() returns rows keyed by `id`; the old UI read
+             `batch_id` and encoded "undefined" into the resume/abandon URL. */
+          return batch && batch.id ? String(batch.id) : '';
+        }
         function matchesProject(job, project) {
           if (!job || !project) return false;
           const normalize = path => String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
@@ -11908,7 +11989,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         exports.apply = apply;
         /* Pure functions the panel's own test harness drives across every cycle
            shape. Exposed read-only: nothing here touches React or the DOM. */
-        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage };
+        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES };
         return module.exports;
       },
     });

@@ -658,6 +658,38 @@ def _queue_ids(book: str) -> List[int]:
     return sorted(bridge.queued_chapters(folder))
 
 
+def human_pending_chapters(project: Path) -> List[int]:
+    """Committed-but-not-reviewed (two-review handoff) bodies that still exist."""
+    receipts = writer_runner.reviewed_chapters(Path(project))
+    committed = writer_runner.committed_chapters(Path(project))
+    existing = writer_runner.existing_chapter_ids(Path(project))
+    return sorted((set(committed) - set(receipts)) & existing)
+
+
+def scheduled_human_pending_block(project: Path) -> Optional[str]:
+    """Block platform scheduling only when a later reviewed chapter would skip a handoff."""
+    pending = human_pending_chapters(project)
+    if not pending:
+        return None
+    later = sorted(c for c in writer_runner.reviewed_chapters(Path(project)) if c > pending[0])
+    if later:
+        return f"第 {pending} 章待人工复核，已阻止排期后续章节 {later}"
+    return None
+
+
+def split_targets_by_pending(pending: Sequence[int], targets: Sequence[int]):
+    """Keep publishable targets before the earliest handoff; return (allowed, skipped)."""
+    if not pending:
+        return list(targets), []
+    first = min(pending)
+    return [t for t in targets if t < first], [t for t in targets if t >= first]
+
+
+def targets_blocked_by_pending(pending: Sequence[int], targets: Sequence[int]) -> List[int]:
+    """Targets at or after the earliest handoff must wait; earlier chapters may publish."""
+    return split_targets_by_pending(pending, targets)[1]
+
+
 def _check_approval(job: Dict[str, Any], run_date: str) -> Optional[str]:
     mode = job.get("approval_mode", "unattended")
     if mode not in {"unattended", "confirm_24h"}:
@@ -817,6 +849,11 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             record['verification']='local_qualification_and_memory_only_not_platform_publication'
             return local_step(job_id,job,cycle,record,force)
         if is_scheduled_job(job):
+            # 排期路径在 draft 生成前先过人工复核门禁：若更早章节待复核，
+            # 后面已通过的章节不得被排到平台（否则读者看到跳章）。
+            scheduled_block = scheduled_human_pending_block(project)
+            if scheduled_block:
+                raise RuntimeError(scheduled_block)
             # 排期：同一套生成/审查/落稿，收尾后按平台能力决定是否代提交定时发布。
             # 能力未证实时这里只产出本地存稿候选，绝不会误报“已排期”。
             from integration.scheduled_delivery import step as scheduled_step
@@ -839,9 +876,9 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
         all_existing = writer_runner.existing_chapter_ids(project)
         published_set = set(_published_ids(book, account))
         human_pending = sorted((set(committed) - set(receipts)) & all_existing - published_set)
-        if human_pending:
-            raise RuntimeError(f"第 {human_pending} 章已完成 2 次自动审查，待人工复核通过后再发布")
-        unreviewed = all_existing - set(receipts) - published_set
+        # Handoff chapters are not "missing review" — they are blocked pending
+        # human approval. Only targets at/after the earliest handoff are barred.
+        unreviewed = all_existing - set(receipts) - set(committed) - published_set
         if unreviewed:
             raise RuntimeError(f"正文缺少有效审查记录：{sorted(unreviewed)}")
         if not cycle or cycle.get("status") == "success":
@@ -865,6 +902,17 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
                 or any(type(i) is not int or i <= 0 for i in targets)
                 or len(set(targets)) != len(targets)):
             raise ValueError("持久化批次章节列表无效")
+        targets, blocked_targets = split_targets_by_pending(human_pending, targets)
+        if blocked_targets:
+            if not targets:
+                raise RuntimeError(
+                    f"第 {min(human_pending)} 章待人工复核通过后再发布；本批目标 {blocked_targets} 已阻止")
+            # 已通过的前序章继续发布，只跳过待复核章及其后续。
+            cycle["target_ids"] = list(targets)
+            cycle["skipped_pending"] = blocked_targets
+            record["skipped_pending"] = blocked_targets
+            record["target_ids"] = list(targets)
+            record["quota"] = {"chapters_per_run": len(targets), "word_count": cycle["word_count"]}
         cycle['status']='running'
         cycle['stage']='B'
         cycle['total_count']=len(targets)
@@ -889,6 +937,17 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             )
             record["generated"].append(_compact_generation(generated))
         receipts = writer_runner.reviewed_chapters(project)
+        pending_now = human_pending_chapters(project)
+        targets, blocked_now = split_targets_by_pending(pending_now, targets)
+        if blocked_now:
+            if not targets:
+                raise RuntimeError(
+                    f"第 {min(pending_now)} 章待人工复核通过后再发布；本批目标 {blocked_now} 已阻止")
+            cycle["target_ids"] = list(targets)
+            cycle["skipped_pending"] = blocked_now
+            record["skipped_pending"] = blocked_now
+            record["target_ids"] = list(targets)
+            record["quota"] = {"chapters_per_run": len(targets), "word_count": cycle["word_count"]}
         if not set(targets).issubset(receipts):
             raise RuntimeError("批次存在未通过审查或正文被修改的章节")
         archive = _verified_archive(book, receipts, account)
@@ -912,6 +971,17 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
                 raise RuntimeError("发布前任务已停用或当前日期未批准")
             # Re-read receipts immediately before calling the publisher.
             receipts = writer_runner.reviewed_chapters(project)
+            pending_now = human_pending_chapters(project)
+            targets, blocked_now = split_targets_by_pending(pending_now, targets)
+            if blocked_now:
+                if not targets:
+                    raise RuntimeError(
+                        f"第 {min(pending_now)} 章待人工复核通过后再发布；本批目标 {blocked_now} 已阻止")
+                cycle["target_ids"] = list(targets)
+                cycle["skipped_pending"] = blocked_now
+                record["skipped_pending"] = blocked_now
+                record["target_ids"] = list(targets)
+                record["quota"] = {"chapters_per_run": len(targets), "word_count": cycle["word_count"]}
             if not set(targets).issubset(receipts):
                 raise RuntimeError("发布前正文审查记录失效")
             _verify_queue(book, receipts)

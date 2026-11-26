@@ -44,9 +44,19 @@ def blocked(project,model):
     return datetime.fromisoformat(until) if until and datetime.fromisoformat(until)>now() else None
 
 
+NO_ACCOUNT_CHANNELS = {'opencode', 'kilo', 'kilo-auto', 'openrouter'}
+
+
 def _requires_account_login(model: str) -> bool:
-    prefix = str(model or '').split('/', 1)[0]
-    return bool(prefix) and '/' in str(model or '') and prefix not in {'opencode', 'kilo'} and not str(model or '').startswith('combo:')
+    """Only prefixes that are known account-backed channels need a login.
+
+    Model IDs are not proof of an account lane: ``kilo-auto/free`` and
+    ``openrouter/free`` are anonymous lanes, so a 401/429 there must not lock
+    the model for a day behind a “requires login” banner.
+    """
+    text = str(model or '')
+    prefix = text.split('/', 1)[0].casefold()
+    return bool(prefix) and '/' in text and prefix not in NO_ACCOUNT_CHANNELS and not text.startswith('combo:')
 
 
 def defer(project,model,failure):
@@ -136,13 +146,17 @@ class FreePoolClient:
 
     def _choices(self):
         from . import ofm_runtime
+        from .free_channels import ofm_token_saver_enabled
         info=ofm_runtime.ensure_started()
         live_base = info['url'] + '/v1'
+        self.base_url = live_base
         if self.config['providers']['ofm-standalone']['base_url'] != live_base:
             self.config['providers']['ofm-standalone']['base_url'] = live_base
             if 'free-pool' in self.config['providers']:
                 self.config['providers']['free-pool']['base_url'] = live_base
-            self.base_url = live_base
+            ofm_runtime.persist_service_url(live_base)
+        if ofm_token_saver_enabled(ofm_runtime.HOME/'settings.json'):
+            raise ValueError('独立服务提示词压缩已开启，已停止发送原始创作材料')
         meta = costs.META.get()
         is_probe = meta.get('stage') == 'probe'
         project = meta.get('project')
@@ -167,7 +181,11 @@ class FreePoolClient:
         if index or states().get(identity(project,row['model_id']),{}).get('status')=='failed':
             extra=retry_budget.extension({'project':project,'recovery_policy':{'extra_attempts_per_day':6}},now(),immediate=True,routing=True)
             if not extra:raise PoolWait('今日额外恢复次数已用完，等待次日恢复',next_day())
-        return self.factory({'provider_id':'ofm-standalone','model_id':row['model_id']})
+        client=self.factory({'provider_id':'ofm-standalone','model_id':row['model_id']})
+        # The factory closure may hold the URL captured before OFM self-healed
+        # its port; stamp every created client with the URL we are about to use.
+        if getattr(client,'base_url',None)!=self.base_url:client.base_url=self.base_url
+        return client
 
     async def _run(self,method,messages,**kwargs):
         from .failure_info import details

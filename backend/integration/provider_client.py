@@ -1,5 +1,4 @@
 """Immutable role routing with explicit, budgeted fallback connections."""
-import copy
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -20,7 +19,10 @@ def execution_routes():
 class ProviderClient:
     def __init__(self,role,config,primary,factory):
         object.__setattr__(self,'_role',role)
-        object.__setattr__(self,'_config',copy.deepcopy(config))
+        # ``model_roles.service`` already handed us a per-run deep copy. Keep
+        # that reference (rather than copying again) so a healed ofm-standalone
+        # base_url is visible to the factory closure on its next resolve.
+        object.__setattr__(self,'_config',config)
         object.__setattr__(self,'_primary',primary)
         object.__setattr__(self,'_client',primary)
         object.__setattr__(self,'_factory',factory)
@@ -67,16 +69,37 @@ class ProviderClient:
         if index==0 and len(self._options())>1 and (detail.get('retryable') is True or detail.get('failure_kind') in {'authentication','configuration_or_access'}):
             from .provider_circuit import defer
             defer(costs.META.get().get('project'),self._role,self._config,binding,detail)
+    def _apply_live_base(self,binding,client):
+        """Force the actual request client onto the binding's live URL.
+
+        ``_scope`` may have just healed an ofm-standalone endpoint. A client
+        built before the heal (the role's primary, or a factory result created
+        while resolving the old snapshot) still carries the stale URL.
+        """
+        if client is None:return
+        item=self._config.get('providers',{}).get(binding.get('provider_id'),{})
+        if item.get('protocol')!='ofm_standalone':return
+        base=item.get('base_url')
+        if base and getattr(client,'base_url',None)!=base:client.base_url=base
     @contextmanager
     def _scope(self,binding,fallback,messages,max_tokens):
         item=self._config['providers'][binding['provider_id']]
         if item.get('protocol')=='ofm_standalone':
             from . import ofm_runtime
+            from .free_channels import ofm_token_saver_enabled
             from pathlib import Path
             info=ofm_runtime.ensure_started()
             live_base = info['url'] + '/v1'
             if item['base_url'] != live_base:
                 item['base_url'] = live_base
+                # The live AIService/FreePoolClient was built with the stale URL;
+                # update it here so the very next request uses the real port.
+                for live in (self._primary, self._client):
+                    if live is not None and getattr(live, 'base_url', None) != live_base:
+                        live.base_url = live_base
+                ofm_runtime.persist_service_url(live_base)
+            if ofm_token_saver_enabled(ofm_runtime.HOME/'settings.json'):
+                raise ValueError('独立服务提示词压缩已开启，已停止发送原始创作材料')
             project=costs.META.get().get('project')
             permitted={str(Path(x).resolve()).casefold() for x in item.get('allowed_projects',[])}
             if costs.META.get().get('stage')!='probe' and (not project or str(Path(project).resolve()).casefold() not in permitted):raise ValueError('此作品未授权独立免费渠道处理正文与记忆')
@@ -88,14 +111,15 @@ class ProviderClient:
                 from .providers import verify_dsh_gateway
                 verify_dsh_gateway(item['base_url'])
             from pathlib import Path
+            from .free_channels import home as dsh_home, token_saver_enabled
             meta=costs.META.get()
             permitted={str(Path(x).resolve()).casefold() for x in item.get('allowed_projects',[])}
             if meta.get('stage')!='probe' and (not meta.get('project') or str(Path(meta['project']).resolve()).casefold() not in permitted):
                 raise ValueError('此作品尚未授权免费渠道处理正文与记忆')
             from .writer_runner import strict_json
-            settings=strict_json(Path.home()/'.dsh/our-free-model/settings.json',{})
-            if isinstance(settings, dict) and settings.get('tokenSaver',{}).get('enabled') is True:
-                raise ValueError('dsh 提示词压缩已开启，已停止发送原始创作材料')
+            settings=strict_json(dsh_home()/'our-free-model/settings.json',{})
+            if token_saver_enabled(settings):
+                raise ValueError('dsh 提示词压缩已开启或状态未知，已停止发送原始创作材料')
         price=item.get('pricing',{}).get(binding['model_id'])
         if item.get('protocol')=='free_pool':price={'input':'0','output':'0','cached':'0','currency':'CNY'}
         if binding['model_id'] in item.get('free_models',[]):
@@ -162,6 +186,7 @@ class ProviderClient:
             try:
                 inputs={'messages':messages,'tools':kwargs['tools']} if 'tools' in kwargs else messages
                 with self._scope(binding,index>0,inputs,kwargs.get('max_tokens',4000)):
+                    self._apply_live_base(binding,client)
                     result=await getattr(client,method)(messages,*args,**kwargs)
                 self._remember(index,client);return result
             except Exception as exc:
@@ -177,8 +202,10 @@ class ProviderClient:
         from .failure_info import details
         for index,binding in self._candidates():
             client=self._primary if index==0 else self._factory(binding);emitted=False
+            object.__setattr__(self,'_client',client)
             try:
                 with self._scope(binding,index>0,messages,max_tokens):
+                    self._apply_live_base(binding,client)
                     async for chunk in client.chat_stream(messages,temperature=temperature,max_tokens=max_tokens):
                         if str(chunk).startswith('[ERROR]'):raise RuntimeError(str(chunk))
                         emitted=emitted or bool(str(chunk or '').strip())

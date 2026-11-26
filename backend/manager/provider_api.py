@@ -1,6 +1,61 @@
 """Credential-safe registry under the existing management authorization."""
 import copy
+from pathlib import Path
 from integration import providers, model_roles, bridge, writer_runner
+
+
+def _registered_projects(app):
+    """Projects the user actually registered (store) or scheduled (jobs)."""
+    paths=set()
+    store=getattr(app.state,'store',None)
+    if store is not None:
+        try:
+            paths.update(str(Path(x['path']).resolve()) for x in store.projects() if isinstance(x,dict) and x.get('path'))
+        except (AttributeError,KeyError,TypeError,ValueError):
+            pass
+    from integration import scheduler
+    try:
+        jobs=scheduler.load_scheduler().get('jobs',{})
+        paths.update(str(Path(job['project']).resolve()) for job in jobs.values() if isinstance(job,dict) and job.get('project'))
+    except (OSError,ValueError,AttributeError,TypeError):
+        pass
+    return paths
+
+
+def _resolve_project_value(value, app):
+    text=str(value or '').strip()
+    if not text:return ''
+    if Path(text).is_absolute():return str(Path(text).resolve())
+    store=getattr(app.state,'store',None)
+    if store is not None:
+        try:
+            matched=next((x['path'] for x in store.projects() if x.get('id')==text),None)
+        except (AttributeError,KeyError,TypeError):
+            matched=None
+        if matched:return str(Path(matched).resolve())
+    return str(Path(text).resolve())
+
+
+def _explicit_projects(payload, app):
+    """Explicit project scope only; never “all registered books”."""
+    raw=[]
+    projects=payload.get('projects')
+    if isinstance(projects,list):
+        raw.extend(x for x in projects if isinstance(x,str) and x.strip())
+    elif projects is not None:
+        raise ValueError('projects 必须是作品路径列表')
+    project=payload.get('project')
+    if isinstance(project,str) and project.strip():
+        raw.append(_resolve_project_value(project, app))
+    elif project is not None:
+        raise ValueError('project 必须是作品路径')
+    project_id=payload.get('project_id')
+    if project_id:
+        if not isinstance(project_id,str):raise ValueError('project_id 无效')
+        matched=next((x['path'] for x in app.state.store.projects() if x.get('id')==project_id),None)
+        if not matched:raise ValueError('所选作品未登记，无法授权')
+        raw.append(str(Path(matched).resolve()))
+    return list(dict.fromkeys(raw))
 
 
 def install(app, load, config_path, *, costs_db=None):
@@ -120,10 +175,17 @@ def install(app, load, config_path, *, costs_db=None):
                 else:doc.setdefault('roles',{})[role]={**doc.get('roles',{}).get(role,{}),**copy.deepcopy(value),**providers.resolve(doc,value)}
         transaction(change);return listing()
     @app.post('/api/ai/providers/dsh/import')
-    def dsh():
-        projects = [x['path'] for x in app.state.store.projects()]
+    def dsh(payload: dict | None = None):
+        payload=payload or {}
+        if set(payload)-{'project','project_id','projects'}:raise ValueError('dsh 导入包含未知字段')
+        named=_explicit_projects(payload,app)
+        known=_registered_projects(app)
+        allowed=[p for p in named if p in known]
+        if named and not allowed:raise ValueError('请选择已登记的作品，不扩大隐私授权范围')
+        # No explicit project means the provider is saved with an empty
+        # authorization list and can process nothing until a book is named.
         def change(doc):
-            updated,identity=providers.import_dsh(doc, projects=projects or None);doc.clear();doc.update(updated);return identity
+            updated,identity=providers.import_dsh(doc,projects=allowed);doc.clear();doc.update(updated);return identity
         return {'id':transaction(change),**listing()}
 
     from integration import free_channels
@@ -141,14 +203,16 @@ def install(app, load, config_path, *, costs_db=None):
 
     @app.post('/api/ai/free-channels/import')
     def free_import(payload:dict):
-        if set(payload)-{'port','channel_id','authorize_project','project','projects'}:raise ValueError('渠道接入包含未知字段')
-        if not payload.get('project') and not payload.get('projects'):
-            projects = [x['path'] for x in app.state.store.projects()]
-            if projects:
-                payload = {**payload, 'projects': projects}
+        if set(payload)-{'port','channel_id','authorize_project','project','project_id','projects'}:raise ValueError('渠道接入包含未知字段')
+        named=_explicit_projects(payload,app)
+        if not named:raise ValueError('请先选择需要授权的作品，再接入渠道')
+        known=_registered_projects(app)
+        allowed=[p for p in named if p in known]
+        if not allowed:raise ValueError('请选择已登记的作品，不扩大隐私授权范围')
+        payload = {**payload, 'projects': allowed}
         # Network work stays outside the AI configuration lock.
         current=load()
-        updated,identity,catalog=free_channels.import_channel(current,payload)
+        updated,identity,catalog=free_channels.import_channel(current,payload,known_projects=known)
         def change(latest):
             if latest.get('providers')!=providers.migrate(current).get('providers'):
                 raise ValueError('供应商设置已变化，请重新接入')

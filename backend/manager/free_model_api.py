@@ -65,9 +65,10 @@ def install(app,load,transaction,listing):
                 'protocol':'free_pool','api_key':key,'allowed_projects':permitted})
             updated['providers']['free-pool'].update(models=['auto'],pool_members=members)
             doc['providers']=updated['providers']
-            current_default = doc.get('default_binding') or {}
-            default_provider = doc['providers'].get(current_default.get('provider_id', ''), {})
-            if payload.get('set_default') is True or not current_default.get('model_id') or not default_provider.get('enabled', False):
+            # Only an explicit “set as default” may change the global binding.
+            # Authorizing a single book must never repoint every other book that
+            # relies on the global default.
+            if payload.get('set_default') is True:
                 doc['default_binding'] = {'provider_id': 'free-pool', 'model_id': 'auto', 'reasoning_effort': 'auto'}
         transaction(change)
         return {'status':'saved','members':members,**listing()}

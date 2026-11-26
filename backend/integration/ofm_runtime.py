@@ -163,11 +163,52 @@ def endpoint():
     return info,parts
 
 
+def persist_service_url(live_base: str) -> bool:
+    """Persist a self-healed loopback endpoint into the AI config.
+
+    Only provider ``base_url`` fields are touched; the file is re-read first so
+    keys already moved into the protected store stay out of this write, and the
+    pre-heal file is kept as ``<name>.bak``. Best-effort: a failed write must
+    never stop the in-flight model request.
+    """
+    from . import model_roles, writer_runner
+    path = model_roles.config_path()
+    if not path.is_file():
+        return False
+    try:
+        with writer_runner.file_lock(path.with_suffix('.lock'), blocking=True):
+            raw = json.loads(path.read_text(encoding='utf-8-sig'))
+            if not isinstance(raw, dict):
+                return False
+            providers = raw.get('providers')
+            if not isinstance(providers, dict):
+                return False
+            changed = False
+            for item in providers.values():
+                if not isinstance(item, dict) or item.get('protocol') not in {'ofm_standalone', 'free_pool'}:
+                    continue
+                if item.get('base_url') != live_base:
+                    item['base_url'] = live_base
+                    changed = True
+            if not changed:
+                return False
+            shutil.copy2(path, path.with_name(path.name + '.bak'))
+            bridge.write_json_atomic(path, raw)
+            return True
+    except (OSError, ValueError):
+        return False
+
+
 def _resolve_node_runtime() -> Tuple[str, dict]:
-    """Resolve Node.js or Electron-as-Node runtime without relying strictly on system PATH."""
+    """Resolve Node.js or Electron-as-Node runtime without relying strictly on system PATH.
+
+    ``NOVEL_HELPER_NODE`` is the host-selected runtime and outranks whatever
+    ``node`` happens to be first on PATH; a stale Node 20 on PATH must not
+    silently replace the DSH-managed binary.
+    """
     candidates = [
-        shutil.which('node'),
         os.environ.get('NOVEL_HELPER_NODE', '').strip(),
+        shutil.which('node'),
     ]
     if os.name == 'nt':
         pf = os.environ.get('ProgramFiles', r'C:\Program Files')
@@ -184,7 +225,59 @@ def _resolve_node_runtime() -> Tuple[str, dict]:
     electron = os.environ.get('NOVEL_HELPER_NODE_ELECTRON', '').strip()
     if electron and Path(electron).is_file():
         return str(Path(electron).resolve()), {'ELECTRON_RUN_AS_NODE': '1'}
-    raise ValueError('未找到 Node.js 运行环境（请安装 Node.js 20+ 或从 DSH 桌面端启动插件）')
+    raise ValueError('未找到 Node.js 运行环境（需要 Node.js ≥22.21 或 ≥24.5，或从 DSH 桌面端启动插件）')
+
+
+def node_version_supported(version: object) -> bool:
+    """Whether this Node.js version honours ``NODE_USE_ENV_PROXY``.
+
+    Node added env-proxy support in v22.21.0 and v24.5.0. Node 23 never
+    received that backport (it was EOL before the change), so a bare
+    ``>=22.21`` semver comparison is not enough.
+    """
+    text = str(version or '').strip().lower()
+    match = re.match(r'^v?(\d+)\.(\d+)', text)
+    if not match:
+        return False
+    major, minor = int(match.group(1)), int(match.group(2))
+    if major == 22:
+        return minor >= 21
+    if major == 23:
+        return False
+    if major == 24:
+        return minor >= 5
+    return major >= 25
+
+
+def _node_version(node: str, extra_env: dict) -> Optional[str]:
+    env = os.environ.copy()
+    env.update(extra_env or {})
+    try:
+        probe = subprocess.run([node, '--version'], capture_output=True, text=True, timeout=10,
+            stdin=subprocess.DEVNULL, env=env, creationflags=_NO_WINDOW)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if probe.returncode:
+        return None
+    return (probe.stdout or probe.stderr or '').strip() or None
+
+
+def _check_node_runtime(node: str, extra_env: dict, proxy_configured: bool) -> Tuple[bool, str]:
+    """Validate the OFM Node runtime before spawning it.
+
+    Without a proxy an old Node still works for direct connections, so it only
+    produces a startup warning. With a proxy configured the request would fail
+    with an opaque ``ENOTFOUND``, so an old Node is a hard, actionable error.
+    """
+    version = _node_version(node, extra_env)
+    if version and node_version_supported(version):
+        return True, version
+    detail = f'当前 {version}' if version else '无法读取版本'
+    message = (f'免费渠道代理需要 Node.js ≥22.21 或 ≥24.5（NODE_USE_ENV_PROXY 从这些版本才生效），{detail}；'
+        '请安装受支持的 Node.js，或改用受支持的 Node 运行环境')
+    if proxy_configured:
+        raise ValueError(message)
+    return False, f'{message}。未检测到代理，继续启动但不会经代理连接。'
 
 
 def _detect_proxy_env() -> dict:
@@ -192,6 +285,8 @@ def _detect_proxy_env() -> dict:
     env = {'NO_PROXY': '127.0.0.1,localhost,::1', 'no_proxy': '127.0.0.1,localhost,::1', 'NODE_USE_ENV_PROXY': '1'}
     for k in ('HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'):
         if os.environ.get(k):
+            for name in ('HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'):
+                if os.environ.get(name): env[name] = os.environ[name]
             return env
     if os.name != 'nt':
         return env
@@ -240,9 +335,6 @@ def _icacls_principal() -> str:
     return getpass.getuser()
 
 
-_HEALTH_CACHE: dict = {'key': None, 'ts': 0.0}
-
-
 def health():
     info,parts=endpoint()
     with build_opener(ProxyHandler({}),NoRedirect()).open(info['url']+'/health',timeout=2) as response:
@@ -254,18 +346,14 @@ def health():
         raise ValueError('无法确认免费渠道服务身份，未发送密钥')
     if os.name=='nt':
         # Pin the owner and command line, including the data-isolated wrapper.
+        # This check runs on every health() call: a 20s cache used to skip it,
+        # so a listener that reused the port after a crash could pass.
         pid=info.get('pid')
         if type(pid) is not int or pid<=0:raise ValueError('服务进程标识无效')
-        cache_key = (pid, parts.port, info.get('startup_id'))
-        now_ts = time.monotonic()
-        if _HEALTH_CACHE.get('key') == cache_key and now_ts - _HEALTH_CACHE.get('ts', 0.0) < 20.0:
-            return info
         script=str(ROOT/'integration/ofm_service.mjs').replace("'","''")
-        code=f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}'; if(-not $p -or -not $p.CommandLine -or $p.CommandLine.IndexOf('{script}',[System.StringComparison]::OrdinalIgnoreCase) -lt 0){{exit 2}}; $c=Get-NetTCPConnection -State Listen -LocalPort {parts.port} -ErrorAction SilentlyContinue; if(-not ($c | Where-Object {{$_.OwningProcess -eq {pid} -and $_.LocalAddress -eq '127.0.0.1'}})){{exit 3}}"
+        code=f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}'; if(-not $p -or $p.Name -notmatch '^node[.]exe$' -or -not $p.CommandLine -or $p.CommandLine.IndexOf('{script}',[System.StringComparison]::OrdinalIgnoreCase) -lt 0){{exit 2}}; $c=Get-NetTCPConnection -State Listen -LocalPort {parts.port} -ErrorAction SilentlyContinue; if(-not ($c | Where-Object {{$_.OwningProcess -eq {pid} -and $_.LocalAddress -eq '127.0.0.1'}})){{exit 3}}"
         result=subprocess.run(['powershell.exe','-NoProfile','-Command',code],capture_output=True,timeout=10,creationflags=subprocess.CREATE_NO_WINDOW)
         if result.returncode:raise ValueError('独立渠道端口归属不符，未发送密钥')
-        _HEALTH_CACHE['key'] = cache_key
-        _HEALTH_CACHE['ts'] = now_ts
     return info
 
 
@@ -276,6 +364,29 @@ def status():
             'version':info.get('version'),'endpoint':info['url']+'/v1','source_revision':info.get('source_revision')}
     except (OSError,ValueError,subprocess.SubprocessError):
         return {'running':False,'enabled':strict(CONTROL).get('enabled',False),'mode':'independent'}
+
+
+def _terminate_process(proc) -> None:
+    """Stop an OFM child we started; never leave an orphan behind."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+    except OSError:
+        return
+    try:
+        proc.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        return
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def ensure_started(start=False):
@@ -307,28 +418,49 @@ def ensure_started(start=False):
         env=os.environ.copy()
         for key in list(env):
             if key.startswith('DSH_') or key.startswith('OFM_'):env.pop(key,None)
-        env.update(_detect_proxy_env())
+        proxy_env = _detect_proxy_env()
+        env.update(proxy_env)
         env.update(extra_env)
         env.update(NOVEL_HELPER_CREDENTIAL_CODEC=str(codec),NOVEL_HELPER_PYTHON=str(python),
             NOVEL_HELPER_CHECKIN_OPT_IN='1')
         log_dir = DATA / 'manager-logs'
         log_dir.mkdir(parents=True, exist_ok=True)
-        err_file = (log_dir / 'ofm-service.err.log').open('ab')
+        err_log = log_dir / 'ofm-service.err.log'
+        proxy_configured = any(name in proxy_env for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'))
+        supported, version_note = _check_node_runtime(node, extra_env, proxy_configured)
+        if not supported:
+            # Old but proxy-less runtimes still work for direct connections; say so
+            # in the service log instead of silently claiming Node 20 is supported.
+            try:
+                with err_log.open('ab') as warning:
+                    warning.write(f'[chapter-whale] Node.js 版本告警：{version_note}\n'.encode('utf-8'))
+            except OSError:
+                pass
+        err_file = err_log.open('ab')
         try:
             proc = subprocess.Popen([node,str(ROOT/'integration/ofm_service.mjs')],cwd=str(ROOT),env=env,
                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=err_file,
                 creationflags=_NO_WINDOW)
-        finally:
+        except OSError as error:
             err_file.close()
-        for _ in range(60):
-            if proc.poll() is not None:
-                raise ValueError(f'独立渠道服务启动退出（退出码 {proc.returncode}），请查看 manager-logs/ofm-service.err.log')
-            try:
-                ready_info=health()
-                if start:bridge.write_json_atomic(CONTROL,{'enabled':True,'updated_at':bridge.now_iso()})
-                return ready_info
-            except (OSError,ValueError,subprocess.SubprocessError):time.sleep(.5)
-        raise ValueError('独立渠道服务未就绪，未更改正式模型；请检查运行环境或端口占用')
+            raise ValueError(f'无法启动独立渠道服务的 Node.js（{error.__class__.__name__}）；请安装 Node.js ≥22.21 或 ≥24.5') from error
+        else:
+            err_file.close()
+        try:
+            deadline = time.monotonic() + 30.0
+            while time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    raise ValueError(f'独立渠道服务启动退出（退出码 {proc.returncode}），请查看 manager-logs/ofm-service.err.log')
+                try:
+                    ready_info=health()
+                    if start:bridge.write_json_atomic(CONTROL,{'enabled':True,'updated_at':bridge.now_iso()})
+                    return ready_info
+                except (OSError,ValueError,subprocess.SubprocessError):
+                    time.sleep(min(.5, max(0.0, deadline - time.monotonic())))
+            raise ValueError('独立渠道服务未就绪，未更改正式模型；请检查运行环境或端口占用')
+        except BaseException:
+            _terminate_process(proc)
+            raise
 
 
 def request(path,body=None,timeout=30):
