@@ -815,7 +815,7 @@ def commit_candidates(project, chapter, body_sha256=None):
     body, digest = _chapter(project, chapter)
     if digest != body_sha256:
         raise ValueError("正文已变化，事实候选未提交")
-    if chapter not in writer.committed_chapters(project):
+    if chapter not in writer.reviewed_chapters(project):
         raise ValueError("只能提交具备当前有效审查／E 授权的正文事实")
     candidates = doc_file.get("candidates") or []
     with writer.file_lock(_path(project, "memory.lock")):

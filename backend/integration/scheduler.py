@@ -17,7 +17,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
@@ -346,6 +346,9 @@ def _validate_job(job: Dict[str, Any]) -> None:
             raise ValueError(f"{field} 必须是大于等于 {minimum} 的整数")
     if job.get("volume") is not None and (type(job["volume"]) is not int or job["volume"] <= 0):
         raise ValueError("volume 必须是正整数或 null")
+    name = job.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > 96:
+        raise ValueError("name 必须是 1–96 字")
     if type(job.get("enabled", True)) is not bool:
         raise ValueError("enabled 必须是布尔值")
     if job.get("approval_mode", "unattended") not in {"unattended", "confirm_24h"}:
@@ -383,6 +386,33 @@ def _check_binding(data: Dict[str, Any], job_id: str, job: Dict[str, Any]) -> No
             raise ValueError("同一平台账号与书籍只能有一个排期任务")
 
 
+class DuplicatePublicationMode(ValueError, FileExistsError):
+    """A second job for the same project + mode would double-write the book.
+
+    Inherits both ValueError (scheduler/API callers already treat it as a
+    request conflict) and FileExistsError so the manager's existing exception
+    handler answers HTTP 409 instead of 400.
+    """
+
+
+def _check_duplicate_publication_mode(data: Dict[str, Any], job_id: str, job: Dict[str, Any]) -> None:
+    """One job per project + publication mode.
+
+    Two tasks with the same project and the same mode each keep their own cycle
+    and quota and would write the same book twice. POST already collapses this
+    case; PUT must not reintroduce it by changing one job's mode.
+    """
+    mode = publication_mode(job)
+    project = str(Path(job.get("project") or "").expanduser().resolve())
+    for other_id, other in data["jobs"].items():
+        if other_id == job_id or not isinstance(other, dict):
+            continue
+        if publication_mode(other) != mode:
+            continue
+        if str(Path(other.get("project") or "").expanduser().resolve()) == project:
+            raise DuplicatePublicationMode(f"该作品已有相同发布方式（{mode}）的任务：{other_id}")
+
+
 def update_job(job_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(changes, dict) or set(changes) - _JOB_FIELDS:
         raise ValueError("changes 含未知或运行状态字段")
@@ -406,6 +436,7 @@ def update_job(job_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
                 if not future_phase_only:
                     raise ValueError("未完成批次只能修改 name、enabled或不影响原批次的未来阶段；请先恢复该批次")
         _check_binding(data, job_id, job)
+        _check_duplicate_publication_mode(data, job_id, job)
         if material_change(job,old):
             job.pop("approved_for", None)
         data["jobs"][job_id] = job
@@ -658,20 +689,50 @@ def _queue_ids(book: str) -> List[int]:
     return sorted(bridge.queued_chapters(folder))
 
 
-def human_pending_chapters(project: Path) -> List[int]:
-    """Committed-but-not-reviewed (two-review handoff) bodies that still exist."""
-    receipts = writer_runner.reviewed_chapters(Path(project))
-    committed = writer_runner.committed_chapters(Path(project))
-    existing = writer_runner.existing_chapter_ids(Path(project))
-    return sorted((set(committed) - set(receipts)) & existing)
+def _blocking_chapters(project: Path, published: Iterable[int] = ()) -> List[int]:
+    """Chapters with an existing body but no valid publication receipt.
+
+    ``blocking = existing - reviewed - published``. This covers every way a
+    chapter can lose publication eligibility: never reviewed, needs_revision,
+    handoff edited after its receipt, and duplicate chapter numbers (the receipt
+    collection drops a chapter that maps to more than one body file).
+    """
+    path = Path(project)
+    receipts = writer_runner.reviewed_chapters(path)
+    existing = writer_runner.existing_chapter_ids(path)
+    published_set = set()
+    for value in published or ():
+        try:
+            published_set.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return sorted((existing - set(receipts)) - published_set)
 
 
-def scheduled_human_pending_block(project: Path) -> Optional[str]:
-    """Block platform scheduling only when a later reviewed chapter would skip a handoff."""
-    pending = human_pending_chapters(project)
+def human_pending_chapters(project: Path, published: Iterable[int] = ()) -> List[int]:
+    """Chapters that block later scheduling.
+
+    The historical name is kept for callers and receipts that still speak of
+    "handoff"; the set is now the wider blocking set (unreviewed/needs_revision/
+    stale receipt/duplicate), not just two-review handoffs.
+    """
+    return _blocking_chapters(Path(project), published)
+
+
+def scheduled_human_pending_block(project: Path, published: Iterable[int] = ()) -> Optional[str]:
+    """Block platform scheduling only when a later reviewed chapter would skip a blocking chapter."""
+    path = Path(project)
+    pending = human_pending_chapters(path, published)
     if not pending:
         return None
-    later = sorted(c for c in writer_runner.reviewed_chapters(Path(project)) if c > pending[0])
+    published_set = set()
+    for value in published or ():
+        try:
+            published_set.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    later = sorted(c for c in writer_runner.reviewed_chapters(path)
+                   if c > pending[0] and c not in published_set)
     if later:
         return f"第 {pending} 章待人工复核，已阻止排期后续章节 {later}"
     return None
@@ -850,8 +911,13 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             return local_step(job_id,job,cycle,record,force)
         if is_scheduled_job(job):
             # 排期路径在 draft 生成前先过人工复核门禁：若更早章节待复核，
-            # 后面已通过的章节不得被排到平台（否则读者看到跳章）。
-            scheduled_block = scheduled_human_pending_block(project)
+            # 后面已通过的章节不得被排到平台（否则读者看到跳章）。published
+            # 章已落在平台上，不再参与“会被跳过”的阻塞集合。
+            try:
+                published_now = set(_published_ids(book, account))
+            except Exception:  # noqa: BLE001 - 归档读不到时按“没有已发布章”处理
+                published_now = set()
+            scheduled_block = scheduled_human_pending_block(project, published=published_now)
             if scheduled_block:
                 raise RuntimeError(scheduled_block)
             # 排期：同一套生成/审查/落稿，收尾后按平台能力决定是否代提交定时发布。
@@ -937,7 +1003,7 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             )
             record["generated"].append(_compact_generation(generated))
         receipts = writer_runner.reviewed_chapters(project)
-        pending_now = human_pending_chapters(project)
+        pending_now = human_pending_chapters(project, published_set)
         targets, blocked_now = split_targets_by_pending(pending_now, targets)
         if blocked_now:
             if not targets:
@@ -971,7 +1037,7 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
                 raise RuntimeError("发布前任务已停用或当前日期未批准")
             # Re-read receipts immediately before calling the publisher.
             receipts = writer_runner.reviewed_chapters(project)
-            pending_now = human_pending_chapters(project)
+            pending_now = human_pending_chapters(project, published_set)
             targets, blocked_now = split_targets_by_pending(pending_now, targets)
             if blocked_now:
                 if not targets:

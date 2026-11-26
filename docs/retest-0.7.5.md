@@ -28,13 +28,35 @@
 - **前端契约**：批次 `id`、`CostRateInput`、自定义供应商 `models`、发布账号、13 个渠道真实 ID、成本页 `Bars` 崩溃、双端新建任务的 `publication_mode` 均已修复。
 - **免费模型/安全**：端口自愈更新真实 client、Node ≥22.21 校验、显式作品授权、`set_default` 不再隐式改全局、`owned_ports` owner 校验、tokenSaver fail-closed。
 
+## 发行、市场与入口修复（E 域，2026-11-26）
+
+| 编号 | 修复 | 回归验证 |
+| --- | --- | --- |
+| P2-21 | `check-release` 只在 `--local` 跳过缺席的 `runtime/` 项；完整包模式缺 `runtime/` 或 `runtime/python/python.exe` 直接失败 | `scripts/test-release-fix.mjs`：同一份薄清单带 `--local` 通过、不带 `--local` 非零退出并报 runtime 缺失 |
+| P2-22 | `pack-bundle.py` 完整包名/URL 改用 `manifest.version`（runtime 0.7.0）；不再覆盖源码根部的 `runtime-download.json`（该文件继续描述已发布的 v0.7.0 runtime 资产及其 `runtimeAssetBuildId`） | 新测试在隔离目录真实执行 `pack-bundle.py`，断言输出 `...runtime-win32-x64-0.7.0.tgz`、`bundle.json` 的 runtime/package 版本正确，并断言完整包前后下载描述逐字节不变 |
+| P2-23 | `market/index.json`、`losebird-entry.json`、`catalog-entry.yml` 恢复到已发布的 0.7.4；`check-release` 允许 market 落后于 `package.json` 并给出 note，禁止高于 `package.json` | 新测试断言三处均为 0.7.4、仓库 `--local` 通过且带滞后 note；临时 fixture 中 0.8.0 必须失败 |
+| P2-25 | 复跑顺序改为先 `check-release --local` 再跑 backend 测试；测试后再次跑门禁前清理 `backend/integration_data` | 新测试检查文档中的命令顺序与清理命令；`check-release` 继续拒绝 `backend/integration_data` |
+| P3-3 | 按 Python 的 `sha256(json.dumps(files, sort_keys=True))` 复算 `buildId`，校验 `packageVersion === package.json.version`，清单拒绝 `test_*.py` | 新测试用 Python 生成的固定 buildId 校验通过；篡改 buildId/packageVersion、加入 `test_foo.py` 均非零退出 |
+| P3-4 | README L250 改为「当前分支 `0.7.5` 插件」，与文末「0.7.5 尚未发布」一致 | 新测试断言 README 不再出现「当前 `0.7.4` 插件」 |
+| P3-5 | `index.js ensureStarted` 在启动循环每轮及 `delay(600)` 后检查 `signal.aborted`，中止时 kill 子进程并返回 `{started:false, aborted:true}` | 新测试用 600 秒启动超时和 100ms 中止，断言 5 秒内返回 `aborted:true` |
+
 ## 离线自动化验证结果（2026-11-26，审计修复后）
 
+复跑顺序（P2-25）：发行门禁必须在干净树先跑。backend 测试会写入 `backend/integration_data`，测试后再次执行门禁前先清理。
+
+```bash
+node scripts/check-release.mjs --local        # 先跑发行门禁（干净树）
+npm test                                       # JS / 前端契约
+PYTHONPATH=backend python -m unittest discover -s backend/integration -t backend
+PYTHONPATH=backend python -m unittest discover -s backend/manager -t backend
+rm -rf backend/integration_data                # 测试残留；再次执行门禁前必须清理
+```
+
+- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `128a4b95c98bc41a4e11a5ddf9e03d17495b407f69a88047596255430fb87d92`；P3-3 起该命令同时复算 buildId、校验 `packageVersion`，并允许 market 以 0.7.4 滞后于 `package.json`（输出 note）。
+- **完整包校验（HEAD 源码 + 真实 v0.7.0 runtime）**：**3421 个文件全部通过**，同一 buildId `128a4b95c98bc41a4e11a5ddf9e03d17495b407f69a88047596255430fb87d92`；`downloadRuntime()` 用真实归档字节复现成功。
 - **JS / 前端门禁与包契约（`npm test`）**：**125 项，109 pass / 0 fail / 16 skipped**（Linux；Windows/macOS 条件用例跳过），含 `test/client-ui.test.mjs` 的真实递归渲染回归。
-- **后端集成层（`backend/integration`）**：**768 tests OK（skipped=8）**，25.43s。
-- **后端管理服务层（`backend/manager`）**：**175 tests OK**，27.86s。
-- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `6467096cfc789c2ba6d898d5534ec4ac376013373da6fe8adfa32fbea2a71d0c`。
-- **完整包校验（HEAD 源码 + 真实 v0.7.0 runtime）**：**3421 个文件全部通过**，同一 buildId；`downloadRuntime()` 用真实归档字节复现成功。
+- **后端集成层（`backend/integration`）**：**821 tests OK（skipped=8）**，约 35s。
+- **后端管理服务层（`backend/manager`）**：**185 tests OK**，约 33s。
 - **CSS 内联**：`scripts/build-client-ui.py` 生成结果与 `client.js` 字节一致；新增 26 个唯一 `.nh-*` 选择器。
 
 ## 真实环境边界声明

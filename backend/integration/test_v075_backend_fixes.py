@@ -22,7 +22,10 @@ from integration import (character_state, draft_delivery, length_policy, memory_
 HEADER = "# 第1章 起风\n\n"
 BODY = HEADER + "林舟握紧断剑，站在山门前。他记得父亲的血债与山中的旧约。"
 
-PASS = {"success": True, "review_decision": "pass", "needs_revision": False}
+PASS = {"success": True, "review_decision": "pass", "needs_revision": False,
+        "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                    "scores": {"setting": 90, "plot": 90, "character": 90,
+                               "prose": 90, "dialogue": 90, "style": 90}}}
 REVISE = {"success": True, "review_decision": "needs_revision", "needs_revision": True,
           "raw_review": "修正时间线"}
 

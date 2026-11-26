@@ -239,6 +239,18 @@ class Operations:
                 raise HTTPException(409, "同一操作正在执行，请查看运行记录")
             meta_pid = (metadata or {}).get("project_id")
             if kind in {"generate", "daily"}:
+                if not meta_pid and kind == "daily":
+                    # 审计 P2-14：daily 通常只带 --job-id，必须从调度任务解析项目，
+                    # 否则项目互斥会被空 project_id 静默跳过。
+                    try:
+                        position = list(args).index("--job-id")
+                        daily_job = scheduler.load_scheduler().get("jobs", {}).get(str(args[position + 1]))
+                    except (ValueError, IndexError, OSError, RuntimeError):
+                        daily_job = None
+                    if isinstance(daily_job, dict):
+                        meta_pid = project_path_key(str(daily_job.get("project") or ""))
+                        if meta_pid:
+                            metadata = {**(metadata or {}), "project_id": meta_pid}
                 if not meta_pid:
                     # Unregistered/CLI paths still get a stable key; an empty
                     # project_id must never silently disable the project mutex.
@@ -2177,15 +2189,24 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         supplied = set(data.model_fields_set)
         values = data.model_dump(exclude={"id", "job_id"})
         if "name" not in supplied or not values.get("name") or values["name"].strip() in {"", "日更任务"}:
-            values["name"] = f"《{data.book.strip()}》 · 日更"
+            # P2-15: 书名本身可到 96 字，默认名必须截断到 JobInput.name 的同一上限。
+            values["name"] = f"《{data.book.strip()}》 · 日更"[:96]
         explicit_id = data.job_id or data.id
+        normalized_explicit = None
+        if explicit_id:
+            raw_id = str(explicit_id)
+            # P2-13: 非法 ID 直接 400，绝不静默 safe_dir_name 成另一个 ID。
+            if "/" in raw_id or "\\" in raw_id or ".." in raw_id:
+                raise HTTPException(400, "任务 ID 不能包含路径分隔符或 ..")
+            normalized_explicit = scheduler.normalize_job_id(raw_id)
+            if normalized_explicit != raw_id.replace(" ", "-"):
+                raise HTTPException(400, "任务 ID 含非法字符、首尾空白或超过 80 字；请改用合法 ID")
         target_project = str(Path(data.project).expanduser().resolve())
         # 查重与创建/更新必须串行；否则两个并发 POST 都看不到对方而各写一条。
         # 锁序：_JOBS_CREATE_LOCK -> scheduler config lock，反向不存在。
         with _JOBS_CREATE_LOCK:
             snapshot = scheduler.load_scheduler()
             jobs = snapshot.get("jobs", {})
-            normalized_explicit = scheduler.normalize_job_id(explicit_id) if explicit_id else None
             existing_id = None
             if normalized_explicit and isinstance(jobs.get(normalized_explicit), dict):
                 existing_job = jobs[normalized_explicit]
@@ -2193,8 +2214,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                     raise HTTPException(409, "该任务 ID 已用于其他作品，不能重复使用")
                 existing_id = normalized_explicit
             if existing_id is None:
-                target_mode = values.get("publication_mode") if "publication_mode" in supplied else None
-                target_mode = target_mode or "draft_only"
+                explicit_mode = values.get("publication_mode") if "publication_mode" in supplied else None
+                target_mode = explicit_mode or "draft_only"
                 existing_id = next(
                     (jid for jid, job in jobs.items()
                      if isinstance(job, dict)
@@ -2204,6 +2225,18 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                 )
                 if existing_id and normalized_explicit and existing_id != normalized_explicit:
                     raise HTTPException(409, f"该作品已有同发布方式的任务：{existing_id}")
+                if existing_id is None and explicit_mode is None:
+                    # P2-12: 旧客户端裸 POST 不能在有发布/排期任务的书上悄悄再生一个只存稿任务。
+                    legacy = next(
+                        (jid for jid, job in jobs.items()
+                         if isinstance(job, dict)
+                         and str(Path(job.get("project", "")).expanduser().resolve()) == target_project
+                         and scheduler.publication_mode(job) in {"publish_now", "platform_scheduled"}),
+                        None,
+                    )
+                    if legacy:
+                        raise HTTPException(409, f"该作品已有发布/排期任务（{legacy}）；"
+                                                 "新建只存稿任务请显式提交 publication_mode=draft_only")
             if existing_id:
                 # P0-2: 只合并客户端真正提交的字段，绝不拿 model_dump 默认值
                 # 覆盖 serial/配额/时段/排期/enabled 等已保存配置。
@@ -2232,24 +2265,13 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def edit_job(identity: str, data: JobInput):
         if not any(Path(x["path"]).resolve() == Path(data.project).resolve() for x in store.projects()):
             raise ValueError("请先登记写作项目")
-        values = data.model_dump(exclude={"id", "job_id"})
-        if "quota_phases" not in data.model_fields_set:
-            # Older clients editing ordinary fields must not erase a saved plan.
-            values.pop("quota_phases", None)
-        if "slot_quotas" not in data.model_fields_set:
-            values.pop("slot_quotas", None)
-        if "delivery_mode" not in data.model_fields_set:
-            values.pop("delivery_mode", None)
-        if "publication_mode" not in data.model_fields_set:
+        # P2-10/P2-11: 与 POST 一致，只合并客户端显式提交的字段。缺省 = 不改；
+        # 显式 null 仅对 schedule_buffer 表示“清空”，publication_mode 的 null 仍视为未提交。
+        values = {k: v for k, v in data.model_dump(exclude={"id", "job_id"}).items()
+                  if k in data.model_fields_set}
+        if values.get("publication_mode") is None:
             # 旧 PUT 不带这个键时必须保留任务原值，否则发布任务会被静默降级成只存稿。
             values.pop("publication_mode", None)
-        if "schedule_buffer" not in data.model_fields_set or values.get("schedule_buffer") is None:
-            # 排期设置同理：旧客户端的一次普通保存不能把缓冲计划擦成空对象。
-            values.pop("schedule_buffer", None)
-        for key in ("platform", "account", "timezone", "daily_time", "daily_times"):
-            if key not in data.model_fields_set:
-                # 这些字段都有非空默认值；不带就表示“不改”，不能拿默认值覆盖原任务。
-                values.pop(key, None)
         if hasattr(scheduler, "update_job"):
             return scheduler.update_job(identity, values)
         raise HTTPException(503, "任务更新接口尚不可用")
@@ -2268,7 +2290,11 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         platform = str(job.get("platform") or "fanqie")
         account, book = str(job.get("account") or ""), str(job.get("book") or "")
         capability = platform_schedule.capability_for(platform, account, book)
-        approved = schedule_buffer.approved_candidates(Path(job["project"]))
+        try:
+            published = scheduler._published_ids(book, account or None) if book else []
+        except Exception:
+            published = []
+        approved = schedule_buffer.approved_candidates(Path(job["project"]), published=published)
         store = schedule_buffer.load_store(identity)
         last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), dict) else {}
         remote = [row for row in (last.get("rows") or []) if isinstance(row, dict)]
@@ -2361,7 +2387,11 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         account, book = str(job.get("account") or ""), str(job.get("book") or "")
         capability = platform_schedule.capability_for(platform, account, book)
         allowed, reason = platform_schedule.can_auto_schedule(capability)
-        approved = schedule_buffer.approved_candidates(Path(job["project"]))
+        try:
+            published = scheduler._published_ids(book, account or None) if book else []
+        except Exception:
+            published = []
+        approved = schedule_buffer.approved_candidates(Path(job["project"]), published=published)
         last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), dict) else {}
         remote = [row for row in (last.get("rows") or []) if isinstance(row, dict)]
         planned = schedule_buffer.plan({**job, "job_id": identity}, approved=approved, remote=remote,

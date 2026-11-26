@@ -321,12 +321,68 @@ def abandon_batch(project, batch_id=None):
         return {"status": "abandoned", "abandoned": abandoned}
 
 
+def _empty_body_paths(project, chapters) -> list:
+    """Body files for *chapters* that exist but hold no prose (0 bytes/blank).
+
+    A chapter with more than one body file is ambiguous; it is not treated as a
+    simple empty body because quarantining one copy would leave the duplicate in
+    place. Those chapters keep the pre-existing duplicate handling.
+    """
+    paths = {}
+    for path, chapter in writer._chapter_files(Path(project)):
+        paths.setdefault(chapter, []).append(path)
+    empty = []
+    for chapter in set(chapters):
+        group = paths.get(chapter) or []
+        if len(group) != 1:
+            continue
+        path = group[0]
+        try:
+            if path.stat().st_size <= 0:
+                empty.append(path)
+                continue
+            text = path.read_text(encoding="utf-8-sig")
+        except OSError:
+            continue
+        if not text.strip():
+            empty.append(path)
+    return empty
+
+
+def _quarantine_empty_bodies(project, chapters) -> list:
+    """Move empty body files aside so the chapter can be regenerated.
+
+    ``_generate_chapter_locked`` refuses to overwrite an existing chapter, and an
+    empty file still counts as existing. Preserve it under ``.webnovel/originals``
+    (never silently delete evidence) and remove the zero-byte body.
+    """
+    project = Path(project)
+    moved = []
+    for path in _empty_body_paths(project, chapters):
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        backup = project_file(project, "originals", uuid.uuid4().hex, ".md")
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        bridge._write_text_atomic(backup, raw.decode("utf-8-sig", errors="replace"))
+        path.unlink()
+        moved.append(backup)
+    return moved
+
+
 def _completed_with_bodies(project, doc):
-    """Batch `completed` is only trustworthy when the body still exists."""
+    """Batch `completed` is only trustworthy when the body still has prose."""
     recorded = {c for c in doc.get("completed") or [] if type(c) is int and c > 0}
-    existing = writer.existing_chapter_ids(project)
-    return ([c for c in sorted(recorded) if c in existing],
-            [c for c in sorted(recorded) if c not in existing])
+    existing = writer.existing_chapter_ids(Path(project))
+    empty_paths = set(_empty_body_paths(project, recorded))
+    files: dict = {}
+    for path, chapter in writer._chapter_files(Path(project)):
+        files.setdefault(chapter, []).append(path)
+    empty = {c for c, group in files.items() if len(group) == 1 and group[0] in empty_paths}
+    completed = [c for c in sorted(recorded) if c in existing and c not in empty]
+    missing = [c for c in sorted(recorded) if c not in existing or c in empty]
+    return completed, missing
 
 
 def batch(project,count,word_count,max_revisions,identity,scenes=0):
@@ -376,16 +432,25 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
         writer.atomic_json(path,doc)
         completed_set = set(doc.get("completed") or [])
         completed, missing_bodies = _completed_with_bodies(project, doc)
+        quarantined = []
         if missing_bodies:
-            # Recorded as completed but the body was deleted/moved: regenerate it
-            # instead of silently skipping the chapter and still reporting success.
+            # Recorded as completed but the body was deleted/moved/empty:
+            # regenerate it instead of silently skipping the chapter and still
+            # reporting success. Empty files are moved aside first so the
+            # generator does not hit FileExistsError on a 0-byte chapter.
             print(f"批次记录第{missing_bodies}章已完成但正文缺失，重新生成", flush=True)
+            quarantined = _quarantine_empty_bodies(project, missing_bodies)
             doc["completed"] = completed
             completed_set = set(completed)
         remaining_targets = [c for c in doc["targets"] if c not in completed_set]
+        # Also cover an empty body that was never recorded as completed: the
+        # generator refuses to overwrite an existing chapter, even a 0-byte one.
+        quarantined += _quarantine_empty_bodies(project, remaining_targets)
         result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":completed}
         if missing_bodies:
             result["recovered_missing_bodies"] = missing_bodies
+        if quarantined:
+            result["quarantined_empty_bodies"] = [str(path) for path in quarantined]
         total = max(1, len(doc["targets"]))
         try:
             for idx, chapter in enumerate(remaining_targets):
@@ -458,13 +523,17 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         receipts=writer.strict_json(receipts_path,{})
         receipt={"destination":str(source.resolve()),"sha256":hashlib.sha256(payload).hexdigest(),"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
         handoff=isinstance(review,dict) and review.get("review_decision")=="needs_human_review" and review.get("human_review_required") is True
+        # P2-6: write the new body before saving candidates. save_candidates
+        # re-reads the body file and rejects a digest that does not match, so
+        # saving the receipt first would leave both modules "failed" until the
+        # next approve. Body first, candidates second, receipt last.
+        bridge._write_text_atomic(source,rewritten)
         if handoff:
             # 非预览润色到达两次审查上限：正文保留为交接稿，候选只存 pending，
             # 人工 approve-review 时再提交，避免未审定内容进入记忆。
             receipt["candidates"]=writer._commit_review_candidates(project,chapter,rewritten,review,_writer_locked=True)
         receipts[str(chapter)]=receipt
         writer.atomic_json(receipts_path,receipts)
-        bridge._write_text_atomic(source,rewritten)
         post=asyncio.run(writer._sync_committed_artifacts(executor,chapter,rewritten,receipt,receipts,receipts_path))
         return {"status":"polished","chapter_id":chapter,
                 "post_save":post,"backup_saved":True,

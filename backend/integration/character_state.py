@@ -399,7 +399,7 @@ def commit_candidates(project, chapter, body_sha256=None, *, _writer_locked=Fals
     doc_file = json.loads(path.read_text(encoding="utf-8"))
     if doc_file.get("state") == "committed":
         return {"status": "reused", "chapter": chapter}
-    if chapter not in writer.committed_chapters(project):
+    if chapter not in writer.reviewed_chapters(project):
         raise ValueError("只能提交具备当前有效审查／E 授权的正文变化")
     added = {"persons": 0, "relations": 0, "knowledge": 0}
     skipped = 0

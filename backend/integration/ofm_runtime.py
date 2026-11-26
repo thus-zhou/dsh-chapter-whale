@@ -204,12 +204,15 @@ def _resolve_node_runtime() -> Tuple[str, dict]:
 
     ``NOVEL_HELPER_NODE`` is the host-selected runtime and outranks whatever
     ``node`` happens to be first on PATH; a stale Node 20 on PATH must not
-    silently replace the DSH-managed binary.
+    silently replace the DSH-managed binary.  An explicitly configured path
+    that does not exist is an error, never a silent PATH fallback.
     """
-    candidates = [
-        os.environ.get('NOVEL_HELPER_NODE', '').strip(),
-        shutil.which('node'),
-    ]
+    explicit = os.environ.get('NOVEL_HELPER_NODE', '').strip()
+    if explicit:
+        if not Path(explicit).is_file():
+            raise ValueError(f'NOVEL_HELPER_NODE 指向的 Node.js 不存在：{explicit}；不会回退到 PATH 上的其它 node')
+        return str(Path(explicit).resolve()), {}
+    candidates = [shutil.which('node')]
     if os.name == 'nt':
         pf = os.environ.get('ProgramFiles', r'C:\Program Files')
         local = os.environ.get('LOCALAPPDATA', '')
@@ -223,7 +226,9 @@ def _resolve_node_runtime() -> Tuple[str, dict]:
         if item and Path(item).is_file():
             return str(Path(item).resolve()), {}
     electron = os.environ.get('NOVEL_HELPER_NODE_ELECTRON', '').strip()
-    if electron and Path(electron).is_file():
+    if electron:
+        if not Path(electron).is_file():
+            raise ValueError(f'NOVEL_HELPER_NODE_ELECTRON 指向的 Electron 不存在：{electron}')
         return str(Path(electron).resolve()), {'ELECTRON_RUN_AS_NODE': '1'}
     raise ValueError('未找到 Node.js 运行环境（需要 Node.js ≥22.21 或 ≥24.5，或从 DSH 桌面端启动插件）')
 
@@ -252,8 +257,14 @@ def node_version_supported(version: object) -> bool:
 def _node_version(node: str, extra_env: dict) -> Optional[str]:
     env = os.environ.copy()
     env.update(extra_env or {})
+    # Electron's ``--version`` reports the Electron version (e.g. 39), which is
+    # not a Node.js version. Ask the embedded runtime for ``process.versions.node``.
+    if (extra_env or {}).get('ELECTRON_RUN_AS_NODE'):
+        command = [node, '-e', 'process.stdout.write(process.versions.node)']
+    else:
+        command = [node, '--version']
     try:
-        probe = subprocess.run([node, '--version'], capture_output=True, text=True, timeout=10,
+        probe = subprocess.run(command, capture_output=True, text=True, timeout=10,
             stdin=subprocess.DEVNULL, env=env, creationflags=_NO_WINDOW)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -272,6 +283,9 @@ def _check_node_runtime(node: str, extra_env: dict, proxy_configured: bool) -> T
     version = _node_version(node, extra_env)
     if version and node_version_supported(version):
         return True, version
+    if (extra_env or {}).get('ELECTRON_RUN_AS_NODE') and not version:
+        raise ValueError('无法从 Electron 运行时读取内置 Node.js 版本（process.versions.node）；'
+            '为避免把 Electron 版本误当 Node 版本，未启动免费渠道服务')
     detail = f'当前 {version}' if version else '无法读取版本'
     message = (f'免费渠道代理需要 Node.js ≥22.21 或 ≥24.5（NODE_USE_ENV_PROXY 从这些版本才生效），{detail}；'
         '请安装受支持的 Node.js，或改用受支持的 Node 运行环境')

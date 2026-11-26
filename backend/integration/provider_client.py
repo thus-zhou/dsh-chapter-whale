@@ -92,11 +92,13 @@ class ProviderClient:
             live_base = info['url'] + '/v1'
             if item['base_url'] != live_base:
                 item['base_url'] = live_base
-                # The live AIService/FreePoolClient was built with the stale URL;
-                # update it here so the very next request uses the real port.
-                for live in (self._primary, self._client):
-                    if live is not None and getattr(live, 'base_url', None) != live_base:
-                        live.base_url = live_base
+                # Only the binding being called may be re-pointed. ``_call``
+                # already set ``_client`` to this binding's client before
+                # entering the scope; touching ``_primary`` here would rewrite
+                # a *paid* primary to the OFM port and send its key there.
+                live = self._client
+                if live is not None and getattr(live, 'base_url', None) != live_base:
+                    live.base_url = live_base
                 ofm_runtime.persist_service_url(live_base)
             if ofm_token_saver_enabled(ofm_runtime.HOME/'settings.json'):
                 raise ValueError('独立服务提示词压缩已开启，已停止发送原始创作材料')

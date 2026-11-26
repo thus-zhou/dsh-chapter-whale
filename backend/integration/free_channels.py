@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError
@@ -82,6 +83,49 @@ def read_object(path):
 
 
 HOST_PROCESS_RE = re.compile(r'^(node|nodejs|electron|dsh|deepseek)', re.IGNORECASE)
+# A process *name* is not an install path: any same-user ``node`` may listen on
+# a port and would then receive the gateway key. Require the kernel-reported
+# executable/command line to carry a DSH-family install path as well.
+OWNER_PATH_MARKERS = ('our-free-model', 'ofm_service.mjs', 'dsh-chapter-whale',
+    'chapter-whale', 'deepseek harness', 'deepseek-harness', 'deepseek', 'dsh')
+
+
+def _proc_identity(pid):
+    """Kernel-reported ``exe``/``cmdline`` for a listener, or ``None``.
+
+    Linux uses ``/proc``; other Unix hosts fall back to ``ps`` because they do
+    not expose ``/proc``. Any read failure returns ``None`` so the caller can
+    reject instead of trusting a bare command name.
+    """
+    text = str(pid or '').strip()
+    if not text.isdigit():
+        return None
+    if sys.platform.startswith('linux'):
+        base = Path('/proc') / text
+        try:
+            exe = os.readlink(base / 'exe')
+            cmdline = (base / 'cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
+        except (OSError, ValueError):
+            return None
+    else:
+        try:
+            probe = subprocess.run(['ps', '-p', text, '-o', 'command='], capture_output=True, text=True, timeout=4)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if probe.returncode:
+            return None
+        cmdline = (probe.stdout or '').strip()
+        exe = cmdline.split(' ', 1)[0] if cmdline else ''
+    if not exe or not cmdline:
+        return None
+    return {'exe': exe, 'cmdline': cmdline}
+
+
+def _identity_owned(identity):
+    if not isinstance(identity, dict):
+        return False
+    haystack = (str(identity.get('exe') or '') + ' ' + str(identity.get('cmdline') or '')).casefold()
+    return any(marker in haystack for marker in OWNER_PATH_MARKERS)
 
 
 def _loopback_port(name):
@@ -116,9 +160,15 @@ def _parse_lsof_listeners(text):
     return rows
 
 
-def _host_process(command):
-    """Accept only the DSH host families, never an arbitrary listener."""
-    return bool(HOST_PROCESS_RE.match(Path(str(command or '')).name))
+def _host_process(command, pid=None):
+    """Accept only DSH host families proven by their kernel-reported path.
+
+    ``pid`` is required: a command name alone (``node``) is not ownership. A
+    listener whose ``/proc`` identity cannot be read is rejected, not trusted.
+    """
+    if not HOST_PROCESS_RE.match(Path(str(command or '')).name):
+        return False
+    return _identity_owned(_proc_identity(pid))
 
 
 def owned_ports():
@@ -141,7 +191,7 @@ def owned_ports():
             return []
         ports=set()
         for row in _parse_lsof_listeners(out.stdout):
-            if _host_process(row['command']):
+            if _host_process(row['command'], row.get('pid')):
                 ports.update(row['ports'])
         return sorted(ports)
     local = Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local')))

@@ -7,9 +7,9 @@ Windows 轻量插件复用 [v0.7.0 固定 Python 与浏览器运行时](https://
 ## 2026-11-26 审计后离线验收规模
 
 - **Node / 面板与宿主桥契约（`npm test`）**：共 125 项，`109 pass / 0 fail / 16 skipped`（Linux；Windows/macOS 条件用例跳过）。
-- **后端集成层（`python -B -X utf8 -m unittest discover -s backend/integration -t backend`）**：共 `768` 项，全部通过（`0 fail / 0 error / 8 skipped`）。
-- **后端管理层（`python -B -X utf8 -m unittest discover -s backend/manager -t backend`）**：共 `175` 项，全部通过（`0 fail / 0 error`）。
-- **干净源码门禁（`node scripts/check-release.mjs --local`）**：1168 个文件通过，跳过 2253 个缺席 runtime 项，buildId `6467096cfc789c2ba6d898d5534ec4ac376013373da6fe8adfa32fbea2a71d0c`。
+- **后端集成层（`python -B -X utf8 -m unittest discover -s backend/integration -t backend`）**：共 `821` 项，全部通过（`0 fail / 0 error / 8 skipped`）。
+- **后端管理层（`python -B -X utf8 -m unittest discover -s backend/manager -t backend`）**：共 `185` 项，全部通过（`0 fail / 0 error`）。
+- **干净源码门禁（`node scripts/check-release.mjs --local`）**：1168 个文件通过，跳过 2253 个缺席 runtime 项，buildId `128a4b95c98bc41a4e11a5ddf9e03d17495b407f69a88047596255430fb87d92`。
 - **完整包门禁（HEAD 源码 + 真实 v0.7.0 runtime）**：3421 个文件全部通过，`downloadRuntime()` 用真实归档字节复现成功。
 
 > `--local` 的 1168 与完整包的 3421 不是同一个口径；前者不校验缺席的 runtime 项，不能单独证明运行时归档对齐。

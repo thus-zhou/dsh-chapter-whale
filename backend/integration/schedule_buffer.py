@@ -172,19 +172,42 @@ def validate_settings(raw: Any) -> Dict[str, Any]:
 
 # ---- 已审定稿件 -------------------------------------------------------------
 
-def approved_candidates(project: Any) -> List[Dict[str, Any]]:
-    """只认本机回执（reviewed_chapters）；没有回执的章一律不进排期候选。"""
+def approved_candidates(project: Any, *, published: Optional[Iterable[int]] = None,
+                        book: str = "") -> List[Dict[str, Any]]:
+    """只认本机回执（reviewed_chapters）；没有回执的章一律不进排期候选。
+
+    ``blocking = existing - reviewed - published``：更早的未审查、needs_revision、
+    改稿后回执失效、重复章号，都会成为阻塞章；所有 ``>= first_blocking`` 的章
+    都不得排期，避免平台出现章号缺口。``published`` 由调用方传入（已上平台的章
+    不再需要本地回执）；未传时按空集合处理，``book`` 仅在需要从归档推导时使用。
+    """
     from . import writer_runner as writer
 
     path = Path(project)
     try:
         receipts = writer.reviewed_chapters(path)
-        committed = writer.committed_chapters(path)
     except Exception:  # noqa: BLE001 - 项目不可读时按“没有可用稿件”处理
         return []
-    existing = writer.existing_chapter_ids(path)
-    handoff = sorted((set(committed) - set(receipts)) & existing)
-    first_pending = handoff[0] if handoff else 0
+    try:
+        existing = writer.existing_chapter_ids(path)
+    except Exception:  # noqa: BLE001 - 无法枚举正文时不能证明没有阻塞章
+        return []
+    published_set = set()
+    if published is None:
+        if book:
+            try:
+                from . import scheduler as s
+                published_set = {int(c) for c in s._published_ids(book)}
+            except Exception:  # noqa: BLE001 - 归档不可读时按“没有已发布章”处理
+                published_set = set()
+    else:
+        for value in published:
+            try:
+                published_set.add(int(value))
+            except (TypeError, ValueError):
+                continue
+    blocking = sorted((set(existing) - set(receipts)) - published_set)
+    first_blocking = blocking[0] if blocking else 0
     candidates: List[Dict[str, Any]] = []
     for chapter_id, receipt in sorted((receipts or {}).items()):
         if not isinstance(receipt, Mapping):
@@ -196,9 +219,9 @@ def approved_candidates(project: Any) -> List[Dict[str, Any]]:
             number = int(chapter_id)
         except (TypeError, ValueError):
             continue
-        if first_pending and number >= first_pending:
-            # A later reviewed chapter must not jump over an earlier handoff
-            # that is still waiting for human approval.
+        if first_blocking and number >= first_blocking:
+            # A later reviewed chapter must not jump over an earlier chapter
+            # that still lacks a valid review receipt.
             continue
         candidates.append({"chapter_id": number, "version_sha256": version,
                            "words": int(receipt.get("word_count") or receipt.get("words") or 0),
@@ -471,7 +494,7 @@ def apply_plan(job_id: str, job: Mapping[str, Any], planned: Mapping[str, Any],
     platform, account, book = _job_platforms(job)
     entries = [item for item in planned.get("entries") or [] if isinstance(item, Mapping)]
     planned_keys = {str(item.get("key") or "") for item in entries}
-    added = replaced = cancelled = 0
+    added = replaced = cancelled = superseded = 0
     blocked: List[str] = []
     intents = [item for item in store.get("intents") or [] if isinstance(item, Mapping)]
 
@@ -479,6 +502,18 @@ def apply_plan(job_id: str, job: Mapping[str, Any], planned: Mapping[str, Any],
         key = str(entry.get("key") or "")
         existing = _find(intents, key)
         if existing is None:
+            chapter_key = str(entry.get("chapter_id"))
+            # 同一章换了新版本时，旧版本留下的 expired 意图不再与 planned 并存：
+            # 它已经错过自己的档位，新版本排进来后只保留一条有效台账。
+            for old in intents:
+                if not isinstance(old, dict):
+                    continue
+                if (str(old.get("job_id") or "") == str(job_id)
+                        and str(old.get("chapter_id") or "") == chapter_key
+                        and str(old.get("state") or "") == "expired"):
+                    old["state"] = "superseded"
+                    old["last_error"] = "superseded_by_new_version"
+                    superseded += 1
             intents.append({
                 "key": key,
                 "job_id": str(job_id),
@@ -545,7 +580,7 @@ def apply_plan(job_id: str, job: Mapping[str, Any], planned: Mapping[str, Any],
     }
     save_store(job_id, store)
     return {"added": added, "replaced": replaced, "cancelled": cancelled,
-            "blocked": blocked, "total": len(store["intents"])}
+            "superseded": superseded, "blocked": blocked, "total": len(store["intents"])}
 
 
 def stop_replenish(job_id: str, reason: str = "author_stopped") -> Dict[str, Any]:

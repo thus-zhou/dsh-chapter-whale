@@ -11,6 +11,11 @@ const REPO = fileURLToPath(new URL('..', import.meta.url));
 const CHECKER = join(REPO, 'scripts', 'check-release.mjs');
 const VERSION = '0.6.0';
 const sha = (buffer) => createHash('sha256').update(buffer).digest('hex');
+// Runtime manifest buildId is Python's sha256(json.dumps(files, sort_keys=True)).
+// These fixture keys/values are ASCII, so JSON.stringify matches Python's
+// quoted strings; only the separators and key order differ from JSON.stringify.
+const pyBuildId = (files) => sha(Buffer.from('{' + Object.keys(files).sort()
+  .map((name) => `${JSON.stringify(name)}: ${JSON.stringify(files[name])}`).join(', ') + '}'));
 
 const SOURCES = {
   'backend/manager/app.py': 'print("manager")\n',
@@ -32,12 +37,12 @@ async function makePackage() {
   // 薄源码检出不带 runtime，但清单里仍然要有它（跳过磁盘检查，不跳过清单项）。
   files['runtime/python/python.exe'] = sha(Buffer.from('interpreter'));
   await writeFile(join(root, 'runtime-manifest.json'), JSON.stringify({
-    version: VERSION, buildId: sha(Buffer.from(JSON.stringify(files))), files,
+    version: VERSION, packageVersion: VERSION, buildId: pyBuildId(files), files,
   }, null, 2));
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'dsh-chapter-whale', version: VERSION, license: 'GPL-3.0-only' }));
   await writeFile(join(root, 'runtime-download.json'), JSON.stringify({
     url: `https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v${VERSION}/dsh-chapter-whale-runtime-win32-x64-${VERSION}.tgz`,
-    bytes: 1234, sha256: 'a'.repeat(64), buildId: sha(Buffer.from(JSON.stringify(files))),
+    bytes: 1234, sha256: 'a'.repeat(64), buildId: pyBuildId(files),
   }));
   return root;
 }
@@ -167,6 +172,7 @@ test('P02 插件补丁版复用上一版 runtime-manifest 时通过校验', asyn
     await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
     const manifest = JSON.parse(await readFile(join(root, 'runtime-manifest.json'), 'utf8'));
     manifest.version = '0.7.0';
+    manifest.packageVersion = pkg.version;
     await writeFile(join(root, 'runtime-manifest.json'), JSON.stringify(manifest, null, 2));
     await writeFile(join(root, 'runtime-download.json'), JSON.stringify({
       url: 'https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v0.7.0/dsh-chapter-whale-runtime-win32-x64-0.7.0.tgz',

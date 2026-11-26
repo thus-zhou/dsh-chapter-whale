@@ -3296,29 +3296,31 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                                 e(
                                   'div',
                                   { className: 'nh-row', style: { gap: 5, flexWrap: 'wrap' } },
-                                  row.human_review_required
-                                    ? e(
-                                        Button,
-                                        {
-                                          size: 'sm',
-                                          kind: 'primary',
-                                          busy: busy[`approve-${row.id}`],
-                                          onClick: () =>
-                                            act('人工复核通过', `/projects/${project.id}/chapters/${row.id}/approve-review`, { note: '作者人工确认通过' }, `approve-${row.id}`),
-                                        },
-                                        '复核通过',
-                                      )
-                                    : e(
-                                        Button,
-                                        {
-                                          size: 'sm',
-                                          kind: 'ghost',
-                                          busy: busy[`review-${row.id}`],
-                                          onClick: () =>
-                                            act('重新审查', `/projects/${project.id}/chapters/${row.id}/review`, undefined, `review-${row.id}`),
-                                        },
-                                        '审查',
-                                      ),
+                                  row.reviewed && row.review_status === 'human_approved'
+                                    ? e(Badge, { tone: 'ok' }, '已批准')
+                                    : row.human_review_required && !row.reviewed
+                                      ? e(
+                                          Button,
+                                          {
+                                            size: 'sm',
+                                            kind: 'primary',
+                                            busy: busy[`approve-${row.id}`],
+                                            onClick: () =>
+                                              act('人工复核通过', `/projects/${project.id}/chapters/${row.id}/approve-review`, { note: '作者人工确认通过' }, `approve-${row.id}`),
+                                          },
+                                          '复核通过',
+                                        )
+                                      : e(
+                                          Button,
+                                          {
+                                            size: 'sm',
+                                            kind: 'ghost',
+                                            busy: busy[`review-${row.id}`],
+                                            onClick: () =>
+                                              act('重新审查', `/projects/${project.id}/chapters/${row.id}/review`, undefined, `review-${row.id}`),
+                                          },
+                                          '审查',
+                                        ),
                                   e(
                                     Button,
                                     {

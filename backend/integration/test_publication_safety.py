@@ -342,7 +342,10 @@ class BridgePublicationTest(unittest.TestCase):
     def review(self):
         atomic_json(self.project / ".webnovel" / "writer_receipts.json", {
             "1": {"destination": str(self.source.resolve()), "sha256": digest_file(self.source),
-                  "review": {"success": True, "review_decision": "pass", "needs_revision": False}}})
+                  "review": {"success": True, "review_decision": "pass", "needs_revision": False,
+                             "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                                         "scores": {"setting": 90, "plot": 90, "character": 90,
+                                                   "prose": 90, "dialogue": 90, "style": 90}}}}})
 
     def test_reviewed_origin_passes(self):
         plan = bridge.validate_queue_origin("测试书", self.project, "账号A")

@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 from manager import app as module
 from integration import studio, writer_runner as writer, model_roles as roles, bridge, memory_library, scheduler
 
-PASS={"success":True,"review_decision":"pass","needs_revision":False}
+PASS={"success":True,"review_decision":"pass","needs_revision":False,
+      "quality":{"format":"json","verdict":"pass","issues":[],"not_applicable":[],
+                 "scores":{"setting":90,"plot":90,"character":90,"prose":90,"dialogue":90,"style":90}}}
 
 
 class StudioTests(unittest.TestCase):

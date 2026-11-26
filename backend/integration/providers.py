@@ -100,6 +100,11 @@ def resolve(config, binding):
     return {'base_url': url, 'api_key': provider['api_key'], 'model': model}
 
 
+def _has_control_char(value):
+    """Model IDs cross into URLs/JSON; control bytes have no legitimate role."""
+    return any(ord(c) < 32 or ord(c) == 127 for c in value)
+
+
 def save(config, identity, payload):
     from .model_roles import validate_url
     doc = migrate(config)
@@ -112,7 +117,7 @@ def save(config, identity, payload):
     if models_payload is not None:
         if not isinstance(models_payload, list) or len(models_payload) > 1000:
             raise ValueError('模型清单无效')
-        if any(not isinstance(x, str) or not x.strip() or len(x) > 200 for x in models_payload):
+        if any(not isinstance(x, str) or not x.strip() or len(x) > 200 or _has_control_char(x) for x in models_payload):
             raise ValueError('模型清单无效')
         models_payload = list(dict.fromkeys(x.strip() for x in models_payload))
     url = validate_url(payload.get('base_url', old.get('base_url', '')))
@@ -142,7 +147,7 @@ def save(config, identity, payload):
         value.setdefault('currency','CNY')
         if 'usd_to_cny' in value and float(number(value['usd_to_cny'])) <= 0:raise ValueError('汇率必须大于零')
     free = payload.get('free_models',old.get('free_models',[]))
-    if not isinstance(free,list) or len(free)>10000 or any(not isinstance(x,str) or not x.strip() or len(x)>200 for x in free):raise ValueError('免费模型清单无效')
+    if not isinstance(free,list) or len(free)>10000 or any(not isinstance(x,str) or not x.strip() or len(x)>200 or _has_control_char(x) for x in free):raise ValueError('免费模型清单无效')
     permitted=payload.get('allowed_projects',old.get('allowed_projects',[]))
     if not isinstance(permitted,list) or any(not isinstance(x,str) or not Path(x).is_absolute() for x in permitted):raise ValueError('作品隐私授权无效')
     doc['providers'][identity] = {**old, 'id': identity, 'name': name, 'base_url': url, 'api_key': key,
@@ -184,6 +189,10 @@ def discover(config, identity):
         models=[x['id'] for x in result['models'] if x['channel']==item.get('channel_id')]
         item.update(models=models,last_check={'at':result['checked_at'],'status':'models_read','count':len(models)})
         return {'models':models,'count':len(models)}
+    if item.get('protocol')=='dsh_local':
+        # The model list must come from the verified dsh process, not from
+        # whatever loopback listener happens to answer /health.
+        verify_dsh_gateway(item['base_url'])
     result = ai_tools.discover(item['base_url'], None, item,registered=True)
     item.update(models=result['models'], last_check={'at': datetime.now(timezone.utc).isoformat(), 'status': 'models_read', 'count': result['count']})
     return result
@@ -192,8 +201,17 @@ def discover(config, identity):
 def verify_dsh_gateway(base_url):
     from urllib.request import build_opener,ProxyHandler
     from urllib.parse import urlsplit
+    from . import free_channels
     parts=urlsplit(base_url)
     if parts.scheme!='http' or parts.hostname not in {'127.0.0.1','localhost','::1'}:raise ValueError('dsh 仅允许本机网关')
+    try:
+        port=parts.port
+    except ValueError:
+        port=None
+    # Ownership first: a loopback listener that merely answers ``/health`` with
+    # the expected service name is not proof that dsh owns the port.
+    if port is None or port not in free_channels.owned_ports():
+        raise ValueError('dsh 网关端口不属于已核实的 dsh 监听进程；尚未发送网关密钥，请在插件核对实际端口')
     endpoint=f'{parts.scheme}://{parts.netloc}/health'
     try:
         with build_opener(ProxyHandler({})).open(endpoint,timeout=3) as response:

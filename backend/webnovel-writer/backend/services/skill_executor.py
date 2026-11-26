@@ -5717,9 +5717,13 @@ class SkillExecutor:
     @classmethod
     def _match_outline_chapter_number(cls, line: str) -> Optional[int]:
         stripped = str(line or "").strip()
-        m_num = re.match(r"^(?:#+\s*)?(?:[-*•]\s+)?(?:\*\*|__)?\s*(?:第\s*0*(\d+)\s*章|0*(\d+)\s*\.\s*(?:《|\s))", stripped)
+        m_num = re.match(
+            r"^(?:(?:#{1,6}\s*|\*\*\s*|__\s*)0*(\d+)\s*\.|0*(\d+)\s*\.\s*《|"
+            r"(?:#{0,6}\s*|\s*[-*•]\s+)?(?:\*\*|__)?\s*第\s*0*(\d+)\s*章)",
+            stripped,
+        )
         if m_num:
-            return int(m_num.group(1) or m_num.group(2))
+            return int(m_num.group(1) or m_num.group(2) or m_num.group(3))
         m_cn = re.match(r"^(?:#+\s*)?(?:[-*•]\s+)?(?:\*\*|__)?\s*第\s*([零〇一二两三四五六七八九十百千万]+)\s*章", stripped)
         if m_cn:
             return cls._parse_cn_chapter_num(m_cn.group(1))

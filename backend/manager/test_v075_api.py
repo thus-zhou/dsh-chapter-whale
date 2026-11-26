@@ -60,11 +60,19 @@ class V075ManagerApiTests(unittest.TestCase):
                 mock.patch.object(manager_app, "AI_PATH", ai_path),
                 mock.patch("subprocess.Popen", return_value=fake_proc),
             ):
+                seen_progress = []
+                original_save = store.save_operation
+                def capture(payload):
+                    seen_progress.append(dict(payload.get("progress") or {}))
+                    return original_save(payload)
+                store.save_operation = capture
                 ops._execute("op-prog-1", ["generate", "p1"])
 
             finished = store.operation("op-prog-1")
             self.assertEqual(finished["status"], "success")
             self.assertEqual(finished["project_title"], "测试之书")
+            # P2-27: the 42% progress line must be observed, not only the final 100.
+            self.assertTrue(any(p.get("percent") == 42 and p.get("stage") == "B" for p in seen_progress))
             self.assertEqual(finished["progress"]["percent"], 100)
             self.assertEqual(finished["progress"]["chapter"], 1)
 

@@ -69,8 +69,19 @@ def bundle_name(version):
     return f"dsh-chapter-whale-runtime-win32-x64-{version}.tgz"
 
 
+def runtime_release_version(manifest, package_version):
+    """完整包描述的是 runtime 资产：版本取 manifest.version，而不是插件版本。
+
+    轻量安装器会去 ``v{runtime}/dsh-chapter-whale-runtime-win32-x64-{runtime}.tgz``
+    取同一个资产；插件 0.7.5 复用 runtime 0.7.0 时写成 0.7.5 会得到 404。
+    """
+    return str(manifest.get("version") or package_version)
+
+
 def build(keep_stage=False):
-    version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+    package_version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+    manifest, _ = manifest_files(ROOT)
+    version = runtime_release_version(manifest, package_version)
     target = TMP / bundle_name(version)
     if TMP.is_symlink() or ROOT.resolve() not in TMP.resolve().parents:
         raise SystemExit("暂存目录必须位于当前发行工作区")
@@ -97,14 +108,14 @@ def build(keep_stage=False):
     sums = TMP / "SHA256SUMS.txt"
     sums.write_text(f"{digest}  {target.name}\n", encoding="utf-8", newline="\n")
     result = {"file": target.name, "bytes": len(blob), "sha256": digest,
-              "buildId": data.get("buildId"), "manifest_files": copied}
+              "buildId": data.get("buildId"), "packageVersion": package_version,
+              "runtimeVersion": version, "manifest_files": copied}
     (TMP / "bundle.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n",
                                      encoding="utf-8", newline="\n")
-    spec = {"url": f"https://github.com/thus-zhou/dsh-chapter-whale/releases/download/v{version}/{target.name}",
-            "bytes": len(blob), "sha256": digest, "buildId": data.get("buildId")}
-    (ROOT / "runtime-download.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8", newline="\n")
-    # 下载描述现在必须由真实包字节决定：重新校验一次，避免 URL/bytes/sha 与本次产物脱节。
-    subprocess.run(["node", str(ROOT / "scripts/check-release.mjs"), "--local"], check=True)
+    # A full bundle carries its own runtime; it must NOT overwrite the root
+    # runtime-download.json, which describes the published v0.7.0 runtime asset
+    # used by the lightweight installer. Writing the full-bundle SHA here made
+    # downloadRuntime reject the archive (buildId/runtimeAssetBuildId mismatch).
     if not keep_stage:
         shutil.rmtree(stage_dir, ignore_errors=True)
     print(json.dumps(result, ensure_ascii=False), flush=True)

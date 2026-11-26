@@ -16,7 +16,10 @@ try:
 except ImportError:
     import writer_runner as writer
 
-PASS = {"success": True, "review_decision": "pass", "needs_revision": False}
+PASS = {"success": True, "review_decision": "pass", "needs_revision": False,
+        "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                    "scores": {"setting": 90, "plot": 90, "character": 90,
+                               "prose": 90, "dialogue": 90, "style": 90}}}
 REVISE = {"success": True, "review_decision": "needs_revision", "needs_revision": True,
           "raw_review": "修正时间线"}
 
@@ -297,6 +300,25 @@ class WriterRunnerTest(unittest.TestCase):
         self.assertEqual(second['review']['review_decision'],'needs_human_review')
         self.assertEqual(executor.execute_polish.await_count,1)
         self.assertEqual(executor.execute_review.await_count,1)
+
+    def test_editorial_budget_persists_across_new_executor_instance(self):
+        """A fresh executor (process restart) must reuse the checkpoint budget."""
+        first_executor = self.pipeline([{'type':'content','chunk':'初稿'},
+            {'type':'review','result':dict(REVISE)},{'type':'done','success':True}])
+        first_executor.execute_review = AsyncMock(return_value=dict(REVISE))
+        first_executor.execute_polish = AsyncMock(side_effect=lambda *a,**k:{'success':True,'content':a[1]+'改'})
+        first = asyncio.run(writer._generate_and_review(self.project,1,100,3))
+        self.assertEqual(first['review']['review_decision'], 'needs_human_review')
+
+        second_executor = self.pipeline([{'type':'content','chunk':'不应再写'},
+            {'type':'review','result':dict(REVISE)},{'type':'done','success':True}])
+        second_executor.execute_review = AsyncMock(return_value=dict(REVISE))
+        second_executor.execute_polish = AsyncMock(side_effect=lambda *a,**k:{'success':True,'content':a[1]+'改'})
+        second = asyncio.run(writer._generate_and_review(self.project,1,100,3))
+        self.assertEqual(second['review']['review_decision'], 'needs_human_review')
+        self.assertEqual(second_executor.execute_write_stream.call_count, 0)
+        self.assertEqual(second_executor.execute_polish.await_count, 0)
+        self.assertEqual(second_executor.execute_review.await_count, 0)
 
     def test_untyped_or_changed_checkpoint_never_enables_editorial_retry(self):
         from . import editorial_recovery as editorial

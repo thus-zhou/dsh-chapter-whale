@@ -247,7 +247,7 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 
 **支持什么系统和平台？**
 
-当前 `0.7.4` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
+当前分支 `0.7.5` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
 
 ## 许可证与第三方组件
 

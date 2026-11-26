@@ -62,7 +62,7 @@
     "THIRD_PARTY_NOTICES.md",
     "runtime-download.json",
     "RELEASE_STATUS.md",
-    "docs/",
+    "docs/*.md",
     "deploy/",
     "assets/",
     "screenshots.json",
@@ -75,7 +75,7 @@
   },
   "engines": {
     "dsh": ">=0.2.2-rc.1",
-    "node": ">=22.21"
+    "node": ">=22.21 <23 || >=24.5"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.3",
@@ -98,7 +98,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "prepublishOnly": "node scripts/check-release.mjs"
+    "prepublishOnly": "node scripts/check-release.mjs --local"
   },
   "dsh": {
     "bundle": {

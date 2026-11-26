@@ -92,11 +92,19 @@ def _submit_planned(job_id: str, job: Mapping[str, Any], capability: Mapping[str
                              "rejected": 0, "too_soon": 0, "duplicate": 0, "blocked": ""}
     project = Path(str(job["project"]))
     try:
-        pending = sorted(set(writer.committed_chapters(project)) - set(writer.reviewed_chapters(project)))
-        pending = [c for c in pending if c in writer.existing_chapter_ids(project)]
-    except Exception:  # noqa: BLE001 - 项目不可读时由后续逐章回执校验兜底
-        pending = []
-    first_pending = pending[0] if pending else 0
+        receipts = writer.reviewed_chapters(project)
+        existing = writer.existing_chapter_ids(project)
+    except Exception:  # noqa: BLE001 - 项目不可读时无法判定前序章，整轮停写
+        stats["blocked"] = "项目不可读：无法确认前序章审查状态，已停止排期"
+        return stats
+    published = set(done_chapters)
+    try:
+        published |= {str(c) for c in s._published_ids(str(job.get("book") or ""),
+                                                       str(job.get("account") or "") or None)}
+    except Exception:  # noqa: BLE001 - 归档不可读时不扩大排除集
+        pass
+    blocking = sorted((set(existing) - set(receipts)) - {int(c) for c in published if str(c).isdigit()})
+    first_blocking = blocking[0] if blocking else 0
     # 有待对账的章时，本轮一条都不写：先把“可能已收”的那条弄清，否则就会重复预约（T06）。
     if any(isinstance(item, Mapping) and item.get("state") == "needs_review"
            for item in store.get("intents", [])):
@@ -104,8 +112,8 @@ def _submit_planned(job_id: str, job: Mapping[str, Any], capability: Mapping[str
         return stats
     for intent in intents:
         chapter = int(intent.get("chapter_id") or 0)
-        if first_pending and chapter >= first_pending:
-            stats["blocked"] = f"第 {pending} 章待人工复核，已停止排期后续章节"
+        if first_blocking and chapter >= first_blocking:
+            stats["blocked"] = f"第 {blocking} 章缺少有效审查记录，已停止排期后续章节"
             break
         if str(chapter) in done_chapters:
             stats["duplicate"] += 1
@@ -220,7 +228,13 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
         return base
 
     project = Path(str(job["project"]))
-    approved = sb.approved_candidates(project)
+    published: set = set()
+    try:
+        published = {int(c) for c in s._published_ids(str(job.get("book") or ""),
+                                                     str(job.get("account") or "") or None)}
+    except Exception:  # noqa: BLE001 - 归档不可读时按“没有已发布章”处理
+        published = set()
+    approved = sb.approved_candidates(project, published=published)
     # 上一轮对账看到的“平台已占章”要参与本轮去重，否则平台侧已排的章会被再排一次。
     last = store.get("last_reconcile") if isinstance(store.get("last_reconcile"), Mapping) else {}
     remote_rows = [row for row in (last.get("rows") or []) if isinstance(row, Mapping)]

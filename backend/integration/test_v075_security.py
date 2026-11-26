@@ -374,7 +374,10 @@ class OwnedPortTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix lsof branch")
     def test_lsof_owner_filter(self):
         completed = mock.Mock(returncode=0, stdout=self.SAMPLE)
-        with mock.patch.object(free_channels.subprocess, "run", return_value=completed) as run:
+        identity = {"exe": "/opt/DeepSeek Harness/DeepSeek Harness",
+                    "cmdline": "DeepSeek Harness --type=renderer"}
+        with mock.patch.object(free_channels.subprocess, "run", return_value=completed) as run, \
+                mock.patch.object(free_channels, "_proc_identity", return_value=identity):
             ports = free_channels.owned_ports()
         self.assertEqual(ports, [3000, 3001, 3100, 25600])
         args = run.call_args.args[0]

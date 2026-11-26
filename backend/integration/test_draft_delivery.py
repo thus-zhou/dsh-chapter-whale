@@ -78,7 +78,10 @@ class DraftDeliveryTest(unittest.TestCase):
         import hashlib
         return {"chapter_id": chapter, "destination": str(path.resolve()),
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                "review": {"success": True, "review_decision": "pass"}, "reviewed_at": bridge.now_iso(),
+                "review": {"success": True, "review_decision": "pass",
+                           "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                                       "scores": {"setting": 90, "plot": 90, "character": 90,
+                                                 "prose": 90, "dialogue": 90, "style": 90}}}, "reviewed_at": bridge.now_iso(),
                 "post_save": {"shared_memory": {"status": "synced"}, "entities": {"status": "synced"},
                               "rag_indexed": True, "continuity_written": True},
                 "creative_contract_hash": bridge.creative_contract_hash(self.project)}
@@ -87,7 +90,10 @@ class DraftDeliveryTest(unittest.TestCase):
         path = self.write_chapter(chapter_id)
         self.receipts[chapter_id] = self.fake_receipt(chapter_id, path)
         return {"project": str(project), "chapter_id": chapter_id, "destination": str(path),
-                "status": "reviewed", "review": {"success": True, "review_decision": "pass"}}
+                "status": "reviewed", "review": {"success": True, "review_decision": "pass",
+                    "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
+                                "scores": {"setting": 90, "plot": 90, "character": 90,
+                                          "prose": 90, "dialogue": 90, "style": 90}}}}
 
     # --- 字段穿透 ---------------------------------------------------------------
     def test_new_job_defaults_to_draft_only_without_account(self):

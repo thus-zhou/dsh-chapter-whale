@@ -207,6 +207,23 @@ def _target_ids(record: Dict[str, Any]) -> List[int]:
     return sorted(seen)
 
 
+def _skipped_pending(record: Dict[str, Any]) -> List[int]:
+    cycle = record.get("cycle") if isinstance(record.get("cycle"), dict) else {}
+    raw: List[Any] = []
+    for source in (record.get("skipped_pending"), cycle.get("skipped_pending")):
+        if isinstance(source, (list, tuple)):
+            raw.extend(source)
+    seen: List[int] = []
+    for value in raw:
+        try:
+            chapter = int(value)
+        except (TypeError, ValueError):
+            continue
+        if chapter > 0 and chapter not in seen:
+            seen.append(chapter)
+    return sorted(seen)
+
+
 def _cost_block(job: Dict[str, Any], record: Dict[str, Any], project: Path) -> Dict[str, Any]:
     """费用三分：known（有价有量）/ zero（有账本、确实没有调用）/ unknown（不可判定）。"""
     zone = _job_timezone(job)
@@ -283,6 +300,11 @@ def _actions(job: Dict[str, Any], record: Dict[str, Any], chapters: List[Dict[st
     if status == "running":
         return {"decision": "wait", "reason": "本次运行仍在进行中，只读核验即可",
                 "actions": [{"id": "refresh", "label": "刷新状态", "enabled": True}]}
+    skipped = [c for c in chapters if c.get("state") == "skipped_pending_review"]
+    if skipped:
+        ids = "、".join(str(c["chapter_id"]) for c in skipped)
+        return {"decision": "manual", "reason": f"第{ids}章待人工复核，已跳过排期；批准后可继续",
+                "actions": [{"id": "open_chapters", "label": "查看待复核章节", "enabled": True}]}
     if mode == "draft_only":
         if not chapters:
             return {"decision": "retry", "reason": "本次运行没有记录到目标章节",
@@ -323,6 +345,9 @@ def project_run(job_id: str, job: Dict[str, Any], run_id: str) -> Dict[str, Any]
     book = str(record.get("book") or job.get("book") or "")
     account = str(record.get("account") or job.get("account") or "")
     targets = _target_ids(record)
+    skipped_pending = _skipped_pending(record)
+    skipped_set = set(skipped_pending)
+    ordered = sorted(set(targets) | skipped_set)
     files = _chapter_files(project) if project else {}
     try:
         receipts = writer_runner.reviewed_chapters(project) if project and project.is_dir() else {}
@@ -348,7 +373,7 @@ def project_run(job_id: str, job: Dict[str, Any], run_id: str) -> Dict[str, Any]
             except (TypeError, ValueError):
                 continue
     chapters: List[Dict[str, Any]] = []
-    for chapter in targets:
+    for chapter in ordered:
         receipt = receipts.get(chapter) if isinstance(receipts, dict) else None
         body = files.get(chapter)
         words = _body_words(body) if body is not None else None
@@ -359,7 +384,10 @@ def project_run(job_id: str, job: Dict[str, Any], run_id: str) -> Dict[str, Any]
             if isinstance(review, dict):
                 review_decision = review.get("review_decision")
         state = "pending"
-        if chapter in published:
+        if chapter in skipped_set:
+            # 因前序章待人工复核而被跳过的章：必须可见，不能表现为“目标缩水”。
+            state = "skipped_pending_review"
+        elif chapter in published:
             state = "published"
         elif chapter in queued:
             state = "queued"
@@ -387,6 +415,7 @@ def project_run(job_id: str, job: Dict[str, Any], run_id: str) -> Dict[str, Any]
         "reviewed": sum(1 for c in chapters if c["review_passed"]),
         "published": sum(1 for c in chapters if c["platform_verified"]),
         "pending": sum(1 for c in chapters if not c["review_passed"]),
+        "skipped_pending": sum(1 for c in chapters if c["state"] == "skipped_pending_review"),
         "words": sum(int(c["words"] or 0) for c in chapters),
     }
     decision = _actions(job, record, chapters, published)
@@ -401,6 +430,7 @@ def project_run(job_id: str, job: Dict[str, Any], run_id: str) -> Dict[str, Any]
         "started_at": record.get("started_at"),
         "finished_at": record.get("finished_at"),
         "tally": tally,
+        "skipped_pending": skipped_pending,
         "chapters": chapters,
         "costs": costs_block,
         "last_event": _last_event(record),

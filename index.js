@@ -648,8 +648,17 @@ async function ensureStarted(config, signal) {
     swallow(child.exitCode === null ? new Promise((done) => child.once('exit', done)) : Promise.resolve(), () => {});
 
     const deadline = Date.now() + config.startTimeoutMs;
+    const abortedResult = () => {
+      // Do not leave a half-started detached worker behind: an aborted tool call
+      // must not keep occupying the port until the full start timeout expires.
+      terminateSpawnedTree(child, null);
+      return { started: false, aborted: true, pid: child.pid };
+    };
     while (Date.now() < deadline) {
+      if (signal?.aborted) return abortedResult();
       await delay(600);
+      // The wait itself can be aborted; check again before another probe.
+      if (signal?.aborted) return abortedResult();
       if (spawnError) {
         const logs = lastSpawnedLog(config);
         return {
@@ -679,7 +688,7 @@ async function ensureStarted(config, signal) {
       }
       if (child.exitCode !== null) break;
     }
-    if (signal?.aborted) return { started: false, aborted: true, pid: child.pid };
+    if (signal?.aborted) return abortedResult();
     const logs = lastSpawnedLog(config);
     const died = child.exitCode !== null;
     return {
@@ -1305,4 +1314,5 @@ export const __internals = {
   isLoopbackAuthority,
   hostnameOf,
   redactService,
+  ensureStarted,
 };

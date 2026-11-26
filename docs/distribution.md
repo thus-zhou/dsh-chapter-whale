@@ -34,11 +34,15 @@
 
 `node scripts/check-release.mjs`（CI 与 `prepublishOnly` 使用）：
 
-- 清单内每个文件存在且 sha256 一致（无捆绑运行时则跳过 `runtime/` 前缀）。
+- 清单内每个文件存在且 sha256 一致；只有 `--local`（薄源码检出）允许跳过缺席的 `runtime/` 项。完整包模式缺 `runtime/` 或 `runtime/python/python.exe` 直接失败，不再把 2253 个 runtime 项静默算作通过。
+- 按 `sha256(json.dumps(files, sort_keys=True))` 复算 `buildId` 并与清单比较；`packageVersion` 必须等于 `package.json` 的 `version`，拒绝陈旧或手改的清单。
 - 拒绝 `backend/{accounts,books,integration_data,playwright-browsers,.env}` 这类本地状态。
 - 拒绝清单里的测试残留与私稿痕迹：`__pycache__`、`.pyc/.pyo`、`test_*.py`、`.webnovel/`、`正文/`、`integration_data/`、`*.dpapi`、`*.publish.json`、`scheduler.json*`。
 - 要求关键文件在清单内：`backend/manager/app.py`、`backend/integration/writer_runner.py`、`backend/fanqie_auto_publish/publication_safety.py`、`runtime/python/python.exe`。
-- 无捆绑运行时，校验 `runtime-download.json` 的 `buildId`、大小、sha256 与固定下载地址；非 `--local` 时 `package.json` 不得为 `private`。
+- 轻量包校验 `runtime-download.json` 的 `buildId`、大小、sha256 与固定下载地址；非 `--local` 时 `package.json` 不得为 `private`。
+- `market/` 条目只能在对应 GitHub/npm 资产真实存在后指向新版本。发布前允许 market 版本低于 `package.json`（当前保留已发布的 `0.7.4`，`0.7.5` 待 Release/npm 后再同步），但高于 `package.json` 的版本直接失败，避免把用户引向 404。
+
+本地复跑顺序：先在干净树执行 `node scripts/check-release.mjs --local`，再跑 backend 测试。backend 测试会写入 `backend/integration_data`，测试之后、再次执行发行门禁之前必须清理该目录；否则 `check-release` 会按「后端包混入本地状态」拒绝通过（P2-25）。
 
 发行包内不含作品正文、账号数据、密钥（`secret_store` 的 DPAPI 文件在工作区，不随包）与测试文件；测试仍保留在源码仓库中。
 
@@ -76,7 +80,7 @@
 文件名，避免不同 Windows 系统 tar 版本对中文文件名的转换差异。
 
 ```
-python scripts/build-runtime.py --manifest-only # 复用本地环境，重建当前清单
+python scripts/build-runtime.py --manifest-only --runtime-version 0.7.0  # 复用已发布的 runtime 0.7.0，只重建清单
 python scripts/build-runtime.py          # 需要重新准备依赖时使用
 python scripts/pack-bundle.py            # npm 文件 + 清单内的 runtime → .tmp/bundle/*.tgz
 python scripts/pack-bundle.py --keep-stage   # 保留解包目录用于核对
@@ -85,8 +89,16 @@ python scripts/pack-bundle.py --keep-stage   # 保留解包目录用于核对
 `pack-bundle.py` 只复制清单里列出的文件，组装后检查是否混入 `__pycache__`、`.pyc`、
 `test_*.py`。组装前核对每个源文件摘要，并在隔离暂存目录执行发行检查。
 
-完整包使用自带环境，不携带自指摘要的 `runtime-download.json`。完整包生成后，脚本自动将其
-实际大小、SHA-256、buildId 和版本地址写回源码的下载描述，再构建轻量包：
+完整包名使用 `runtime-manifest.json` 的 `version`（当前 `0.7.0`），不是插件
+`package.json` 的 `0.7.5`；否则 `v0.7.5/dsh-chapter-whale-runtime-win32-x64-0.7.5.tgz`
+并不存在。`pack-bundle.py` 只产出完整包、`bundle.json` 与 `SHA256SUMS.txt`，不改写
+`runtime-download.json`——该文件继续描述已发布的 v0.7.0 runtime 资产及其
+`runtimeAssetBuildId`，避免轻量包被引向 404 或摘要不符的归档（P2-22）。
+
+完整包使用自带环境，不携带自指摘要的 `runtime-download.json`。`pack-bundle.py` **不会**覆盖源码根部的
+`runtime-download.json`：该文件始终描述已发布、可下载的 runtime 资产（当前 v0.7.0），完整包只生成
+`bundle.json` 与 `SHA256SUMS.txt`。否则把完整包自身的 SHA 写进下载描述，会让轻量安装器的
+`downloadRuntime()` 因 buildId/runtimeAssetBuildId 不匹配而拒绝归档（P2-22）。轻量包再按以下方式构建：
 
 ```
 npm pack --ignore-scripts --pack-destination .tmp
