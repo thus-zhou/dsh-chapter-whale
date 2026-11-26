@@ -52,8 +52,8 @@ PYTHONPATH=backend python -m unittest discover -s backend/manager -t backend
 rm -rf backend/integration_data                # 测试残留；再次执行门禁前必须清理
 ```
 
-- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `efba5d3f679f414181911b8299ce297cec1a470a3fe2dd99315ea3f9736c23de`；P3-3 起该命令同时复算 buildId、校验 `packageVersion`，并允许 market 以 0.7.4 滞后于 `package.json`（输出 note）。
-- **完整包校验（HEAD 源码 + 真实 v0.7.0 runtime）**：**3421 个文件全部通过**，同一 buildId `efba5d3f679f414181911b8299ce297cec1a470a3fe2dd99315ea3f9736c23de`；`downloadRuntime()` 用真实归档字节复现成功。
+- **干净源码清单校验（`node scripts/check-release.mjs --local`）**：**1168 个文件通过，跳过 2253 个缺席 runtime 项**，buildId `9f1cc34920fe1c62b5579e0b3e3e5d9708df20ed728b49a21290cc38e4625e2a`；P3-3 起该命令同时复算 buildId、校验 `packageVersion`，并允许 market 以 0.7.4 滞后于 `package.json`（输出 note）。
+- **完整包校验（HEAD 源码 + 真实 v0.7.0 runtime）**：**3421 个文件全部通过**，同一 buildId `9f1cc34920fe1c62b5579e0b3e3e5d9708df20ed728b49a21290cc38e4625e2a`；`downloadRuntime()` 用真实归档字节复现成功。
 - **JS / 前端门禁与包契约（`npm test`）**：**125 项，109 pass / 0 fail / 16 skipped**（Linux；Windows/macOS 条件用例跳过），含 `test/client-ui.test.mjs` 的真实递归渲染回归。
 - **后端集成层（`backend/integration`）**：**827 tests OK（skipped=8）**，约 35s。
 - **后端管理服务层（`backend/manager`）**：**187 tests OK**，约 33s。

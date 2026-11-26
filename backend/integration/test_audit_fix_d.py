@@ -274,6 +274,20 @@ class OwnedPortProcTests(unittest.TestCase):
                                              'cmdline': 'node /opt/our-free-model/ofm_service.mjs'}):
             self.assertTrue(free_channels._host_process('node', '9002'))
 
+    def test_host_process_accepts_node24_mainthread_comm_only_for_host_exe(self):
+        with mock.patch.object(free_channels, '_proc_identity',
+                               return_value={'exe': '/usr/local/bin/node',
+                                             'cmdline': 'node /opt/vendor/ofm_service.mjs'}):
+            self.assertTrue(free_channels._host_process('MainThread', '9004'))
+        with mock.patch.object(free_channels, '_proc_identity',
+                               return_value={'exe': '/usr/bin/python3',
+                                             'cmdline': 'python3 /opt/vendor/ofm_service.mjs'}):
+            self.assertFalse(free_channels._host_process('MainThread', '9005'))
+        with mock.patch.object(free_channels, '_proc_identity',
+                               return_value={'exe': '/usr/local/bin/node',
+                                             'cmdline': 'node server.js'}):
+            self.assertFalse(free_channels._host_process('MainThread', '9006'))
+
     def test_identity_owned_rejects_substring_and_flags(self):
         for bad in (
             {'exe': '/usr/bin/node', 'cmdline': 'node /tmp/oldsh/server.js'},

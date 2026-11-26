@@ -5,7 +5,7 @@
   "pythonSha256": "0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8",
   "distributionStatus": "tested-without-live-publish",
   "version": "0.7.0",
-  "buildId": "efba5d3f679f414181911b8299ce297cec1a470a3fe2dd99315ea3f9736c23de",
+  "buildId": "9f1cc34920fe1c62b5579e0b3e3e5d9708df20ed728b49a21290cc38e4625e2a",
   "files": {
     "backend/manager/__init__.py": "25bf932079fe1bfd101f94cec4ee47c279847dce466f19d01b9d407122945697",
     "backend/manager/ai_tools.py": "8406dbb3f29adf64afce02e6bf02a96cd40894828bf6c03d57e2f501ac9ba53e",
@@ -53,7 +53,7 @@
     "backend/integration/evidence_usage.py": "618fff1d53b561a9b0e621c2920ec9287cd23356fe630483b7412de8a8b8f975",
     "backend/integration/failure_info.py": "ffd3efed8d543cc031f819edf2f7d3b2f0147e0ab55d34e5c6786754b07b3974",
     "backend/integration/fallback_budget.py": "f5457e8e32a731419905c963b93f30e547a8c5660384b0d7b084bdb98bcf88b0",
-    "backend/integration/free_channels.py": "e41550d809b79ff2062b877b349040ef547c1d5a260eed98bd1c6d03957f345c",
+    "backend/integration/free_channels.py": "16bb6c1fb3ebedae3b96a2910b36ab93a6713016c6e1a4d0963dd86a855a62ca",
     "backend/integration/free_pool.py": "ba061531a372ba7c620437fd99a99e3055519e7514d7d56b738e377bac847b71",
     "backend/integration/invalidation.py": "48b589d7dcc70beb82acddf9d4e7831795219ac18c5236fdf2a269a1152393ae",
     "backend/integration/length_policy.py": "b23adbaa8171c1c716afecc64a23b96905ed238fbf3afb0a6fbde1c074a25316",

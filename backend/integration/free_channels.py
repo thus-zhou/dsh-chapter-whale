@@ -180,9 +180,17 @@ def _host_process(command, pid=None):
     ``pid`` is required: a command name alone (``node``) is not ownership. A
     listener whose ``/proc`` identity cannot be read is rejected, not trusted.
     """
-    if not HOST_PROCESS_RE.match(Path(str(command or '')).name):
+    cmd_name = Path(str(command or '')).name
+    identity = _proc_identity(pid)
+    if not isinstance(identity, dict):
         return False
-    return _identity_owned(_proc_identity(pid))
+    if not HOST_PROCESS_RE.match(cmd_name):
+        exe_name = Path(str(identity.get('exe') or '')).name
+        # Node.js 24+ on Linux sets /proc/<pid>/comm to "MainThread" (lsof `c`
+        # field); verify the kernel executable basename is still a host binary.
+        if cmd_name.casefold() not in ('mainthread', 'mainthrea') or not HOST_PROCESS_RE.match(exe_name):
+            return False
+    return _identity_owned(identity)
 
 
 def owned_ports():
