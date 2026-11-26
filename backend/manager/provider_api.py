@@ -121,8 +121,9 @@ def install(app, load, config_path, *, costs_db=None):
         transaction(change);return listing()
     @app.post('/api/ai/providers/dsh/import')
     def dsh():
+        projects = [x['path'] for x in app.state.store.projects()]
         def change(doc):
-            updated,identity=providers.import_dsh(doc);doc.clear();doc.update(updated);return identity
+            updated,identity=providers.import_dsh(doc, projects=projects or None);doc.clear();doc.update(updated);return identity
         return {'id':transaction(change),**listing()}
 
     from integration import free_channels
@@ -140,7 +141,11 @@ def install(app, load, config_path, *, costs_db=None):
 
     @app.post('/api/ai/free-channels/import')
     def free_import(payload:dict):
-        if set(payload)-{'port','channel_id','authorize_project'}:raise ValueError('渠道接入包含未知字段')
+        if set(payload)-{'port','channel_id','authorize_project','project','projects'}:raise ValueError('渠道接入包含未知字段')
+        if not payload.get('project') and not payload.get('projects'):
+            projects = [x['path'] for x in app.state.store.projects()]
+            if projects:
+                payload = {**payload, 'projects': projects}
         # Network work stays outside the AI configuration lock.
         current=load()
         updated,identity,catalog=free_channels.import_channel(current,payload)

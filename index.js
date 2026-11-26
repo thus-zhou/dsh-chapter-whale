@@ -236,8 +236,10 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/style-profile/rebuild',
   'POST /api/projects/:identity/plan',
   'POST /api/projects/:identity/batches/:batch/resume',
+  'POST /api/projects/:identity/batches/:batch/abandon',
   'POST /api/projects/:identity/chapters/:chapter/polish',
   'POST /api/projects/:identity/chapters/:chapter/review',
+  'POST /api/projects/:identity/chapters/:chapter/approve-review',
   'POST /api/projects/:identity/chapters/:chapter/revision',
   'POST /api/projects/:identity/chapters/:chapter/revision/accept',
   'POST /api/projects/:identity/chapters/:chapter/revision/reject',
@@ -273,6 +275,7 @@ const WRITE_ROUTES = [
   'POST /api/publish/preview',
   'POST /api/jobs',
   'PUT /api/jobs/:identity',
+  'DELETE /api/jobs/:identity',
   'POST /api/jobs/:identity/run',
   'POST /api/jobs/:identity/recover',
   'POST /api/jobs/:identity/approve',
@@ -646,7 +649,6 @@ async function ensureStarted(config, signal) {
 
     const deadline = Date.now() + config.startTimeoutMs;
     while (Date.now() < deadline) {
-      if (signal?.aborted) return { started: false, aborted: true, pid: child.pid };
       await delay(600);
       if (spawnError) {
         const logs = lastSpawnedLog(config);
@@ -983,6 +985,10 @@ export function createHandler(config, token) {
     if (method === 'GET' && ['/api/ai/providers', '/api/overview'].includes(suffix) && config.hostModels) {
       try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
       catch { /* Manual providers remain accessible when the host catalog is unavailable. */ }
+    } else if (method === 'POST' && config.hostModels && !config.hostModels.syncedProvider
+        && (/^\/api\/ai\/(test|roles\/)/.test(suffix) || /^\/api\/projects\/[^/]+\/(plan|generate|chapters\/\d+\/(polish|review|revision))/.test(suffix) || /^\/api\/jobs\/[^/]+\/run$/.test(suffix))) {
+      try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
+      catch { /* Keep explicit provider errors visible if host catalog is absent. */ }
     }
     if (SAFE_METHODS.has(method)) {
       if (!allowsRead(segments)) {
@@ -1108,15 +1114,15 @@ function makeTool(ctx, config) {
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['status', 'get', 'post'] },
+        action: { type: 'string', enum: ['status', 'get', 'post', 'put', 'delete'] },
         path: {
           type: 'string',
           description: 'API 路径，例如 /api/overview 或 /api/projects/<id>/chapters',
         },
-        body: { type: 'object', description: 'action=post 时的 JSON 请求体' },
+        body: { type: 'object', description: '写操作时的 JSON 请求体' },
         confirm: {
           type: 'boolean',
-          description: 'action=post 时必须为 true：表示已确认这次写操作。',
+          description: '写操作时必须为 true：表示已确认这次写操作。',
         },
       },
       required: ['action'],
@@ -1169,7 +1175,7 @@ function makeTool(ctx, config) {
       }
 
       const path = String(args?.path || '');
-      const method = action === 'post' ? 'POST' : 'GET';
+      const method = action === 'post' ? 'POST' : action === 'put' ? 'PUT' : action === 'delete' ? 'DELETE' : 'GET';
       assertToolPath(path, method);
 
       if (method !== 'GET') {

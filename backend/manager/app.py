@@ -222,8 +222,18 @@ class Operations:
             active = self.store.operations(active_only=True)
             if any(x.get("identity") == identity for x in active):
                 raise HTTPException(409, "同一操作正在执行，请查看运行记录")
+            meta_pid = (metadata or {}).get("project_id")
+            if meta_pid and kind in {"generate", "daily"}:
+                if any(
+                    x.get("project_id") == meta_pid and x.get("kind") in {"generate", "daily"}
+                    and x.get("status") in {"queued", "running", "awaiting_login"}
+                    for x in active
+                ):
+                    raise HTTPException(409, "该作品已有写作或日更任务正在执行，请等待完成后再试")
             payload = {"id": uuid.uuid4().hex, "kind": kind, "identity": identity,
-                       "created_at": bridge.now_iso(), "status": "queued", "log_tail": "", **(metadata or {})}
+                       "created_at": bridge.now_iso(), "status": "queued", "log_tail": "",
+                       "progress": {"percent": 0, "stage": "queued", "label": "等待执行", "current": 0, "total": 0, "indeterminate": True},
+                       **(metadata or {})}
             if operation_key:
                 payload["operation_key"] = operation_key
                 payload["request_signature"] = signature
@@ -311,7 +321,17 @@ class Operations:
                 cancelled_before_spawn = identity in self.cancelled
             if cancelled_before_spawn:
                 stop_process_tree(process)
-            payload.update(status="running", pid=process.pid)
+            payload.update(
+                status="running",
+                pid=process.pid,
+                progress={
+                    **(payload.get("progress") or {}),
+                    "stage": "running",
+                    "label": "正在执行",
+                    "percent": max(5, int((payload.get("progress") or {}).get("percent") or 5)),
+                    "indeterminate": True,
+                },
+            )
             self.store.save_operation(payload)
             # Bound the child even if the website or model stops responding.
             timed_out = threading.Event()
@@ -323,14 +343,44 @@ class Operations:
             timer.start()
             try:
                 for line in process.stdout:
+                    stripped = line.strip()
+                    if stripped.startswith("NOVEL_HELPER_PROGRESS:"):
+                        try:
+                            prog = json.loads(stripped[len("NOVEL_HELPER_PROGRESS:"):])
+                            if isinstance(prog, dict):
+                                cur = dict(payload.get("progress") or {})
+                                cur.update({k: v for k, v in prog.items() if k in {"percent", "stage", "label", "current", "total", "chapter"}})
+                                cur["indeterminate"] = False
+                                payload["progress"] = cur
+                                self.store.save_operation(payload)
+                                continue
+                        except ValueError:
+                            pass
                     payload["log_tail"] = (payload.get("log_tail", "") + redact(line))[-16000:]
                     with self.lock:
                         confirmed = identity in self.login_confirmed
                     if line.startswith("NOVEL_HELPER_WAITING_LOGIN"):
                         if not confirmed:
                             payload["status"] = "awaiting_login"
+                            payload["progress"] = {**(payload.get("progress") or {}), "stage": "login", "label": "等待浏览器登录确认", "indeterminate": True}
                     elif confirmed and payload.get("status") == "awaiting_login":
                         payload["status"] = "running"
+                    else:
+                        inferred = None
+                        if "创作第" in stripped:
+                            inferred = ("B", stripped[:40], 20, False)
+                        elif "模型 C 正在润色" in stripped:
+                            inferred = ("C", "模型 C 润色中", 55, False)
+                        elif "自动审查" in stripped or "审查" in stripped:
+                            inferred = ("D", "模型 D 审查中", 75, False)
+                        elif "示范分析" in stripped:
+                            inferred = ("learn", stripped[:40], 50, False)
+                        elif "共享记忆补建" in stripped:
+                            inferred = ("memory", stripped[:40], 60, False)
+                        if inferred:
+                            cur = dict(payload.get("progress") or {})
+                            cur.update(stage=inferred[0], label=inferred[1], percent=max(int(cur.get("percent") or 0), inferred[2]), indeterminate=inferred[3])
+                            payload["progress"] = cur
                     self.store.save_operation(payload)
                 code = process.wait(timeout=30)
             finally:
@@ -343,16 +393,22 @@ class Operations:
                 payload.update(status="failed", error="运行超过一小时，已停止；请核对平台状态后再试")
             elif code == 0 and child_status in benign:
                 payload["status"] = "success"
+                payload["progress"] = {**(payload.get("progress") or {}), "percent": 100, "stage": "done", "label": "已完成", "indeterminate": False}
             elif child_status=='waiting' and payload.get('kind')=='generate' and payload.get('batch_id') and result.get('failure_kind') in {'recovery_cooldown','free_pool_wait'} and result.get('next_retry_at'):
                 payload.update(status='waiting',error=result.get('error','等待模型恢复'))
+                payload["progress"] = {**(payload.get("progress") or {}), "stage": "waiting", "label": "等待模型恢复", "indeterminate": False}
             elif child_status == 'waiting' and result.get('next_retry_at'):
                 payload.update(status='deferred', error='等待模型恢复，调度器将继续原批次')
+                payload["progress"] = {**(payload.get("progress") or {}), "stage": "waiting", "label": "等待模型恢复", "indeterminate": False}
             elif child_status in {'metadata_pending', 'needs_revision', 'blocked'}:
                 payload.update(status=child_status, error=result.get('next_action') or result.get('reason_code') or '需要处理后继续')
+                payload["progress"] = {**(payload.get("progress") or {}), "stage": child_status, "label": "需要处理后继续", "indeterminate": False}
             elif child_status in {"awaiting_approval", "disabled", "already_run", "already_ran", "busy"}:
                 payload["status"] = child_status
+                payload["progress"] = {**(payload.get("progress") or {}), "stage": child_status, "indeterminate": False}
             else:
                 payload.update(status="failed", error=result.get("error", "操作失败，请查看日志") if isinstance(result, dict) else "操作失败")
+                payload["progress"] = {**(payload.get("progress") or {}), "stage": "failed", "label": "执行失败", "indeterminate": False}
             payload.update(result=result, exit_code=code)
         except Exception as exc:
             payload.update(status="failed", error=redact(str(exc)))
@@ -969,6 +1025,32 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         value = data.get("book") if isinstance(data, dict) else None
         return value.strip() if isinstance(value, str) and value.strip() else None
 
+    def project_title(path_str: str) -> str:
+        p = Path(path_str)
+        try:
+            state = writer_runner.strict_json(p / ".webnovel" / "state.json", {})
+            info = state.get("project_info") if isinstance(state, dict) else {}
+            if isinstance(info, dict) and str(info.get("title") or "").strip():
+                return str(info["title"]).strip()
+            if isinstance(state, dict) and str(state.get("title") or "").strip():
+                return str(state["title"]).strip()
+        except (OSError, ValueError):
+            pass
+        return p.name
+
+    def project_id_for_path(path_str: str) -> str:
+        try:
+            target = str(Path(path_str).resolve())
+        except OSError:
+            return ""
+        for p in store.projects():
+            try:
+                if str(Path(p["path"]).resolve()) == target:
+                    return p["id"]
+            except OSError:
+                continue
+        return ""
+
     async def dispatch():
         while True:
             await asyncio.sleep(20)
@@ -976,8 +1058,13 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                 await asyncio.to_thread(ops.resume_due)
                 for job in await asyncio.to_thread(scheduler.due_jobs):
                     identity = job["id"]
+                    meta = {
+                        "job_id": identity,
+                        "project_id": project_id_for_path(job.get("project", "")),
+                        "book": job.get("book") or project_title(job.get("project", "")),
+                    }
                     try:
-                        ops.start("daily", ["run", "--job-id", identity], f"job:{identity}")
+                        ops.start("daily", ["run", "--job-id", identity], f"job:{identity}", meta)
                     except HTTPException:
                         continue
             except (ValueError, KeyError, RuntimeError, OSError, sqlite3.Error) as exc:
@@ -1002,6 +1089,14 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     async def lifespan(app):
         task = asyncio.create_task(dispatch()) if start_dispatcher else None
         notify_task = asyncio.create_task(deliver_notifications())
+        if start_dispatcher:
+            def _restore_ofm():
+                try:
+                    from integration import ofm_runtime
+                    ofm_runtime.restore_if_enabled()
+                except Exception:
+                    pass
+            threading.Thread(target=_restore_ofm, daemon=True).start()
         yield
         for pending in (task, notify_task):
             if pending:
@@ -1173,9 +1268,23 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/chapters")
     def chapters(identity: str):
         path = Path(project(identity)["path"])
-        receipts = writer_runner.reviewed_chapters(path)
-        return {"chapters": [{"id": cid, "title": title, "words": len(content), "path": str(source), "reviewed": cid in receipts, "review_status":receipts.get(cid,{}).get("review",{}).get("review_decision")}
-                             for source, cid, title, content in bridge.iter_source_chapters(path)]}
+        reviewed = writer_runner.reviewed_chapters(path)
+        committed = writer_runner.committed_chapters(path)
+        rows = []
+        for source, cid, title, content in bridge.iter_source_chapters(path):
+            receipt = committed.get(cid) or reviewed.get(cid) or {}
+            review = receipt.get("review") or {}
+            rows.append({
+                "id": cid,
+                "title": title,
+                "words": len(content),
+                "path": str(source),
+                "reviewed": cid in reviewed,
+                "human_review_required": cid in committed and cid not in reviewed,
+                "review_status": review.get("review_decision"),
+                "auto_review_count": review.get("auto_review_count"),
+            })
+        return {"chapters": rows}
 
     @app.get("/api/projects/{identity}/entities")
     def project_entities(identity: str, chapter: int = 0):
@@ -1660,7 +1769,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
     @app.get("/api/projects/{identity}/workflow")
     def workflow_state(identity: str):
-        return workflow.state(Path(project(identity)["path"]))
+        path = Path(project(identity)["path"])
+        return {**workflow.state(path), "pending_batches": studio.pending_batches(path)}
 
     @app.get("/api/projects/{identity}/scenes")
     def scenes_view(identity: str,chapter: int=0,count: int=2,word_count: int=3500):
@@ -1700,7 +1810,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def rebuild_memory(identity: str):
         item=project(identity)
         if not public_ai()["configured"]:raise ValueError("请先配置 AI 模型")
-        return ops.start("memory",["memory-rebuild","--project",item["path"]],f"project:{identity}",{"project_id":identity})
+        return ops.start("memory",["memory-rebuild","--project",item["path"]],f"project:{identity}",{"project_id":identity,"book":project_title(item["path"])})
 
     @app.post("/api/projects/{identity}/samples")
     async def upload_sample(identity: str,file: UploadFile=File(...)):
@@ -1715,7 +1825,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if not public_ai()["configured"]:raise ValueError("请先配置 AI 模型")
         args=["learn","--project",item["path"],"--sample-id",sample,"--revision",str(data.revision)]
         if data.full:args.append("--full")
-        return ops.start("learn",args,f"project:{identity}",{"project_id":identity,"sample_id":sample})
+        return ops.start("learn",args,f"project:{identity}",{"project_id":identity,"book":project_title(item["path"]),"sample_id":sample})
 
     @app.get("/api/projects/{identity}/style-profile")
     def style_public(identity: str):
@@ -1743,7 +1853,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def plan_project(identity: str,data: PlanInput):
         item=project(identity)
         if not public_ai()["configured"]:raise ValueError("请先配置 AI 模型")
-        return ops.start("plan",["plan","--project",item["path"],"--count",str(data.count)],f"project:{identity}",{"project_id":identity})
+        return ops.start("plan",["plan","--project",item["path"],"--count",str(data.count)],f"project:{identity}",{"project_id":identity,"book":project_title(item["path"])})
 
     @app.get("/api/projects/{identity}/plan")
     def current_plan(identity: str):
@@ -1753,26 +1863,45 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def resume_batch(identity: str,batch: str):
         item=project(identity);path=studio.project_file(Path(item["path"]),"batches",batch)
         if not path.is_file():raise KeyError("批次不存在")
-        return ops.start("generate",["batch","--project",item["path"],"--batch-id",batch],f"project:{identity}",{"project_id":identity,"batch_id":batch})
+        return ops.start("generate",["batch","--project",item["path"],"--batch-id",batch],f"project:{identity}",{"project_id":identity,"book":project_title(item["path"]),"batch_id":batch})
+
+    @app.post("/api/projects/{identity}/batches/{batch}/abandon")
+    def abandon_batch(identity: str, batch: str):
+        item = project(identity)
+        return studio.abandon_batch(Path(item["path"]), None if batch == "all" else batch)
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/polish")
     def polish_chapter(identity: str,chapter: int):
         if chapter<=0:raise ValueError("章节号无效")
         item=project(identity)
         if not public_ai()["configured"]:raise ValueError("请先配置 AI 模型")
-        return ops.start("polish",["polish","--project",item["path"],"--chapter",str(chapter)],f"project:{identity}",{"project_id":identity})
+        return ops.start("polish",["polish","--project",item["path"],"--chapter",str(chapter)],f"project:{identity}",{"project_id":identity,"book":project_title(item["path"]),"chapter":chapter})
 
     @app.get("/api/projects/{identity}/chapters/{chapter}")
     def chapter(identity: str, chapter: int):
-        items = [x for x in bridge.iter_source_chapters(Path(project(identity)["path"])) if x[1] == chapter]
+        path = Path(project(identity)["path"])
+        items = [x for x in bridge.iter_source_chapters(path) if x[1] == chapter]
         if len(items) != 1:
             raise HTTPException(409 if items else 404, "章节重复，请检查正文文件" if items else "未找到章节")
         words = len([c for c in items[0][3] if not c.isspace()])
-        from integration import quality_gate, writer_runner
-        receipts = writer_runner.reviewed_chapters(Path(project(identity)["path"]))
+        from integration import writer_runner
+        reviewed = writer_runner.reviewed_chapters(path)
+        committed = writer_runner.committed_chapters(path)
+        receipt = committed.get(chapter) or reviewed.get(chapter) or {}
+        review = receipt.get("review") or {}
         return {"content": items[0][3], "title": items[0][2], "id": chapter, "words": words,
-                "reviewed": chapter in receipts,
-                "review_status": (receipts.get(chapter) or {}).get("review", {}).get("review_decision")}
+                "reviewed": chapter in reviewed,
+                "human_review_required": chapter in committed and chapter not in reviewed,
+                "review_status": review.get("review_decision"),
+                "auto_review_count": review.get("auto_review_count")}
+
+    @app.post("/api/projects/{identity}/chapters/{chapter}/approve-review")
+    def approve_chapter_review(identity: str, chapter: int, data: dict | None = None):
+        if chapter <= 0:
+            raise ValueError("章节号无效")
+        item = project(identity)
+        note = str((data or {}).get("note") or "")
+        return writer_runner.approve_chapter_review(Path(item["path"]), chapter, note=note)
 
     @app.get("/api/projects/{identity}/chapters/{chapter}/quality")
     def chapter_quality(identity: str, chapter: int):
@@ -1794,7 +1923,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         item = project(identity)
         if not public_ai()["configured"]: raise ValueError("请先配置 AI 模型")
         return ops.start("polish", ["polish", "--project", item["path"], "--chapter", str(chapter), "--preview"],
-                         f"project:{identity}", {"project_id": identity})
+                         f"project:{identity}", {"project_id": identity, "book": project_title(item["path"]), "chapter": chapter})
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/revision/accept")
     def accept_revision(identity: str, chapter: int, data: RevisionClose):
@@ -1841,7 +1970,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             raise ValueError("章节号必须大于 0")
         if not public_ai()["configured"]:
             raise ValueError("请先完成 AI 设置")
-        return ops.start("review", ["review", "--project", item["path"], "--chapter", str(chapter)], f"project:{identity}")
+        return ops.start("review", ["review", "--project", item["path"], "--chapter", str(chapter)], f"project:{identity}",
+                         {"project_id": identity, "book": project_title(item["path"]), "chapter": chapter})
 
     def read_outline(identity, path):
         from hashlib import sha256
@@ -1886,7 +2016,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         batch=uuid.uuid4().hex
         return ops.start("generate", ["batch", "--project", item["path"], "--word-count", str(data.word_count),
                           "--max-revisions", str(data.max_revisions),"--count",str(data.count),"--batch-id",batch,
-                          "--scenes",str(data.scenes)], f"project:{identity}",{"project_id":identity,"batch_id":batch,"scenes":data.scenes},
+                          "--scenes",str(data.scenes)], f"project:{identity}",{"project_id":identity,"book":project_title(item["path"]),"batch_id":batch,"scenes":data.scenes},
                           operation_key=data.operation_key)
 
     @app.post("/api/projects/{identity}/stage")
@@ -1957,7 +2087,10 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                          {"book": book, "account": data.account, "project_id": data.project_id})
 
     def list_jobs():
-        return [scheduler._job_summary(identity, job) | {"max_revisions": job.get("max_revisions", 2)}
+        return [scheduler._job_summary(identity, job) | {
+                    "max_revisions": job.get("max_revisions", 1),
+                    "project_id": project_id_for_path(job.get("project", "")),
+                }
                 for identity, job in scheduler.load_scheduler()["jobs"].items() if isinstance(job, dict)]
 
     @app.get("/api/jobs")
@@ -1969,13 +2102,36 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if not any(Path(x["path"]).resolve() == Path(data.project).resolve() for x in store.projects()):
             raise ValueError("请先登记写作项目")
         values = data.model_dump()
+        if not values.get("name") or values["name"].strip() in {"", "日更任务"}:
+            values["name"] = f"{data.book.strip()} · 日更"
         if values.get("publication_mode") is None:
             # 新客户端没指定就用默认 draft_only；显式传了 platform_scheduled 会由调度器拒绝。
             values.pop("publication_mode", None)
-        values["job_id"] = data.job_id or data.id or uuid.uuid4().hex[:12]
+        explicit_id = data.job_id or data.id
+        if not explicit_id:
+            target_proj = str(Path(data.project).resolve())
+            target_mode = values.get("publication_mode") or "draft_only"
+            existing_id = next(
+                (jid for jid, job in scheduler.load_scheduler().get("jobs", {}).items()
+                 if isinstance(job, dict)
+                 and str(Path(job.get("project", "")).resolve()) == target_proj
+                 and scheduler.publication_mode(job) == target_mode),
+                None,
+            )
+            if existing_id:
+                update_values = {k: v for k, v in values.items() if k not in {"id", "job_id"}}
+                return scheduler.update_job(existing_id, update_values)
+        values["job_id"] = explicit_id or uuid.uuid4().hex[:12]
         values["disabled"] = not data.enabled
         values["volume"] = None
         return scheduler.add_job(argparse.Namespace(**values))
+
+    @app.delete("/api/jobs/{identity}")
+    def delete_job(identity: str):
+        if any(x.get("identity") == f"job:{identity}" for x in store.operations(active_only=True)):
+            raise HTTPException(409, "该任务正在执行中，请先停止后再删除")
+        scheduler.remove_job(identity)
+        return {"deleted": identity}
 
     @app.put("/api/jobs/{identity}")
     def edit_job(identity: str, data: JobInput):
@@ -2208,7 +2364,12 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         # 否则 worker 只调用 ensure_started() 并返回 configured，界面显示成功
         # 而任务从未执行（曾导致失败批次无法从界面恢复）。
         extra = ["--serial-step"] if job.get("delivery_mode") == "serial" else []
-        return ops.start("daily", ["run", "--job-id", identity, *extra], f"job:{identity}")
+        meta = {
+            "job_id": identity,
+            "project_id": project_id_for_path(job.get("project", "")),
+            "book": job.get("book") or project_title(job.get("project", "")),
+        }
+        return ops.start("daily", ["run", "--job-id", identity, *extra], f"job:{identity}", meta)
 
     @app.post("/api/jobs/{identity}/recover")
     def recover_job(identity: str):

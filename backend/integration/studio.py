@@ -122,6 +122,8 @@ async def learn_async(project,identity,revision,full=False):
                 notes.append(note)
                 writer.atomic_json(checkpoint,{"token":token,"notes":notes})
                 meta["analyzed_segments"]=len(notes);writer.atomic_json(meta_path,meta)
+                pct = min(88, max(8, round((len(notes) / max(1, len(parts))) * 85)))
+                print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'learn', 'label': f'分析示范 {len(notes)}/{len(parts)} 段', 'percent': pct, 'current': len(notes), 'total': len(parts)}, ensure_ascii=False)}", flush=True)
                 print(f"示范分析 {len(notes)}/{len(parts)}",flush=True)
             condensed=notes
             if len(notes)>6:
@@ -210,7 +212,9 @@ async def plan_async(project,count=5,start=None,locked=False):
     from .planning_failover import PlanningRouter
     planner = PlanningRouter(project)
     from .planning_output import validated_call
+    print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'A', 'label': f'规划第 {start}–{ids[-1]} 章细纲', 'percent': 25, 'current': 0, 'total': count}, ensure_ascii=False)}", flush=True)
     value=await validated_call(project,ids,prompt,planner.call,budget)
+    print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'A', 'label': f'保存第 {start}–{ids[-1]} 章规划', 'percent': 92, 'current': count, 'total': count}, ensure_ascii=False)}", flush=True)
     chapters=value['chapters']
     # A single Markdown artifact is the durable planning commit. Recovery uses
     # its embedded validated metadata if a later index write is interrupted.
@@ -230,8 +234,19 @@ def plan(project,count=5):return asyncio.run(plan_async(project,count))
 def recover_plan(project,persist=True):
     project=Path(project);path=project/".webnovel"/"story_plan.json"
     doc=writer.strict_json(path,{})
-    if not isinstance(doc,dict) or not isinstance(doc.get("chapters",{}),dict):raise ValueError("规划索引损坏")
+    if not isinstance(doc,dict):
+        raise ValueError("规划索引损坏")
     changed=False
+    raw_chapters=doc.get("chapters",{})
+    if isinstance(raw_chapters,list):
+        normalized={}
+        for item in raw_chapters:
+            if isinstance(item,dict) and "id" in item:
+                normalized[str(item["id"])]=item
+        doc["chapters"]=normalized
+        changed=True
+    elif not isinstance(raw_chapters,dict):
+        raise ValueError("规划索引损坏")
     for artifact in sorted((project/"大纲").glob("AI规划-*.md")):
         with artifact.open(encoding="utf-8") as stream:first=stream.readline()
         if not first.startswith("<!-- novel-plan:"):continue
@@ -257,6 +272,53 @@ def is_key_scene(project,chapter):
     return bool(value.get("chapters",{}).get(str(chapter),{}).get("key_scene"))
 
 
+def pending_batches(project):
+    project = Path(project).resolve()
+    root = project / ".webnovel" / "batches"
+    if not root.is_dir():
+        return []
+    rows = []
+    for path in sorted(root.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+        if not re.fullmatch(r"[a-f0-9]{32}", path.stem):
+            continue
+        try:
+            doc = writer.strict_json(path, {})
+        except (ValueError, OSError):
+            continue
+        if isinstance(doc, dict) and doc.get("status") in {"running", "partial", "waiting"}:
+            rows.append({
+                "id": doc.get("id") or path.stem,
+                "status": doc.get("status"),
+                "targets": list(doc.get("targets") or []),
+                "completed": list(doc.get("completed") or []),
+                "created_at": doc.get("created_at", ""),
+                "finished_at": doc.get("finished_at", ""),
+                "recovery": doc.get("recovery") if isinstance(doc.get("recovery"), dict) else None,
+            })
+    return rows
+
+
+def abandon_batch(project, batch_id=None):
+    project = Path(project).resolve()
+    with writer.file_lock(project / ".webnovel" / "batch.lock"), writer.file_lock(project / ".webnovel" / "writer.lock"):
+        root = project / ".webnovel" / "batches"
+        abandoned = []
+        if root.is_dir():
+            if batch_id and batch_id != "all":
+                targets = [project_file(project, "batches", batch_id)]
+            else:
+                targets = [p for p in root.glob("*.json") if re.fullmatch(r"[a-f0-9]{32}", p.stem)]
+            for target in targets:
+                if not target.is_file():
+                    continue
+                doc = writer.strict_json(target, {})
+                if isinstance(doc, dict) and doc.get("status") in {"running", "partial", "waiting"}:
+                    doc.update(status="abandoned", abandoned_reason="user_abandoned", finished_at=bridge.now_iso())
+                    writer.atomic_json(target, doc)
+                    abandoned.append(doc.get("id") or target.stem)
+        return {"status": "abandoned", "abandoned": abandoned}
+
+
 def batch(project,count,word_count,max_revisions,identity,scenes=0):
     scenes=max(0,min(3,int(scenes or 0)))
     if type(count) is not int or not 1<=count<=30:raise ValueError("批量创作每次 1–30 章")
@@ -272,8 +334,27 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
                     raise ValueError('本书有未完成的逐章发布任务，请继续原日更任务；不能另建创作批次重写同章')
             for other in path.parent.glob("*.json"):
                 pending=writer.strict_json(other,{})
-                if pending.get("status") in {"running","partial","waiting"}:
-                    raise ValueError("有未完成的创作批次，请在原运行记录中继续")
+                if not isinstance(pending, dict):
+                    continue
+                st = pending.get("status")
+                done_list = pending.get("completed") or []
+                if st == "running":
+                    # Holding both batch.lock and writer.lock guarantees no live batch worker owns this file.
+                    if not done_list:
+                        pending.update(status="abandoned", abandoned_reason="stale_empty_batch", finished_at=bridge.now_iso())
+                        writer.atomic_json(other, pending)
+                        continue
+                    pending.update(status="partial", finished_at=bridge.now_iso())
+                    writer.atomic_json(other, pending)
+                    st = "partial"
+                if st == "partial" and not done_list:
+                    # Chapter 1 (or the first chapter in the batch) never landed on disk; don't trap the book forever.
+                    pending.update(status="superseded", finished_at=bridge.now_iso())
+                    writer.atomic_json(other, pending)
+                    continue
+                if st in {"partial", "waiting"}:
+                    bid = pending.get("id") or other.stem
+                    raise ValueError(f"有未完成的创作批次（{bid[:8]}），请在原运行记录中继续或放弃旧批次")
             start=writer.next_chapter_id(project)
             doc={"id":identity,"targets":list(range(start,start+count)),"word_count":word_count,"max_revisions":max_revisions,"scenes":scenes,"status":"running","created_at":bridge.now_iso()}
             writer.atomic_json(path,doc)
@@ -283,12 +364,19 @@ def batch(project,count,word_count,max_revisions,identity,scenes=0):
         doc.pop('recovery',None)
         doc.pop('finished_at',None)
         writer.atomic_json(path,doc)
-        result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":[]}
+        completed_set = set(doc.get("completed") or [])
+        remaining_targets = [c for c in doc["targets"] if c not in completed_set]
+        result={"batch_id":identity,"project":str(project),"targets":doc["targets"],"completed":list(doc.get("completed") or [])}
+        total = max(1, len(doc["targets"]))
         try:
-            for chapter in doc["targets"]:
+            for idx, chapter in enumerate(remaining_targets):
+                done_count = len(result["completed"])
+                pct = min(95, max(5, round((done_count / total) * 100)))
+                print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'B', 'label': f'创作第{chapter}章（{done_count + 1}/{total}）', 'percent': pct, 'current': done_count, 'total': total, 'chapter': chapter}, ensure_ascii=False)}", flush=True)
                 print(f"创作第{chapter}章",flush=True)
                 asyncio.run(writer._generate_chapter_locked(project,doc["word_count"],doc["max_revisions"],chapter,False,int(doc.get("scenes") or 0)))
                 result["completed"].append(chapter);doc.update(result,status="running");writer.atomic_json(path,doc)
+            print(f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': 'done', 'label': '创作完成', 'percent': 100, 'current': total, 'total': total}, ensure_ascii=False)}", flush=True)
             doc.update(result,status="generated",finished_at=bridge.now_iso());writer.atomic_json(path,doc)
             return doc
         except Exception as exc:
@@ -371,7 +459,7 @@ def sync_existing_artifacts(project, chapter):
     """Repair metadata of the same qualified body, without another prose draft."""
     project=Path(project).resolve()
     with writer.file_lock(project/'.webnovel'/'writer.lock'):
-        current=writer.reviewed_chapters(project).get(chapter)
+        current=writer.committed_chapters(project).get(chapter)
         if not current:raise ValueError('正文缺少有效审查记录，不能补同步')
         source=Path(current['destination']);content=source.read_text(encoding='utf-8-sig')
         Executor,get_ai=writer._load_webnovel_services();ai=get_ai();config=roles.load_config()

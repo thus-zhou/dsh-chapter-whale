@@ -5,12 +5,12 @@
   "package": "dsh-chapter-whale",
   "repo": "thus-zhou/dsh-chapter-whale",
   "spec": "dsh-chapter-whale",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "author": {
     "name": "thus-zhou",
     "url": "https://github.com/thus-zhou"
   },
-  "description": "0.7.4（GPL-3.0-only）：全量审计修复启停与重启恢复、单模型存稿、排期恢复与前后端交互缺陷。支持 Windows x64 与 macOS（Apple Silicon / Intel）DSH 插件。",
+  "description": "0.7.5（GPL-3.0-only）：全方位用户体验重构（4 大工作区与右上角任务中心）、全任务进度条、多书日更去重、免费模型渠道恢复连接、首章死结破解与 2 次自动审查封顶转人工复核。支持 Windows x64 与 macOS。",
   "longDescription": "按设定时间、章数和目标字数执行写作、审查修订、发布与状态核验。首次配置后可无人值守运行，需要保持电脑、本地服务、模型及发布账号可用。支持 Windows 10/11 x64 与 macOS（Apple Silicon arm64 / Intel x86_64），要求 DSH >= 0.2.2-rc.1（macOS 依赖本机 Python 3.11+ 自动搭建隔离 .venv，Windows 自动下载或内置固定运行环境）。组件许可见仓库 THIRD_PARTY_NOTICES.md（连接器 MIT，写作器 GPL v3）。\n\n[完整教程](https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/quickstart.md) · [新版演示图](https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md)\n\n新版界面截图：https://github.com/thus-zhou/dsh-chapter-whale/blob/main/docs/screenshots.md",
   "category": "agent",
   "tags": [
@@ -22,5 +22,5 @@
     "免费模型"
   ],
   "license": "GPL-3.0-only",
-  "latestVersion": "0.7.4"
+  "latestVersion": "0.7.5"
 }

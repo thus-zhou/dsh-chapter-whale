@@ -157,8 +157,21 @@ def review_passed(review: Any) -> bool:
     return quality_gate.review_passed(review)
 
 
-def reviewed_chapters(project_root: Path) -> Dict[int, Dict[str, Any]]:
-    """Return only receipts bound to the exact, uniquely named saved body."""
+MAX_AUTO_REVIEWS = 2
+
+
+def human_review_handoff(review: Any, body_sha256: str) -> bool:
+    """Two-review cap handoff: saved locally with honest non-pass quality state."""
+    return (
+        isinstance(review, dict)
+        and review.get("review_decision") == "needs_human_review"
+        and review.get("human_review_required") is True
+        and review.get("body_sha256") == body_sha256
+    )
+
+
+def _receipt_collection(project_root: Path, include_handoff: bool = False) -> Dict[int, Dict[str, Any]]:
+    """Return receipts bound to the exact, uniquely named saved body."""
     from fanqie_auto_publish.publication_safety import qualification_contract_matches
     data = strict_json(project_root / ".webnovel" / "writer_receipts.json", {})
     if not isinstance(data, dict):
@@ -173,14 +186,76 @@ def reviewed_chapters(project_root: Path) -> Dict[int, Dict[str, Any]]:
             continue
         chapter = int(raw_id)
         paths = files.get(chapter, [])
-        if len(paths) != 1 or not review_eligible(receipt.get("review"),body_digest(paths[0].read_text(encoding="utf-8-sig")),project_root,chapter):
+        if len(paths) != 1:
             continue
         path = paths[0]
+        digest = body_digest(path.read_text(encoding="utf-8-sig"))
+        review = receipt.get("review")
+        eligible = review_eligible(review, digest, project_root, chapter)
+        handoff = include_handoff and human_review_handoff(review, digest)
+        if not (eligible or handoff):
+            continue
         if (receipt.get("destination") == str(path.resolve())
                 and receipt.get("sha256") == hashlib.sha256(path.read_bytes()).hexdigest()
-                and qualification_contract_matches(project_root,chapter,receipt,contract_hash)):
+                and (handoff or qualification_contract_matches(project_root, chapter, receipt, contract_hash))):
             result[chapter] = receipt
     return result
+
+
+def reviewed_chapters(project_root: Path) -> Dict[int, Dict[str, Any]]:
+    """Return only publication-eligible receipts bound to the exact saved body."""
+    return _receipt_collection(project_root, include_handoff=False)
+
+
+def committed_chapters(project_root: Path) -> Dict[int, Dict[str, Any]]:
+    """Return locally committed chapters (passed or handed off to human review)."""
+    base = reviewed_chapters(project_root)
+    extra = _receipt_collection(project_root, include_handoff=True)
+    return {**extra, **base}
+
+
+def approve_chapter_review(project_path: Path, chapter_id: int, note: str = "") -> Dict[str, Any]:
+    """Mark a saved chapter (including needs_human_review) as human-approved for publishing."""
+    if type(chapter_id) is not int or chapter_id <= 0:
+        raise ValueError("chapter_id 必须是正整数")
+    root = Path(project_path).expanduser().resolve()
+    with file_lock(root / ".webnovel" / "writer.lock"):
+        paths = [p for p, i in _chapter_files(root) if i == chapter_id]
+        if len(paths) != 1:
+            raise ValueError("指定章节必须唯一对应一个正文文件")
+        source = paths[0]
+        raw = source.read_bytes()
+        text = raw.decode("utf-8-sig")
+        digest = body_digest(text)
+        receipts_path = root / ".webnovel" / "writer_receipts.json"
+        receipts = strict_json(receipts_path, {})
+        if not isinstance(receipts, dict):
+            raise ValueError("writer_receipts.json 必须是对象")
+        existing = receipts.get(str(chapter_id)) if isinstance(receipts.get(str(chapter_id)), dict) else {}
+        review = dict(existing.get("review") or {})
+        review.update({
+            "success": True,
+            "review_decision": "human_approved",
+            "human_review_approved": True,
+            "human_review_required": False,
+            "needs_revision": False,
+            "body_sha256": digest,
+            "human_approved_at": now_iso(),
+            "human_review_note": str(note or "").strip()[:400],
+        })
+        receipt = {
+            **existing,
+            "destination": str(source.resolve()),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "review": review,
+            "creative_contract_hash": creative_contract_hash(root),
+            "reviewed_at": existing.get("reviewed_at") or now_iso(),
+            "human_approved_at": review["human_approved_at"],
+        }
+        receipts[str(chapter_id)] = receipt
+        atomic_json(receipts_path, receipts)
+        _save_progress(root, chapter_id)
+        return {"status": "approved", "chapter_id": chapter_id, "review_decision": "human_approved", "receipt": receipt}
 
 
 def _chapter_files(project_root: Path) -> Iterable[Tuple[Path, int]]:
@@ -215,18 +290,65 @@ def next_chapter_id(project_root: Path) -> int:
     return max(max(ids, default=0), current) + 1
 
 
+_CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+_CN_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
+
+
+def _chinese_to_int(text: str) -> Optional[int]:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    if raw.isdigit():
+        return int(raw)
+    total = 0
+    section = 0
+    number = 0
+    for ch in raw:
+        if ch in _CN_DIGITS:
+            number = _CN_DIGITS[ch]
+        elif ch in _CN_UNITS:
+            unit = _CN_UNITS[ch]
+            if unit == 10000:
+                section = (section + number) * unit
+                total += section
+                section = 0
+            else:
+                if number == 0 and unit == 10 and section == 0:
+                    number = 1
+                section += number * unit
+            number = 0
+        else:
+            return None
+    value = total + section + number
+    return value if value > 0 else None
+
+
+_HEADING_ARABIC = re.compile(r"^(?:#+\s*)?(?:[-*•]\s+)?(?:\*\*|__)?\s*(?:第\s*0*(\d+)\s*章|0*(\d+)\s*\.\s*(?:《|\s))")
+_HEADING_CHINESE = re.compile(r"^(?:#+\s*)?(?:[-*•]\s+)?(?:\*\*|__)?\s*第\s*([零〇一二两三四五六七八九十百千万]+)\s*章")
+
+
+def _chapter_heading_number(line: str) -> Optional[int]:
+    stripped = str(line or "").strip()
+    match = _HEADING_ARABIC.match(stripped)
+    if match:
+        return int(match.group(1) or match.group(2))
+    match = _HEADING_CHINESE.match(stripped)
+    if match:
+        return _chinese_to_int(match.group(1))
+    return None
+
+
 def _find_outline(project_root: Path, chapter: int) -> str:
     # Local, read-only lookup makes --dry-run independent of AI initialization.
-    header = re.compile(r"^(?:#+\s*)?(?:[-*]\s+)?(?:\*\*|__)?\s*(?:第\s*0*(\d+)\s*章|0*(\d+)\s*\.\s*(?:《|\s))")
     for path in sorted((project_root / "大纲").glob("*.md")):
         lines = path.read_text(encoding="utf-8-sig").splitlines()
         start = None
         for i, line in enumerate(lines):
-            match = header.match(line.strip())
-            if match:
+            found = _chapter_heading_number(line)
+            if found is not None:
                 if start is not None:
                     return "\n".join(lines[start:i]).strip()
-                if int(match.group(1) or match.group(2)) == chapter:
+                if found == chapter:
                     start = i
         if start is not None:
             return "\n".join(lines[start:]).strip()
@@ -235,13 +357,15 @@ def _find_outline(project_root: Path, chapter: int) -> str:
 
 def _outline_title(outline: str, chapter_id: int) -> str:
     for raw_line in str(outline or "").splitlines():
-        line = raw_line.strip().lstrip("#").strip().replace("**", "").replace("__", "")
+        line = raw_line.strip().lstrip("#").strip().lstrip("-*•").strip().replace("**", "").replace("__", "")
+        if _chapter_heading_number(raw_line) != chapter_id:
+            continue
         match = re.search(
-            rf"第\s*0*{chapter_id}\s*章(?:[：:\-—–_\s]+(.+?))?(?:\s*)$",
+            rf"(?:第\s*(?:0*{chapter_id}|[零〇一二两三四五六七八九十百千万]+)\s*章|0*{chapter_id}\s*\.)(?:[：:\-—–_\s]+(.+?))?(?:\s*)$",
             line,
         )
         if match:
-            title = (match.group(1) or "").strip(" -—–_：:　")
+            title = (match.group(1) or "").strip(" -—–_：:《》　")
             if title:
                 return title
     return ""
@@ -461,13 +585,21 @@ async def _generate_and_review(
 
     history=checkpoint.get('review_history', [])
     attempts=checkpoint.get('revision_attempts', 0)
+    auto_review_count=checkpoint.get('auto_review_count', 0)
     if (not isinstance(history,list) or len(history)>editorial.MAX_CORRECTIONS+4
             or any(not isinstance(item,dict) for item in history)
-            or type(attempts) is not int or attempts<0):
+            or type(attempts) is not int or attempts<0
+            or type(auto_review_count) is not int or auto_review_count<0):
         raise ValueError('编辑纠偏检查点损坏，未覆盖')
     if multi and history:
         executor.editorial_review_context=(editorial.canonical_context(project_root,chapter_id)+
             '\n'+editorial.revision_guidance(history,history[-1]))
+
+    def emit_progress(stage_name, label, percent):
+        print(
+            f"NOVEL_HELPER_PROGRESS:{json.dumps({'stage': stage_name, 'label': label, 'percent': percent, 'chapter': chapter_id}, ensure_ascii=False)}",
+            flush=True,
+        )
 
     def remember_review(current):
         if isinstance(current,dict):
@@ -481,17 +613,53 @@ async def _generate_and_review(
                     '\n'+editorial.revision_guidance(history,current))
             preserve('polished',content)
 
+    def record_completed_review(current):
+        nonlocal auto_review_count
+        if isinstance(current, dict) and current.get('success') is True:
+            auto_review_count += 1
+            checkpoint['auto_review_count'] = auto_review_count
+            checkpoint['last_reviewed_sha256'] = body_digest(content)
+            checkpoint['last_review'] = current
+            _record_review_attempt(project_root, chapter_id, content, current)
+            remember_review(current)
+
+    def make_human_handoff(current):
+        studio.reject_sample_copy(project_root, content)
+        handoff = {
+            **(current if isinstance(current, dict) else {}),
+            'success': True,
+            'review_decision': 'needs_human_review',
+            'human_review_required': True,
+            'review_capped': True,
+            'auto_review_count': auto_review_count,
+            'body_sha256': body_digest(content),
+        }
+        checkpoint['last_reviewed_sha256'] = body_digest(content)
+        checkpoint['last_review'] = handoff
+        preserve('polished', content)
+        return {
+            'content': content,
+            'review': handoff,
+            'reviews': reviews,
+            'revision_rounds': checkpoint.get('revision_attempts', 0),
+            'executor': executor,
+            'human_review_required': True,
+        }
+
     reused='draft' in checkpoint
     if reused:
         print(f'恢复第{chapter_id}章已保存的 B 中间稿（尚未具备发布资格）',flush=True)
+        emit_progress('B', f'恢复第{chapter_id}章初稿', 35)
         first={'content':checkpoint['draft'],'review':None}
     elif scenes:
         from . import scene_writer
+        emit_progress('B', f'生成第{chapter_id}章场景初稿', 25)
         first = await scene_writer.draft(project_root, chapter_id, word_count, scenes, config=config)
         if not first.get('content'):
             raise RuntimeError('场景生成没有产出可保存的正文')
         preserve('draft', first['content'])
     else:
+        emit_progress('B', f'撰写第{chapter_id}章初稿', 25)
         first = await _read_stream_result(executor.execute_write_stream(chapter_id, word_count=word_count))
         if first['errors']:
             from .failure_info import WriteIncomplete
@@ -511,6 +679,11 @@ async def _generate_and_review(
         review = None
     if isinstance(review, dict):
         reviews.append(review)
+        if review.get("success") is True:
+            auto_review_count += 1
+            checkpoint['auto_review_count'] = auto_review_count
+            checkpoint['last_reviewed_sha256'] = body_digest(content)
+            checkpoint['last_review'] = review
     from . import editorial_release
     if editorial_release.public(config).get('enabled'):
         content,review=await editorial_release.run(project_root,chapter_id,content,executor,config,
@@ -520,33 +693,58 @@ async def _generate_and_review(
     if multi and (config.get("polish_mode","key") == "all" or config.get("polish_mode","key") == "key" and studio.is_key_scene(project_root,chapter_id)):
         if 'polished' in checkpoint:
             content=checkpoint['polished']
-            print(f'恢复第{chapter_id}章 C 润色中间稿，重新进行当前审查',flush=True)
+            print(f'恢复第{chapter_id}章 C 润色中间稿',flush=True)
         else:
+            emit_progress('C', f'模型 C 润色第{chapter_id}章', 50)
             print(f'模型 C 正在润色第{chapter_id}章；B 中间稿已保留',flush=True)
             polished=await executor.execute_polish(chapter_id,content,"优化重点场景的对话和情绪张力，去掉空泛总结、套路句、过密形容词和 AI 腔；不改变事件、人设与伏笔，不扩写下一章。",mode="rewrite")
             content=require_polish(polished,'模型 C 重点章润色未完成；B 中间稿已保留，可继续原批次')
             preserve('polished',content)
         content = normalize_title(content)
-        review=await executor.execute_review(chapter_id,content)
+        if (
+            (max_revisions > 0 or auto_review_count >= MAX_AUTO_REVIEWS)
+            and checkpoint.get('last_reviewed_sha256') == body_digest(content)
+            and isinstance(checkpoint.get('last_review'), dict)
+            and checkpoint['last_review'].get('success') is True
+        ):
+            review = checkpoint['last_review']
+        else:
+            emit_progress('D', f'模型 D 审查第{chapter_id}章', 65)
+            review=await executor.execute_review(chapter_id,content)
+            record_completed_review(review)
         reviews.append(review)
     elif reused or multi or review is None:
         content = normalize_title(content)
-        review=await executor.execute_review(chapter_id,content)
+        if (
+            (max_revisions > 0 or auto_review_count >= MAX_AUTO_REVIEWS)
+            and 'polished' in checkpoint
+            and checkpoint.get('last_reviewed_sha256') == body_digest(content)
+            and isinstance(checkpoint.get('last_review'), dict)
+            and checkpoint['last_review'].get('success') is True
+        ):
+            review = checkpoint['last_review']
+        else:
+            emit_progress('D', f'模型 D 审查第{chapter_id}章', 65)
+            review=await executor.execute_review(chapter_id,content)
+            record_completed_review(review)
         reviews.append(review)
 
     if minimum_words and body_chars(content,chapter_id)<minimum_words:
         content=normalize_title(await ensure_length(content))
         preserve('polished',content)
         review=await executor.execute_review(chapter_id,content)
+        record_completed_review(review)
         reviews.append(review)
     checked=await ensure_counts(content)
     if body_digest(checked)!=body_digest(content):
         content=normalize_title(checked)
         preserve('polished',content)
         review=await executor.execute_review(chapter_id,content)
+        record_completed_review(review)
         reviews.append(review)
-    _record_review_attempt(project_root,chapter_id,content,review)
-    remember_review(review)
+    if not history and isinstance(review, dict):
+        _record_review_attempt(project_root,chapter_id,content,review)
+        remember_review(review)
 
     for revision_round in range(max_revisions + 1):
         if not review_eligible(review,body_digest(content)) and multi and config.get("review_policy")=="e_decides":
@@ -570,6 +768,10 @@ async def _generate_and_review(
                 "revision_rounds": revision_round,
                 "executor": executor,
             }
+        if decision == "needs_human_review" or (decision == "needs_revision" and auto_review_count >= MAX_AUTO_REVIEWS):
+            print(f'第{chapter_id}章已自动审查 {auto_review_count} 次，停止继续自动审查并转人工复核',flush=True)
+            emit_progress('D', f'第{chapter_id}章转待人工复核', 90)
+            return make_human_handoff(review)
         if decision != "needs_revision":
             raise RuntimeError("审查结论不明确，已阻止发布")
         if revision_round >= max_revisions:
@@ -585,6 +787,7 @@ async def _generate_and_review(
         checkpoint['revision_attempts']=attempts
         preserve('polished',content)
 
+        emit_progress('C', f'按审查意见修改第{chapter_id}章（第{attempts}次）', 75)
         suggestions = (editorial.canonical_context(project_root,chapter_id)+'\n' if multi else '')
         suggestions += editorial.revision_guidance(history,review)
         polished = await executor.execute_polish(
@@ -603,9 +806,9 @@ async def _generate_and_review(
                 raise RuntimeError(f'第{chapter_id}章修订没有产生实际有效修改，已保留中间稿，未提交')
         content = normalize_title(await ensure_counts(await ensure_length(str(polished["content"]).strip())))
         preserve('polished',content)
+        emit_progress('D', f'模型 D 第 2 次审查第{chapter_id}章', 85)
         review = await executor.execute_review(chapter_id=chapter_id, content=content)
-        _record_review_attempt(project_root,chapter_id,content,review)
-        remember_review(review)
+        record_completed_review(review)
         reviews.append(review)
 
     raise RuntimeError("审查流程异常结束")
@@ -754,7 +957,7 @@ async def _generate_chapter_locked(
     # Known failures from the new shared-memory path must be repaired before
     # another draft, rather than silently writing with missing historical facts.
     from integration import memory_library
-    qualified={} if dry_run else reviewed_chapters(project_root)
+    qualified={} if dry_run else committed_chapters(project_root)
     for previous,record in sorted(qualified.items()):
         if previous>=selected_chapter or record.get("post_save",{}).get("shared_memory",{}).get("status")!="failed":continue
         try:
@@ -768,7 +971,14 @@ async def _generate_chapter_locked(
     outline = _find_outline(project_root, selected_chapter)
     if not outline and not dry_run:
         from integration import model_roles, studio
-        if model_roles.enabled():
+        cfg = model_roles.load_config()
+        has_ai = bool(
+            model_roles.enabled(cfg)
+            or cfg.get("provider_schema") == 1
+            or cfg.get("api_key")
+            or os.getenv("AI_API_KEY")
+        )
+        if has_ai:
             await studio.plan_async(project_root,count=1,start=selected_chapter,locked=True)
             outline=_find_outline(project_root,selected_chapter)
     if not str(outline or "").strip():
@@ -797,7 +1007,9 @@ async def _generate_chapter_locked(
         max_revisions,
         scenes,
     )
-    if not review_eligible(generated.get("review"),body_digest(str(generated.get("content","")).strip()),project_root,selected_chapter):
+    gen_digest = body_digest(str(generated.get("content", "")).strip())
+    gen_review = generated.get("review")
+    if not (review_eligible(gen_review, gen_digest, project_root, selected_chapter) or human_review_handoff(gen_review, gen_digest)):
         raise RuntimeError("保存前审查验证失败")
     content = str(generated["content"]).strip()
     normalized = _retitle_chapter_heading(content, selected_chapter, title).strip()
@@ -861,6 +1073,7 @@ async def _generate_chapter_locked(
         {
             "status": "generated",
             "review_decision": generated["review"].get("review_decision"),
+            "human_review_required": bool(human_review_handoff(generated["review"], body_digest(content.strip()))),
             "revision_rounds": generated["revision_rounds"],
             "review": generated["review"],
             "post_save": post_save,

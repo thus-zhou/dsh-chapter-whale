@@ -5685,88 +5685,70 @@ class SkillExecutor:
         
         return ""
 
+    @staticmethod
+    def _parse_cn_chapter_num(text: str) -> Optional[int]:
+        digits = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+        units = {"十": 10, "百": 100, "千": 1000, "万": 10000}
+        raw = str(text or "").strip()
+        if not raw:
+            return None
+        if raw.isdigit():
+            return int(raw)
+        total = section = number = 0
+        for ch in raw:
+            if ch in digits:
+                number = digits[ch]
+            elif ch in units:
+                unit = units[ch]
+                if unit == 10000:
+                    section = (section + number) * unit
+                    total += section
+                    section = 0
+                else:
+                    if number == 0 and unit == 10 and section == 0:
+                        number = 1
+                    section += number * unit
+                number = 0
+            else:
+                return None
+        val = total + section + number
+        return val if val > 0 else None
+
+    @classmethod
+    def _match_outline_chapter_number(cls, line: str) -> Optional[int]:
+        stripped = str(line or "").strip()
+        m_num = re.match(r"^(?:#+\s*)?(?:[-*•]\s+)?(?:\*\*|__)?\s*(?:第\s*0*(\d+)\s*章|0*(\d+)\s*\.\s*(?:《|\s))", stripped)
+        if m_num:
+            return int(m_num.group(1) or m_num.group(2))
+        m_cn = re.match(r"^(?:#+\s*)?(?:[-*•]\s+)?(?:\*\*|__)?\s*第\s*([零〇一二两三四五六七八九十百千万]+)\s*章", stripped)
+        if m_cn:
+            return cls._parse_cn_chapter_num(m_cn.group(1))
+        return None
+
     def _find_chapter_outline(self, chapter: int) -> str:
-        """查找章节大纲 - 支持多种格式并提取完整内容块"""
+        """查找章节大纲 - 与 writer_runner 统一，支持前导零、中文数字及多种 Markdown 标题格式。"""
         outline_dir = self.project_root / "大纲"
         if not outline_dir.exists():
             return ""
-        
+
         files_to_search = sorted(list(outline_dir.glob("*.md")))
-        
-        # 定义匹配章节标题的正则模式 - 按优先级排序，要包容多种格式
-        patterns = [
-            # 格式0: "## **第X章**" (混合格式) - 用户反馈的CASE
-            rf"^#+\s*(\*\*|__)\s*第\s*{chapter}\s*章",
-            # 格式1: "**第X章：标题**" 或 "**第X章:标题**"（无前缀），允许空格
-            rf"^\*\*\s*第\s*{chapter}\s*章[：:].+\*\*",
-            # 格式2: "*   **第X章：标题**"（带列表前缀），允许空格
-            rf"^[-*]\s*\*\*\s*第\s*{chapter}\s*章[：:\s].*",
-            # 格式3: "### 第X章" 或 "第X章..."（标题格式），允许空格
-            rf"^#+\s*第\s*{chapter}\s*章",
-            rf"^第\s*{chapter}\s*章[：:\s]",
-            # 格式4: 带书名号的格式 "### 1.《标题》" 或 "1.《标题》"
-            rf"^#+\s*{chapter}\s*\.\s*《",
-            rf"^{chapter}\s*\.\s*《",
-            # 格式5: 纯数字格式 "1. 标题" 或 "**1. 标题**"（章节号匹配）
-            rf"^\*\*\s*{chapter}\s*\.\s+",
-        ]
-        
         for f in files_to_search:
             content = self._read_file(f)
             if not content:
                 continue
-            
+
             lines = content.split("\n")
+            start = None
             for i, line in enumerate(lines):
-                line_stripped = line.strip()
-                match = False
-                for p in patterns:
-                    if re.match(p, line_stripped):
-                        match = True
-                        break
-                
-                if match:
-                    # 找到章节标题，开始提取内容块
-                    outline_block = [line]
-                    # 向下读取直到遇到下一个标题（### 或 数字开头）或文件结束
-                    for j in range(i + 1, len(lines)):
-                        next_line = lines[j].strip()
-                        #如果遇到下一个章节的标题特征，则停止
-                        is_new_chapter = False
-                        
-                        # 检测下一章节的开始 - 极度宽松模式
-                        
-                        # 1. 标题类 (# 第 X 章)
-                        if re.match(r"^#+\s*第\s*\d+\s*章", next_line):
-                            is_new_chapter = True
-                        
-                        # 2. 加粗类 (**第 X 章)
-                        elif re.match(r"^(\*\*|__)\s*第\s*\d+\s*章", next_line):
-                            is_new_chapter = True
-                        
-                        # 3. 列表格式 (- **第X章**)
-                        elif re.match(r"^[-*]\s*(\*\*|__)\s*第\s*\d+\s*章", next_line):
-                             is_new_chapter = True
-                             
-                        # 4. 数字+书名号格式 (1. 《...》)
-                        elif re.match(r"^(\*\*|#+\s*)?\d+\s*\.\s*《", next_line):
-                             is_new_chapter = True
-                        
-                        # 5. 纯文本类 (第 X 章)
-                        elif re.match(r"^第\s*\d+\s*章", next_line):
-                            is_new_chapter = True
+                found = self._match_outline_chapter_number(line)
+                if found is not None:
+                    if start is not None:
+                        return "\n".join(lines[start:i]).strip()
+                    if found == chapter:
+                        start = i
+            if start is not None:
+                return "\n".join(lines[start:]).strip()
 
-                        # 6. 宽容匹配：包含 "第X章" 且看起来像标题 (Mixed case ## **第X章)
-                        elif re.match(r"^#+\s*(\*\*|__)?\s*第\s*\d+\s*章", next_line):
-                             is_new_chapter = True
-
-                        if is_new_chapter:
-                            break
-
-                        outline_block.append(lines[j])
-                    
-                    return "\n".join(outline_block).strip()
-        
         return ""
 
     def _get_recent_summaries(self, chapter: int, count: int = 3) -> List[Dict]:

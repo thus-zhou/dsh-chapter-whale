@@ -54,13 +54,35 @@ def read_object(path):
 
 
 def owned_ports():
-    """Do not send a key to a port until its owner is the installed host."""
-    if os.name!='nt':return []
-    host=Path(os.environ.get('LOCALAPPDATA',str(Path.home()/'AppData/Local')))/'Programs/DeepSeek Harness/DeepSeek Harness.exe'
-    expected=str(host).replace("'","''")
+    """Do not send a key to a port until its owner is the installed DSH host."""
+    if os.name!='nt':
+        try:
+            out = subprocess.run(['lsof', '-nP', '-iTCP', '-sTCP:LISTEN', '-Fn'], capture_output=True, text=True, timeout=8)
+            if out.returncode == 0:
+                ports = set()
+                for line in out.stdout.splitlines():
+                    if line.startswith('n127.0.0.1:') or line.startswith('n[::1]:'):
+                        try:
+                            ports.add(int(line.rsplit(':', 1)[1]))
+                        except ValueError:
+                            pass
+                return sorted(p for p in ports if 1 <= p <= 65535)
+        except Exception:
+            pass
+        return []
+    local = Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local')))
+    pf = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))
+    candidates = [
+        str(local / 'Programs/DeepSeek Harness/DeepSeek Harness.exe'),
+        str(pf / 'DeepSeek Harness/DeepSeek Harness.exe'),
+        str(local / 'Programs/DeepSeek Harness/resources/runtime/node/node.exe'),
+        str(local / 'Programs/DeepSeek Harness/resources/node/node.exe'),
+        str(pf / 'DeepSeek Harness/resources/runtime/node/node.exe'),
+    ]
+    escaped = ','.join("'" + p.replace("'", "''") + "'" for p in candidates)
     script=f"""$ErrorActionPreference='Stop'
-$taskHost='{expected}'
-$taskOwners=@(Get-CimInstance Win32_Process | Where-Object {{$_.ExecutablePath -eq $taskHost}} | Select-Object -ExpandProperty ProcessId)
+$taskHosts=@({escaped})
+$taskOwners=@(Get-CimInstance Win32_Process | Where-Object {{$_.ExecutablePath -in $taskHosts -or ($_.ExecutablePath -and $_.ExecutablePath -like '*DeepSeek Harness*')}} | Select-Object -ExpandProperty ProcessId)
 if ($taskOwners.Count -eq 0) {{ Write-Output '[]'; exit }}
 $taskPorts=@(Get-NetTCPConnection -State Listen | Where-Object {{$_.LocalAddress -in @('127.0.0.1','::1') -and $_.OwningProcess -in $taskOwners}} | Select-Object -ExpandProperty LocalPort -Unique)
 ConvertTo-Json -InputObject $taskPorts -Compress
@@ -151,7 +173,7 @@ def snapshot(config,db_path):
             'official_balance':None,'balance_source':'not_exposed_by_inference_gateway'})
     return {'channels':rows,'connected_channels':sum(x['accounts']>0 for x in rows),'channel_count':len(rows),
         'gateway_enabled':state.get('gatewayEnabled') is not False,'endpoint':cache.get('endpoint'),
-        'checked_at':cache.get('checked_at'),'compression_enabled':settings.get('tokenSaver',{}).get('enabled',True),
+        'checked_at':cache.get('checked_at'),'compression_enabled':bool(isinstance(settings, dict) and settings.get('tokenSaver',{}).get('enabled') is True),
         'model_count':sum(len(x['models']) for x in rows),'today':day,
         'management':'请在 dsh → Our Free Model → 白嫖模型接入中添加账号、刷新官方余额或领取额度。',
         'notice':'本地调用量不是官方剩余额度；网关可能包含付费模型，不自动标记为免费。'}
@@ -162,8 +184,14 @@ def import_channel(config,payload):
     if channel not in CHANNEL_IDS:raise ValueError('渠道无效')
     if payload.get('authorize_project') is not True:raise ValueError('请确认本项目正文及必要记忆的渠道处理授权')
     from integration import scheduler
-    projects={x['project'] for x in scheduler.load_scheduler().get('jobs',{}).values() if x.get('enabled')}
-    if len(projects)!=1:raise ValueError('需要明确唯一作品的隐私授权，尚未接入')
+    projects=set()
+    if isinstance(payload.get('projects'), list):
+        projects={str(Path(p).resolve()) for p in payload['projects'] if p}
+    elif payload.get('project'):
+        projects={str(Path(payload['project']).resolve())}
+    else:
+        projects={x['project'] for x in scheduler.load_scheduler().get('jobs',{}).values() if x.get('enabled')}
+    if not projects:raise ValueError('请先选择或创建需要授权的作品，再导入渠道')
     catalog,key=scan(payload.get('port'))
     models=[x['id'] for x in catalog['models'] if x['channel']==channel]
     if not models:raise ValueError('此渠道未返回可用模型，请先在 dsh 登录并刷新模型')

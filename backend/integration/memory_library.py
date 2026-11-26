@@ -548,9 +548,9 @@ def reader_advice_block(project, chapter):
 
 @costs.attributed("memory",project="project",chapter="chapter",role="D")
 async def sync_chapter(project, chapter, content, config=None):
-    """Extract only from a durable qualified chapter; plans never enter this path."""
+    """Extract only from a durable committed chapter; plans never enter this path."""
     project = Path(project).resolve()
-    receipts = writer.reviewed_chapters(project)
+    receipts = writer.committed_chapters(project)
     if chapter not in receipts:
         raise ValueError("只能从具备当前有效审查／E 授权的已保存正文提取记忆")
     body, digest = _chapter(project, chapter)
@@ -810,7 +810,7 @@ def commit_candidates(project, chapter, body_sha256=None):
     body, digest = _chapter(project, chapter)
     if digest != body_sha256:
         raise ValueError("正文已变化，事实候选未提交")
-    if chapter not in writer.reviewed_chapters(project):
+    if chapter not in writer.committed_chapters(project):
         raise ValueError("只能提交具备当前有效审查／E 授权的正文事实")
     candidates = doc_file.get("candidates") or []
     with writer.file_lock(_path(project, "memory.lock")):
@@ -844,7 +844,7 @@ def commit_candidates(project, chapter, body_sha256=None):
 def rebuild(project):
     project = Path(project).resolve()
     with writer.file_lock(_path(project, "writer.lock")):
-        chapters = sorted(writer.reviewed_chapters(project))
+        chapters = sorted(writer.committed_chapters(project))
         doc = read(project);pending = [c for c in chapters if doc["chapters"].get(str(c), {}).get("sha256") != _chapter(project, c)[1]]
         selected = pending[:30]
         for chapter in selected:

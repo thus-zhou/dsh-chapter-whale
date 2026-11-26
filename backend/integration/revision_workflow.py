@@ -32,8 +32,9 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
     if not isinstance(rewritten,str):raise ValueError('修订正文检查点损坏')
     history=state.setdefault('reviews',[])
     if not isinstance(history,list):raise ValueError('修订审查历史损坏')
+    auto_reviews=int(state.get('auto_review_count', 0) or 0)
     def save():
-        state.update(revision_attempts=attempts,updated_at=bridge.now_iso())
+        state.update(revision_attempts=attempts,auto_review_count=auto_reviews,updated_at=bridge.now_iso())
         writer.atomic_json(path,state)
     min_clause = f'本章正文不含标题和空白至少{min_words}字；' if min_words else ''
     base=('保留设定、事件、人物弧线和伏笔，优化对话与重点场景，减少空泛旁白和AI腔。'
@@ -119,10 +120,18 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
         if state.get('review_body_sha256')!=digest:
             review=None;state.pop('review',None);state.pop('authorization',None)
         if not review:
+            if auto_reviews >= writer.MAX_AUTO_REVIEWS:
+                if strict:
+                    state['phase']='stopped';save()
+                    raise revision_plan.RevisionStopped('human_review_required',
+                        f'已完成 {writer.MAX_AUTO_REVIEWS} 次自动审查，后续交由人工复核',
+                        candidate=rewritten,author_issues=(plan or {}).get('author',[]))
+                raise ValueError('已完成 2 次自动审查，请人工复核候选正文')
             review=await executor.execute_review(chapter,rewritten)
             writer._record_review_attempt(project,chapter,rewritten,review)
             if not isinstance(review,dict) or review.get('success') is not True:
                 raise ReviewIncomplete(review,'修订审查未完成；补写稿已保存为检查点')
+            auto_reviews+=1
             state.update(review=review,review_body_sha256=digest);history.append(review);save()
         qualified=review
         if not writer.review_passed(review) and roles.enabled(config) and config.get('review_policy')=='e_decides':
@@ -133,6 +142,11 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
         if bridge.review_eligible(qualified,digest):
             state.update(phase='qualified',qualified_review=qualified);save()
             return rewritten,qualified
+        if auto_reviews >= writer.MAX_AUTO_REVIEWS and strict:
+            state['phase']='stopped';save()
+            raise revision_plan.RevisionStopped('human_review_required',
+                f'已完成 {writer.MAX_AUTO_REVIEWS} 次自动审查，后续交由人工复核',
+                candidate=rewritten,author_issues=(plan or {}).get('author',[]))
         if not min_words and (not roles.enabled(config) or config.get('review_policy')!='e_decides'):
             # Preserve the existing strict manual-polish contract. A
             # later explicit retry rechecks D, but never overwrites its source.

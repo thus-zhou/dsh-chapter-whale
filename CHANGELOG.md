@@ -1,3 +1,11 @@
+## [0.7.5] · 2026-11-26
+
+- **界面架构收敛与任务中心**：将 6 个主区 15 个入口整合为 4 个工作区（`工作台 / 创作室 / 发布与日更 / 模型与系统`），移除顶部堆叠的 `StatusBar` 与新书横幅，改由右上角可折叠任务中心（`TaskCenterPopover`）统一显示各书后台任务进度条与一键取消。
+- **全任务进度条与多书日更隔离**：后端 `Operations` 增加结构化 `progress` 进度推送（`NOVEL_HELPER_PROGRESS`），补齐各操作 `project_id`/`project_title`；同书同模式日更自动去重并默认书名作用域命名（`《书名》· 日更`），新增 `DELETE /api/jobs/{identity}` 与同书 `generate`/`daily` 互斥校验。
+- **免费模型连接修复**：Node 运行时自动探测与代理注入、`ofm_runtime` 端口漂移自愈与健康缓存、`free_pool` 非登录渠道防误锁 `requires_login`、`PUT /api/free-model/pool` 支持 `project_id` 与自动设默认绑定，并修复 `FreeChannelCard` 渠道渲染、`loginUrl`/二维码初始化与 3 秒登录轮询。
+- **首章创作死结与 2 次审查上限转人工**：统一细纲章节编号匹配（支持中文数字与前导零）、支持单模型首章兜底规划、自动清理空跑遗留首章锁定并提供「继续/放弃旧批次」入口；所有章节自动审查固定 **最多 2 次**（`MAX_AUTO_REVIEWS = 2`），满 2 次后停止自动重审并以 `needs_human_review` 本地落盘放行后续章节写作，仅发布门禁需点击「人工复核通过」（`POST /api/projects/{id}/chapters/{ch}/approve-review`）解锁。
+- **前端 26 项丢失样式与交互缺陷全修复**：补全 `atelier-native.css` 缺失工具类，修复 `.nh-body` 层叠上下文导致的弹窗遮挡、文本域压扁、日更/记忆/章节弹窗/文风滑块/供应商增删/定价保存等交互故障，同步更新独立 Web 控制台。
+
 ## [0.7.4] · 2026-11-25
 
 - 修复 0.7.3 审计的 14 项缺陷：真实实体提取入口、macOS 默认浏览器缓存、排期日期解析与否定审查结论。

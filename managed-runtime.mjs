@@ -515,10 +515,40 @@ export async function prepareManaged(config) {
   try { return await preparing; } finally { preparing = null; }
 }
 
+function detectHostNodeBinary() {
+  const execPath = process.execPath || '';
+  if (execPath && process.versions?.node && !process.versions?.electron) {
+    return { node: execPath, electron: '' };
+  }
+  const base = execPath ? dirname(execPath) : '';
+  const candidates = process.platform === 'win32'
+    ? [
+        base && join(base, 'resources', 'runtime', 'node', 'node.exe'),
+        base && join(base, 'resources', 'node', 'node.exe'),
+        base && join(base, 'node.exe'),
+      ]
+    : [
+        base && join(base, '..', 'Resources', 'runtime', 'node', 'bin', 'node'),
+        base && join(base, '..', 'Resources', 'node', 'bin', 'node'),
+        base && join(base, 'node'),
+      ];
+  for (const candidate of candidates) {
+    try {
+      if (candidate && existsSync(candidate) && statSync(candidate).isFile()) {
+        return { node: candidate, electron: '' };
+      }
+    } catch { /* ignore */ }
+  }
+  return { node: '', electron: execPath && existsSync(execPath) ? execPath : '' };
+}
+
 export function managedEnvironment(config) {
   const env = { ...process.env, PYTHONUTF8: '1', PYTHONUNBUFFERED: '1' };
+  const hostNode = detectHostNodeBinary();
   if (!config.managed) {
     if (config.rootDir) env.NOVEL_HELPER_ROOT = config.rootDir;
+    if (hostNode.node) env.NOVEL_HELPER_NODE = hostNode.node;
+    if (hostNode.electron) env.NOVEL_HELPER_NODE_ELECTRON = hostNode.electron;
     env.CHAPTER_WHALE_SERVICE_MODE = 'dsh_managed';
     return env;
   }
@@ -532,6 +562,8 @@ export function managedEnvironment(config) {
     NOVEL_HELPER_ROOT: config.rootDir,
     NOVEL_HELPER_AI_CONFIG: join(config.rootDir, 'integration_data', 'ai_config.json'),
     NOVEL_HELPER_WEBNOVEL_HOME: join(config.rootDir, 'integration_data', 'webnovel'),
+    ...(hostNode.node ? { NOVEL_HELPER_NODE: hostNode.node } : {}),
+    ...(hostNode.electron ? { NOVEL_HELPER_NODE_ELECTRON: hostNode.electron } : {}),
   };
   if (process.platform === 'win32' || existsSync(join(config.rootDir, 'playwright-browsers'))) {
     managedEnv.PLAYWRIGHT_BROWSERS_PATH = join(config.rootDir, 'playwright-browsers');

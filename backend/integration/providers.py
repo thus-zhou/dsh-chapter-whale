@@ -193,12 +193,13 @@ def verify_dsh_gateway(base_url):
             body=response.read(4097)
         if len(body)>4096:raise ValueError('网关身份响应过大')
         data=json.loads(body)
-        if data.get('service')!='our-free-model' or data.get('ok') is not True:raise ValueError('不是 Our Free Model 网关')
+        if data.get('service') not in {'our-free-model', 'our-free-model-standalone'} or data.get('ok') is not True:
+            raise ValueError('不是 Our Free Model 网关')
     except (OSError,ValueError,AttributeError) as exc:
         raise ValueError('未核实 dsh 实际监听地址；尚未发送网关密钥，请在插件核对实际端口') from exc
 
 
-def import_dsh(config, settings_path=None):
+def import_dsh(config, settings_path=None, projects=None):
     """Read only the named plugin's local forward configuration; never its accounts."""
     from .writer_runner import strict_json
     path = Path(settings_path) if settings_path else Path.home() / '.dsh' / 'our-free-model' / 'settings.json'
@@ -206,7 +207,7 @@ def import_dsh(config, settings_path=None):
     forward = settings.get('forward') or settings.get('forwarding') or {}
     if not isinstance(forward, dict) or not forward.get('enabled'):
         raise ValueError('请先在 dsh → Our Free Model → 本地转发中启用网关')
-    if settings.get('tokenSaver',{}).get('enabled',True):
+    if isinstance(settings, dict) and settings.get('tokenSaver',{}).get('enabled') is True:
         raise ValueError('dsh 提示词压缩仍开启，尚不能用于正式小说；请先关闭插件的提示词压缩，再连接。本助手不会擅自修改其他 dsh 使用场景')
     port = forward.get('port')
     key = settings.get('forwardKey') or forward.get('key')
@@ -215,7 +216,10 @@ def import_dsh(config, settings_path=None):
     verify_dsh_gateway(f'http://127.0.0.1:{port}/v1')
     existing = next((k for k,v in config.get('providers',{}).items() if v.get('protocol') == 'dsh_local'), None)
     from . import scheduler
-    projects={job['project'] for job in scheduler.load_scheduler().get('jobs',{}).values() if job.get('enabled')}
-    if len(projects)!=1:raise ValueError('dsh 正文隐私授权需明确唯一作品，目前不会自动扩大至其他书籍')
+    allowed = list(projects or [])
+    if not allowed:
+        allowed = list({job['project'] for job in scheduler.load_scheduler().get('jobs',{}).values() if job.get('enabled')})
+    if not allowed:
+        raise ValueError('请先选择或创建需要授权的作品，再导入 dsh 本地转发')
     return save(config, existing, {'name': 'Our Free Model · 本机', 'base_url': f'http://127.0.0.1:{port}/v1',
-        'api_key': key, 'protocol': 'dsh_local', 'enabled': True,'allowed_projects':list(projects)})
+        'api_key': key, 'protocol': 'dsh_local', 'enabled': True,'allowed_projects':allowed})

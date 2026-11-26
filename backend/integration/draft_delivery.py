@@ -102,10 +102,14 @@ def _issues(receipt: Optional[Dict[str, Any]]) -> List[str]:
 
 def _entry(chapter: int, receipt: Optional[Dict[str, Any]],
            *, reviewed: bool, issue: str = "") -> Dict[str, Any]:
+    review = (receipt or {}).get("review") if isinstance(receipt, dict) else None
+    decision = (review or {}).get("review_decision", "") if isinstance(review, dict) else ""
+    human_review = bool(isinstance(review, dict) and decision == "needs_human_review" and review.get("human_review_required"))
     item: Dict[str, Any] = {
         "chapter_id": chapter,
         "body_saved": receipt is not None,
-        "review_passed": bool(receipt is not None and reviewed),
+        "review_passed": bool(receipt is not None and reviewed and not human_review),
+        "human_review_required": human_review,
         "remote_state": "not_applicable",
         "words": _words(receipt) if receipt else 0,
         "updated_at": bridge.now_iso(),
@@ -113,7 +117,7 @@ def _entry(chapter: int, receipt: Optional[Dict[str, Any]],
     if receipt is not None:
         item["sha256"] = receipt.get("sha256", "")
         item["reviewed_at"] = receipt.get("reviewed_at", "")
-        item["review_decision"] = (receipt.get("review") or {}).get("review_decision", "")
+        item["review_decision"] = decision
         item["post_save"] = copy.deepcopy(receipt.get("post_save", {}))
     if issue:
         item["issue"] = issue
@@ -225,9 +229,12 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
 
     cycle["status"] = "running"
     cycle["publication_mode"] = mode
+    cycle["stage"] = "B"
+    cycle["completed_count"] = 0
+    cycle["total_count"] = len(targets)
     s._update_run(job_id, {"cycle": cycle})
 
-    receipts = writer.reviewed_chapters(project)
+    receipts = writer.committed_chapters(project)
     entries: Dict[int, Dict[str, Any]] = {
         int(item["chapter_id"]): item for item in cycle.get("draft_chapters", [])
         if isinstance(item, dict) and type(item.get("chapter_id")) is int
@@ -247,7 +254,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
         cycle["recovery"] = {**failure, "chapter_id": chapter, "automatic_retry": bool(waiting), "attempts": attempts,
                              "message": str(exc)[:300]}
         record.update(failure)
-        record["saved_ids"] = sorted(c for c, r in writer.reviewed_chapters(project).items()
+        record["saved_ids"] = sorted(c for c, r in writer.committed_chapters(project).items()
                                      if c in targets and _post_save_complete(r.get("post_save")))
         cycle["draft_chapters"] = [entries[i] for i in sorted(entries)]
         return finish(cycle, record, "waiting" if waiting else status,
@@ -264,8 +271,13 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
             if not _post_save_complete(post):
                 raise PostSaveIncomplete(_post_failure(post))
 
-    for chapter in targets:
+    for index, chapter in enumerate(targets):
         cycle["current_chapter"] = chapter
+        cycle["stage"] = "B"
+        cycle["completed_count"] = index
+        cycle["total_count"] = len(targets)
+        cycle["updated_at"] = bridge.now_iso()
+        s._update_run(job_id, {"cycle": cycle})
         if chapter in receipts:
             # 上一轮已经存好且回执仍绑定当前正文：不重写，只刷新统计。
             entries[chapter] = _entry(chapter, receipts[chapter], reviewed=True)
@@ -290,7 +302,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
             if isinstance(exc, costs.BudgetExceeded):
                 # 预算按全局/作品/任务上限预留，继续下一章只会再次失败；保留已存稿并交给作者。
                 cycle["failure_kind"] = "budget_exceeded"
-                done = [c for c in targets if c in writer.reviewed_chapters(project)]
+                done = [c for c in targets if c in writer.committed_chapters(project)]
                 record["saved_ids"] = done
                 record["saved_words"] = sum(int(entries[c].get("words") or 0)
                                             for c in done if c in entries)
@@ -301,7 +313,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
                     "调整全局/作品/任务的预算上限，或等预算重置后重新运行；已存稿章节不会重写")
             if failure.get("failure_kind") in {"transport", "http", "authentication", "configuration_or_access", "model_output"}:
                 return defer(exc, chapter, "blocked")
-            fresh = writer.reviewed_chapters(project).get(chapter)
+            fresh = writer.committed_chapters(project).get(chapter)
             if fresh is None:
                 entries[chapter] = _entry(chapter, None, reviewed=False, issue=message)
                 cycle["draft_chapters"] = [entries[i] for i in sorted(entries)]
@@ -313,7 +325,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
             entries[chapter] = _entry(chapter, fresh, reviewed=True)
             cycle["draft_chapters"] = [entries[i] for i in sorted(entries)]
             return defer(exc, chapter)
-        receipts = writer.reviewed_chapters(project)
+        receipts = writer.committed_chapters(project)
         fresh = receipts.get(chapter)
         if fresh is None:
             saved = chapter in _body_ids(project)
@@ -324,12 +336,13 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
             entries[chapter] = _entry(chapter, fresh, reviewed=True)
             if not _post_save_complete(fresh.get("post_save")):
                 return defer(PostSaveIncomplete(_post_failure(fresh.get("post_save"))), chapter)
+        cycle["completed_count"] = index + 1
         cycle["draft_chapters"] = [entries[i] for i in sorted(entries)]
         cycle["updated_at"] = bridge.now_iso()
         s._update_run(job_id, {"cycle": cycle})
 
     # 收尾复核：回执必须仍与正文、创作约定、章版本一致（作者可能在中途改了稿）。
-    receipts = writer.reviewed_chapters(project)
+    receipts = writer.committed_chapters(project)
     missing = [c for c in targets if c not in receipts]
     incomplete = [c for c in targets if c in receipts and not _post_save_complete(receipts[c].get("post_save"))]
     if incomplete:
@@ -358,16 +371,23 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
             "review_failed", "按审查问题修改对应章节后重新运行该任务，已通过审查的章节不会重写")
 
     words = sum(int(entries[c].get("words") or 0) for c in targets)
+    human_review_ids = [c for c in targets if entries.get(c, {}).get("human_review_required")]
     cycle["saved_words"] = words
+    cycle["stage"] = "done"
+    cycle["completed_count"] = len(targets)
     cycle.pop("failure_kind", None)
     for key in ("next_retry_at", "recovery", "retryable", "error_code"):
         cycle.pop(key, None)
     record["saved_words"] = words
+    if human_review_ids:
+        record["human_review_ids"] = human_review_ids
     record["saved_ids"] = list(targets)
     if not record.get("memory_pending"):
         record.pop("memory_pending", None)
     # 口径必须跟着模式走：排期模式的本章只完成“本地已审定”，远端还没确认。
     tail = "本地已审定，排期待平台回读确认" if mode == "platform_scheduled" else "仅本机，未发布"
+    if human_review_ids:
+        tail += f"；第 {','.join(str(c) for c in human_review_ids)} 章已自动审查 2 次，转待人工复核"
     return finish(cycle, record, "success",
                   f"已存稿 {len(targets)} 章（{words} 字，{tail}）")
 

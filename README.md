@@ -1,12 +1,12 @@
 # 码章鲸 · 全自动小说写作与番茄发布
 
-**0.7.4（GPL-3.0-only）：修复 0.7.3 全量审计确认的 14 项缺陷，覆盖实体同步、安全升级、存稿恢复、场景缓存和审查门禁。**
+**0.7.5（GPL-3.0-only）：全方位用户体验优化——4 工作区顶栏与右上角任务中心、全任务进度条、多书日更去重、免费模型连接修复、首章死结破解与自动审查 2 次封顶转人工复核。**
 
 码章鲸是运行在 DeepSeek Harness（DSH）里的无人值守小说工作台。连接模型、登录账号、设定任务后，由本机服务按计划完成章节写作、审查修订、发布与状态核验。你可以安排更新时间、每次章数和篇幅，在 Windows 上也可接入部分免费模型渠道。
 
 **[npm 安装](https://www.npmjs.com/package/dsh-chapter-whale)** · **[下载完整安装包](https://github.com/thus-zhou/dsh-chapter-whale/releases/latest)** · **[从安装到自动连载](docs/quickstart.md)** · **[查看全部实机图](docs/screenshots.md)**
 
-Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.4
+Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档 · DSH ≥ 0.2.2-rc.1 · GPL-3.0-only · 0.7.5
 
 > Windows 上已使用独立 DSH 环境实装；macOS 插件首发安装与独立工作区 `.venv` 服务启动已在 GitHub Actions `macos-latest` 跑通，真实番茄及七猫页面、真实模型调用、物理机 Intel Mac 与外网 Webhook 仍待验。详见[验证记录](RELEASE_STATUS.md)。
 

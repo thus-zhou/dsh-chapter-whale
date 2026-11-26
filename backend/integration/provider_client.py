@@ -74,7 +74,9 @@ class ProviderClient:
             from . import ofm_runtime
             from pathlib import Path
             info=ofm_runtime.ensure_started()
-            if item['base_url']!=info['url']+'/v1':raise ValueError('独立服务端口已变化，请在网页重新同步模型')
+            live_base = info['url'] + '/v1'
+            if item['base_url'] != live_base:
+                item['base_url'] = live_base
             project=costs.META.get().get('project')
             permitted={str(Path(x).resolve()).casefold() for x in item.get('allowed_projects',[])}
             if costs.META.get().get('stage')!='probe' and (not project or str(Path(project).resolve()).casefold() not in permitted):raise ValueError('此作品未授权独立免费渠道处理正文与记忆')
@@ -92,7 +94,8 @@ class ProviderClient:
                 raise ValueError('此作品尚未授权免费渠道处理正文与记忆')
             from .writer_runner import strict_json
             settings=strict_json(Path.home()/'.dsh/our-free-model/settings.json',{})
-            if settings.get('tokenSaver',{}).get('enabled',True):raise ValueError('dsh 提示词压缩已开启，已停止发送原始创作材料')
+            if isinstance(settings, dict) and settings.get('tokenSaver',{}).get('enabled') is True:
+                raise ValueError('dsh 提示词压缩已开启，已停止发送原始创作材料')
         price=item.get('pricing',{}).get(binding['model_id'])
         if item.get('protocol')=='free_pool':price={'input':'0','output':'0','cached':'0','currency':'CNY'}
         if binding['model_id'] in item.get('free_models',[]):

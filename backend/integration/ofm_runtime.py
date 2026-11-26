@@ -163,6 +163,86 @@ def endpoint():
     return info,parts
 
 
+def _resolve_node_runtime() -> Tuple[str, dict]:
+    """Resolve Node.js or Electron-as-Node runtime without relying strictly on system PATH."""
+    candidates = [
+        shutil.which('node'),
+        os.environ.get('NOVEL_HELPER_NODE', '').strip(),
+    ]
+    if os.name == 'nt':
+        pf = os.environ.get('ProgramFiles', r'C:\Program Files')
+        local = os.environ.get('LOCALAPPDATA', '')
+        candidates.extend([
+            str(Path(pf) / 'nodejs' / 'node.exe'),
+            str(Path(local) / 'Programs' / 'nodejs' / 'node.exe') if local else '',
+        ])
+    else:
+        candidates.extend(['/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node'])
+    for item in candidates:
+        if item and Path(item).is_file():
+            return str(Path(item).resolve()), {}
+    electron = os.environ.get('NOVEL_HELPER_NODE_ELECTRON', '').strip()
+    if electron and Path(electron).is_file():
+        return str(Path(electron).resolve()), {'ELECTRON_RUN_AS_NODE': '1'}
+    raise ValueError('未找到 Node.js 运行环境（请安装 Node.js 20+ 或从 DSH 桌面端启动插件）')
+
+
+def _detect_proxy_env() -> dict:
+    """Propagate explicit or Windows system proxy so Node 22 fetch() reaches upstream free lanes."""
+    env = {'NO_PROXY': '127.0.0.1,localhost,::1', 'no_proxy': '127.0.0.1,localhost,::1', 'NODE_USE_ENV_PROXY': '1'}
+    for k in ('HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'):
+        if os.environ.get(k):
+            return env
+    if os.name != 'nt':
+        return env
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Internet Settings') as key:
+            enabled, _ = winreg.QueryValueEx(key, 'ProxyEnable')
+            if not enabled:
+                return env
+            server, _ = winreg.QueryValueEx(key, 'ProxyServer')
+        raw = str(server or '').strip()
+        if not raw:
+            return env
+        proxy_url = ''
+        if '=' in raw:
+            parts = dict(part.split('=', 1) for part in raw.split(';') if '=' in part)
+            chosen = parts.get('https') or parts.get('http') or parts.get('socks')
+            if chosen:
+                proxy_url = chosen if '://' in chosen else f'http://{chosen}'
+        else:
+            proxy_url = raw if '://' in raw else f'http://{raw}'
+        if proxy_url:
+            env['HTTP_PROXY'] = proxy_url
+            env['HTTPS_PROXY'] = proxy_url
+    except Exception:
+        pass
+    return env
+
+
+def _icacls_principal() -> str:
+    """Resolve SID or qualified account name so Microsoft/AzureAD accounts don't fail icacls."""
+    if os.name == 'nt':
+        try:
+            res = subprocess.run(['whoami', '/user', '/fo', 'csv', '/nh'], capture_output=True, text=True, timeout=8, creationflags=_NO_WINDOW)
+            if res.returncode == 0 and res.stdout.strip():
+                cols = [c.strip().strip('"') for c in res.stdout.strip().splitlines()[0].split(',')]
+                if len(cols) >= 2 and cols[1].startswith('S-1-'):
+                    return '*' + cols[1]
+        except Exception:
+            pass
+        domain = os.environ.get('USERDOMAIN', '').strip()
+        user = (os.environ.get('USERNAME') or getpass.getuser()).strip()
+        if domain and user and '\\' not in user:
+            return f'{domain}\\{user}'
+        return user
+    return getpass.getuser()
+
+
+_HEALTH_CACHE: dict = {'key': None, 'ts': 0.0}
+
+
 def health():
     info,parts=endpoint()
     with build_opener(ProxyHandler({}),NoRedirect()).open(info['url']+'/health',timeout=2) as response:
@@ -176,10 +256,16 @@ def health():
         # Pin the owner and command line, including the data-isolated wrapper.
         pid=info.get('pid')
         if type(pid) is not int or pid<=0:raise ValueError('服务进程标识无效')
+        cache_key = (pid, parts.port, info.get('startup_id'))
+        now_ts = time.monotonic()
+        if _HEALTH_CACHE.get('key') == cache_key and now_ts - _HEALTH_CACHE.get('ts', 0.0) < 20.0:
+            return info
         script=str(ROOT/'integration/ofm_service.mjs').replace("'","''")
-        code=f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}'; if($p.Name -notmatch '^node[.]exe$' -or $p.CommandLine -notlike '*{script}*'){{exit 2}}; $c=Get-NetTCPConnection -State Listen -LocalPort {parts.port} -ErrorAction SilentlyContinue; if(-not ($c | Where-Object {{$_.OwningProcess -eq {pid} -and $_.LocalAddress -eq '127.0.0.1'}})){{exit 3}}"
+        code=f"$p=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}'; if(-not $p -or -not $p.CommandLine -or $p.CommandLine.IndexOf('{script}',[System.StringComparison]::OrdinalIgnoreCase) -lt 0){{exit 2}}; $c=Get-NetTCPConnection -State Listen -LocalPort {parts.port} -ErrorAction SilentlyContinue; if(-not ($c | Where-Object {{$_.OwningProcess -eq {pid} -and $_.LocalAddress -eq '127.0.0.1'}})){{exit 3}}"
         result=subprocess.run(['powershell.exe','-NoProfile','-Command',code],capture_output=True,timeout=10,creationflags=subprocess.CREATE_NO_WINDOW)
         if result.returncode:raise ValueError('独立渠道端口归属不符，未发送密钥')
+        _HEALTH_CACHE['key'] = cache_key
+        _HEALTH_CACHE['ts'] = now_ts
     return info
 
 
@@ -205,31 +291,44 @@ def ensure_started(start=False):
         python,codec=credential_runtime()
         # New independent directory only. Do not touch the user's dsh directory.
         if HOME.resolve()!=HOME.absolute() or HOME.is_symlink():raise ValueError('凭据目录不可为链接')
-        user=os.environ.get('USERNAME') or getpass.getuser()
-        result=subprocess.run(['icacls',str(HOME),'/inheritance:r','/grant:r',f'{user}:(OI)(CI)F'],capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
-        if result.returncode:raise ValueError('无法限制独立凭据目录权限，尚未启动')
+        principal=_icacls_principal()
+        result=subprocess.run(['icacls',str(HOME),'/inheritance:r','/grant:r',f'{principal}:(OI)(CI)F'],capture_output=True,timeout=15,creationflags=_NO_WINDOW)
+        if result.returncode:
+            fallback_user = os.environ.get('USERNAME') or getpass.getuser()
+            if fallback_user != principal:
+                result=subprocess.run(['icacls',str(HOME),'/inheritance:r','/grant:r',f'{fallback_user}:(OI)(CI)F'],capture_output=True,timeout=15,creationflags=_NO_WINDOW)
+            if result.returncode:raise ValueError('无法限制独立凭据目录权限，尚未启动')
         # Fail before the upstream JsonStore can replace a damaged file.
         for name in ('settings.json','stats.json','catalog.json','availability.json','channel-credentials.json'):
             if (HOME/name).exists():strict(HOME/name)
         verify_credential_store(HOME/'channel-credentials.json')
-        node=shutil.which('node')
-        if not node:raise ValueError('未找到Node.js运行环境')
+        node, extra_env = _resolve_node_runtime()
         verify_source()
         env=os.environ.copy()
         for key in list(env):
             if key.startswith('DSH_') or key.startswith('OFM_'):env.pop(key,None)
+        env.update(_detect_proxy_env())
+        env.update(extra_env)
         env.update(NOVEL_HELPER_CREDENTIAL_CODEC=str(codec),NOVEL_HELPER_PYTHON=str(python),
             NOVEL_HELPER_CHECKIN_OPT_IN='1')
-        subprocess.Popen([node,str(ROOT/'integration/ofm_service.mjs')],cwd=str(ROOT),env=env,
-            stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW)
-        for _ in range(25):
+        log_dir = DATA / 'manager-logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        err_file = (log_dir / 'ofm-service.err.log').open('ab')
+        try:
+            proc = subprocess.Popen([node,str(ROOT/'integration/ofm_service.mjs')],cwd=str(ROOT),env=env,
+                stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=err_file,
+                creationflags=_NO_WINDOW)
+        finally:
+            err_file.close()
+        for _ in range(60):
+            if proc.poll() is not None:
+                raise ValueError(f'独立渠道服务启动退出（退出码 {proc.returncode}），请查看 manager-logs/ofm-service.err.log')
             try:
                 ready_info=health()
                 if start:bridge.write_json_atomic(CONTROL,{'enabled':True,'updated_at':bridge.now_iso()})
                 return ready_info
             except (OSError,ValueError,subprocess.SubprocessError):time.sleep(.5)
-        raise ValueError('独立渠道服务未就绪，未更改正式模型；请检查运行环境或占用')
+        raise ValueError('独立渠道服务未就绪，未更改正式模型；请检查运行环境或端口占用')
 
 
 def request(path,body=None,timeout=30):

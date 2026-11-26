@@ -340,7 +340,7 @@ def _validate_job(job: Dict[str, Any]) -> None:
     job["timezone"] = str(job.get("timezone", "Asia/Shanghai") or "Asia/Shanghai").strip()
     job["platform"] = str(job.get("platform") or "fanqie").strip().lower()
     _now_for_job(job)
-    for field, minimum, default in (("chapters_per_run", 1, 1), ("word_count", 1, 3500), ("max_revisions", 0, 2)):
+    for field, minimum, default in (("chapters_per_run", 1, 1), ("word_count", 1, 3500), ("max_revisions", 0, 1)):
         value = job.get(field, default)
         if type(value) is not int or value < minimum:
             raise ValueError(f"{field} 必须是大于等于 {minimum} 的整数")
@@ -544,7 +544,7 @@ def _job_summary(job_id: str, job: Dict[str, Any]) -> Dict[str, Any]:
         "timezone": job.get("timezone", "Asia/Shanghai"),
         "chapters_per_run": job.get("chapters_per_run", 1),
         "word_count": job.get("word_count", 3500),
-        "max_revisions": job.get("max_revisions", 2),
+        "max_revisions": job.get("max_revisions", 1),
         "volume": job.get("volume"),
         "approval_mode": job.get("approval_mode", "unattended"),
         "last_attempt_date": job.get("last_attempt_date", ""),
@@ -831,11 +831,17 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             record['remote_state']='not_applicable'
             return draft_step(job_id,job,cycle,quota,record,force)
         receipts = writer_runner.reviewed_chapters(project)
+        committed = writer_runner.committed_chapters(project)
         archive = _verified_archive(book, receipts, account)
         queue = _verify_queue(book, receipts)
         # Legacy/manual bodies have no review evidence. Never stage them in the
         # recovery path, or silently skip over them to publish later chapters.
-        unreviewed = writer_runner.existing_chapter_ids(project) - set(receipts) - set(_published_ids(book, account))
+        all_existing = writer_runner.existing_chapter_ids(project)
+        published_set = set(_published_ids(book, account))
+        human_pending = sorted((set(committed) - set(receipts)) & all_existing - published_set)
+        if human_pending:
+            raise RuntimeError(f"第 {human_pending} 章已完成 2 次自动审查，待人工复核通过后再发布")
+        unreviewed = all_existing - set(receipts) - published_set
         if unreviewed:
             raise RuntimeError(f"正文缺少有效审查记录：{sorted(unreviewed)}")
         if not cycle or cycle.get("status") == "success":
@@ -860,14 +866,21 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
                 or len(set(targets)) != len(targets)):
             raise ValueError("持久化批次章节列表无效")
         cycle['status']='running'
+        cycle['stage']='B'
+        cycle['total_count']=len(targets)
+        cycle['completed_count']=0
         _update_run(job_id,{'cycle':cycle})
         record["target_ids"] = list(targets)
         if job.get("delivery_mode") == "serial":
             from integration.serial_delivery import step
             return step(job_id, job, cycle, record, force)
-        for chapter in targets:
+        for index, chapter in enumerate(targets):
             if chapter in archive:
                 continue
+            cycle['current_chapter']=chapter
+            cycle['stage']='B'
+            cycle['completed_count']=index
+            _update_run(job_id,{'cycle':cycle})
             # Explicit IDs recover committed chapters after state/staging failure
             # instead of expanding this day's reserved batch.
             generated = writer_runner.generate_chapter(
