@@ -553,7 +553,7 @@ class PrePublishPendingRecomputeTests(unittest.TestCase):
     def test_pre_publish_blocking_recomputes_remaining_and_merges_skipped(self):
         with tempfile.TemporaryDirectory(prefix="audit-b-prepub-") as tmp:
             root = Path(tmp)
-            project = make_project(root)
+            project = make_project(root).resolve()
             ch1 = write_chapter(project, 1)
             ch2 = write_chapter(project, 2)
             sched_path = root / "scheduler.json"

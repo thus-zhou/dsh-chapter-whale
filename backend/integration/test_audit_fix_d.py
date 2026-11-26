@@ -294,6 +294,8 @@ class OwnedPortProcTests(unittest.TestCase):
         node = shutil.which('node')
         if not node:
             self.skipTest('node is not installed')
+        if not shutil.which('lsof'):
+            self.skipTest('lsof is not installed')
         script = ("const s=require('http').createServer((q,r)=>r.end('ok'));"
                   "s.listen(0,'127.0.0.1',()=>console.log(s.address().port))")
         processes = []
