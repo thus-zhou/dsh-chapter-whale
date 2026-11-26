@@ -43,6 +43,7 @@ _TRASH = "trash"
 _WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
                      *(f"LPT{i}" for i in range(1, 10))}
 _WINDOWS_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+_OP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
 _CHAPTER_HEADING = re.compile(
     r"^\s*(?:第\s*([0-9０-９零〇一二三四五六七八九十百千]+)\s*[章节回]|Chapter\s+(\d+))[ \t　]*(.*)$",
     re.IGNORECASE | re.MULTILINE,
@@ -107,6 +108,13 @@ def _validate_title(title: str) -> str:
     if problem:
         raise ChapterError(f"invalid_title:{problem}")
     return value
+
+
+def _validate_op_id(value: Any) -> str:
+    text = str(value or "")
+    if text and not _OP_ID_RE.fullmatch(text):
+        raise ChapterError("invalid_op_id")
+    return text
 
 
 def _validate_content(content: str) -> str:
@@ -377,7 +385,7 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
         raise ChapterError("chapter_invalid")
     title = _validate_title(data.get("title", ""))
     content = _validate_content(data.get("content", ""))
-    op_id = str(data.get("op_id") or "")
+    op_id = _validate_op_id(data.get("op_id"))
     expected_version = str(data.get("expected_version_id") or "").strip()
     expected_sha = str(data.get("expected_content_sha256") or "").strip().lower()
     allow_new = bool(data.get("allow_new"))
@@ -517,7 +525,7 @@ def new_chapter(project, data: Dict[str, Any]) -> Dict[str, Any]:
         raise ChapterError("chapter_exists", status=409)
     uid = wb.chapter_uid(project, chapter)
     result = versions.commit_raw_bytes(project, chapter, content.encode("utf-8"), title=title,
-                                       op_id=str(data.get("op_id") or uuid.uuid4().hex),
+                                       op_id=_validate_op_id(data.get("op_id") or uuid.uuid4().hex),
                                        source="author_new", note="新建空白章节", allow_new=True)
     try:
         wb.index_document(project, doc_key=f"正文:{chapter}", kind="chapter", chapter_id=chapter,
@@ -734,6 +742,7 @@ def _require_tail_unpublished(project, chapter: int) -> Path:
 def split_chapter(project, chapter: int, *, offset: int, title: str = "",
                   expected_content_sha256: str = "", op_id: str = "") -> Dict[str, Any]:
     chapter = int(chapter)
+    op_id = _validate_op_id(op_id)
     path = _require_tail_unpublished(project, chapter)
     raw = path.read_bytes()
     if expected_content_sha256 and expected_content_sha256 != _raw_sha(raw):
@@ -785,6 +794,7 @@ def split_chapter(project, chapter: int, *, offset: int, title: str = "",
 
 
 def merge_tail(project, *, op_id: str = "") -> Dict[str, Any]:
+    op_id = _validate_op_id(op_id)
     mapping = versions.chapter_map(project)
     if len(mapping) < 2:
         raise ChapterError("merge_needs_two_chapters", status=409)
@@ -837,6 +847,7 @@ def import_preview(project, *, text: str, start_chapter: Optional[int] = None) -
 
 def import_chapters(project, *, text: str, start_chapter: Optional[int] = None,
                     preview: bool = True, op_id: str = "") -> Dict[str, Any]:
+    op_id = _validate_op_id(op_id)
     plan = import_preview(project, text=text, start_chapter=start_chapter)
     if preview:
         return {"status": "preview", **plan}
@@ -877,7 +888,7 @@ def author_confirm(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any
     expected_sha = str(data.get("expected_content_sha256") or "").strip().lower()
     if not expected_version or not expected_sha:
         raise ChapterError("expected_version_required")
-    op_id = str(data.get("op_id") or "")
+    op_id = _validate_op_id(data.get("op_id"))
     params = {"chapter": chapter, "expected_version_id": expected_version,
               "expected_content_sha256": expected_sha, "note": data.get("note")}
     cached = _idempotent(project, "author_confirm", op_id, params) if op_id else None

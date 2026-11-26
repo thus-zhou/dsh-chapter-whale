@@ -321,10 +321,10 @@ class LockAndRaceTest(unittest.TestCase):
             outcomes = []
             lock = threading.Lock()
 
-            def worker(content):
+            def worker(content, ordinal):
                 barrier.wait(5)
                 try:
-                    result = save(project, 1, content, op_id=f"race-{content}",
+                    result = save(project, 1, content, op_id=f"race-{ordinal}",
                                   expected_version_id=state["version_id"],
                                   expected_content_sha256=state["sha256"])
                     with lock:
@@ -333,7 +333,7 @@ class LockAndRaceTest(unittest.TestCase):
                     with lock:
                         outcomes.append(("error", exc))
 
-            threads = [threading.Thread(target=worker, args=(f"稿件{i}\n",))
+            threads = [threading.Thread(target=worker, args=(f"稿件{i}\n", i))
                        for i in (0, 1)]
             for thread in threads:
                 thread.start()

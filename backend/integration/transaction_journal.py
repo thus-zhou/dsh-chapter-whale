@@ -381,18 +381,22 @@ def assert_within(root, path) -> Path:
     """
     root_path = Path(root)
     try:
-        root_resolved = root_path.resolve(strict=False)
+        root_abs = Path(os.path.abspath(str(root_path)))
     except OSError:
-        root_resolved = root_path.absolute()
+        root_abs = root_path
     candidate = Path(path)
     if not candidate.is_absolute():
-        candidate = root_resolved / candidate
+        candidate = root_abs / candidate
     candidate = Path(os.path.normpath(str(candidate)))
     try:
-        relative = candidate.relative_to(root_resolved)
+        relative = candidate.relative_to(root_abs)
     except ValueError:
-        raise UnsafePath("path_escape", str(path)) from None
-    current = root_resolved
+        # macOS /var → /private/var、Windows 8.3 短路径等：两边都 realpath 后再比。
+        try:
+            relative = candidate.resolve(strict=False).relative_to(root_abs.resolve(strict=False))
+        except (OSError, ValueError):
+            raise UnsafePath("path_escape", str(path)) from None
+    current = root_abs
     for part in relative.parts:
         if part == "..":
             raise UnsafePath("path_traversal", str(path))
@@ -401,12 +405,10 @@ def assert_within(root, path) -> Path:
         reason = _link_reason(current)
         if reason is not None:
             raise UnsafePath(reason, str(current))
-    resolved = current.resolve(strict=False)
     try:
-        resolved.relative_to(root_resolved)
-    except ValueError:
-        raise UnsafePath("path_escape", str(path)) from None
-    return resolved
+        return candidate.resolve(strict=False)
+    except OSError:
+        return candidate
 
 
 # --------------------------------------------------------------------------- 事务日志
@@ -1127,7 +1129,7 @@ def _sqlite_backup(source, target) -> Tuple[str, int]:
                 target_db.close()
         finally:
             source_db.close()
-        with temporary.open("rb") as stream:
+        with temporary.open("rb+") as stream:
             os.fsync(stream.fileno())
         rename_with_retry(temporary, target)
         _fsync_dir(target.parent)
@@ -1182,9 +1184,9 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0) -
             _copy_single(source, _join(dest, target_rel), target_rel, records)
 
         workbench = assert_within(project_path, ".webnovel/workbench.sqlite3")
-        db_sources: List[Tuple[str, Path, Optional[str]]] = []
+        db_sources: List[Tuple[str, Path, Optional[str], str]] = []
         if workbench.is_file():
-            db_sources.append(("workbench", workbench, ".webnovel/workbench.sqlite3"))
+            db_sources.append(("workbench", workbench, ".webnovel/workbench.sqlite3", str(workbench)))
         for index_no, extra in enumerate(_as_path_list(extra_sqlite)):
             extra_path = extra if extra.is_absolute() else project_path / extra
             extra_path = extra_path.resolve()
@@ -1193,14 +1195,14 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0) -
                 continue
             if extra_path == workbench:
                 continue
-            db_sources.append((_safe_db_name(extra_path.name, index_no), extra_path, None))
-        for ordinal, (logical, source, restore_rel) in enumerate(db_sources):
+            db_sources.append((_safe_db_name(extra_path.name, index_no), extra_path, None, str(extra)))
+        for ordinal, (logical, source, restore_rel, source_label) in enumerate(db_sources):
             rel = f"db/{ordinal:02d}-{Path(logical).name if '/' in logical else logical}"
             if not rel.endswith(".sqlite3"):
                 rel += ".sqlite3"
             checksum, size = _sqlite_backup(source, _join(dest, rel))
             entry = {"path": rel, "kind": "sqlite", "logical": logical,
-                     "source": str(source), "restore": restore_rel,
+                     "source": source_label, "restore": restore_rel,
                      "sha256": checksum, "size": size}
             sqlite_records.append(entry)
             records.append(entry)

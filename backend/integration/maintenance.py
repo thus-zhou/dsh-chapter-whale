@@ -158,14 +158,18 @@ def health(project) -> Dict[str, Any]:
     db_path = wb.db_path(project)
     integrity = "missing"
     if db_path.exists():
+        db = None
         try:
-            with sqlite3.connect(str(db_path)) as db:
-                integrity = str(db.execute("PRAGMA integrity_check").fetchone()[0])
-                if integrity != "ok":
-                    issues.append({"code": "db_integrity", "severity": "P0", "detail": integrity})
+            db = sqlite3.connect(str(db_path))
+            integrity = str(db.execute("PRAGMA integrity_check").fetchone()[0])
+            if integrity != "ok":
+                issues.append({"code": "db_integrity", "severity": "P0", "detail": integrity})
         except sqlite3.Error as exc:
             integrity = "error"
             issues.append({"code": "db_open_failed", "severity": "P0", "detail": str(exc)})
+        finally:
+            if db is not None:
+                db.close()
     mapping = versions.chapter_map(project)
     with wb.connect(project) as db:
         indexed = {str(row[0]) for row in db.execute("SELECT chapter_id FROM chapter_meta")}
