@@ -33,7 +33,8 @@ import {
 import { spawn, spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { managedRoot, managedPythonPath, runtimeAvailable, prepareManaged, managedEnvironment,
-  readRunDescription, compareRunDescription, writeRunDescription, normalizePath } from './managed-runtime.mjs';
+  readRunDescription, compareRunDescription, writeRunDescription, normalizePath,
+  expectedManagerRelease, stopForUpgrade, restartSerialCoordinator } from './managed-runtime.mjs';
 import { DshModelBridge } from './dsh-model-bridge.mjs';
 
 const PLUGIN_ID = 'dsh-chapter-whale';
@@ -485,6 +486,10 @@ async function probe(config, signal) {
         }
       }
     }
+    if (running && config.managed && body.release_id !== expectedManagerRelease()) {
+      return { running: false, backendAlive: true, upgradeRequired: true, health: body, hint,
+        error: '旧版后端仍在运行；将核验活动任务后安全升级，尚未就绪。' };
+    }
     return { running, health: body, hint };
   } catch (error) {
     return {
@@ -571,7 +576,14 @@ async function ensureStarted(config, signal) {
   if (startingPromise) return startingPromise;
 
   startingPromise = (async () => {
+    if (current.upgradeRequired) {
+      let stopped;
+      try { stopped = await stopForUpgrade(config, current.health); }
+      catch { stopped = { stopped: false, reason: '无法确认旧实例归属，请先从原启动器停止旧服务后重试' }; }
+      if (!stopped.stopped) return { ...current, started: false, error: stopped.reason || '旧实例有活动任务，完成后重试升级' };
+    }
     await prepareManaged(config);
+    await restartSerialCoordinator(config);
     const hint = configHint(config);
     if (hint) return { started: false, error: hint, ...current };
     const dir = logDir(config);
@@ -700,12 +712,17 @@ async function ensureStarted(config, signal) {
  */
 async function stopService(config, signal) {
   const state = await probe(config, signal);
-  if (!state.running) return { stopped: false, running: false, detail: '服务未在运行' };
+  if (!state.running && !state.backendAlive) return { stopped: false, running: false, detail: '服务未在运行' };
   const pid = state.health?.pid;
   if (!Number.isInteger(pid)) {
     return { stopped: false, running: true, code: 'no-pid', detail: '健康检查没有返回 pid，无法判断归属' };
   }
   if (!ownsService(pid, state.health, config)) {
+    if (config.managed && state.upgradeRequired) {
+      const stopped = await stopForUpgrade(config, state.health, true).catch(() => ({ stopped:false }));
+      return { stopped: Boolean(stopped.stopped), running: !stopped.stopped,
+        detail: stopped.reason || (stopped.stopped ? '旧后端已停止，可重试升级' : '无法核验旧后端，请从原启动器停止') };
+    }
     return {
       stopped: false,
       running: true,
@@ -913,6 +930,8 @@ export function createHandler(config, token) {
       sendJson(response, 200, {
         ok: Boolean(state.running),
         running: Boolean(state.running),
+        upgradeRequired: Boolean(state.upgradeRequired),
+        backendAlive: Boolean(state.backendAlive || state.running),
         httpStatus: state.httpStatus ?? null,
         service: state.health
           ? {

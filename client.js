@@ -1939,6 +1939,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const refresh = React.useCallback(async () => {
             try {
               const data = await api('/_service');
+              data.ready = data.running;
+              data.running = data.running || Boolean(data.upgradeRequired && data.backendAlive);
               if (mounted.current) {
                 setState((current) =>
                   current.starting || current.stopping
@@ -1963,6 +1965,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             setState((current) => ({ ...current, starting: true }));
             try {
               const data = await api('/_service', { method: 'POST' });
+              data.ready = data.running;
+              data.running = data.running || Boolean(data.upgradeRequired && data.backendAlive);
               if (mounted.current) setState({ loading: false, starting: false, ...data });
               return data;
             } catch (error) {
@@ -2463,7 +2467,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const localRecovery = (cycle && cycle.local_recovery) || null;
           const batchRecovery = (cycle && cycle.publication_batch_active && cycle.batch_recovery) || null;
           const batch = (cycle && cycle.batch_delivery) || null;
-          const recovery = batchRecovery || localRecovery;
+          const recovery = batchRecovery || localRecovery || (cycle && cycle.recovery);
           const groupLabel =
             batch && batch.group_start && batch.group_end
               ? `第 ${batch.group_start}–${batch.group_end} 章`
@@ -2492,8 +2496,22 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               subtitle:
                 status === 'published_complete'
                   ? '平台发布已核验；这不等同于平台审核通过，也不等同于有收益。'
-                  : '等待下一个时段；已发布章节不受影响。',
+                  : job.publication_mode === 'draft_only' ? '正文、审查与附属资料已就绪；等待下一个时段。' : '等待下一个时段；已发布章节不受影响。',
             };
+          }
+          if (status === 'waiting') {
+            const when = (recovery && recovery.next_retry_at) || (cycle && cycle.next_retry_at);
+            return { ...blank, tone: 'warn', tag: '等待重试', target, chapter, stageLabel, groupLabel,
+              title: chapter ? `第 ${chapter} 章 · 等待模型恢复` : '等待模型恢复',
+              subtitle: when ? `下次恢复 ${when}；继续原批次，已保存的正文保留。` : job.last_message || '继续原批次，等待可用模型。',
+              recovery, requestLabel };
+          }
+          if (status === 'metadata_pending' || status === 'blocked' || status === 'needs_revision') {
+            const label = status === 'metadata_pending' ? '待补同步资料' : status === 'needs_revision' ? '待修订' : '待处理';
+            return { ...blank, tone: 'warn', tag: label, target, chapter, stageLabel, groupLabel,
+              title: chapter ? `第 ${chapter} 章 · ${label}` : label,
+              subtitle: job.last_message || (recovery && recovery.message) || '处理后重新运行原任务。',
+              recovery, requestLabel };
           }
           if (status === 'failed') {
             const reason =
@@ -6185,6 +6203,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             queued: '排队中',
             running: '生成中',
             waiting: '等待重试',
+            deferred: '等待模型恢复',
+            metadata_pending: '待补同步资料',
+            needs_revision: '待修订',
+            blocked: '待处理',
             awaiting_login: '等待登录',
             success: '已完成',
             failed: '失败',
@@ -10542,6 +10564,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           }
 
+          if (service.state.upgradeRequired) {
+            body = e('div', null,
+              e(Card, { title: '后端待升级' },
+                e('p', null, '旧实例仍在运行，可先完成登录或取消等待任务，再重试升级。'),
+                e(Button, { onClick: () => service.stop() }, '停止旧后端'),
+                e(Button, { busy: service.state.starting, onClick: () => service.start() }, '重试升级')),
+              body);
+          }
           const bookTitle = project ? project.title : '创作空间';
           const bookMark = (bookTitle || '鲸').slice(0, 1);
           const subRoutes = activeHub.routes.map((id) => flatNav.find((item) => item.id === id)).filter(Boolean);

@@ -53,6 +53,7 @@ def details(exc):
 
 class PostSaveIncomplete(RuntimeError):
     def __init__(self, result):
+        result = result if isinstance(result, dict) else {}
         message=str(result.get('message') or '本章记忆同步未完成')
         if type(result.get('http_status')) is int:
             message+=f'（HTTP {result["http_status"]}）'

@@ -13,6 +13,47 @@ import { fileURLToPath } from 'node:url';
 const execFileAsync = promisify(execFile);
 
 export const PACKAGE_ROOT = dirname(fileURLToPath(import.meta.url));
+let expectedRelease;
+export function expectedManagerRelease() {
+  if (expectedRelease) return expectedRelease;
+  const files = Object.keys(JSON.parse(readFileSync(join(PACKAGE_ROOT, 'runtime-manifest.json'), 'utf8')).files);
+  const groups = [
+    files.filter(n => /^backend\/integration\/[^/]+\.py$/.test(n)).sort(),
+    files.filter(n => /^backend\/manager\/[^/]+\.py$/.test(n)).sort(),
+    files.filter(n => /^backend\/manager\/static\/[^/]+\.[^/]+$/.test(n)).sort(),
+    ['backend/fanqie_auto_publish/publish.py', 'backend/fanqie_auto_publish/publication_safety.py'],
+    files.filter(n => /^backend\/integration\/[^/]+\.mjs$/.test(n)).sort(),
+    ['backend/vendor/ofm-source-lock.json'],
+    ['ai_service.py', 'skill_executor.py'].map(n => `backend/webnovel-writer/backend/services/${n}`),
+  ];
+  const digest = createHash('sha256');
+  for (const name of groups.flat()) {
+    digest.update(name.slice('backend/'.length));
+    digest.update(readFileSync(join(PACKAGE_ROOT, name)));
+  }
+  expectedRelease = digest.digest('hex').slice(0, 16);
+  return expectedRelease;
+}
+
+export async function stopForUpgrade(config, health, explicitStop = false) {
+  const result = await execFileAsync(config.python, ['-X', 'utf8',
+    join(PACKAGE_ROOT, 'backend', 'manager', 'upgrade.py'), '--root', config.rootDir,
+    '--port', String(config.port), '--pid', String(health.pid), '--startup-id', String(health.startup_id || ''),
+    ...(explicitStop ? ['--explicit-stop'] : [])],
+    { windowsHide: true, timeout: 30000, encoding: 'utf8', env: managedEnvironment(config) });
+  return JSON.parse(result.stdout.trim());
+}
+
+export async function restartSerialCoordinator(config) {
+  const marker = join(config.rootDir, 'integration_data', 'upgrade-resume.json');
+  if (!existsSync(marker)) return;
+  const resume = JSON.parse(await readFile(marker, 'utf8'));
+  if (!resume.restart_serial) return;
+  await execFileAsync(config.python, ['-X', 'utf8', '-c',
+    'from integration.serial_service import ensure_started; ensure_started()'],
+    { cwd: config.rootDir, env: managedEnvironment(config), windowsHide: true, timeout: 15000 });
+  await rm(marker);
+}
 export function managedRoot(platform = process.platform) {
   if (platform === 'win32') {
     return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'ChapterWhale', 'workspace');

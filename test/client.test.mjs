@@ -166,6 +166,17 @@ function atelierHelpers() {
   return loadBundle().factory(() => new Proxy({}, { get: () => chainable })).__internals;
 }
 
+test('默认存稿的模型等待与资料待同步在总览准确显示', () => {
+  const { workHeadline } = atelierHelpers();
+  const waiting = workHeadline({cycle:{status:'waiting',current_chapter:2,
+    recovery:{next_retry_at:'2026-11-25T23:00:00+08:00'}}});
+  assert.equal(waiting.tag, '等待重试');
+  assert.match(waiting.subtitle, /23:00:00/);
+  const pending = workHeadline({cycle:{status:'metadata_pending'},last_message:'补同步当前正文'});
+  assert.equal(pending.tag, '待补同步资料');
+  assert.match(pending.subtitle, /补同步/);
+});
+
 test('A–E 轨道只采用当前章节的请求，不继承前一章的审查阶段', () => {
   const { chapterStage } = atelierHelpers();
   const stage = (chapter, role, requestChapter = chapter) => chapterStage({ cycle: { status: 'running', current_chapter: chapter, stage: 'local_generation' }, runtime: { last_request: { chapter: requestChapter, role } } });

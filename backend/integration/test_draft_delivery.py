@@ -79,6 +79,8 @@ class DraftDeliveryTest(unittest.TestCase):
         return {"chapter_id": chapter, "destination": str(path.resolve()),
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 "review": {"success": True, "review_decision": "pass"}, "reviewed_at": bridge.now_iso(),
+                "post_save": {"shared_memory": {"status": "synced"}, "entities": {"status": "synced"},
+                              "rag_indexed": True, "continuity_written": True},
                 "creative_contract_hash": bridge.creative_contract_hash(self.project)}
 
     def generate_ok(self, project, word_count, max_revisions, chapter_id):
@@ -238,11 +240,12 @@ class DraftDeliveryTest(unittest.TestCase):
 
         def memory_failure(project, word_count, max_revisions, chapter_id):
             self.generate_ok(project, word_count, max_revisions, chapter_id)
+            self.receipts[chapter_id]["post_save"]["shared_memory"] = {"status": "failed"}
             raise RuntimeError("共享记忆同步失败")
 
         self.generate.side_effect = memory_failure
         result = scheduler.run_once("tide")
-        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["status"], "metadata_pending")
         self.assertEqual(result["memory_pending"], [1])
         first_body = (self.project / "正文" / "第0001章 潮声.md").read_bytes()
         calls = []
@@ -252,9 +255,55 @@ class DraftDeliveryTest(unittest.TestCase):
             return self.generate_ok(project, word_count, max_revisions, chapter_id)
 
         self.generate.side_effect = pass_two
-        scheduler.run_once("tide")
+        def repair(project, chapter):
+            self.receipts[chapter]["post_save"]["shared_memory"] = {"status": "synced"}
+            return self.receipts[chapter]["post_save"]
+        with patch("integration.studio.sync_existing_artifacts", side_effect=repair):
+            self.assertEqual(scheduler.run_once("tide")["status"], "success")
         self.assertNotIn(1, calls)  # 回执仍在，第 1 章正文不会重写
         self.assertEqual((self.project / "正文" / "第0001章 潮声.md").read_bytes(), first_body)
+
+    def test_zero_revisions_reaches_generator(self):
+        self.add_job(max_revisions=0)
+        self.generate.side_effect = self.generate_ok
+        self.assertEqual(scheduler.run_once("tide")["status"], "success")
+        self.assertEqual(self.generate.call_args.kwargs["max_revisions"], 0)
+
+    def test_wait_survives_reload_and_resumes_same_targets_when_due(self):
+        from datetime import datetime, timedelta
+        from integration.free_pool import PoolWait
+        self.add_job(chapters_per_run=2)
+        scheduler.update_settings({"auto_schedule": True})
+        now = scheduler._now_for_job({"timezone": "Asia/Shanghai"})
+        target = now + timedelta(minutes=5)
+        self.generate.side_effect = PoolWait(target=target)
+        waiting = scheduler.run_once("tide")
+        self.assertEqual(waiting["status"], "waiting")
+        self.assertEqual(waiting["target_ids"], [1, 2])
+        job = scheduler.load_scheduler()["jobs"]["tide"]
+        self.assertEqual(datetime.fromisoformat(scheduler.next_due(job, now)), target)
+        self.assertEqual(scheduler.due_jobs(now), [])
+        self.assertEqual([j["id"] for j in scheduler.due_jobs(target + timedelta(seconds=1))], ["tide"])
+        self.generate.side_effect = self.generate_ok
+        result = scheduler.run_once("tide")
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["target_ids"], [1, 2])
+
+    def test_each_missing_post_save_step_stops_completion_without_consuming_slot(self):
+        for key in ("shared_memory", "entities", "rag_indexed", "continuity_written"):
+            with self.subTest(key=key):
+                self.receipts.clear()
+                job_id = "missing-" + key
+                self.add_job(job_id=job_id)
+                def partial(project, word_count, max_revisions, chapter_id):
+                    value = self.generate_ok(project, word_count, max_revisions, chapter_id)
+                    self.receipts[chapter_id]["post_save"][key] = False
+                    return value
+                self.generate.side_effect = partial
+                result = scheduler.run_once(job_id)
+                self.assertEqual(result["status"], "metadata_pending")
+                job = scheduler.load_scheduler()["jobs"][job_id]
+                self.assertFalse(job.get("completed_slots"))
 
     def test_missing_model_blocks_without_writing(self):
         self.add_job()
@@ -263,6 +312,19 @@ class DraftDeliveryTest(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason_code"], "model_unavailable")
         self.assertFalse(list((self.project / "正文").glob("*.md")))
+
+    def test_transient_continuity_failure_with_synced_memory_retries(self):
+        self.add_job()
+        def partial(project, word_count, max_revisions, chapter_id):
+            result = self.generate_ok(project, word_count, max_revisions, chapter_id)
+            self.receipts[chapter_id]['post_save'].update(continuity_written=False,
+                continuity_failure={'failure_kind':'transport','retryable':True})
+            return result
+        self.generate.side_effect = partial
+        result = scheduler.run_once('tide')
+        self.assertEqual(result['status'], 'waiting')
+        self.assertEqual(result['failure_kind'], 'transport')
+        self.assertTrue(result['cycle']['recovery']['automatic_retry'])
 
     def test_draft_progress_counts_local_receipts(self):
         path = self.write_chapter(1, "第1章\n\n林禾把怀表按在胸口，听见潮声倒退。")

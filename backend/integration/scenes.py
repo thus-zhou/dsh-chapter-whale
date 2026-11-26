@@ -25,18 +25,23 @@ def _folder(project):
 
 
 def plan_hash(project):
-    path = Path(project).resolve() / ".webnovel" / "story_plan.json"
-    return hashlib.sha256(path.read_bytes() if path.exists() else b"").hexdigest()
+    root = Path(project).resolve()
+    paths = [root / ".webnovel" / "story_plan.json", *sorted((root / "大纲").glob("*.md"))]
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(str(path.relative_to(root)).encode("utf-8"))
+        digest.update(path.read_bytes() if path.exists() else b"")
+    return digest.hexdigest()
 
 
 def _chapter_entry(project, chapter):
     path = Path(project).resolve() / ".webnovel" / "story_plan.json"
     if not path.exists():
-        return {}
+        return {"outline": writer._find_outline(Path(project), chapter)}
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}
+        raise ValueError("章节规划无法读取，请修复规划文件后重试") from None
     rows = doc.get("chapters") or []
     # 规划作者可能把章节写成列表，也可能写成 {章号: {...}}；两种都要能读。
     if isinstance(rows, dict):
@@ -46,8 +51,17 @@ def _chapter_entry(project, chapter):
         if not isinstance(row, dict):
             continue
         if int(row.get("id") or 0) == int(chapter):
+            markdown = writer._find_outline(Path(project), chapter)
+            if markdown:
+                body = markdown.split("\n", 1)[-1].strip() if "\n" in markdown else markdown
+                # AI planning writes the same body into Markdown and JSON. A
+                # later author edit makes the Markdown authoritative and its
+                # old scene cards no longer describe the current chapter.
+                if re.sub(r"\s+", "", body) != re.sub(r"\s+", "", str(row.get("outline") or "")):
+                    return {**row, "outline": markdown, "scenes": []}
+                return {**row, "outline": markdown}
             return row
-    return {}
+    return {"outline": writer._find_outline(Path(project), chapter)}
 
 
 def _calm(text):
@@ -120,6 +134,8 @@ def plan(project, chapter, *, count=2, word_count=3500):
                                calm=bool(row.get("calm")), must_follow=row.get("must_follow")))
         source = "plan"
     else:
+        if not str(entry.get("outline") or "").strip():
+            raise ValueError(f"第{chapter}章没有细纲，不能生成空场景卡")
         purpose = _split_outline(entry.get("outline"), count)
         target = max(600, int(word_count or 3500) // count)
         cards = [_card(index, purpose[index], target, calm=_calm(purpose[index])) for index in range(count)]

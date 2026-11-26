@@ -4,7 +4,6 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from starlette.responses import JSONResponse
 
 STARTED_AT=datetime.now(timezone.utc).isoformat()
 STARTUP_ID=uuid.uuid4().hex
@@ -18,7 +17,8 @@ def release_id():
         *(root/'webnovel-writer/backend/services'/name for name in ('ai_service.py','skill_executor.py'))]
     digest=hashlib.sha256()
     for path in paths:
-        if path.is_file():digest.update(str(path.relative_to(root)).encode());digest.update(path.read_bytes())
+        if path.is_file() and not path.name.startswith('test_'):
+            digest.update(path.relative_to(root).as_posix().encode());digest.update(path.read_bytes())
     return digest.hexdigest()[:16]
 
 
@@ -28,6 +28,7 @@ class RequestTooLarge(Exception):pass
 class BodyLimitMiddleware:
     def __init__(self,app,limit=32*1024*1024):self.app=app;self.limit=limit
     async def __call__(self,scope,receive,send):
+        from starlette.responses import JSONResponse
         if scope['type']!='http':return await self.app(scope,receive,send)
         if scope.get('method') not in {'POST','PUT','PATCH','DELETE'}:
             return await self.app(scope,receive,send)

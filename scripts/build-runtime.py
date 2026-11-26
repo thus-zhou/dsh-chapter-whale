@@ -46,7 +46,7 @@ def check_line_endings(files):
                          f'{detail}{more}')
 
 
-def write_manifest():
+def write_manifest(runtime_version=None):
     runtime = ROOT / 'runtime'
     previous = json.loads((ROOT / 'runtime-manifest.json').read_text(encoding='utf-8'))
     files = {}
@@ -64,7 +64,8 @@ def write_manifest():
                     raise ValueError(f'发行目录不接受符号链接：{path}')
                 files[path.relative_to(ROOT).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     check_line_endings(files)
-    previous.update(version=json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version'],
+    package_version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+    previous.update(version=runtime_version or package_version, packageVersion=package_version,
                     buildId=hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest(), files=files)
     (ROOT / 'runtime-manifest.json').write_text(json.dumps(previous, indent=2) + '\n',
                                                  encoding='utf-8', newline='\n')
@@ -112,7 +113,9 @@ def main():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--manifest-only', action='store_true', help='复用现有运行时，只重建源码与运行时清单')
-    if parser.parse_args().manifest_only:
-        write_manifest()
+    parser.add_argument('--runtime-version', help='轻量包复用的已发布运行时版本；仅配合 --manifest-only')
+    args = parser.parse_args()
+    if args.manifest_only:
+        write_manifest(args.runtime_version)
     else:
         main()

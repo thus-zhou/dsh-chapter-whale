@@ -15,12 +15,13 @@ function quotaLabel(j) {
  return j.effective_quota?`今日目标 ${fmt(j.effective_quota.daily_chapters)} 章 · 每章约 ${fmt(j.effective_quota.word_count)} 字`:`基础配额 ${fmt(j.chapters_per_run)} 章/批`;
 }
 statusNames.waiting="等待自动恢复";
+Object.assign(statusNames,{deferred:"等待模型恢复",metadata_pending:"待补同步资料",blocked:"待处理",needs_revision:"待修订"});
 statusNames.local_complete="本地完稿 · 待发布";
 statusNames.published_complete="章节已全部发布 · 完结状态待核验";
 function operationWait(o) {
- if(o.status!=="waiting")return "";
+ if(!["waiting","deferred"].includes(o.status))return "";
  const when=o.result?.next_retry_at;
- return `<p class="operation-wait" role="status">保留原批次，${when?`下次恢复 ${esc(time(when))}`:"等待可用模型"}；不重复创建章节。${button("cancel-operation",o.id,"取消等待")}</p>`;
+ return `<p class="operation-wait" role="status">保留原批次，${when?`下次恢复 ${esc(time(when))}`:"等待可用模型"}；不重复创建章节。${o.status==="waiting"?button("cancel-operation",o.id,"取消等待"):""}</p>`;
 }
 function jobProgress(j) {
  const c=j.cycle || {}, r=(c.publication_batch_active?c.batch_recovery:c.local_recovery || c.recovery) || {}, chapter=c.current_chapter?`第${c.current_chapter}章 · `:"";

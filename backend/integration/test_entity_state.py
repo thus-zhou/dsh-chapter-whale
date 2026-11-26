@@ -1,13 +1,14 @@
 """C01 有来源实体状态：钥匙归属链、同章歧义、故事时间、全知不越界、跨作品隔离。"""
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 
 from integration import entity_state as es
 
-SHA = {n: f"{n:x}" * 64 for n in range(1, 12)}
 Q = "他把钥匙放进袖袋，铜环磕出一声轻响。"
+SHA = {n: hashlib.sha256(Q.encode("utf-8")).hexdigest() for n in range(1, 12)}
 
 
 class EntityStateTest(unittest.TestCase):
@@ -16,6 +17,9 @@ class EntityStateTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.project = Path(self.temp.name)
         (self.project / ".webnovel").mkdir(parents=True)
+        (self.project / "正文").mkdir()
+        for n in range(1, 12):
+            (self.project / "正文" / f"第{n}章.md").write_text(Q, encoding="utf-8")
 
     def seed_key(self):
         es.record_item(self.project, entity="黄铜钥匙", holder="林砚", chapter=1, quote=Q, sha256=SHA[1],
@@ -87,6 +91,8 @@ class EntityStateTest(unittest.TestCase):
     def test_same_name_across_projects_do_not_merge(self):
         other = Path(self.temp.name) / "other"
         (other / ".webnovel").mkdir(parents=True)
+        (other / "正文").mkdir()
+        (other / "正文" / "第1章.md").write_text(Q, encoding="utf-8")
         es.record_item(self.project, entity="钥匙", holder="林砚", chapter=1, quote=Q, sha256=SHA[1], event="本作")
         es.record_item(other, entity="钥匙", holder="程野", chapter=1, quote=Q, sha256=SHA[1], event="另一本")
         self.assertEqual(es.holder_at(self.project, "钥匙", 2)["holder"], "林砚")
@@ -134,6 +140,25 @@ class EntityStateTest(unittest.TestCase):
             es.record_item(self.project, entity="钥匙", holder="林砚", chapter=1, quote="", sha256=SHA[1])
         with self.assertRaises(ValueError):
             es.record_item(self.project, entity="钥匙", holder="林砚", chapter=1, quote=Q, sha256="short")
+
+    def test_changed_or_missing_body_invalidates_holder_and_knowledge(self):
+        self.seed_key()
+        path = self.project / "正文" / "第3章.md"
+        path.write_text("阿澜没有接过钥匙。", encoding="utf-8")
+        self.assertEqual(es.holder_at(self.project, "黄铜钥匙", 5)["reason"], "source_changed")
+        self.assertEqual(es.item_knowledge(self.project, "阿澜", "黄铜钥匙", 5)["status"], "unknown")
+        path.unlink()
+        self.assertEqual(es.holder_at(self.project, "黄铜钥匙", 5)["status"], "unknown")
+        self.assertEqual(len(es.read(self.project)["events"]), 3)
+
+    def test_reextraction_of_changed_chapter_restores_current_facts(self):
+        self.seed_key()
+        text = "阿澜把钥匙交给沈序。"
+        (self.project / "正文/第3章.md").write_text(text, encoding="utf-8")
+        es.record_item(self.project, entity="黄铜钥匙", holder="沈序", chapter=3,
+                       quote=text, sha256=hashlib.sha256(text.encode()).hexdigest(), knowers=["阿澜"])
+        self.assertEqual(es.holder_at(self.project, "黄铜钥匙", 5)["holder"], "沈序")
+        self.assertEqual(es.item_knowledge(self.project, "阿澜", "黄铜钥匙", 5)["holder_at_event"], "沈序")
 
     def test_holder_rows_are_compact_and_mark_unknown(self):
         self.seed_key()

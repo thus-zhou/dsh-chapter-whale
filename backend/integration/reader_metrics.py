@@ -17,10 +17,12 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import re
+import uuid
+from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from integration import bridge
+from integration import bridge, writer_runner
 
 SCHEMA = 1
 CALIBER_VERSION = "2026-11-16"
@@ -484,6 +486,15 @@ def _snapshot(item: Dict[str, Any]) -> Dict[str, Any]:
     return {key: item.get(key) for key in keys if key in item}
 
 
+def _transaction(fn):
+    @wraps(fn)
+    def locked(project, *args, **kwargs):
+        with writer_runner.file_lock(store_path(project).with_suffix(".lock"), blocking=True):
+            return fn(project, *args, **kwargs)
+    return locked
+
+
+@_transaction
 def commit(project: Path, preview_result: Optional[Dict[str, Any]] = None, *, actor: str = "author",
            filename: str = "", token: Optional[str] = None,
            allow_partial: bool = False) -> Dict[str, Any]:
@@ -562,8 +573,7 @@ def _discard_plan(project: Path, token: str) -> None:
 
 def _batch_id(project: Path, data: Dict[str, Any]) -> str:
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
-    seed = f"{project}|{stamp}|{len(data.get('batches') or [])}"
-    return stamp + "-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:6]
+    return stamp + "-" + uuid.uuid4().hex[:12]
 
 
 # --- 查询与回源 --------------------------------------------------------------
@@ -646,6 +656,7 @@ def sanitize_comment(text: str, *, limit: int = MAX_COMMENT) -> Dict[str, Any]:
     return {"text": cleaned, "truncated": truncated, "flagged": flagged, "hash": digest}
 
 
+@_transaction
 def add_comments(project: Path, rows: Iterable[Dict[str, Any]], *, batch: str = "",
                  chapter_id: Any = None) -> Dict[str, Any]:
     """导入评论：按脱敏前原文哈希在同章内去重，不覆盖已有；未指定批次时自动生成。"""
@@ -709,6 +720,7 @@ def cluster_comments(project: Path, chapter_id: Any, *, limit: int = 5) -> List[
     return out
 
 
+@_transaction
 def remove_batch(project: Path, batch: str) -> Dict[str, Any]:
     """作者撤销一次导入：删掉该批次新增的行，修订行整条回退到上一版快照。"""
     identifier = str(batch or "").strip()

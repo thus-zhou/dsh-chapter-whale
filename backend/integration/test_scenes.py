@@ -110,6 +110,45 @@ class ScenesCase(unittest.TestCase):
         self.assertEqual(scene_writer.estimate(2)["requests"], 3)
         self.assertEqual(scene_writer.estimate(9)["scenes"], 3)
 
+    def test_markdown_outline_is_used_and_missing_outline_stops(self):
+        (self.root / ".webnovel" / "story_plan.json").unlink()
+        (self.root / "大纲").mkdir()
+        (self.root / "大纲" / "细纲.md").write_text("## 第1章 城门\n守夜人送来封蜡信。\n## 第2章 海潮\n潮声响起。", encoding="utf-8")
+        result, calls = self._draft([{"text": "场景正文。" * 30}], count=1)
+        self.assertIn("封蜡信", calls[0])
+        self.assertNotIn("潮声响起", calls[0])
+        with self.assertRaisesRegex(ValueError, "没有细纲"):
+            scenes.plan(self.root, 3)
+
+    def test_changed_guidance_length_count_or_context_invalidates_cache(self):
+        from integration import studio
+        async def fake(*args, **kwargs):
+            return {"text": "新场景正文。" * 30}
+        with mock.patch.object(scene_writer.model_roles, "json_call", side_effect=fake) as call, \
+                mock.patch.object(studio, "brief_service") as brief, \
+                mock.patch.object(scene_writer.memory_library, "context", return_value={"text": "旧上下文"}) as context:
+            brief.return_value.load_guidance.return_value = "第一人称"
+            asyncio.run(scene_writer.draft(self.root, 1, 2000, 2))
+            call.reset_mock()
+            self.assertEqual(asyncio.run(scene_writer.draft(self.root, 1, 2000, 2))["requests"], 0)
+            for words, count, guidance, ctx in ((4000, 2, "第一人称", "旧上下文"),
+                                               (4000, 2, "第三人称", "旧上下文"),
+                                               (4000, 3, "第三人称", "旧上下文"),
+                                               (4000, 3, "第三人称", "新上下文")):
+                brief.return_value.load_guidance.return_value = guidance
+                context.return_value = {"text": ctx}
+                self.assertEqual(asyncio.run(scene_writer.draft(self.root, 1, words, count))["requests"], count)
+
+    def test_markdown_edit_supersedes_old_json_outline_and_scene_cards(self):
+        (self.root / "大纲").mkdir()
+        (self.root / "大纲/细纲.md").write_text("## 第1章 西门\n乙从西门离开。", encoding="utf-8")
+        path = self.root / ".webnovel/story_plan.json"
+        path.write_text(json.dumps({'chapters': [{'id': 1, 'outline': '甲从东门进入。',
+            'scenes': [{'purpose': '甲从东门进入', 'target_chars': 2000}]}]}, ensure_ascii=False), encoding="utf-8")
+        planned = scenes.plan(self.root, 1, count=1, word_count=2000)
+        self.assertIn("乙从西门", planned['cards'][0]['purpose'])
+        self.assertNotIn("东门", planned['cards'][0]['purpose'])
+
     def test_writer_accepts_scene_mode(self):
         import inspect
         self.assertEqual(inspect.signature(writer_runner._generate_and_review).parameters["scenes"].default, 0)

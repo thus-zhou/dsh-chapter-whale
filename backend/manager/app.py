@@ -185,7 +185,16 @@ class Operations:
                 old.update(status="interrupted", finished_at=bridge.now_iso(), error="管理服务已重启；请核对队列后重新执行")
                 store.save_operation(old)
 
-    def start(self, kind: str, args: list[str], identity: str, metadata: dict | None = None,
+    def start(self, *args, **kwargs):
+        try:
+            with writer_runner.file_lock(DATA / 'upgrade-admission.lock'):
+                return self._start_admitted(*args, **kwargs)
+        except RuntimeError as exc:
+            if '已有任务正在运行' not in str(exc):
+                raise
+            raise HTTPException(409, '正在维护或接收其他任务，请稍后重试') from None
+
+    def _start_admitted(self, kind: str, args: list[str], identity: str, metadata: dict | None = None,
               operation_key: str | None = None):
         signature = None
         if operation_key:
@@ -336,6 +345,10 @@ class Operations:
                 payload["status"] = "success"
             elif child_status=='waiting' and payload.get('kind')=='generate' and payload.get('batch_id') and result.get('failure_kind') in {'recovery_cooldown','free_pool_wait'} and result.get('next_retry_at'):
                 payload.update(status='waiting',error=result.get('error','等待模型恢复'))
+            elif child_status == 'waiting' and result.get('next_retry_at'):
+                payload.update(status='deferred', error='等待模型恢复，调度器将继续原批次')
+            elif child_status in {'metadata_pending', 'needs_revision', 'blocked'}:
+                payload.update(status=child_status, error=result.get('next_action') or result.get('reason_code') or '需要处理后继续')
             elif child_status in {"awaiting_approval", "disabled", "already_run", "already_ran", "busy"}:
                 payload["status"] = child_status
             else:
@@ -910,6 +923,7 @@ def project_summary(item: dict):
     return {**item, "title": info.get("title") or state.get("title") or path.name,
             "genre": info.get("genre") or state.get("genre", "未设定"),
             "chapters": len(chapters), "words": sum(len(x[3]) for x in chapters),
+            "latest_chapter_id": max((x[1] for x in chapters), default=0),
             "chapters_revision":revision.hexdigest()[:16],
             "outline_count": len(outlines), "ready": next_outline_ready and not problem,
             "exists": path.is_dir(), "error": problem}
@@ -1102,7 +1116,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             'pid':os.getpid(),'startup_id':STARTUP_ID,'started_at':STARTED_AT,
             'root':str(bridge.COMBINED_ROOT.resolve()),'port':_LISTEN_PORT,
             'mode':os.getenv('CHAPTER_WHALE_SERVICE_MODE','standalone'),
-            'schema_version':1,
+            'schema_version':1, 'upgrade_guard':1,
             'maintenance':maintenance.get('state') == 'maintenance'}
 
     device_access.install_routes(app, access, STATIC)

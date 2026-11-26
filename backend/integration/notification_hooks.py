@@ -56,7 +56,7 @@ def on_run_finished(job_id: str, job: Dict[str, Any], record: Dict[str, Any]) ->
     try:
         status = str(record.get("status") or "")
         mode = str(record.get("publication_mode") or job.get("publication_mode") or "draft_only")
-        if status not in {"success", "needs_revision", "blocked", "failed"}:
+        if status not in {"success", "needs_revision", "blocked", "failed", "metadata_pending", "waiting"}:
             return summary
         db = connection()
         try:
@@ -69,11 +69,15 @@ def on_run_finished(job_id: str, job: Dict[str, Any], record: Dict[str, Any]) ->
                 "publication_mode": mode,
                 "reason_code": record.get("reason_code"),
                 "next_action": record.get("next_action"),
+                "next_retry_at": record.get("next_retry_at"),
                 **_saved(record),
             }
             alias = {"project": _alias(job.get("project", ""), "项目"),
                      "book": _alias(job.get("book", ""), "作品")}
-            reason = str(record.get("last_message") or record.get("error") or "")[:400]
+            # Detailed local diagnostics can contain project paths or provider
+            # response fragments. Notifications carry a controlled reason code.
+            reason = str(record.get("reason_code") or status)[:120]
+            payload['next_action'] = '查看本机运行记录并继续原任务' if payload.get('next_action') else None
             if status == "needs_revision":
                 event_type = EVENT_REVIEW
                 payload["reason"] = reason
@@ -90,7 +94,7 @@ def on_run_finished(job_id: str, job: Dict[str, Any], record: Dict[str, Any]) ->
                     rows = notifications.enqueue(db, incident["id"], event_type, payload, recipients,
                                                  store_without_recipients=True)
                     summary["queued"] += len(rows)
-            elif status in {"blocked", "failed"}:
+            elif status in {"blocked", "failed", "metadata_pending", "waiting"}:
                 event_type = EVENT_PAUSED
                 payload["reason"] = reason
                 incident = notifications.open_incident(

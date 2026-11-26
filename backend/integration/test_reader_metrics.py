@@ -36,6 +36,25 @@ class ReaderMetricsTest(unittest.TestCase):
                            allow_partial=allow_partial)
         return plan, result
 
+    def test_concurrent_commits_preserve_winner_and_reject_stale_preview(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+        plans = [rm.preview(self.project, rm.parse_csv(csv(row(chapter=n)))["rows"], work_id="demo-book")
+                 for n in (1, 2)]
+        barrier = threading.Barrier(2)
+        def commit(plan):
+            barrier.wait(timeout=5)
+            try:
+                return rm.commit(self.project, token=plan["token"])["status"]
+            except ValueError as exc:
+                self.assertIn("过期", str(exc))
+                return "stale"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(commit, plans))
+        self.assertCountEqual(results, ["committed", "stale"])
+        self.assertEqual(len(rm.load(self.project)["rows"]), 1)
+        self.assertEqual(len(rm.load(self.project)["batches"]), 1)
+
     # --- 字段字典 -----------------------------------------------------------
     def test_dictionary_lists_official_fields(self):
         items = rm.dictionary()

@@ -191,10 +191,10 @@ def extract(payload):
             result["verdict"] = "pass"
         elif token in ("needs_revision", "needs-revision", "revise", "reject"):
             result["verdict"] = "needs_revision"
-        elif re.search(r"无需修改|不需要修改|通过|可直接采用", verdict):
-            result["verdict"] = "pass"
-        elif re.search(r"需(?:要)?修改|需要改|退回", verdict):
+        elif re.search(r"不(?:予)?通过|未通过|(?<!无)需修改|(?<!不)需要修改|需要改|退回|驳回", verdict):
             result["verdict"] = "needs_revision"
+        elif token.strip("。.!！ \t") in ("通过", "审查通过", "审核通过", "无需修改", "不需要修改", "可直接采用"):
+            result["verdict"] = "pass"
         else:
             result["verdict"] = None
     result["evidence"] = str(source.get("summary") or source.get("reason") or source.get("原因") or "").strip()[:800]
@@ -202,10 +202,10 @@ def extract(payload):
 
 
 def _text_verdict(text):
+    if re.search(r"结论\s*[:：]\s*(?:不通过|未通过|需修改)|^P[01]", text, re.MULTILINE):
+        return "needs_revision"
     if re.search(r"结论\s*[:：]\s*无需修改|未发现(?:明显)?问题|审查通过", text):
         return "pass"
-    if re.search(r"结论\s*[:：]\s*需修改|^P[01]", text, re.MULTILINE):
-        return "needs_revision"
     return None
 
 

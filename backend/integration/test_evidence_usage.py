@@ -188,7 +188,8 @@ class EvidenceUsageTests(unittest.TestCase):
 
     def test_context_includes_entity_block_and_supply_trace(self):
         from integration import entity_state
-        entity_state.record_item(self.project, entity="黄铜钥匙", holder="林砚", chapter=1, quote=QUOTE, sha256=SHA)
+        entity_state.record_item(self.project, entity="黄铜钥匙", holder="林砚", chapter=1, quote=QUOTE,
+                                 sha256=self.sha(1))
         self.fact()
         context = memory_library.context(self.project, chapter=5, query="钥匙",
                                          trace={"stage": "B", "version_sha": SHA})

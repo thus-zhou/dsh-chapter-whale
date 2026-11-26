@@ -699,7 +699,7 @@
       return;
     }
     try {
-      const ch = Math.max(1, Number(proj.chapters) || 1);
+      const ch = Math.max(1, Number(proj.latest_chapter_id) || 1);
       const ret = await getJson(`/api/projects/${pid}/retrieval?chapter=${ch}`);
       const plan = ret.plan || ret || {};
       const suppliedCount = Array.isArray(plan.supplied) ? plan.supplied.length : (plan.counts?.supplied ?? 0);
@@ -806,7 +806,11 @@
       host.innerHTML = `<div class="panel-header"><div><span class="eyebrow">STYLE & CONTINUITY PRECHECK</span><h2>0.7.0 风格预检与忽略词条</h2></div></div><div class="cw-pad"><p class="muted">选定已有章节的作品后可拉取风格预检规则命中明细。</p></div>`;
       return;
     }
-    const ch = Math.max(1, Number(proj.chapters) || 1);
+    const ch = Number(proj.latest_chapter_id) || 0;
+    if (!ch) {
+      host.innerHTML = `<div class="panel-header"><div><h2>风格预检与忽略词条</h2></div></div><div class="cw-pad"><p class="muted">生成正文后将自动接入该书风格预检。</p></div>`;
+      return;
+    }
     const pid = encodeURIComponent(proj.id);
     try {
       const data = await getJson(`/api/projects/${pid}/precheck?chapter=${ch}`);

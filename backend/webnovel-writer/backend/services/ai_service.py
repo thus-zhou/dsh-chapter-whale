@@ -558,9 +558,11 @@ class AIService:
                                     except json.JSONDecodeError:
                                         continue
                         
-                        meter.completed=True
-                        self._debug(f"AI Stream ended, total chunks: {chunk_count}")
-                        return
+                        if self.last_finish_reason:
+                            meter.completed=True
+                            self._debug(f"AI Stream ended, total chunks: {chunk_count}")
+                            return
+                        raise ConnectionError("SSE stream ended without a completion marker")
             except AIHTTPError:
                 # A gateway may emit an error frame after HTTP 200. Preserve
                 # its safe status/code; never log the upstream body or retry

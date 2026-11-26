@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 import unicodedata
 import uuid
 from contextlib import nullcontext
@@ -94,6 +95,23 @@ def _story_before(candidate, target):
 
 def _events_for(doc, key):
     return [row for row in doc["events"] if _norm(row.get("entity")) == key]
+
+
+def _evidence_current(project, row):
+    """历史事件仍保留，但只有与当前正文及引文一致时才能成为事实。"""
+    chapter = int(row.get("chapter") or 0)
+    paths = [p for p in (Path(project) / "正文").glob("*.md")
+             if (parsed := bridge.parse_chapter_name(p.name)) and parsed[0] == chapter]
+    if len(paths) != 1:
+        return False
+    try:
+        raw = paths[0].read_bytes()
+        text = raw.decode("utf-8-sig")
+    except (OSError, UnicodeError):
+        return False
+    evidence = row.get("evidence") or {}
+    return (evidence.get("sha256") == hashlib.sha256(raw).hexdigest()
+            and bool(evidence.get("quote")) and evidence["quote"] in text)
 
 
 def _check_chapter(chapter):
@@ -183,12 +201,16 @@ def holder_at(project, entity, chapter, *, story_time=None, doc=None):
     rows.sort(key=lambda row: int(row.get("chapter") or 0))
     top = int(rows[-1].get("chapter") or 0)
     same = [row for row in rows if int(row.get("chapter") or 0) == top]
+    same = [row for row in same if _evidence_current(project, row)]
+    if not same:
+        return {"status": "unknown", "reason": "source_changed", "entity": entity,
+                "chapter": top, "note": "来源正文已改动或缺失，请重新提取确认"}
     holders = {str(row.get("after") or "") for row in same}
     if len(holders) > 1:
         return {"status": "unknown", "reason": "same_chapter_order_unknown", "entity": entity, "chapter": top,
                 "candidates": [{"holder": row.get("after"), "event": row.get("event"), "quote": row.get("evidence", {}).get("quote")}
                                for row in same]}
-    last = rows[-1]
+    last = same[-1]
     return {"status": "known", "entity": entity, "chapter": chapter, "holder": last.get("after"),
             "source_chapter": top, "confidence": last.get("status"),
             "quote": last.get("evidence", {}).get("quote"), "sha256": last.get("evidence", {}).get("sha256"),
@@ -226,7 +248,13 @@ def item_knowledge(project, person, entity, chapter, *, scope="character", doc=N
     if not rows:
         return {"status": "unknown", "reason": "no_knowledge_record", "person": person, "entity": entity,
                 "note": "未记录不等于人物不知道；程序只能核对本书记录。"}
-    latest = max(rows, key=lambda row: int(row.get("chapter") or 0))
+    top = max(int(row.get("chapter") or 0) for row in rows)
+    current = [row for row in rows if int(row.get("chapter") or 0) == top and _evidence_current(project, row)]
+    if not current:
+        return {"status": "unknown", "reason": "source_changed", "person": person, "entity": entity}
+    if len({row.get("after") for row in current}) > 1:
+        return {"status": "unknown", "reason": "same_chapter_order_unknown", "person": person, "entity": entity}
+    latest = current[-1]
     return {"status": "known", "person": person, "entity": entity, "holder_at_event": latest.get("after"),
             "chapter": int(latest.get("chapter") or 0), "confidence": latest.get("status"),
             "quote": latest.get("evidence", {}).get("quote")}

@@ -661,7 +661,7 @@ async def _sync_committed_artifacts(
                     summary = await executor._apply_extraction_results(chapter, content, extraction["extraction"])
                     entities = {"status": "synced" if isinstance(summary, dict) and summary.get('success') is True else "failed", "summary": summary}
     except Exception as exc:
-        entities = {"status": "failed", "error_type": type(exc).__name__}
+        entities = {"status": "failed", **_safe_error(exc)}
     try:
         if previous.get('rag_indexed') is True:
             post_save={**previous,'reused_source_artifacts':True}
@@ -674,6 +674,7 @@ async def _sync_committed_artifacts(
                     directory.mkdir(parents=True,exist_ok=True)
                     bridge._write_text_atomic(directory/f'第{chapter}章_状态.md',summary)
                     post_save['continuity_written']=True
+                    post_save.pop('continuity_failure', None)
         else:
             with operation_scope(),costs.scope(**({'role':'E'} if routed else {})):
                 post_save = await executor.sync_post_save_artifacts(chapter, content)

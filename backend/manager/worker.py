@@ -35,7 +35,8 @@ def login(name):
     folder = bridge.account_dir(name)
     folder.mkdir(parents=True, exist_ok=True)
     environment = bridge.child_environment()
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = environment["PLAYWRIGHT_BROWSERS_PATH"]
+    if environment.get("PLAYWRIGHT_BROWSERS_PATH"):
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = environment["PLAYWRIGHT_BROWSERS_PATH"]
     with bridge.runtime_lock("account-login-" + name), sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         try:

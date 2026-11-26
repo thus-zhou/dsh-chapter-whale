@@ -60,17 +60,24 @@ async def draft(project, chapter, word_count, count=2, *, config=None):
     except Exception:
         guidance = ""
     config = config or model_roles.load_config()
-    done, previous, requests = [], "", 0
+    done, previous, requests, texts = [], "", 0, []
     for card in planned["cards"]:
-        path = _path(project, chapter, card["id"], planned["plan_hash"])
+        prompt = _prompt(project, chapter, card, previous, guidance)
+        inputs = json.dumps({"schema": 2, "chapter": int(chapter), "word_count": word_count,
+                             "count": len(planned["cards"]), "plan_hash": planned["plan_hash"],
+                             "creative_contract_hash": bridge.creative_contract_hash(project),
+                             "prompt": prompt}, ensure_ascii=False, sort_keys=True)
+        fingerprint = hashlib.sha256(inputs.encode("utf-8")).hexdigest()
+        path = _path(project, chapter, card["id"], fingerprint)
         row = _saved(path)
-        if row:
+        if row and row.get("input_hash") == fingerprint:
             done.append({"id": card["id"], "chars": len(row["text"]), "reused": True})
             previous = row["text"]
+            texts.append(previous)
             continue
         # 每次场景生成都要记进同一本费用账：否则预算只看得到整章调用。
         with costs.scope(stage="draft", chapter=int(chapter), project=str(Path(project).resolve())):
-            result = await model_roles.json_call("B", _prompt(project, chapter, card, previous, guidance),
+            result = await model_roles.json_call("B", prompt,
                                                  config=config, max_tokens=min(6000, max(1200, card["target_chars"] * 2)),
                                                  timeout=240)
         text = str(result.get("text") or "").strip()
@@ -78,14 +85,15 @@ async def draft(project, chapter, word_count, count=2, *, config=None):
             raise ValueError(f"场景 {card['id']} 生成内容过短，未保存")
         requests += 1
         payload = {"schema_version": SCHEMA, "chapter": int(chapter), "plan_hash": planned["plan_hash"],
+                   "input_hash": fingerprint,
                    "scene_id": card["id"], "index": card["position"], "text": text,
                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                    "chars": len(text), "created_at": bridge.now_iso()}
         writer.atomic_json(path, payload)
         done.append({"id": card["id"], "chars": len(text), "reused": False})
         previous = text
-    content = "\n\n".join(_saved(_path(project, chapter, card["id"], planned["plan_hash"]))["text"]
-                          for card in planned["cards"])
+        texts.append(text)
+    content = "\n\n".join(texts)
     return {"content": content, "errors": [], "success": True, "review": None,
             "scenes": done, "requests": requests, "plan_hash": planned["plan_hash"],
             "plan_source": planned["source"]}

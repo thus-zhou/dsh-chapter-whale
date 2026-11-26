@@ -108,6 +108,21 @@ class NotificationHookTest(unittest.TestCase):
         self.assertEqual(summary["state"], "failed")
         self.assertIn("磁盘只读", summary["error"])
 
+    def test_metadata_pending_records_paused_event(self):
+        summary = hooks.on_run_finished("tide", self.job,
+            self.record(status="metadata_pending", next_action="补同步当前正文"))
+        self.assertEqual(summary["state"], "recorded")
+        self.assertEqual(summary["events"][0]["event_type"], "job.paused")
+
+    def test_private_local_path_is_not_forwarded_to_notification(self):
+        hooks.on_run_finished('tide', self.job, self.record(status='metadata_pending',
+            last_message=str(self.root/'private-book'), next_action=str(self.root/'private-action')))
+        db=hooks.connection()
+        try:
+            self.assertNotIn(str(self.root),json.dumps(notifications.list_events(db)))
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

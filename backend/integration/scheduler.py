@@ -426,6 +426,9 @@ def next_due(job: Dict[str, Any], now: Optional[datetime] = None) -> Optional[st
     if not job.get("enabled", True):
         return None
     current = now.astimezone(ZoneInfo(job.get("timezone", "Asia/Shanghai"))) if now else _now_for_job(job)
+    retry_at = _draft_retry_at(job)
+    if retry_at:
+        return retry_at.isoformat()
     day=current.date().isoformat();completed=completed_slots(job,day)
     attempted = str(job.get("last_attempt_slot") or "")
     cycle_status = (job.get("cycle") or {}).get("status")
@@ -444,6 +447,19 @@ def next_due(job: Dict[str, Any], now: Optional[datetime] = None) -> Optional[st
             return current.replace(hour=hh,minute=mm,second=0,microsecond=0).isoformat()
     hh,mm=map(int,job_times(job)[0].split(":"))
     return (current.replace(hour=hh,minute=mm,second=0,microsecond=0)+timedelta(days=1)).isoformat()
+
+
+def _draft_retry_at(job):
+    cycle = job.get("cycle") or {}
+    if (publication_mode(job) not in {"draft_only", "platform_scheduled"}
+            or cycle.get("status") != "waiting"
+            or not (cycle.get("recovery") or {}).get("automatic_retry")):
+        return None
+    try:
+        value = datetime.fromisoformat(cycle["next_retry_at"])
+        return value if value.tzinfo else None
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 def retryable(job: Dict[str, Any], slot: str) -> bool:
@@ -478,7 +494,7 @@ def due_jobs(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
         # A failed publication may have reached the server. Retry is an explicit
         # run-once action, not a daemon loop which blindly repeats side effects.
         slot=today+"@"+datetime.fromisoformat(due).strftime("%H:%M")
-        recovering = retryable(job, slot)
+        recovering = retryable(job, slot) or _draft_retry_at(job) is not None
         cycle_status = (job.get("cycle") or {}).get("status")
         if cycle_status not in {"success", "continuing", None} and job.get("last_status") != "awaiting_approval" and not recovering:
             continue

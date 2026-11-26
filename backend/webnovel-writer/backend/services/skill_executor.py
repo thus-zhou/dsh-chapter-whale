@@ -334,6 +334,9 @@ class SkillExecutor:
                     "不要代码块、不要解释、不要额外文本。"
                 )
             except Exception as e:
+                from integration.failure_info import details
+                if details(e).get('failure_kind') != 'unknown':
+                    raise
                 correction = f"上次请求失败（{e}）。请只输出一个合法 JSON 对象。"
         return None
 
@@ -6231,9 +6234,6 @@ class SkillExecutor:
         for path in [settings, *(settings.rglob('*') if settings.exists() else [])]:
             if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()) or not path.resolve().is_relative_to(self.project_root.resolve()):
                 raise ValueError('实体库不能包含项目外路径或链接')
-        for collection in (new_chars, new_treasures, new_techniques, new_organizations, new_locations):
-            for item in collection:
-                self._normalize_entity_name(item.get('name', ''))
         current_roster = ""
         if character_file.exists():
             with self._locked_file(character_file):
@@ -6332,6 +6332,9 @@ class SkillExecutor:
             new_techniques = data.get("new_techniques", [])
             new_organizations = data.get("new_organizations", [])
             new_locations = data.get("new_locations", [])
+            for collection in (new_chars, new_treasures, new_techniques, new_organizations, new_locations):
+                for item in collection:
+                    self._normalize_entity_name(item.get('name', ''))
             status_changes = data.get("status_changes", [])
             exits = data.get("exits", [])
             status_file_updates = data.get("status_file_updates", {})  # 新增：状态文件更新指令
@@ -6399,6 +6402,9 @@ class SkillExecutor:
 
         except Exception as e:
             print(f"[角色系统] 提取章节实体失败: {e}")
+            from integration.failure_info import details
+            if details(e).get('failure_kind') != 'unknown':
+                raise
             return None
 
     async def _apply_extraction_results(self, chapter: int, content: str, extraction: Dict[str, Any]) -> Dict[str, Any]:
@@ -6417,6 +6423,16 @@ class SkillExecutor:
         new_techniques = extraction.get("new_techniques", [])
         new_organizations = extraction.get("new_organizations", [])
         new_locations = extraction.get("new_locations", [])
+        # This entry is also used for confirmed candidates, independently of extraction.
+        settings = self.project_root / '设定集'
+        for path in [settings, *(settings.rglob('*') if settings.exists() else [])]:
+            if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()) or not path.resolve().is_relative_to(self.project_root.resolve()):
+                raise ValueError('实体库不能包含项目外路径或链接')
+        for collection in (new_chars, new_treasures, new_techniques, new_organizations, new_locations):
+            if not isinstance(collection, list) or any(not isinstance(item, dict) for item in collection):
+                raise ValueError('实体提取集合无效')
+            for item in collection:
+                self._normalize_entity_name(item.get('name', ''))
         status_changes = extraction.get("status_changes", [])
         exits = extraction.get("exits", [])
         status_file_updates = extraction.get("status_file_updates", {})
@@ -7309,6 +7325,7 @@ class SkillExecutor:
 
         rag_indexed = False
         continuity_written = False
+        failures = {}
 
         rag = None
         try:
@@ -7330,6 +7347,8 @@ class SkillExecutor:
             stored = await rag.store_chunks(chunks, replace_chapter=chapter)
             rag_indexed = bool(chunks) and stored == len(chunks)
         except Exception as e:
+            from integration.writer_runner import _safe_error
+            failures['rag_failure'] = _safe_error(e)
             print(f"[POST-SAVE RAG] Failed: {e}")
         finally:
             try:
@@ -7349,9 +7368,11 @@ class SkillExecutor:
                 continuity_file.write_text(continuity_summary, encoding="utf-8")
                 continuity_written = True
         except Exception as e:
+            from integration.writer_runner import _safe_error
+            failures['continuity_failure'] = _safe_error(e)
             print(f"[POST-SAVE CONTINUITY] Failed: {e}")
 
-        return {"rag_indexed": rag_indexed, "continuity_written": continuity_written}
+        return {"rag_indexed": rag_indexed, "continuity_written": continuity_written, **failures}
 
     @costs.attributed("continuity",project="self",chapter="chapter")
     async def _generate_continuity_summary(self, chapter: int, content: str) -> str:
