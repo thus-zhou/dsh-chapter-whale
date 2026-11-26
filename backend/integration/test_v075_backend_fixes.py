@@ -84,9 +84,9 @@ class HandoffIsolationTests(unittest.TestCase):
         self.assertEqual(result["character_state"]["added"], 0)
         self.assertEqual(memory_library.read(self.project)["items"], [])
         self.assertEqual(character_state.read(self.project)["persons"], {})
-        digest = writer_runner.body_digest(BODY)
-        self.assertEqual(memory_library.candidate_path(self.project.resolve(), 1, digest).exists(), True)
-        memory_doc = json.loads(memory_library.candidate_path(self.project.resolve(), 1, digest).read_text("utf-8"))
+        candidate_files = list(memory_library._path(self.project.resolve(), "fact_candidates").glob("*.json"))
+        self.assertEqual(len(candidate_files), 1)
+        memory_doc = json.loads(candidate_files[0].read_text("utf-8"))
         self.assertEqual(memory_doc["state"], "pending")
 
         executor = Mock()
