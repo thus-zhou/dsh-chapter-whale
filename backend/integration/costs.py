@@ -109,6 +109,11 @@ def connection(db_path):
               state TEXT NOT NULL, tokens INTEGER NOT NULL DEFAULT 0, cost_cny TEXT,
               unknown_cost INTEGER NOT NULL DEFAULT 0, operation TEXT);
             CREATE INDEX IF NOT EXISTS budget_project_day ON request_budget(project,day);
+            CREATE TABLE IF NOT EXISTS directive_budget_links(
+              request_id TEXT PRIMARY KEY, directive_id TEXT NOT NULL, op_id TEXT,
+              agent_role TEXT, created_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS directive_links_directive
+              ON directive_budget_links(directive_id);
                 """)
                 _INITIALIZED_DBS.add(key)
     except BaseException:
@@ -183,18 +188,21 @@ def budget_limits(config=None):
 
 
 def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None,
-                    operation=None, config=None, limits=None):
+                    operation=None, config=None, limits=None,
+                    directive_id=None, guard=None, agent_role=None):
     """发请求前预留一次网络尝试。超限抛 BudgetExceeded，且不写入任何占位。
 
-    未配置任何上限时返回 None（不改动既有行为）。金额未知时记
+    未配置任何上限且没有指令级护栏时返回 None（不改动既有行为）。金额未知时记
     ``unknown_cost=1`` 并按 ``unknown_reserve_cny`` 保守占用，不当作 0。
+    2B 起只要带 ``directive_id + guard``，即使全局未设上限也强制原子预留。
     """
     policy = limits if limits is not None else budget_limits(config)
     if not db_path:
         return None
     capped = any(policy[key] is not None for key in ('requests_per_day', 'request_tokens', 'chapter_tokens',
                                                      'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))
-    if not capped:
+    guard = dict(guard or {}) if directive_id else {}
+    if not capped and not guard:
         return None
     tokens = int(tokens or 0)
     amount = None if cost_cny is None else Decimal(str(cost_cny))
@@ -226,11 +234,40 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
             if Decimal(used) + Decimal(delta) > Decimal(limit):
                 raise BudgetExceeded(message, {'limit': key, 'limit_value': str(limit),
                                                'used': str(used), 'requested': str(delta)})
+        usage = None
+        if guard:
+            usage = _directive_usage_db(db, directive_id)
+            max_calls = guard.get('max_calls')
+            if max_calls is not None and usage['calls'] + 1 > int(max_calls):
+                raise BudgetExceeded('该指令的模型调用次数已到上限',
+                                     {'limit': 'max_calls', 'limit_value': str(max_calls),
+                                      'used': str(usage['calls'])})
+            max_chapters = guard.get('max_chapters')
+            if max_chapters is not None and int(chapter or 0) not in usage['chapters'] \
+                    and len(usage['chapters']) + 1 > int(max_chapters):
+                raise BudgetExceeded('该指令的自动连续生章数已到上限',
+                                     {'limit': 'max_chapters', 'limit_value': str(max_chapters),
+                                      'used': str(len(usage['chapters']))})
+            max_tokens = guard.get('max_tokens')
+            if max_tokens is not None and usage['tokens'] + tokens > int(max_tokens):
+                raise BudgetExceeded('该指令 Token 已到上限',
+                                     {'limit': 'max_tokens', 'limit_value': str(max_tokens),
+                                      'used': str(usage['tokens'])})
+            cap = guard.get('budget_cap_cny')
+            if cap is not None and usage['cost_cny'] + reserve_amount > Decimal(str(cap)):
+                raise BudgetExceeded('该指令费用已到上限',
+                                     {'limit': 'budget_cap_cny', 'limit_value': str(cap),
+                                      'used': str(usage['cost_cny'])})
         identity = uuid.uuid4().hex
         db.execute('INSERT INTO request_budget VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                    (identity, datetime.now(timezone.utc).isoformat(), project, int(chapter or 0), str(stage or 'other'),
                     day, 'reserved', tokens, str(reserve_amount), 1 if amount is None else 0,
                     str(operation or '')))
+        if directive_id:
+            db.execute('INSERT INTO directive_budget_links(request_id, directive_id, op_id, agent_role, created_at) '
+                       'VALUES(?,?,?,?,?)',
+                       (identity, str(directive_id), str(operation or ''),
+                        str(agent_role or ''), datetime.now(timezone.utc).isoformat()))
         db.commit()
         return identity
     except BudgetExceeded:
@@ -248,6 +285,86 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
             db.close()
 
 
+def _directive_usage_db(db, directive_id: str) -> Dict[str, Any]:
+    rows = db.execute(
+        "SELECT b.state, b.chapter, b.tokens, b.cost_cny, b.unknown_cost "
+        "FROM request_budget b JOIN directive_budget_links l ON l.request_id=b.id "
+        "WHERE l.directive_id=?", (str(directive_id),)).fetchall()
+    states = {'reserved': 0, 'dispatched': 0, 'settled': 0, 'unknown_charge': 0, 'released': 0}
+    chapters = set()
+    cost = Decimal(0)
+    tokens = 0
+    for row in rows:
+        state = str(row['state'])
+        states[state] = states.get(state, 0) + 1
+        if state == 'released':
+            continue
+        chapters.add(int(row['chapter'] or 0))
+        tokens += int(row['tokens'] or 0)
+        if row['cost_cny'] is not None:
+            try:
+                cost += Decimal(str(row['cost_cny']))
+            except InvalidOperation:
+                pass
+    return {'calls': sum(1 for row in rows if row['state'] != 'released'),
+            'chapters': chapters, 'tokens': tokens, 'cost_cny': cost, 'states': states}
+
+
+def directive_usage(db_path, directive_id: str) -> Dict[str, Any]:
+    db = connection(db_path)
+    try:
+        usage = _directive_usage_db(db, directive_id)
+    finally:
+        db.close()
+    usage['cost_cny'] = str(usage['cost_cny'])
+    usage['chapters'] = sorted(usage['chapters'])
+    return usage
+
+
+def bind_directive(db_path, request_id: str, directive_id: str, *, op_id: str = "",
+                   agent_role: str = "") -> None:
+    db = connection(db_path)
+    try:
+        db.execute('INSERT OR REPLACE INTO directive_budget_links(request_id, directive_id, op_id, agent_role, created_at) '
+                   'VALUES(?,?,?,?,?)',
+                   (request_id, directive_id, op_id, agent_role, datetime.now(timezone.utc).isoformat()))
+        db.commit()
+    finally:
+        db.close()
+
+
+def mark_dispatched(db_path, identity: str) -> bool:
+    """reserved → dispatched, exactly once."""
+    if not db_path or not identity:
+        return False
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        cur = db.execute("UPDATE request_budget SET state='dispatched' WHERE id=? AND state='reserved'",
+                         (identity,))
+        db.commit()
+        return bool(cur.rowcount)
+    finally:
+        db.close()
+
+
+def release_request(db_path, identity: str) -> bool:
+    """reserved → released, zeroing tokens/cost for v0.7.5 rollback compatibility."""
+    if not db_path or not identity:
+        return False
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        cur = db.execute("UPDATE request_budget SET state='released', tokens=0, cost_cny='0', "
+                         "unknown_cost=0 WHERE id=? AND state IN ('reserved','dispatched')",
+                         (identity,))
+        db.commit()
+        return bool(cur.rowcount)
+    finally:
+        db.close()
+
+
+
 def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled'):
     """请求结束后结算这次预留；未知金额保持未知并带 unknown_cost 标记。"""
     if not db_path or not identity:
@@ -261,6 +378,12 @@ def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='sett
             record_gap(db_path, 'budget_settlement_missing')
             return None
         amount = row['cost_cny']
+        if state == 'released':
+            # 已安全释放的预留不得被 v0.7.5 旧版 costs.py 误计为已花费。
+            db.execute("UPDATE request_budget SET state='released', tokens=0, cost_cny='0', "
+                       "unknown_cost=0 WHERE id=?", (identity,))
+            db.commit()
+            return identity
         if cost_cny is not None:
             amount = str(Decimal(str(cost_cny)))
         elif row['unknown_cost']:
@@ -297,14 +420,20 @@ def budget_status(db_path, project=None, config=None, limits=None):
     finally:
         db.close()
     today = [row for row in rows if row['day'] == day]
+    active = [row for row in rows if row['state'] != 'released']
+    today_active = [row for row in active if row['day'] == day]
     result.update({
-        'requests_today': len(today),
-        'tokens_today': sum(int(row['tokens']) for row in today),
-        'cost_today_cny': str(sum((Decimal(row['cost_cny']) for row in today if row['cost_cny'] is not None), Decimal(0))),
-        'tokens_project': sum(int(row['tokens']) for row in rows),
-        'cost_project_cny': str(sum((Decimal(row['cost_cny']) for row in rows if row['cost_cny'] is not None), Decimal(0))),
-        'unknown_cost_requests': sum(1 for row in rows if row['unknown_cost']),
+        'requests_today': len(today_active),
+        'tokens_today': sum(int(row['tokens']) for row in today_active),
+        'cost_today_cny': str(sum((Decimal(row['cost_cny']) for row in today_active if row['cost_cny'] is not None), Decimal(0))),
+        'tokens_project': sum(int(row['tokens']) for row in active),
+        'cost_project_cny': str(sum((Decimal(row['cost_cny']) for row in active if row['cost_cny'] is not None), Decimal(0))),
+        'unknown_cost_requests': sum(1 for row in active if row['unknown_cost']),
+        'unknown_charge_requests': sum(1 for row in active if row['state'] == 'unknown_charge'),
         'pending': sum(1 for row in rows if row['state'] == 'reserved'),
+        'dispatched': sum(1 for row in rows if row['state'] == 'dispatched'),
+        'released': sum(1 for row in rows if row['state'] == 'released'),
+        'settled': sum(1 for row in rows if row['state'] == 'settled'),
     })
     return result
 

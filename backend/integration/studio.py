@@ -233,6 +233,16 @@ def plan(project,count=5):return asyncio.run(plan_async(project,count))
 
 def recover_plan(project,persist=True):
     project=Path(project);path=project/".webnovel"/"story_plan.json"
+    # 新版 meta 存在时，以全部 AI规划 + 墓碑重建，旧“只补缺失章”逻辑不再适用。
+    try:
+        from . import outline_editor as _outline
+        if _outline._meta_path(project).exists():
+            rebuilt = _outline.recover_plan(project, persist=persist)
+            return {key: rebuilt.get(key) for key in
+                    ("master_outline", "volumes", "character_arcs", "foreshadowing",
+                     "chapters", "conflicts", "meta_revision")}
+    except (ValueError, OSError, RuntimeError):
+        pass
     doc=writer.strict_json(path,{})
     if not isinstance(doc,dict):
         raise ValueError("规划索引损坏")

@@ -214,6 +214,68 @@ export function originProblem(headers, authority) {
 const WRITE_ROUTES = [
   'POST /api/projects',
   'POST /api/projects/create',
+  'POST /api/projects/:identity/chapters',
+  'DELETE /api/projects/:identity/chapters/:chapter',
+  'PUT /api/projects/:identity/chapters/:chapter',
+  'PUT /api/projects/:identity/chapters/:chapter/draft',
+  'DELETE /api/projects/:identity/chapters/:chapter/draft',
+  'POST /api/projects/:identity/chapters/:chapter/quick-check',
+  'POST /api/projects/:identity/chapters/:chapter/split',
+  'POST /api/projects/:identity/chapters/merge-tail',
+  'POST /api/projects/:identity/import-chapters',
+  'POST /api/projects/:identity/trash/:entry/restore',
+  'POST /api/projects/:identity/chapters/:chapter/author-confirm',
+  'DELETE /api/projects/:identity/chapters/:chapter/author-confirm',
+  'POST /api/projects/:identity/chapters/:chapter/sync-memory',
+  'PUT /api/projects/:identity/outline/files/:filename',
+  'POST /api/projects/:identity/outline/files',
+  'PUT /api/projects/:identity/outline/meta',
+  'PUT /api/projects/:identity/lore/files/:filename',
+  'POST /api/projects/:identity/backup',
+  'POST /api/projects/:identity/rollback/export-legacy',
+  'POST /api/projects/:identity/chapters/:chapter/annotations',
+  'PATCH /api/projects/:identity/chapters/:chapter/annotations/:annotation',
+  'DELETE /api/projects/:identity/chapters/:chapter/annotations/:annotation',
+  'POST /api/projects/:identity/chapters/:chapter/annotations/run',
+  'POST /api/projects/:identity/chapters/:chapter/annotations/:annotation/followup',
+  'POST /api/projects/:identity/chapters/:chapter/revision/apply-hunks',
+  'POST /api/projects/:identity/chapters/:chapter/revision/undo-apply',
+  'POST /api/chief/messages',
+  'POST /api/projects/:identity/chief/messages',
+  'POST /api/projects/:identity/chief/topics',
+  'POST /api/projects/:identity/chief/directives',
+  'POST /api/projects/:identity/chief/route',
+  'POST /api/projects/:identity/chief/commands',
+  'POST /api/projects/:identity/approvals/:approval/resolve',
+  'POST /api/projects/:identity/directives/:directive/amend',
+  'POST /api/projects/:identity/directives/:directive/cancel',
+  'POST /api/projects/:identity/tasks/:task/retry',
+  'POST /api/projects/:identity/automation/pause',
+  'POST /api/system/ai/pause',
+  'POST /api/projects/:identity/world-state/facts',
+  'POST /api/projects/:identity/book-directives/scan',
+  'POST /api/projects/:identity/book-directives/:directive/execute',
+  'POST /api/projects/:identity/directives/:directive/resume',
+  'POST /api/projects/:identity/world/facts',
+  'POST /api/projects/:identity/world/facts/:fact/ignore',
+  'POST /api/projects/:identity/world/cards',
+  'POST /api/projects/:identity/world/extract',
+  'POST /api/projects/:identity/world/causal-scan',
+  'POST /api/projects/:identity/world/exemptions',
+  'POST /api/projects/:identity/tasks',
+  'POST /api/projects/:identity/tasks/claim',
+  'POST /api/projects/:identity/tasks/pause',
+  'POST /api/projects/:identity/tasks/resume',
+  'POST /api/projects/:identity/tasks/recover',
+  'POST /api/projects/:identity/tasks/:task/renew',
+  'POST /api/projects/:identity/tasks/:task/commit',
+  'POST /api/projects/:identity/tasks/:task/complete',
+  'POST /api/projects/:identity/tasks/:task/fail',
+  'POST /api/projects/:identity/quality/:chapter/review',
+  'POST /api/projects/:identity/diagnostics/gc',
+  'POST /api/projects/:identity/diagnostics/export',
+  'POST /api/projects/:identity/diagnostics/heal',
+  'POST /api/system/diagnostics/recover',
   'POST /api/projects/:identity/creative/chat',
   'POST /api/projects/:identity/creative/expand',
   'PUT /api/projects/:identity/creative',
@@ -804,9 +866,12 @@ function sendJson(response, status, value, extraHeaders) {
 
 async function forward(request, response, config, context, targetPath, search) {
   const method = (request.method || 'GET').toUpperCase();
-  const headers = { accept: 'application/json, text/plain, */*' };
+  const headers = { accept: request.headers.accept || 'application/json, text/plain, */*' };
   const contentType = request.headers['content-type'];
   if (contentType) headers['content-type'] = contentType;
+  // SSE reconnects carry Last-Event-ID; the manager replays events after it.
+  const lastEventId = request.headers['last-event-id'];
+  if (typeof lastEventId === 'string' && lastEventId) headers['last-event-id'] = lastEventId;
   // The manager refuses writes without its own marker. The marker is not a
   // credential: gate 4 already decided this exact method+path may mutate, and
   // gate 3 authenticated the caller. Only mutations carry it upstream.
@@ -835,6 +900,46 @@ async function forward(request, response, config, context, targetPath, search) {
       signal: controller.signal,
       redirect: 'manual',
     });
+    const upstreamType = String(upstream.headers.get('content-type') || '').toLowerCase();
+    // Event streams must never be buffered: a 40-second chapter preview would
+    // otherwise arrive as one blob after the upstream timeout.
+    if (upstream.status === 200 && upstreamType.includes('text/event-stream') && upstream.body) {
+      clearTimeout(timer);
+      response.writeHead(upstream.status, {
+        'content-type': upstream.headers.get('content-type') || 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'cross-origin-resource-policy': 'same-origin',
+        'x-accel-buffering': 'no',
+        connection: 'keep-alive',
+        vary: 'origin',
+      });
+      if (typeof response.flushHeaders === 'function') response.flushHeaders();
+      const reader = upstream.body.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value || !value.byteLength) continue;
+          const chunk = Buffer.from(value);
+          if (!response.write(chunk)) {
+            await new Promise((resolveDrain) => {
+              const doneDrain = () => { response.off?.('drain', doneDrain); resolveDrain(); };
+              response.once?.('drain', doneDrain) || resolveDrain();
+              setTimeout(resolveDrain, 1000);
+            });
+          }
+        }
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          try { response.write(`event: error\ndata: ${JSON.stringify({ detail: String(error?.message || error) })}\n\n`); } catch {}
+        }
+      } finally {
+        try { await reader.cancel(); } catch {}
+        response.end();
+      }
+      return;
+    }
     const buffer = Buffer.from(await upstream.arrayBuffer());
     response.writeHead(upstream.status, {
       'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
@@ -995,7 +1100,7 @@ export function createHandler(config, token) {
       try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
       catch { /* Manual providers remain accessible when the host catalog is unavailable. */ }
     } else if (method === 'POST' && config.hostModels && !config.hostModels.syncedProvider
-        && (/^\/api\/ai\/(test|roles\/)/.test(suffix) || /^\/api\/projects\/[^/]+\/(plan|generate|chapters\/\d+\/(polish|review|revision))/.test(suffix) || /^\/api\/jobs\/[^/]+\/run$/.test(suffix))) {
+        && (/^\/api\/ai\/(test|roles\/)/.test(suffix) || /^\/api\/projects\/[^/]+\/(plan|generate|chapters\/\d+\/(polish|review|revision|annotations\/run|annotations\/[^/]+\/followup|sync-memory)|chief\/messages|book-directives\/.*|tasks\/[^/]+\/retry|directives\/[^/]+\/amend|world-state\/facts)/.test(suffix) || /^\/api\/chief\/messages$/.test(suffix) || /^\/api\/jobs\/[^/]+\/run$/.test(suffix))) {
       try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
       catch { /* Keep explicit provider errors visible if host catalog is absent. */ }
     }

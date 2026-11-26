@@ -11,12 +11,15 @@
   <link rel="stylesheet" href="/static/providers.css">
   <link rel="stylesheet" href="/static/free-models.css">
   <link rel="stylesheet" href="/static/studio.css">
+  <link rel="stylesheet" href="/static/workbench.css">
   <link rel="stylesheet" href="/static/liquid-glass.css">
   <script src="/static/app.js" defer></script>
   <script src="/static/memory.js" defer></script>
   <script src="/static/costs.js" defer></script>
   <script src="/static/providers.js" defer></script>
   <script src="/static/free-models.js" defer></script>
+  <script src="/static/workbench-core.js" defer></script>
+  <script src="/static/workbench.js" defer></script>
   <script src="/static/liquid-glass.js" defer></script>
 </head>
 <body>
@@ -29,6 +32,7 @@
       <a href="#dashboard" data-page="dashboard"><span data-icon="grid"></span>工作台<span class="nav-index">01</span></a>
       <a href="#projects" data-page="projects"><span data-icon="book"></span>作品管理<span class="nav-index">02</span></a>
       <a href="#creative" data-page="creative"><span data-icon="spark"></span>创作工作台</a>
+      <a href="#workbench" data-page="workbench"><span data-icon="file"></span>直写工作台<span class="nav-index">05</span></a>
       <a href="#accounts" data-page="accounts"><span data-icon="users"></span>发布账号<span class="nav-index">03</span></a>
       <a href="#jobs" data-page="jobs"><span data-icon="calendar"></span>日更任务<span class="nav-index">04</span></a>
       <a href="#queue" data-page="queue"><span data-icon="send"></span>发布队列<span class="nav-badge" id="nav-queue">—</span></a>
@@ -95,6 +99,209 @@
         </div>
         </div>
       </section>
+      <section class="page wb-page" id="page-workbench" aria-labelledby="workbench-title" hidden>
+        <div class="wb-page-head">
+          <div class="wb-page-title">
+            <div class="eyebrow">THE WRITING ROOM · LOCAL FIRST</div>
+            <h1 id="workbench-title">创作室 · 直写工作台</h1>
+            <p>左侧选章，中间直写。草稿每 1.5 秒自动保存，正式版本由你按下 Ctrl+S。</p>
+          </div>
+          <div class="wb-head-actions">
+            <label class="wb-project-field">作品
+              <select id="wb-project" aria-label="选择作品"><option value="">正在读取作品…</option></select>
+            </label>
+            <div class="wb-view-switch" role="tablist" aria-label="工作台视图">
+              <button type="button" role="tab" id="wb-view-write" aria-selected="true" aria-controls="wb-write-view">直写</button>
+              <button type="button" role="tab" id="wb-view-outline" aria-selected="false" aria-controls="wb-outline-view">大纲与设定</button>
+            </div>
+            <div class="wb-more-wrap">
+              <button type="button" class="button button-secondary button-small" id="wb-more-toggle" aria-expanded="false" aria-controls="wb-more-menu">更多</button>
+              <div class="wb-more-menu" id="wb-more-menu" role="menu" aria-label="更多工具" hidden>
+                <button type="button" role="menuitem" data-wb-tool="new-chapter">新建空白章节</button>
+                <button type="button" role="menuitem" data-wb-tool="import">导入 TXT / MD</button>
+                <button type="button" role="menuitem" data-wb-tool="split">拆分尾章</button>
+                <button type="button" role="menuitem" data-wb-tool="merge">合并最后两章</button>
+                <button type="button" role="menuitem" data-wb-tool="trash">回收站</button>
+                <button type="button" role="menuitem" class="is-danger" data-wb-tool="delete">删除尾章</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wb-banner" id="wb-banner" role="status" aria-live="polite" hidden></div>
+        <div class="wb-conflict" id="wb-conflict" role="alert" hidden>
+          <div class="wb-conflict-head"><strong id="wb-conflict-title">发现冲突</strong><button type="button" class="wb-icon-btn" id="wb-conflict-close" aria-label="收起冲突提示">×</button></div>
+          <p id="wb-conflict-message"></p>
+          <div class="wb-compare" id="wb-compare">
+            <div><span>对方当前内容</span><pre id="wb-conflict-remote"></pre></div>
+            <div><span>你的本地写法</span><pre id="wb-conflict-local"></pre></div>
+          </div>
+          <div class="wb-conflict-actions">
+            <button type="button" class="button button-secondary button-small" id="wb-conflict-reload">载入对方版本</button>
+            <button type="button" class="button button-secondary button-small" id="wb-conflict-merge">三方合并</button>
+            <button type="button" class="button button-danger button-small" id="wb-conflict-force" hidden>用我的版本覆盖</button>
+            <button type="button" class="button button-ghost button-small" id="wb-conflict-later">稍后处理</button>
+          </div>
+        </div>
+        <div class="wb-write" id="wb-write-view">
+          <div class="wb-mobile-bar">
+            <button type="button" id="wb-mobile-left">目录</button>
+            <span id="wb-mobile-title">未选择章节</span>
+            <button type="button" id="wb-mobile-right">批注</button>
+          </div>
+          <div class="wb-shell" id="wb-shell">
+            <aside class="wb-left" id="wb-left" aria-label="章节目录">
+              <div class="wb-pane-head"><strong>章节</strong><button type="button" class="wb-icon-btn" id="wb-left-close" aria-label="收起章节目录">×</button></div>
+              <div class="wb-filters" id="wb-filters">
+                <button type="button" data-wb-filter="all" aria-pressed="true">全部</button>
+                <button type="button" data-wb-filter="draft" aria-pressed="false">未定稿</button>
+                <button type="button" data-wb-filter="published" aria-pressed="false">已发布</button>
+                <button type="button" data-wb-filter="annotations" aria-pressed="false">待采纳</button>
+              </div>
+              <div class="wb-chapter-list" id="wb-chapter-list" role="list"></div>
+              <div class="wb-pane-foot"><span id="wb-chapter-count">0 章</span><button type="button" id="wb-left-new">＋ 新章</button></div>
+            </aside>
+            <section class="wb-center" aria-label="正文编辑">
+              <div class="wb-editor-top">
+                <input id="wb-title" class="wb-title" type="text" maxlength="120" placeholder="章节标题" aria-label="章节标题" autocomplete="off">
+                <div class="wb-editor-buttons">
+                  <span class="wb-save-pill" id="wb-save-state">尚未选择</span>
+                  <button type="button" class="button button-secondary button-small" id="wb-quick-check">快速体检</button>
+                  <button type="button" class="button button-primary button-small" id="wb-save">保存版本</button>
+                </div>
+              </div>
+              <div class="wb-anchors" id="wb-anchor-strip" hidden></div>
+              <textarea id="wb-editor" class="wb-editor" spellcheck="false" placeholder="从左侧选择一章，或从“更多”新建空白章节。" aria-label="章节正文"></textarea>
+              <div class="wb-editor-empty" id="wb-editor-empty"><strong>还没有打开章节</strong><span>左侧目录选择章节；也可以从“更多”新建一章。</span></div>
+              <div class="wb-status" id="wb-status">
+                <span id="wb-words">0 字</span>
+                <span id="wb-save-detail">未选择章节</span>
+                <span id="wb-version-state">线上版本 —</span>
+                <span id="wb-draft-state">草稿 —</span>
+              </div>
+            </section>
+            <aside class="wb-right" id="wb-right" aria-label="本章工具">
+              <div class="wb-pane-head wb-right-head">
+                <div class="wb-tabs" id="wb-tabs" role="tablist" aria-label="本章工具">
+                  <button type="button" role="tab" data-wb-tab="annotations" aria-selected="true" aria-controls="wb-panel-annotations">批注</button>
+                  <button type="button" role="tab" data-wb-tab="check" aria-selected="false" aria-controls="wb-panel-check">快速体检</button>
+                  <button type="button" role="tab" data-wb-tab="versions" aria-selected="false" aria-controls="wb-panel-versions">版本</button>
+                  <button type="button" role="tab" data-wb-tab="reference" aria-selected="false" aria-controls="wb-panel-reference">本章参考</button>
+                  <button type="button" role="tab" data-wb-tab="insights" aria-selected="false" aria-controls="wb-panel-insights">世界状态</button>
+                </div>
+                <button type="button" class="wb-icon-btn" id="wb-right-close" aria-label="收起本章工具">×</button>
+              </div>
+              <div class="wb-panel" id="wb-panel-annotations" role="tabpanel">
+                <div class="wb-note-compose">
+                  <label for="wb-annotation-input">选区批注</label>
+                  <textarea id="wb-annotation-input" rows="3" maxlength="2000" placeholder="先在正文中选中一段，再写下你的修改意见"></textarea>
+                  <div class="wb-note-meta"><span id="wb-selection-label">尚未选择文字</span><span id="wb-annotation-status">本地暂存 0 条</span></div>
+                  <div class="wb-note-actions">
+                    <button type="button" class="button button-secondary button-small" id="wb-annotation-add">暂存本地批注</button>
+                    <button type="button" class="button button-primary button-small" id="wb-annotation-submit" disabled title="批注接口将在 Wave 3 启用">提交到批注接口</button>
+                  </div>
+                  <p class="wb-hint" id="wb-annotation-hint">批注接口将在 Wave 3 启用；当前批注只保存在本页内存，刷新后清空。</p>
+                </div>
+                <div class="wb-annotation-list" id="wb-annotation-list"></div>
+              </div>
+              <div class="wb-panel" id="wb-panel-check" role="tabpanel" hidden>
+                <div class="wb-check-summary" id="wb-check-summary">尚未体检。快速检体不调用模型。</div>
+                <div class="wb-check-list" id="wb-check-list"></div>
+              </div>
+              <div class="wb-panel" id="wb-panel-versions" role="tabpanel" hidden>
+                <div class="wb-panel-title"><strong>版本历史</strong><button type="button" class="button button-secondary button-small" id="wb-versions-refresh">刷新</button></div>
+                <div class="wb-version-summary" id="wb-version-summary">正在读取版本…</div>
+                <div class="wb-version-list" id="wb-version-list"></div>
+                <div class="wb-version-preview" id="wb-version-preview" hidden></div>
+              </div>
+              <div class="wb-panel" id="wb-panel-reference" role="tabpanel" hidden>
+                <div class="wb-ref-block"><span>本章细纲</span><pre id="wb-ref-outline">—</pre></div>
+                <div class="wb-ref-block"><span>上一章结尾（最后 300 字）</span><pre id="wb-ref-tail">—</pre></div>
+                <div class="wb-ref-block"><span>人物与伏笔卡</span><div id="wb-ref-lore" class="wb-ref-lore">—</div></div>
+                <p class="wb-hint" id="wb-ref-status"></p>
+              </div>
+              <div class="wb-panel" id="wb-panel-insights" role="tabpanel" hidden>
+                <div class="wb-card-head">
+                  <strong>世界状态 · 并发 · 质量</strong>
+                  <span>
+                    <button type="button" class="wb-link-btn" id="wb-insight-refresh">刷新</button>
+                    <button type="button" class="wb-link-btn" id="wb-insight-pause">暂停调度</button>
+                    <button type="button" class="wb-link-btn" id="wb-insight-resume">恢复</button>
+                  </span>
+                </div>
+                <p class="wb-hint" id="wb-insight-status">打开后读取当前章世界状态与队列。</p>
+                <div id="wb-insight-cards" class="wb-ref-lore"></div>
+                <div id="wb-insight-facts" class="wb-ref-lore"></div>
+                <div id="wb-insight-conflicts" class="wb-ref-lore"></div>
+                <div id="wb-insight-tasks" class="wb-ref-lore"></div>
+                <div id="wb-insight-quality" class="wb-ref-lore"></div>
+                <div id="wb-insight-diagnostics" class="wb-ref-lore"></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div class="wb-outline" id="wb-outline-view" hidden>
+          <div class="wb-outline-grid">
+            <article class="wb-card">
+              <div class="wb-card-head"><strong>大纲文件</strong><button type="button" class="wb-link-btn" id="wb-outline-refresh">刷新</button></div>
+              <div class="wb-file-list" id="wb-outline-files"></div>
+            </article>
+            <article class="wb-card wb-outline-editor">
+              <div class="wb-card-head"><strong id="wb-outline-name">选择一个大纲文件</strong><span id="wb-outline-state">—</span></div>
+              <textarea id="wb-outline-text" rows="16" spellcheck="false" placeholder="选择左侧大纲文件后编辑"></textarea>
+              <div class="wb-card-actions"><span class="wb-mono" id="wb-outline-revision"></span><button type="button" class="button button-primary button-small" id="wb-outline-save">保存大纲</button></div>
+              <details class="wb-meta">
+                <summary>全书规划字段</summary>
+                <label>总纲<textarea id="wb-meta-master" rows="3"></textarea></label>
+                <label>分卷<textarea id="wb-meta-volumes" rows="3"></textarea></label>
+                <label>人物弧线<textarea id="wb-meta-arcs" rows="3"></textarea></label>
+                <label>伏笔<textarea id="wb-meta-foreshadow" rows="3"></textarea></label>
+                <div class="wb-card-actions"><span class="wb-mono" id="wb-meta-revision">meta_revision —</span><span id="wb-meta-state">—</span><button type="button" class="button button-secondary button-small" id="wb-meta-save">保存规划字段</button></div>
+              </details>
+            </article>
+            <article class="wb-card">
+              <div class="wb-card-head"><strong>设定与资料</strong><button type="button" class="wb-link-btn" id="wb-lore-refresh">刷新</button></div>
+              <div class="wb-file-list" id="wb-lore-files"></div>
+              <div class="wb-lore-editor">
+                <span class="wb-mono" id="wb-lore-name">选择一个设定文件</span>
+                <textarea id="wb-lore-text" rows="9" spellcheck="false" placeholder="选择左侧设定文件后编辑"></textarea>
+                <div class="wb-card-actions"><span class="wb-mono" id="wb-lore-state">—</span><button type="button" class="button button-primary button-small" id="wb-lore-save">保存设定</button></div>
+              </div>
+            </article>
+          </div>
+          <article class="wb-card wb-search-card">
+            <div class="wb-card-head"><strong>全书检索</strong><span class="wb-hint">本地 FTS · 零模型费用</span></div>
+            <form id="wb-search-form" class="wb-search">
+              <input id="wb-search-input" type="search" placeholder="搜索人物、伏笔或句子" aria-label="搜索全书">
+              <button type="submit" class="button button-secondary button-small">搜索</button>
+            </form>
+            <div class="wb-search-status" id="wb-search-status">输入关键词，跨正文、大纲与设定检索。</div>
+            <div class="wb-search-results" id="wb-search-results"></div>
+          </article>
+        </div>
+        <div class="wb-bubble" id="wb-bubble" role="toolbar" aria-label="选区操作" hidden>
+          <div class="wb-bubble-row">
+            <button type="button" data-wb-sel="quick">快速体检</button>
+            <button type="button" data-wb-sel="copy">复制选区</button>
+            <button type="button" data-wb-sel="locate">定位</button>
+          </div>
+          <div class="wb-bubble-note">
+            <input id="wb-bubble-input" type="text" maxlength="500" placeholder="写一条批注（本地暂存）" aria-label="选区批注">
+            <button type="button" id="wb-bubble-add">添加</button>
+          </div>
+          <p class="wb-bubble-hint">批注接口将在 Wave 3 启用，当前仅本地暂存。</p>
+        </div>
+        <div class="wb-selbar" id="wb-selbar" role="toolbar" aria-label="选区操作" hidden>
+          <span id="wb-selbar-label">已选择 0 字</span>
+          <div class="wb-selbar-actions">
+            <button type="button" data-wb-sel="quick">快速体检</button>
+            <button type="button" data-wb-sel="copy">复制</button>
+            <button type="button" data-wb-sel="locate">定位</button>
+            <button type="button" data-wb-sel="annotate">批注</button>
+            <button type="button" data-wb-sel="dismiss">关闭</button>
+          </div>
+        </div>
+        <div class="wb-backdrop" id="wb-backdrop" hidden></div>
+      </section>
       <section class="page" id="page-jobs" aria-labelledby="jobs-title" hidden>
         <div class="page-heading"><div><div class="eyebrow">A CHAPTER A DAY</div><h1 id="jobs-title">日更任务</h1><p>安排更新时间，查看执行与恢复进度。</p></div><button class="button button-primary" data-action="new-job"><span data-icon="plus"></span>创建日更任务</button></div>
         <article class="scheduler-panel"><div class="scheduler-icon"><span data-icon="clock"></span></div><div><h2>自动调度</h2><p id="scheduler-description">正在读取调度设置…</p><span class="muted">创建任务后，还需要开启自动调度，才能按计划执行。</span></div><label class="switch-control"><input id="scheduler-enabled" type="checkbox" role="switch" disabled><span class="switch-track"></span><span id="scheduler-label">读取中</span></label></article>
@@ -131,6 +338,50 @@
   </div>
   <dialog id="action-dialog" class="dialog" aria-labelledby="dialog-title"><div class="dialog-header"><div><span id="dialog-eyebrow" class="eyebrow">WRITER’S STUDY</span><h2 id="dialog-title"></h2></div><button class="icon-button" data-action="close-dialog" aria-label="关闭对话框"><span data-icon="close"></span></button></div><div id="dialog-body"></div></dialog>
   <dialog id="operation-dialog" class="dialog operation-dialog" aria-labelledby="operation-title"><div class="dialog-header"><div><span class="eyebrow">OPERATION DETAILS</span><h2 id="operation-title">操作详情</h2></div><button class="icon-button" data-action="close-operation" aria-label="关闭操作详情"><span data-icon="close"></span></button></div><div id="operation-detail"></div></dialog>
+  <dialog id="wb-dialog" class="dialog wb-dialog" aria-labelledby="wb-dialog-title">
+    <div class="dialog-header"><div><span class="eyebrow">WORKBENCH TOOL</span><h2 id="wb-dialog-title">工作台工具</h2></div><button class="icon-button" type="button" id="wb-dialog-close" aria-label="关闭工具窗口"><span data-icon="close"></span></button></div>
+    <div class="wb-dialog-body" id="wb-dialog-body">
+      <div class="wb-dialog-error" id="wb-dialog-error" role="alert" hidden></div>
+      <form id="wb-tool-new" class="wb-tool" hidden>
+        <p class="wb-hint">在全书末尾新建空白章节。章号由后端自动顺延。</p>
+        <label>章节标题<input id="wb-new-title" type="text" maxlength="120" value="未命名章节" required></label>
+        <div class="wb-dialog-actions"><button type="button" class="button button-ghost" data-wb-dialog-close>取消</button><button type="submit" class="button button-primary">新建章节</button></div>
+      </form>
+      <form id="wb-tool-delete" class="wb-tool" hidden>
+        <p class="wb-hint" id="wb-delete-label">仅允许删除未发布、未入队的尾章或空章；删除会进入回收站，可恢复。</p>
+        <label class="wb-check"><input id="wb-delete-confirm" type="checkbox"> 我确认删除这一章（可从回收站恢复）</label>
+        <div class="wb-dialog-actions"><button type="button" class="button button-ghost" data-wb-dialog-close>取消</button><button type="submit" class="button button-danger">删除尾章</button></div>
+      </form>
+      <form id="wb-tool-split" class="wb-tool" hidden>
+        <p class="wb-hint" id="wb-split-label">仅支持拆分未发布的尾章。偏移量按字符计。</p>
+        <label>拆分偏移量<input id="wb-split-offset" type="number" min="1" step="1" required></label>
+        <label>前半章标题<input id="wb-split-title" type="text" maxlength="120"></label>
+        <div class="wb-dialog-actions"><button type="button" class="button button-ghost" data-wb-dialog-close>取消</button><button type="submit" class="button button-primary">拆分尾章</button></div>
+      </form>
+      <form id="wb-tool-merge" class="wb-tool" hidden>
+        <p class="wb-hint" id="wb-merge-label">把最后一章合并进前一章；仅支持未发布的尾章。</p>
+        <div class="wb-dialog-actions"><button type="button" class="button button-ghost" data-wb-dialog-close>取消</button><button type="submit" class="button button-primary">合并最后两章</button></div>
+      </form>
+      <div id="wb-tool-import" class="wb-tool" hidden>
+        <p class="wb-hint">选择 TXT 或 Markdown，先预览识别结果，再确认导入。导入会新建章节，不覆盖已有正文。</p>
+        <label>文件<input id="wb-import-file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
+        <label>起始章号（留空自动接在末尾）<input id="wb-import-start" type="number" min="1" step="1"></label>
+        <div class="wb-dialog-actions"><button type="button" class="button button-secondary" id="wb-import-preview">预览</button><button type="button" class="button button-primary" id="wb-import-commit" disabled>确认导入</button></div>
+        <div class="wb-import-status" id="wb-import-status">尚未读取文件。</div>
+        <div class="wb-import-list" id="wb-import-list"></div>
+      </div>
+      <div id="wb-tool-trash" class="wb-tool" hidden>
+        <p class="wb-hint">被删除的章节保存在作品回收站，可恢复原文与草稿。</p>
+        <div class="wb-dialog-actions"><button type="button" class="button button-secondary" id="wb-trash-refresh">刷新回收站</button></div>
+        <div class="wb-trash-list" id="wb-trash-list"></div>
+      </div>
+      <form id="wb-tool-restore" class="wb-tool" hidden>
+        <p class="wb-hint" id="wb-restore-label">恢复旧版本会先备份当前正文，并登记一个新版本。</p>
+        <label class="wb-check"><input id="wb-restore-title" type="checkbox" checked> 同时恢复旧版本标题</label>
+        <div class="wb-dialog-actions"><button type="button" class="button button-ghost" data-wb-dialog-close>取消</button><button type="submit" class="button button-primary">确认恢复</button></div>
+      </form>
+    </div>
+  </dialog>
   <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
   <nav class="mobile-dock" aria-label="快捷导航">
     <a href="#dashboard" data-page="dashboard"><span data-icon="grid"></span><span>工作台</span></a>

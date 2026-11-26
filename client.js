@@ -22,6 +22,1146 @@
 
         const React = require('react');
         const e = React.createElement;
+        // BEGIN GENERATED WORKBENCH CORE
+/* Workbench core — shared by the DSH plugin (client.js) and the local Web UI.
+ *
+ * Plain browser-compatible ES2018: no imports, no exports, no DOM access.
+ * All text offsets are Unicode code points on LF-normalised text unless the
+ * function name explicitly says utf16. The build script injects this exact
+ * source into client.js and copies it to backend/manager/static/.
+ */
+const WorkbenchCore = (() => {
+  'use strict';
+
+  const UNDO_LIMIT = 20;
+
+  function _string(value) {
+    return value === null || value === undefined ? '' : String(value);
+  }
+
+  function _integer(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.trunc(number);
+  }
+
+  function _clamp(value, minimum, maximum) {
+    return Math.max(minimum, Math.min(maximum, value));
+  }
+
+  function _cpLength(text) {
+    return Array.from(_string(text)).length;
+  }
+
+  function normalizeLf(text) {
+    return _string(text).replace(/\r\n?/g, '\n');
+  }
+
+  function toCodepoints(text) {
+    return Array.from(_string(text));
+  }
+
+  function utf16ToCodepoint(text, utf16Index) {
+    const source = _string(text);
+    let index = _integer(utf16Index, 0);
+    index = _clamp(index, 0, source.length);
+    let codepoints = 0;
+    for (let i = 0; i < index; i += 1) {
+      const code = source.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff && i + 1 < index) {
+        const low = source.charCodeAt(i + 1);
+        if (low >= 0xdc00 && low <= 0xdfff) i += 1;
+      }
+      codepoints += 1;
+    }
+    return codepoints;
+  }
+
+  function codepointToUtf16(text, cpIndex) {
+    const source = _string(text);
+    const total = _cpLength(source);
+    const target = _clamp(_integer(cpIndex, 0), 0, total);
+    let codepoints = 0;
+    let index = 0;
+    while (index < source.length && codepoints < target) {
+      const code = source.charCodeAt(index);
+      if (code >= 0xd800 && code <= 0xdbff && index + 1 < source.length) {
+        const low = source.charCodeAt(index + 1);
+        index += low >= 0xdc00 && low <= 0xdfff ? 2 : 1;
+      } else {
+        index += 1;
+      }
+      codepoints += 1;
+    }
+    return index;
+  }
+
+  function sliceCodepoints(text, start, end) {
+    const source = _string(text);
+    const total = _cpLength(source);
+    const from = _clamp(_integer(start, 0), 0, total);
+    const to = _clamp(_integer(end, from), 0, total);
+    return source.slice(codepointToUtf16(source, from), codepointToUtf16(source, to));
+  }
+
+  function clampRange(text, start, end) {
+    const total = _cpLength(_string(text));
+    let from = _clamp(_integer(start, 0), 0, total);
+    let to = _clamp(_integer(end, from), 0, total);
+    if (to < from) {
+      const swap = from;
+      from = to;
+      to = swap;
+    }
+    return { start: from, end: to };
+  }
+
+  class UndoStack {
+    constructor(capacity) {
+      const requested = _integer(capacity, UNDO_LIMIT);
+      this.capacity = requested > 0 ? requested : UNDO_LIMIT;
+      this._undo = [];
+      this._redo = [];
+    }
+
+    get canUndo() {
+      return this._undo.length > 0;
+    }
+
+    get canRedo() {
+      return this._redo.length > 0;
+    }
+
+    get size() {
+      return this._undo.length;
+    }
+
+    push(entry) {
+      if (!entry || typeof entry !== 'object') return null;
+      const item = {
+        label: entry.label === null || entry.label === undefined ? '' : String(entry.label),
+        before: entry.before,
+        after: entry.after,
+        meta: entry.meta,
+      };
+      this._undo.push(item);
+      if (this._undo.length > this.capacity) this._undo.splice(0, this._undo.length - this.capacity);
+      this._redo.length = 0;
+      return item;
+    }
+
+    undo() {
+      if (!this._undo.length) return null;
+      const item = this._undo.pop();
+      this._redo.push(item);
+      return item;
+    }
+
+    redo() {
+      if (!this._redo.length) return null;
+      const item = this._redo.pop();
+      this._undo.push(item);
+      return item;
+    }
+
+    get peek() {
+      return this._undo.length ? this._undo[this._undo.length - 1] : null;
+    }
+
+    clear() {
+      this._undo.length = 0;
+      this._redo.length = 0;
+    }
+  }
+
+  class DraftQueue {
+    constructor() {
+      this._queue = [];
+      this._active = null;
+      this._editSeq = 0;
+      this._submittedEditSeq = 0;
+      this._idleWaiters = [];
+    }
+
+    get pending() {
+      return this._queue.length + (this._active ? 1 : 0);
+    }
+
+    get idle() {
+      return !this._active && this._queue.length === 0;
+    }
+
+    get editSeq() {
+      return this._editSeq;
+    }
+
+    get submittedEditSeq() {
+      return this._submittedEditSeq;
+    }
+
+    noteEdit() {
+      this._editSeq += 1;
+      return this._editSeq;
+    }
+
+    enqueue(fn) {
+      return new Promise((resolve, reject) => {
+        this._queue.push({ fn: fn, resolve: resolve, reject: reject });
+        this._pump();
+      });
+    }
+
+    submit(fn) {
+      const submittedEditSeq = this._editSeq;
+      this._submittedEditSeq = submittedEditSeq;
+      return this.enqueue(fn).then((value) => {
+        const editSeq = this._editSeq;
+        const stale = editSeq > submittedEditSeq;
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const result = Object.assign({}, value);
+          result.stale = stale;
+          Object.defineProperty(result, 'value', { value: value, enumerable: false });
+          Object.defineProperty(result, 'submittedEditSeq', { value: submittedEditSeq, enumerable: false });
+          Object.defineProperty(result, 'editSeq', { value: editSeq, enumerable: false });
+          return result;
+        }
+        return { value: value, submittedEditSeq: submittedEditSeq, editSeq: editSeq, stale: stale };
+      });
+    }
+
+    whenIdle() {
+      if (this.idle) return Promise.resolve();
+      return new Promise((resolve) => this._idleWaiters.push(resolve));
+    }
+
+    _pump() {
+      if (this._active) return;
+      if (!this._queue.length) {
+        this._settleIdle();
+        return;
+      }
+      const task = this._queue.shift();
+      this._active = task;
+      Promise.resolve()
+        .then(() => task.fn())
+        .then(
+          (value) => task.resolve(value),
+          (error) => task.reject(error),
+        )
+        .then(() => {
+          this._active = null;
+          if (this._queue.length) this._pump();
+          else this._settleIdle();
+        });
+    }
+
+    _settleIdle() {
+      const waiters = this._idleWaiters.splice(0, this._idleWaiters.length);
+      for (let i = 0; i < waiters.length; i += 1) waiters[i]();
+    }
+  }
+
+  class EditorAdapter {
+    constructor(options, title) {
+      const settings = typeof options === 'string' ? { text: options, title: title } : (options || {});
+      this.text = normalizeLf(settings.text || '');
+      this.title = settings.title === null || settings.title === undefined ? '' : String(settings.title);
+      this.editSeq = 0;
+      this.composing = false;
+      this._selection = { startCp: 0, endCp: 0 };
+      this._revision = null;
+    }
+
+    setValue(text, force) {
+      if (this.composing && !force) return false;
+      this.text = normalizeLf(text);
+      const total = _cpLength(this.text);
+      this._selection = {
+        startCp: _clamp(this._selection.startCp, 0, total),
+        endCp: _clamp(this._selection.endCp, 0, total),
+      };
+      return true;
+    }
+
+    beginComposition() {
+      this.composing = true;
+    }
+
+    endComposition() {
+      this.composing = false;
+    }
+
+    replaceRange(startCp, endCp, replacement) {
+      const total = _cpLength(this.text);
+      const range = clampRange(this.text, startCp, endCp);
+      const from = _clamp(range.start, 0, total);
+      const to = _clamp(range.end, 0, total);
+      const beforeText = this.text;
+      const removed = sliceCodepoints(this.text, from, to);
+      const inserted = normalizeLf(replacement);
+      this.text = sliceCodepoints(this.text, 0, from) + inserted + sliceCodepoints(this.text, to, total);
+      const caret = from + _cpLength(inserted);
+      this._selection = { startCp: caret, endCp: caret };
+      this.editSeq += 1;
+      return {
+        before: beforeText,
+        after: this.text,
+        removed: removed,
+        inserted: inserted,
+        range: { startCp: from, endCp: to },
+      };
+    }
+
+    selection() {
+      return { startCp: this._selection.startCp, endCp: this._selection.endCp };
+    }
+
+    setSelection(startCp, endCp) {
+      const range = clampRange(this.text, startCp, endCp);
+      this._selection = { startCp: range.start, endCp: range.end };
+      return this.selection();
+    }
+
+    markRevision(draftId, epoch, revision) {
+      this._revision = {
+        draftId: draftId === null || draftId === undefined ? null : String(draftId),
+        epoch: epoch === null || epoch === undefined ? null : String(epoch),
+        revision: _integer(revision, 0),
+      };
+      return {
+        draftId: this._revision.draftId,
+        epoch: this._revision.epoch,
+        revision: this._revision.revision,
+      };
+    }
+
+    canApplyRemote(draftId, epoch, revision) {
+      if (!this._revision) return false;
+      const remoteDraft = draftId === null || draftId === undefined ? null : String(draftId);
+      const remoteEpoch = epoch === null || epoch === undefined ? null : String(epoch);
+      if (remoteDraft !== this._revision.draftId) return false;
+      if (remoteEpoch !== this._revision.epoch) return false;
+      return _integer(revision, 0) > this._revision.revision;
+    }
+  }
+
+  function _rectValue(rect, key, fallback) {
+    const value = Number(rect ? rect[key] : NaN);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function floatBarPosition(options) {
+    const settings = options || {};
+    const selectionRect = settings.selectionRect;
+    const editorRect = settings.editorRect;
+    if (!selectionRect || !editorRect) return null;
+    const margin = Number.isFinite(Number(settings.margin)) ? Number(settings.margin) : 8;
+    const barWidth = Math.max(0, Number(settings.barWidth) || 0);
+    const barHeight = Math.max(0, Number(settings.barHeight) || 0);
+
+    const editorLeft = _rectValue(editorRect, 'left', _rectValue(editorRect, 'x', 0));
+    const editorTop = _rectValue(editorRect, 'top', _rectValue(editorRect, 'y', 0));
+    const editorRight = _rectValue(editorRect, 'right', editorLeft + _rectValue(editorRect, 'width', 0));
+    const editorBottom = _rectValue(editorRect, 'bottom', editorTop + _rectValue(editorRect, 'height', 0));
+
+    const selectionLeft = _rectValue(selectionRect, 'left', _rectValue(selectionRect, 'x', editorLeft));
+    const selectionTop = _rectValue(selectionRect, 'top', _rectValue(selectionRect, 'y', editorTop));
+    const selectionRight = _rectValue(selectionRect, 'right', selectionLeft + _rectValue(selectionRect, 'width', 0));
+    const selectionBottom = _rectValue(selectionRect, 'bottom', selectionTop + _rectValue(selectionRect, 'height', 0));
+
+    const minimumLeft = editorLeft + margin;
+    const maximumLeft = editorRight - margin - barWidth;
+    let left = selectionLeft + (selectionRight - selectionLeft) / 2 - barWidth / 2;
+    left = maximumLeft >= minimumLeft ? _clamp(left, minimumLeft, maximumLeft) : minimumLeft;
+
+    const minimumTop = editorTop + margin;
+    const maximumTop = editorBottom - margin - barHeight;
+    const above = selectionTop - margin - barHeight;
+    const below = selectionBottom + margin;
+    let placement = above >= minimumTop ? 'above' : 'below';
+    let top = placement === 'above' ? above : below;
+    top = maximumTop >= minimumTop ? _clamp(top, minimumTop, maximumTop) : minimumTop;
+
+    return { left: left, top: top, placement: placement };
+  }
+
+  class SseParser {
+    constructor() {
+      this.decoder = new TextDecoder('utf-8');
+      this._buffer = '';
+      this._data = null;
+      this._event = '';
+      this._lastEventId = null;
+    }
+
+    get lastEventId() {
+      return this._lastEventId;
+    }
+
+    feed(chunk) {
+      const out = [];
+      const text = typeof chunk === 'string' ? chunk : this.decoder.decode(chunk, { stream: true });
+      this._ingest(text, out, false);
+      return out;
+    }
+
+    flush() {
+      const out = [];
+      const text = this.decoder.decode();
+      this._ingest(text, out, true);
+      return out;
+    }
+
+    _ingest(text, out, final) {
+      this._buffer += text;
+      while (true) {
+        const match = /(?:\r\n|\n|\r)/.exec(this._buffer);
+        if (!match) break;
+        const index = match.index;
+        if (!final && this._buffer.charAt(index) === '\r' && index === this._buffer.length - 1) break;
+        let skip = 1;
+        if (this._buffer.charAt(index) === '\r' && this._buffer.charAt(index + 1) === '\n') skip = 2;
+        const line = this._buffer.slice(0, index);
+        this._buffer = this._buffer.slice(index + skip);
+        this._handleLine(line, out);
+      }
+      if (final && this._buffer.length) {
+        const line = this._buffer;
+        this._buffer = '';
+        this._handleLine(line, out);
+      }
+      if (final) this._dispatch(out);
+    }
+
+    _handleLine(line, out) {
+      if (line === '') {
+        this._dispatch(out);
+        return;
+      }
+      if (line.charAt(0) === ':') return;
+      let field = line;
+      let value = '';
+      const colon = line.indexOf(':');
+      if (colon >= 0) {
+        field = line.slice(0, colon);
+        value = line.slice(colon + 1);
+        if (value.charAt(0) === ' ') value = value.slice(1);
+      }
+      if (field === 'data') {
+        this._data = (this._data === null ? '' : this._data) + value + '\n';
+      } else if (field === 'event') {
+        this._event = value;
+      } else if (field === 'id') {
+        if (value.indexOf('\u0000') < 0) this._lastEventId = value;
+      }
+    }
+
+    _dispatch(out) {
+      if (this._data !== null) {
+        const data = this._data.slice(0, -1);
+        out.push({ id: this._lastEventId, event: this._event || 'message', data: data });
+      }
+      this._data = null;
+      this._event = '';
+    }
+  }
+
+  function _sequenceNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  class OrderedEventBuffer {
+    constructor() {
+      this._events = [];
+      this._snapshot = null;
+      this._ids = new Set();
+      this._seqs = new Set();
+    }
+
+    push(event) {
+      if (!event || typeof event !== 'object') return false;
+      const seq = _sequenceNumber(event.seq);
+      if (this._snapshot !== null && seq !== null && seq <= this._snapshot) return false;
+      const idValue = event.event_id !== null && event.event_id !== undefined
+        ? event.event_id
+        : event.id;
+      const idKey = idValue === null || idValue === undefined ? null : 'id:' + String(idValue);
+      if (idKey !== null && this._ids.has(idKey)) return false;
+      if (seq !== null && this._seqs.has(seq)) return false;
+      if (idKey !== null) this._ids.add(idKey);
+      if (seq !== null) this._seqs.add(seq);
+      this._events.push({ event: event, seq: seq, order: this._events.length });
+      return true;
+    }
+
+    markSnapshot(seq) {
+      const number = _sequenceNumber(seq);
+      this._snapshot = number;
+      if (number === null) return 0;
+      let dropped = 0;
+      const kept = [];
+      for (let i = 0; i < this._events.length; i += 1) {
+        const row = this._events[i];
+        if (row.seq !== null && row.seq <= number) dropped += 1;
+        else kept.push(row);
+      }
+      this._events = kept;
+      return dropped;
+    }
+
+    drain() {
+      const rows = this._events.slice(0);
+      rows.sort((left, right) => {
+        if (left.seq === null && right.seq === null) return left.order - right.order;
+        if (left.seq === null) return 1;
+        if (right.seq === null) return -1;
+        return left.seq - right.seq || left.order - right.order;
+      });
+      this._events = [];
+      return rows.map((row) => row.event);
+    }
+  }
+
+  function _commonPrefixLength(a, b) {
+    const limit = Math.min(a.length, b.length);
+    let index = 0;
+    while (index < limit && a[index] === b[index]) index += 1;
+    return index;
+  }
+
+  function _myersOperations(a, b) {
+    const n = a.length;
+    const m = b.length;
+    const maximum = n + m;
+    const limit = Math.min(maximum, 1200);
+    const frontier = new Map();
+    frontier.set(1, 0);
+    const trace = [];
+    let found = -1;
+    for (let d = 0; d <= limit; d += 1) {
+      trace.push(new Map(frontier));
+      for (let k = -d; k <= d; k += 2) {
+        const down = frontier.get(k + 1);
+        const right = frontier.get(k - 1);
+        let x;
+        if (k === -d || (k !== d && (right === undefined ? -Infinity : right) < (down === undefined ? -Infinity : down))) {
+          x = down === undefined ? 0 : down;
+        } else {
+          x = (right === undefined ? 0 : right) + 1;
+        }
+        let y = x - k;
+        while (x < n && y < m && a[x] === b[y]) {
+          x += 1;
+          y += 1;
+        }
+        frontier.set(k, x);
+        if (x >= n && y >= m) {
+          found = d;
+          break;
+        }
+      }
+      if (found >= 0) break;
+    }
+    if (found < 0) return null;
+
+    const operations = [];
+    let x = n;
+    let y = m;
+    for (let d = found; d > 0; d -= 1) {
+      const previous = trace[d];
+      const k = x - y;
+      const left = previous.get(k - 1);
+      const right = previous.get(k + 1);
+      let previousK;
+      if (k === -d || (k !== d && (left === undefined ? -Infinity : left) < (right === undefined ? -Infinity : right))) {
+        previousK = k + 1;
+      } else {
+        previousK = k - 1;
+      }
+      const previousX = previous.get(previousK);
+      const startX = previousX === undefined ? 0 : previousX;
+      const startY = startX - previousK;
+      while (x > startX && y > startY) {
+        operations.push({ type: 'equal', text: a[x - 1] });
+        x -= 1;
+        y -= 1;
+      }
+      if (x === startX) {
+        operations.push({ type: 'insert', text: b[y - 1] });
+        y -= 1;
+      } else {
+        operations.push({ type: 'delete', text: a[x - 1] });
+        x -= 1;
+      }
+    }
+    while (x > 0 && y > 0) {
+      operations.push({ type: 'equal', text: a[x - 1] });
+      x -= 1;
+      y -= 1;
+    }
+    while (x > 0) {
+      operations.push({ type: 'delete', text: a[x - 1] });
+      x -= 1;
+    }
+    while (y > 0) {
+      operations.push({ type: 'insert', text: b[y - 1] });
+      y -= 1;
+    }
+    operations.reverse();
+    return operations;
+  }
+
+  function _diffChanges(baseText, targetText) {
+    const base = Array.from(baseText);
+    const target = Array.from(targetText);
+    const prefix = _commonPrefixLength(base, target);
+    let suffix = 0;
+    while (
+      suffix < base.length - prefix
+      && suffix < target.length - prefix
+      && base[base.length - 1 - suffix] === target[target.length - 1 - suffix]
+    ) {
+      suffix += 1;
+    }
+    const baseMiddle = base.slice(prefix, base.length - suffix);
+    const targetMiddle = target.slice(prefix, target.length - suffix);
+    if (!baseMiddle.length && !targetMiddle.length) return [];
+    if (!baseMiddle.length || !targetMiddle.length) {
+      return [{
+        baseStart: prefix,
+        baseEnd: prefix + baseMiddle.length,
+        text: targetMiddle.join(''),
+      }];
+    }
+    const operations = _myersOperations(baseMiddle, targetMiddle);
+    if (!operations) {
+      return [{
+        baseStart: prefix,
+        baseEnd: prefix + baseMiddle.length,
+        text: targetMiddle.join(''),
+      }];
+    }
+    const changes = [];
+    let basePosition = prefix;
+    let pending = null;
+    for (let i = 0; i < operations.length; i += 1) {
+      const operation = operations[i];
+      if (operation.type === 'equal') {
+        if (pending) {
+          changes.push(pending);
+          pending = null;
+        }
+        basePosition += 1;
+      } else if (operation.type === 'delete') {
+        if (!pending) pending = { baseStart: basePosition, baseEnd: basePosition, text: '' };
+        basePosition += 1;
+        pending.baseEnd = basePosition;
+      } else {
+        if (!pending) pending = { baseStart: basePosition, baseEnd: basePosition, text: '' };
+        pending.text += operation.text;
+      }
+    }
+    if (pending) changes.push(pending);
+    return changes;
+  }
+
+  function _rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
+    if (firstStart === firstEnd && secondStart === secondEnd) return firstStart === secondStart;
+    if (firstStart === firstEnd) return firstStart > secondStart && firstStart < secondEnd;
+    if (secondStart === secondEnd) return secondStart > firstStart && secondStart < firstEnd;
+    return firstStart < secondEnd && secondStart < firstEnd;
+  }
+
+  function _rangeOf(value) {
+    if (Array.isArray(value)) {
+      const start = _integer(value[0], 0);
+      const end = _integer(value[1], start);
+      return end < start ? { start: end, end: start } : { start: start, end: end };
+    }
+    const object = value || {};
+    let start = object.start;
+    if (start === undefined || start === null) start = object.startCp;
+    if (start === undefined || start === null) start = object.char_start;
+    let end = object.end;
+    if (end === undefined || end === null) end = object.endCp;
+    if (end === undefined || end === null) end = object.char_end;
+    const from = _integer(start, 0);
+    const to = _integer(end, from);
+    return to < from ? { start: to, end: from } : { start: from, end: to };
+  }
+
+  function overlapRanges(first, second) {
+    const a = _rangeOf(first);
+    const b = _rangeOf(second);
+    return _rangesOverlap(a.start, a.end, b.start, b.end);
+  }
+
+  function _applyGroup(base, changes, start, end) {
+    let text = '';
+    let position = start;
+    const sorted = changes.slice(0).sort((left, right) => left.baseStart - right.baseStart || left.baseEnd - right.baseEnd);
+    for (let i = 0; i < sorted.length; i += 1) {
+      const change = sorted[i];
+      const from = _clamp(change.baseStart, start, end);
+      const to = _clamp(change.baseEnd, start, end);
+      if (from > position) text += base.slice(position, from).join('');
+      text += change.text;
+      if (to > position) position = to;
+    }
+    if (position < end) text += base.slice(position, end).join('');
+    return text;
+  }
+
+  function threeWayTextMerge(baseValue, serverValue, localValue) {
+    const baseText = normalizeLf(baseValue);
+    const serverText = normalizeLf(serverValue);
+    const localText = normalizeLf(localValue);
+    if (serverText === localText) return { text: serverText, conflicts: [], clean: true };
+    if (baseText === serverText) return { text: localText, conflicts: [], clean: true };
+    if (baseText === localText) return { text: serverText, conflicts: [], clean: true };
+
+    const base = Array.from(baseText);
+    const serverChanges = _diffChanges(baseText, serverText);
+    const localChanges = _diffChanges(baseText, localText);
+    const all = [];
+    for (let i = 0; i < serverChanges.length; i += 1) {
+      const change = serverChanges[i];
+      all.push({ side: 'server', baseStart: change.baseStart, baseEnd: change.baseEnd, text: change.text });
+    }
+    for (let i = 0; i < localChanges.length; i += 1) {
+      const change = localChanges[i];
+      all.push({ side: 'local', baseStart: change.baseStart, baseEnd: change.baseEnd, text: change.text });
+    }
+    all.sort((left, right) => (
+      left.baseStart - right.baseStart
+      || left.baseEnd - right.baseEnd
+      || (left.side === right.side ? 0 : left.side === 'server' ? -1 : 1)
+    ));
+
+    const used = new Array(all.length).fill(false);
+    let cursor = 0;
+    const groups = [];
+
+    while (true) {
+      while (cursor < all.length && used[cursor]) cursor += 1;
+      if (cursor >= all.length) break;
+      const first = all[cursor];
+      const group = [first];
+      used[cursor] = true;
+      let groupStart = first.baseStart;
+      let groupEnd = first.baseEnd;
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (let index = 0; index < all.length; index += 1) {
+          if (used[index]) continue;
+          const candidate = all[index];
+          if (candidate.baseEnd < groupStart || candidate.baseStart > groupEnd) continue;
+          let crosses = false;
+          for (let memberIndex = 0; memberIndex < group.length; memberIndex += 1) {
+            const member = group[memberIndex];
+            if (member.side !== candidate.side && _rangesOverlap(
+              member.baseStart, member.baseEnd, candidate.baseStart, candidate.baseEnd,
+            )) {
+              crosses = true;
+              break;
+            }
+          }
+          if (!crosses) continue;
+          used[index] = true;
+          group.push(candidate);
+          groupStart = Math.min(groupStart, candidate.baseStart);
+          groupEnd = Math.max(groupEnd, candidate.baseEnd);
+          expanded = true;
+        }
+      }
+      groups.push({ start: groupStart, end: groupEnd, changes: group });
+    }
+
+    function evaluate(group) {
+      const serverChanges = group.changes.filter((change) => change.side === 'server');
+      const localChanges = group.changes.filter((change) => change.side === 'local');
+      group.serverSide = _applyGroup(base, serverChanges, group.start, group.end);
+      group.localSide = _applyGroup(base, localChanges, group.start, group.end);
+      group.baseSide = base.slice(group.start, group.end).join('');
+      group.conflict = group.serverSide !== group.localSide
+        && group.serverSide !== group.baseSide
+        && group.localSide !== group.baseSide;
+      let insertConflict = group.changes.length > 0;
+      let insertPosition = -1;
+      for (let i = 0; i < group.changes.length; i += 1) {
+        const change = group.changes[i];
+        if (change.baseStart !== change.baseEnd) {
+          insertConflict = false;
+          break;
+        }
+        if (insertPosition < 0) insertPosition = change.baseStart;
+        else if (insertPosition !== change.baseStart) {
+          insertConflict = false;
+          break;
+        }
+      }
+      group.insertConflict = insertConflict;
+    }
+
+    for (let i = 0; i < groups.length; i += 1) evaluate(groups[i]);
+
+    /* Character-level diffs can split one replaced phrase into adjacent
+       fragments. Keep a single conflict block per touched run instead of
+       scattering markup through the sentence. */
+    const mergedGroups = [];
+    for (let i = 0; i < groups.length; i += 1) {
+      const group = groups[i];
+      const previous = mergedGroups.length ? mergedGroups[mergedGroups.length - 1] : null;
+      if (previous && previous.conflict && group.conflict && group.start >= previous.end) {
+        const gap = base.slice(previous.end, group.start).join('');
+        if (group.start - previous.end <= 24 && gap.indexOf('\n') < 0) {
+          previous.end = group.end;
+          previous.changes = previous.changes.concat(group.changes);
+          evaluate(previous);
+          continue;
+        }
+      }
+      mergedGroups.push(group);
+    }
+
+    /* Conflict markers follow whole lines, like a normal three-way merge, so
+       the local block contains the author's complete sentence instead of a
+       fragment glued to marker text. Clean edits on the same line are folded
+       into the conflict region for both sides. */
+    const regions = [];
+    for (let i = 0; i < mergedGroups.length; i += 1) {
+      const group = mergedGroups[i];
+      if (!group.conflict) continue;
+      let start = group.start;
+      while (start > 0 && base[start - 1] !== '\n') start -= 1;
+      let end = group.end;
+      while (end < base.length && base[end] !== '\n') end += 1;
+      if (end < base.length && base[end] === '\n') end += 1;
+      regions.push({ start: start, end: end, changes: group.changes.slice(0), conflict: true });
+    }
+    regions.sort((left, right) => left.start - right.start || left.end - right.end);
+    const mergedRegions = [];
+    for (let i = 0; i < regions.length; i += 1) {
+      const region = regions[i];
+      const previous = mergedRegions.length ? mergedRegions[mergedRegions.length - 1] : null;
+      if (previous && region.start <= previous.end) {
+        previous.end = Math.max(previous.end, region.end);
+        previous.changes = previous.changes.concat(region.changes);
+      } else {
+        mergedRegions.push(region);
+      }
+    }
+
+    const renderGroups = [];
+    for (let i = 0; i < mergedGroups.length; i += 1) {
+      const group = mergedGroups[i];
+      if (group.conflict) continue;
+      let absorbed = false;
+      for (let r = 0; r < mergedRegions.length; r += 1) {
+        const region = mergedRegions[r];
+        if (group.start >= region.start && group.end <= region.end) {
+          region.changes = region.changes.concat(group.changes);
+          absorbed = true;
+          break;
+        }
+      }
+      if (!absorbed) renderGroups.push(group);
+    }
+    for (let r = 0; r < mergedRegions.length; r += 1) {
+      evaluate(mergedRegions[r]);
+      renderGroups.push(mergedRegions[r]);
+    }
+    renderGroups.sort((left, right) => left.start - right.start || left.end - right.end);
+
+    let text = '';
+    let textLength = 0;
+    let basePosition = 0;
+    const conflicts = [];
+
+    function append(piece) {
+      text += piece;
+      textLength += _cpLength(piece);
+    }
+
+    for (let i = 0; i < renderGroups.length; i += 1) {
+      const group = renderGroups[i];
+      if (group.end < basePosition) continue;
+      if (group.start > basePosition) append(base.slice(basePosition, group.start).join(''));
+
+      if (group.serverSide === group.localSide) {
+        append(group.serverSide);
+      } else if (group.serverSide === group.baseSide) {
+        append(group.localSide);
+      } else if (group.localSide === group.baseSide) {
+        append(group.serverSide);
+      } else {
+        const conflictStart = textLength;
+        append('<<<<<<< 本地\n');
+        append(group.localSide);
+        if (!group.localSide.endsWith('\n')) append('\n');
+        append('=======\n');
+        append(group.serverSide);
+        if (!group.serverSide.endsWith('\n')) append('\n');
+        append('>>>>>>> 服务端\n');
+        conflicts.push({
+          start: conflictStart,
+          end: textLength,
+          baseStart: group.start,
+          baseEnd: group.end,
+          type: group.insertConflict ? 'insert_conflict' : 'content_conflict',
+          local: group.localSide,
+          server: group.serverSide,
+        });
+      }
+      basePosition = Math.max(basePosition, group.end);
+    }
+    if (basePosition < base.length) append(base.slice(basePosition).join(''));
+
+    return { text: text, conflicts: conflicts, clean: conflicts.length === 0 };
+  }
+
+  function _isBlankLine(codepoints, start, end) {
+    for (let i = start; i < end; i += 1) {
+      if (!/\s/.test(codepoints[i])) return false;
+    }
+    return true;
+  }
+
+  function paragraphIndexOf(text, cpOffset) {
+    const codepoints = Array.from(normalizeLf(text));
+    const total = codepoints.length;
+    const offset = _clamp(_integer(cpOffset, 0), 0, total);
+    let paragraph = -1;
+    let lineStart = 0;
+    for (let index = 0; index <= total; index += 1) {
+      if (index !== total && codepoints[index] !== '\n') continue;
+      const blank = _isBlankLine(codepoints, lineStart, index);
+      if (!blank) paragraph += 1;
+      if (offset >= lineStart && offset <= index) return paragraph < 0 ? 0 : paragraph;
+      lineStart = index + 1;
+    }
+    return paragraph < 0 ? 0 : paragraph;
+  }
+
+  function annotationAnchors(text, annotations) {
+    const source = normalizeLf(text);
+    const rows = Array.isArray(annotations) ? annotations : [];
+    const result = [];
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i] || {};
+      const anchor = row.anchor && typeof row.anchor === 'object' ? row.anchor : row;
+      let start = anchor.startCp;
+      if (start === undefined || start === null) start = anchor.char_start;
+      if (start === undefined || start === null) start = anchor.start;
+      let end = anchor.endCp;
+      if (end === undefined || end === null) end = anchor.char_end;
+      if (end === undefined || end === null) end = anchor.end;
+      const range = clampRange(source, start === undefined || start === null ? 0 : start, end === undefined || end === null ? start : end);
+      result.push({
+        id: row.id === undefined || row.id === null ? anchor.id : row.id,
+        startCp: range.start,
+        endCp: range.end,
+        paragraph: paragraphIndexOf(source, range.start),
+      });
+    }
+    result.sort((left, right) => left.startCp - right.startCp || left.endCp - right.endCp);
+    return result;
+  }
+
+  function markSuperseded(hunks, chosen) {
+    const list = Array.isArray(hunks) ? hunks : [];
+    const picks = (Array.isArray(chosen) ? chosen : []).map((item) => ({
+      id: item && item.id,
+      range: _rangeOf(item),
+    }));
+    const chosenIds = new Set(picks.map((item) => item.id));
+    for (let index = 0; index < list.length; index += 1) {
+      const hunk = list[index];
+      if (chosenIds.has(hunk.id)) continue;
+      const range = _rangeOf(hunk);
+      let overlaps = false;
+      for (let pickIndex = 0; pickIndex < picks.length; pickIndex += 1) {
+        if (_rangesOverlap(range.start, range.end, picks[pickIndex].range.start, picks[pickIndex].range.end)) {
+          overlaps = true;
+          break;
+        }
+      }
+      hunk.status = overlaps ? 'superseded' : 'pending';
+    }
+    return list;
+  }
+
+  function _hasHeader(headers, name) {
+    const wanted = String(name).toLowerCase();
+    const keys = Object.keys(headers);
+    for (let i = 0; i < keys.length; i += 1) {
+      if (keys[i].toLowerCase() === wanted) return true;
+    }
+    return false;
+  }
+
+  function connectEventStream(options) {
+    const settings = options || {};
+    const fetchImpl = settings.fetchImpl || (typeof fetch === 'function' ? fetch : null);
+    if (!fetchImpl) throw new Error('connectEventStream requires fetchImpl or global fetch');
+    const onEvent = typeof settings.onEvent === 'function' ? settings.onEvent : function () {};
+    const onError = typeof settings.onError === 'function' ? settings.onError : function () {};
+    const baseDelay = Math.max(0, _integer(settings.retryDelayMs, 1000));
+    const maximumDelay = Math.max(baseDelay, _integer(settings.maxRetryDelayMs, 15000));
+    const externalSignal = settings.signal || null;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let closed = externalSignal ? Boolean(externalSignal.aborted) : false;
+    let timer = null;
+    let reader = null;
+    let retryDelay = baseDelay;
+    let lastEventId = settings.lastEventId === undefined || settings.lastEventId === null ? null : String(settings.lastEventId);
+
+    function report(error) {
+      try {
+        onError(error);
+      } catch (ignored) {
+        /* consumer error handlers must not kill the stream loop */
+      }
+    }
+
+    function emit(event) {
+      if (event && event.id !== null && event.id !== undefined) lastEventId = event.id;
+      try {
+        onEvent(event);
+      } catch (ignored) {
+        /* consumer error handlers must not kill the stream loop */
+      }
+    }
+
+    function schedule() {
+      if (closed) return;
+      const wait = retryDelay;
+      retryDelay = Math.min(retryDelay * 2, maximumDelay);
+      timer = setTimeout(run, wait);
+    }
+
+    async function run() {
+      timer = null;
+      if (closed) return;
+      const parser = new SseParser();
+      const headers = Object.assign({}, settings.headers || {});
+      if (lastEventId !== null && !_hasHeader(headers, 'Last-Event-ID')) headers['Last-Event-ID'] = lastEventId;
+      if (!_hasHeader(headers, 'Accept')) headers.Accept = 'text/event-stream';
+      let response;
+      try {
+        response = await fetchImpl(settings.url, {
+          method: 'GET',
+          headers: headers,
+          signal: controller ? controller.signal : undefined,
+          cache: 'no-store',
+        });
+      } catch (error) {
+        if (closed) return;
+        report(error);
+        schedule();
+        return;
+      }
+      if (closed) return;
+      const status = response ? Number(response.status) : 0;
+      const ok = Boolean(response) && (
+        response.ok === true
+        || (response.ok === undefined && status >= 200 && status < 300)
+      );
+      if (!ok) {
+        const error = new Error('Event stream request failed with status ' + status);
+        error.status = status;
+        report(error);
+        close();
+        return;
+      }
+      retryDelay = baseDelay;
+      try {
+        if (!response.body || typeof response.body.getReader !== 'function') {
+          throw new Error('Event stream response has no readable body');
+        }
+        reader = response.body.getReader();
+        while (!closed) {
+          const step = await reader.read();
+          if (step.done) break;
+          const events = parser.feed(step.value);
+          for (let i = 0; i < events.length; i += 1) emit(events[i]);
+          if (parser.lastEventId !== null) lastEventId = parser.lastEventId;
+        }
+        if (!closed) {
+          const tail = parser.flush();
+          for (let i = 0; i < tail.length; i += 1) emit(tail[i]);
+          if (parser.lastEventId !== null) lastEventId = parser.lastEventId;
+        }
+      } catch (error) {
+        if (!closed) report(error);
+      } finally {
+        reader = null;
+      }
+      if (!closed) schedule();
+    }
+
+    function close() {
+      if (closed) return;
+      closed = true;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (externalSignal && typeof externalSignal.removeEventListener === 'function') {
+        externalSignal.removeEventListener('abort', close);
+      }
+      if (controller) controller.abort();
+      if (reader) {
+        try {
+          reader.cancel();
+        } catch (ignored) {
+          /* a reader already closed by the transport is fine */
+        }
+      }
+    }
+
+    if (externalSignal && typeof externalSignal.addEventListener === 'function' && !closed) {
+      externalSignal.addEventListener('abort', close);
+    }
+    if (!closed) Promise.resolve().then(run);
+
+    return {
+      close: close,
+      get closed() {
+        return closed;
+      },
+      get lastEventId() {
+        return lastEventId;
+      },
+    };
+  }
+
+  return {
+    UNDO_LIMIT: UNDO_LIMIT,
+    normalizeLf: normalizeLf,
+    toCodepoints: toCodepoints,
+    utf16ToCodepoint: utf16ToCodepoint,
+    codepointToUtf16: codepointToUtf16,
+    sliceCodepoints: sliceCodepoints,
+    clampRange: clampRange,
+    UndoStack: UndoStack,
+    DraftQueue: DraftQueue,
+    EditorAdapter: EditorAdapter,
+    floatBarPosition: floatBarPosition,
+    SseParser: SseParser,
+    OrderedEventBuffer: OrderedEventBuffer,
+    threeWayTextMerge: threeWayTextMerge,
+    paragraphIndexOf: paragraphIndexOf,
+    annotationAnchors: annotationAnchors,
+    overlapRanges: overlapRanges,
+    markSuperseded: markSuperseded,
+    connectEventStream: connectEventStream,
+  };
+})();
+if (typeof globalThis !== 'undefined') globalThis.WorkbenchCore = WorkbenchCore;
+        // END GENERATED WORKBENCH CORE
 
         const PANEL_ID = 'novel-helper';
         const ROOT = '/novel-helper';
@@ -59,6 +1199,7 @@
             'nav.setup': '开始创作与账号',
             'nav.dashboard': '工作台',
             'nav.chapters': '作品与章节',
+            'nav.workbench': '直写工作台',
             'nav.memory': '共享记忆',
             'nav.brief': '创作约定',
             'nav.outline': '大纲与规划',
@@ -87,6 +1228,7 @@
             'nav.setup': 'Setup & accounts',
             'nav.dashboard': 'Dashboard',
             'nav.chapters': 'Works & chapters',
+            'nav.workbench': 'Writing workbench',
             'nav.memory': 'Shared memory',
             'nav.brief': 'House rules',
             'nav.outline': 'Outline & plan',
@@ -3230,6 +4372,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       }),
                     ),
                     e(Button, { kind: 'ghost', size: 'sm', icon: 'refresh', onClick: () => chapters.reload(false) }, '刷新'),
+                    e(Button, { kind: 'primary', size: 'sm', icon: 'pen', onClick: () => props.navigate && props.navigate('workbench') }, '直写工作台'),
                   ),
                 },
                 chapters.loading
@@ -4635,6 +5778,1317 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 : costView,
           );
         }
+
+        /* ------------------------------------------- 创作室 · 直写工作台 */
+
+        /* Workbench-only styles. The generated ATELIER CSS block stays byte
+           identical; this sheet is appended to the same single style node. */
+        const WORKBENCH_CSS = `
+.nh-root[data-ui="atelier"] .wb-root { display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0; }
+.nh-root[data-ui="atelier"] .wb-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 2px 4px 0; }
+.nh-root[data-ui="atelier"] .wb-headline { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.nh-root[data-ui="atelier"] .wb-headline strong { font-family: var(--font-display); font-weight: 400; font-size: 17px; letter-spacing: .01em; }
+.nh-root[data-ui="atelier"] .wb-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nh-root[data-ui="atelier"] .wb-grid { display: grid; grid-template-columns: 232px minmax(0, 1fr) 316px; gap: 12px; min-height: 560px; height: calc(100vh - 246px); }
+.nh-root[data-ui="atelier"] .wb-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--nh-surface2); overflow: hidden; }
+.nh-root[data-ui="atelier"] .wb-panehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.nh-root[data-ui="atelier"] .wb-panehead strong { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
+.nh-root[data-ui="atelier"] .wb-filter { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.nh-root[data-ui="atelier"] .wb-filter .nh-input { height: 28px; font-size: 12px; }
+.nh-root[data-ui="atelier"] .wb-list { flex: 1; min-height: 0; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.nh-root[data-ui="atelier"] .wb-item { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 9px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--ink2); text-align: left; cursor: pointer; transition: background 150ms ease, border-color 150ms ease, color 150ms ease; }
+.nh-root[data-ui="atelier"] .wb-item:hover { background: rgba(255, 255, 255, .05); color: var(--ink); }
+.nh-root[data-ui="atelier"] .wb-item[data-active="true"] { border-color: var(--state-active, var(--line-strong)); background: var(--state-active-soft, rgba(255, 255, 255, .08)); color: var(--ink); }
+.nh-root[data-ui="atelier"] .wb-itemid { font-family: var(--font-mono, monospace); font-size: 10.5px; color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-itemtitle { font-size: 12.5px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nh-root[data-ui="atelier"] .wb-itemmeta { font-size: 10.5px; color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-centerhead { align-items: flex-start; }
+.nh-root[data-ui="atelier"] .wb-crumb { display: block; font-family: var(--font-display); font-size: 14px; }
+.nh-root[data-ui="atelier"] .wb-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.nh-root[data-ui="atelier"] .wb-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-left: 6px; border: 1px solid var(--line); border-radius: var(--radius-pill); font-size: 10.5px; color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-titleinput { margin: 10px 14px 0; padding: 6px 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font-family: var(--font-display); font-size: 22px; font-weight: 400; outline: none; }
+.nh-root[data-ui="atelier"] .wb-titleinput:focus { border-bottom-color: var(--line-strong); }
+.nh-root[data-ui="atelier"] .wb-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 14px 6px; }
+.nh-root[data-ui="atelier"] .wb-actions .nh-spacer { flex: 1; }
+.nh-root[data-ui="atelier"] .wb-menu { position: relative; }
+.nh-root[data-ui="atelier"] .wb-menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-pill); font-size: 11.5px; color: var(--ink2); background: var(--nh-surface2); user-select: none; }
+.nh-root[data-ui="atelier"] .wb-menu > summary::-webkit-details-marker { display: none; }
+.nh-root[data-ui="atelier"] .wb-menu[open] > summary { border-color: var(--line-strong); color: var(--ink); }
+.nh-root[data-ui="atelier"] .wb-menupanel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 6px; border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 12px 34px rgba(0, 0, 0, .28); display: flex; flex-direction: column; gap: 2px; }
+.nh-root[data-ui="atelier"] .wb-menupanel button { border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink2); text-align: left; padding: 7px 9px; font-size: 12px; cursor: pointer; }
+.nh-root[data-ui="atelier"] .wb-menupanel button:hover { background: rgba(255, 255, 255, .06); color: var(--ink); }
+.nh-root[data-ui="atelier"] .wb-menupanel button[data-tone="danger"] { color: #d08a76; }
+.nh-root[data-ui="atelier"] .wb-banner { display: flex; align-items: flex-start; gap: 8px; margin: 4px 14px 0; padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: rgba(255, 255, 255, .04); font-size: 12px; line-height: 1.55; }
+.nh-root[data-ui="atelier"] .wb-banner[data-tone="warn"] { border-color: #b8873b; background: rgba(184, 135, 59, .13); }
+.nh-root[data-ui="atelier"] .wb-banner[data-tone="ok"] { border-color: #3f8f6b; background: rgba(63, 143, 107, .13); }
+.nh-root[data-ui="atelier"] .wb-banner[data-tone="err"] { border-color: #b65a4c; background: rgba(182, 90, 76, .14); }
+.nh-root[data-ui="atelier"] .wb-bannertext { flex: 1; min-width: 0; }
+.nh-root[data-ui="atelier"] .wb-banner-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.nh-root[data-ui="atelier"] .wb-textarea { flex: 1; min-height: 280px; width: 100%; border: 0; outline: none; resize: none; padding: 16px 22px 22px; background: transparent; color: var(--ink); font-family: var(--font-serif); font-size: 16px; line-height: 1.95; letter-spacing: .01em; }
+.nh-root[data-ui="atelier"] .wb-textarea::placeholder { color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); flex: 0 0 auto; }
+.nh-root[data-ui="atelier"] .wb-emptycenter { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 30px; text-align: center; color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-sidebody { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.nh-root[data-ui="atelier"] .wb-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.nh-root[data-ui="atelier"] .wb-kpi { display: flex; flex-direction: column; gap: 2px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .03); }
+.nh-root[data-ui="atelier"] .wb-kpi span { font-size: 10px; color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-kpi strong { font-family: var(--font-display); font-size: 18px; font-weight: 400; }
+.nh-root[data-ui="atelier"] .wb-issue { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .03); }
+.nh-root[data-ui="atelier"] .wb-issue[data-tone="error"] { border-color: #b65a4c; }
+.nh-root[data-ui="atelier"] .wb-issue[data-tone="warning"] { border-color: #b8873b; }
+.nh-root[data-ui="atelier"] .wb-issuemet { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--muted); }
+.nh-root[data-ui="atelier"] .wb-issuetext { font-size: 12px; line-height: 1.5; }
+.nh-root[data-ui="atelier"] .wb-issuequote { font-family: var(--font-serif); font-size: 12px; color: var(--ink2); padding-left: 8px; border-left: 2px solid var(--line-strong); }
+.nh-root[data-ui="atelier"] .wb-version { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .03); }
+.nh-root[data-ui="atelier"] .wb-version[data-current="true"] { border-color: var(--state-active, var(--line-strong)); }
+.nh-root[data-ui="atelier"] .wb-version-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 11px; }
+.nh-root[data-ui="atelier"] .wb-version-main strong { font-size: 12px; font-weight: 600; }
+.nh-root[data-ui="atelier"] .wb-outline { margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .03); font-family: var(--font-serif); font-size: 12.5px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+.nh-root[data-ui="atelier"] .wb-tabhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
+@media (max-width: 1080px) {
+  .nh-root[data-ui="atelier"] .wb-grid { grid-template-columns: 200px minmax(0, 1fr) 280px; }
+}
+@media (max-width: 900px) {
+  .nh-root[data-ui="atelier"] .wb-grid { display: flex; flex-direction: column; height: auto; min-height: 0; }
+  .nh-root[data-ui="atelier"] .wb-left { max-height: 230px; }
+  .nh-root[data-ui="atelier"] .wb-center { min-height: 480px; }
+  .nh-root[data-ui="atelier"] .wb-right { min-height: 220px; max-height: 420px; }
+}
+`;
+
+        function wbStoredProject() {
+          try {
+            return typeof localStorage !== 'undefined' ? localStorage.getItem('chapter-whale-project') || '' : '';
+          } catch {
+            return '';
+          }
+        }
+
+        function wbPickProject(projects, saved) {
+          const rows = Array.isArray(projects) ? projects.filter(Boolean) : [];
+          const wanted = saved === null || saved === undefined ? '' : String(saved);
+          return rows.find((item) => String(item.id) === wanted) || rows[0] || null;
+        }
+
+        function wbSessionId() {
+          try {
+            if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+              return 'dsh_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+            }
+          } catch {}
+          return 'dsh_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+        }
+
+        function wbOpId(prefix) {
+          try {
+            if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+              return `${prefix}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+            }
+          } catch {}
+          return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+        }
+
+        function wbDraftIdentityFrom(data) {
+          const draft = data && data.draft ? data.draft : null;
+          if (draft && draft.exists) {
+            return {
+              draft_id: draft.draft_id || null,
+              draft_epoch: Number(draft.draft_epoch) || 0,
+              draft_revision: Number(draft.draft_revision) || 0,
+            };
+          }
+          return { draft_id: null, draft_epoch: Number(draft && draft.draft_epoch) || 0, draft_revision: 0 };
+        }
+
+        function wbNormalizeLf(text) {
+          return String(text === null || text === undefined ? '' : text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        }
+
+        function wbInitialDocument(data) {
+          const draft = data && data.draft && data.draft.exists ? data.draft : null;
+          return {
+            title: draft && draft.title !== null && draft.title !== undefined ? String(draft.title) : String((data && data.title) || ''),
+            content: wbNormalizeLf(draft && draft.content !== null && draft.content !== undefined ? draft.content : ((data && data.content) || '')),
+            identity: wbDraftIdentityFrom(data),
+            hasDraft: Boolean(draft),
+          };
+        }
+
+        /* Exact payloads accepted by PUT /chapters/{ch}/draft and
+           PUT /chapters/{ch}; kept pure so the contract is unit-testable. */
+        function wbDraftPayload(input) {
+          const item = input || {};
+          const identity = item.draftIdentity || {};
+          return {
+            title: String(item.title || ''),
+            content: String(item.content || ''),
+            base_version_id: item.baseVersionId || null,
+            base_content_sha256: item.baseSha256 || null,
+            expected_draft_id: identity.draft_id || null,
+            expected_draft_epoch: Number(identity.draft_epoch) || 0,
+            expected_draft_revision: Number(identity.draft_revision) || 0,
+            client_session_id: String(item.sessionId || ''),
+            cursor: item.cursor && typeof item.cursor === 'object' ? item.cursor : {},
+          };
+        }
+
+        function wbVersionPayload(input) {
+          const item = input || {};
+          const identity = item.draftIdentity || {};
+          const hasDraft = Boolean(identity.draft_id);
+          return {
+            title: String(item.title || ''),
+            content: String(item.content || ''),
+            expected_version_id: String(item.expectedVersionId || ''),
+            expected_content_sha256: String(item.expectedSha || ''),
+            op_id: String(item.opId || ''),
+            submitted_draft_id: hasDraft ? String(identity.draft_id) : null,
+            submitted_draft_epoch: hasDraft ? Number(identity.draft_epoch) || 0 : null,
+            submitted_draft_revision: hasDraft ? Number(identity.draft_revision) || 0 : null,
+            source: 'author_edit',
+          };
+        }
+
+        function wbMergeTexts(base, local, remote) {
+          try {
+            if (typeof WorkbenchCore !== 'undefined' && WorkbenchCore && typeof WorkbenchCore.threeWayTextMerge === 'function') {
+              const result = WorkbenchCore.threeWayTextMerge(base || '', remote || '', local || '');
+              return { text: result.text, conflicts: result.conflicts || [], clean: result.clean === true };
+            }
+          } catch {}
+          return { text: String(local || ''), conflicts: [], clean: false };
+        }
+
+        function wbOutlineExcerpt(text, chapter) {
+          const wanted = Number(chapter);
+          if (!Number.isFinite(wanted)) return '';
+          const lines = String(text || '').split('\n');
+          const heading = new RegExp('^#{1,6}\\s*第\\s*' + Math.trunc(wanted) + '\\s*章');
+          let start = -1;
+          const collected = [];
+          for (let index = 0; index < lines.length; index += 1) {
+            if (start < 0) {
+              if (heading.test(lines[index])) start = index + 1;
+              continue;
+            }
+            if (/^#{1,6}\s*第\s*\d+\s*章/.test(lines[index])) break;
+            if (/^#{1,2}\s/.test(lines[index])) break;
+            collected.push(lines[index]);
+          }
+          const excerpt = collected.join('\n').trim();
+          return excerpt.length > 1400 ? excerpt.slice(0, 1400) + '…' : excerpt;
+        }
+
+        function wbVisibleWords(text) {
+          let count = 0;
+          for (const char of String(text || '')) if (!/\s/.test(char)) count += 1;
+          return count;
+        }
+
+        function wbParagraphCount(text) {
+          return String(text || '').split(/\n+/).filter((line) => line.trim()).length;
+        }
+
+        function wbFormatTime(value) {
+          return String(value || '').replace('T', ' ').replace(/\.\d+.*$/, '').slice(0, 16) || '—';
+        }
+
+        function wbShortId(value) {
+          const text = String(value || '');
+          return text ? text.slice(0, 14) : '—';
+        }
+
+        function wbIssueTone(severity) {
+          const value = String(severity || '').toLowerCase();
+          if (value === 'error' || value === 'blocking' || value === 'fatal') return 'error';
+          if (value === 'warning' || value === 'warn') return 'warning';
+          return 'info';
+        }
+
+        function wbConfirm(message) {
+          try {
+            if (typeof window !== 'undefined' && typeof window.confirm === 'function') return window.confirm(message);
+          } catch {}
+          return true;
+        }
+
+        function WorkbenchPage(props) {
+          const toast = useToast();
+          const savedProject = wbStoredProject();
+          const [projectId, setProjectId] = React.useState(() => {
+            const picked = wbPickProject(props.overview && props.overview.projects, savedProject);
+            return picked ? String(picked.id) : '';
+          });
+          const [selectedChapter, setSelectedChapter] = React.useState(null);
+          const [query, setQuery] = React.useState('');
+          const [title, setTitle] = React.useState('');
+          const [text, setText] = React.useState('');
+          const [dirty, setDirty] = React.useState(false);
+          const [draftState, setDraftState] = React.useState('idle');
+          const [conflict, setConflict] = React.useState(null);
+          const [notice, setNotice] = React.useState(null);
+          const [tab, setTab] = React.useState('annotations');
+          const [check, setCheck] = React.useState(null);
+          const [versions, setVersions] = React.useState({ key: '', loading: false, error: '', rows: [], current: '' });
+          const [reference, setReference] = React.useState({ key: '', loading: false, error: '', title: '', outline: '' });
+          const [busy, setBusy] = React.useState('');
+          const [savingVersion, setSavingVersion] = React.useState(false);
+          const [undoState, setUndoState] = React.useState({ undo: false, redo: false });
+
+          const adapterRef = React.useRef(null);
+          const undoRef = React.useRef(null);
+          const composingRef = React.useRef(false);
+          const dirtyRef = React.useRef(false);
+          const chapterRef = React.useRef(null);
+          const projectRef = React.useRef(null);
+          const titleRef = React.useRef('');
+          const textRef = React.useRef('');
+          const identityRef = React.useRef({ draft_id: null, draft_epoch: 0, draft_revision: 0 });
+          const baseRef = React.useRef({ version_id: '', sha256: '', content: '' });
+          const editSeqRef = React.useRef(0);
+          const draftTimerRef = React.useRef(null);
+          const draftChainRef = React.useRef(Promise.resolve());
+          const lastCheckpointRef = React.useRef(0);
+          const lastTextRef = React.useRef('');
+          const lastTitleRef = React.useRef('');
+          const loadedKeyRef = React.useRef('');
+          const sessionRef = React.useRef(wbSessionId());
+          const textareaRef = React.useRef(null);
+          const conflictRef = React.useRef(null);
+          const saveVersionRef = React.useRef(null);
+          const savingVersionRef = React.useRef(false);
+
+          const projectsPoll = usePoll(() => api('/projects'), [], 0);
+          const projectRows = Array.isArray(projectsPoll.data) ? projectsPoll.data.filter(Boolean) : ((props.overview && props.overview.projects) || []);
+          const projectKey = projectRows.map((item) => String(item.id)).join('|');
+          const project = projectRows.find((item) => String(item.id) === String(projectId)) || null;
+
+          const chapterList = usePoll(
+            () => (project ? api(`/projects/${project.id}/chapters`) : Promise.resolve({ chapters: [] })),
+            [project && String(project.id)],
+            0,
+          );
+          const chapters = (chapterList.data && chapterList.data.chapters) || [];
+
+          const chapterKey = project && selectedChapter !== null ? `${project.id}:${selectedChapter}` : '';
+          const chapterPoll = usePoll(
+            () => (chapterKey ? api(`/projects/${project.id}/chapters/${selectedChapter}`) : Promise.resolve(null)),
+            [chapterKey],
+            0,
+          );
+          const chapter = chapterPoll.data || null;
+
+          chapterRef.current = chapter;
+          projectRef.current = project;
+          titleRef.current = title;
+          textRef.current = text;
+          conflictRef.current = conflict;
+
+          React.useEffect(() => {
+            if (projectId && projectRows.some((item) => String(item.id) === String(projectId))) return;
+            const picked = projectRows[0] || null;
+            if (picked && String(picked.id) !== String(projectId)) {
+              setProjectId(String(picked.id));
+              setSelectedChapter(null);
+              loadedKeyRef.current = '';
+            }
+          }, [projectKey, projectId]);
+
+          React.useEffect(() => {
+            if (!projectId) return;
+            try { localStorage.setItem('chapter-whale-project', projectId); } catch {}
+          }, [projectId]);
+
+          React.useEffect(() => {
+            if (selectedChapter !== null) return;
+            if (!chapters.length) return;
+            setSelectedChapter(chapters[0].id);
+          }, [chapters.length, selectedChapter]);
+
+          const setDirtyFlag = (value) => {
+            dirtyRef.current = Boolean(value);
+            setDirty(Boolean(value));
+          };
+
+          const pushCheckpoint = (before, after, label) => {
+            if (!undoRef.current) return;
+            if (before.content === after.content && before.title === after.title) return;
+            undoRef.current.push({ label, before, after });
+            setUndoState({ undo: undoRef.current.canUndo, redo: undoRef.current.canRedo });
+          };
+
+          const applyServerData = (data, options) => {
+            if (!data) return;
+            const settings = options || {};
+            const doc = wbInitialDocument(data);
+            const identity = doc.identity;
+            if (settings.sameChapter) {
+              identity.draft_epoch = Math.max(Number(identity.draft_epoch) || 0, Number(identityRef.current.draft_epoch) || 0);
+            }
+            identityRef.current = identity;
+            const draft = data.draft && data.draft.exists ? data.draft : null;
+            baseRef.current = {
+              /* When a draft exists, its recorded base is the version the
+                 author actually edited. Trusting the newest file sha instead
+                 would let a stale draft silently overwrite a background save. */
+              version_id: (draft && draft.base_version_id) || data.version_id || '',
+              sha256: (draft && draft.base_sha256) || data.sha256 || data.content_sha256 || '',
+              content: wbNormalizeLf(data.content),
+            };
+            if (settings.reset) {
+              undoRef.current = new WorkbenchCore.UndoStack(20);
+              adapterRef.current = new WorkbenchCore.EditorAdapter({ text: doc.content, title: doc.title });
+              setUndoState({ undo: false, redo: false });
+            } else if (adapterRef.current) {
+              adapterRef.current.setValue(doc.content, true);
+            }
+            titleRef.current = doc.title;
+            textRef.current = doc.content;
+            lastTitleRef.current = doc.title;
+            lastTextRef.current = doc.content;
+            setTitle(doc.title);
+            setText(doc.content);
+            setDirtyFlag(false);
+            setDraftState(doc.hasDraft ? 'saved' : 'idle');
+            if (settings.reset) {
+              setCheck(null);
+              setVersions({ key: '', loading: false, error: '', rows: [], current: '' });
+              setNotice(doc.hasDraft ? {
+                tone: data.draft && data.draft.stale ? 'warn' : 'info',
+                text: data.draft && data.draft.stale
+                  ? '已恢复未提交草稿（基于旧版本，保存正式版本前请比对正文）'
+                  : '已恢复未提交草稿 · 保存正式版本后会自动清理',
+              } : null);
+            }
+          };
+
+          React.useEffect(() => {
+            const data = chapterPoll.data;
+            if (!data) return;
+            const key = `${projectId}:${data.id}`;
+            if (key !== loadedKeyRef.current) {
+              loadedKeyRef.current = key;
+              applyServerData(data, { reset: true, sameChapter: false });
+            } else if (!composingRef.current && !dirtyRef.current) {
+              applyServerData(data, { reset: false, sameChapter: true });
+            }
+          }, [chapterPoll.data]);
+
+          const captureDraft = () => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner) return null;
+            const area = textareaRef.current;
+            let cursor = {};
+            if (area && typeof area.selectionStart === 'number') {
+              try {
+                const start = WorkbenchCore.utf16ToCodepoint(textRef.current, area.selectionStart);
+                const end = WorkbenchCore.utf16ToCodepoint(textRef.current, area.selectionEnd);
+                cursor = { start_cp: start, end_cp: end, scroll_top: Number(area.scrollTop) || 0 };
+              } catch {}
+            }
+            return {
+              projectId: String(owner.id),
+              chapterId: state.id,
+              title: titleRef.current,
+              content: textRef.current,
+              baseVersionId: baseRef.current.version_id,
+              baseSha256: baseRef.current.sha256,
+              draftIdentity: { ...identityRef.current },
+              sessionId: sessionRef.current,
+              cursor,
+              seq: editSeqRef.current,
+            };
+          };
+
+          const persistDraftOnce = async (capture) => {
+            if (!capture) return false;
+            if (composingRef.current) return false;
+            setDraftState('saving');
+            const body = wbDraftPayload(capture);
+            try {
+              const result = await api(`/projects/${capture.projectId}/chapters/${capture.chapterId}/draft`, { method: 'PUT', body });
+              const draft = (result && result.draft) || {};
+              const sameChapter = Boolean(
+                chapterRef.current
+                && String(chapterRef.current.id) === String(capture.chapterId)
+                && projectRef.current
+                && String(projectRef.current.id) === String(capture.projectId),
+              );
+              if (sameChapter) {
+                identityRef.current = {
+                  draft_id: draft.draft_id || null,
+                  draft_epoch: Number(draft.draft_epoch) || 0,
+                  draft_revision: Number(draft.draft_revision) || 0,
+                };
+                if (editSeqRef.current === capture.seq) setDirtyFlag(false);
+                setDraftState('saved');
+              }
+              return true;
+            } catch (error) {
+              const sameChapter = Boolean(chapterRef.current && String(chapterRef.current.id) === String(capture.chapterId));
+              if (sameChapter) {
+                if (error && error.code === 'draft_conflict') {
+                  const payload = { kind: 'draft_conflict', data: error.data || {} };
+                  setConflict(payload);
+                  conflictRef.current = payload;
+                }
+                setDraftState('error');
+                setDirtyFlag(true);
+              } else {
+                toast.push(`第 ${capture.chapterId} 章草稿保存失败：${error.message}`, 'err');
+              }
+              return false;
+            }
+          };
+
+          const queueDraftSave = (capture) => {
+            if (!capture) return Promise.resolve(false);
+            const task = draftChainRef.current.then(() => (
+              persistDraftOnce(typeof capture === 'function' ? capture() : capture)
+            ));
+            draftChainRef.current = task.then(() => undefined, () => undefined);
+            return task;
+          };
+
+          const cancelDraftTimer = () => {
+            if (draftTimerRef.current) {
+              clearTimeout(draftTimerRef.current);
+              draftTimerRef.current = null;
+            }
+          };
+
+          const scheduleDraft = () => {
+            if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+            draftTimerRef.current = setTimeout(() => {
+              draftTimerRef.current = null;
+              if (composingRef.current) {
+                scheduleDraft();
+                return;
+              }
+              queueDraftSave(() => (dirtyRef.current ? captureDraft() : null));
+            }, 1500);
+          };
+
+          const flushDraft = async () => {
+            cancelDraftTimer();
+            if (!dirtyRef.current) return true;
+            return queueDraftSave(() => (dirtyRef.current ? captureDraft() : null));
+          };
+
+          const adoptDocument = (doc, label, options) => {
+            const settings = options || {};
+            const before = { title: titleRef.current, content: textRef.current };
+            const after = {
+              title: doc && doc.title !== undefined && doc.title !== null ? String(doc.title) : titleRef.current,
+              content: doc && doc.content !== undefined && doc.content !== null ? String(doc.content) : textRef.current,
+            };
+            if (settings.record !== false) pushCheckpoint(before, after, label);
+            titleRef.current = after.title;
+            textRef.current = after.content;
+            lastTitleRef.current = after.title;
+            lastTextRef.current = after.content;
+            setTitle(after.title);
+            setText(after.content);
+            if (adapterRef.current) adapterRef.current.setValue(after.content, true);
+            editSeqRef.current += 1;
+            setDirtyFlag(true);
+            setDraftState('dirty');
+            if (settings.autosave !== false) scheduleDraft();
+          };
+
+          const applyContentInput = (next) => {
+            if (!chapterRef.current) return;
+            const value = String(next || '');
+            if (adapterRef.current && !composingRef.current) adapterRef.current.setValue(value, true);
+            if (!composingRef.current) {
+              const now = Date.now();
+              if (now - lastCheckpointRef.current > 800) {
+                pushCheckpoint(
+                  { title: titleRef.current, content: lastTextRef.current },
+                  { title: titleRef.current, content: value },
+                  '输入',
+                );
+                lastCheckpointRef.current = now;
+              }
+            }
+            lastTextRef.current = value;
+            textRef.current = value;
+            setText(value);
+            editSeqRef.current += 1;
+            setDirtyFlag(true);
+            setDraftState('dirty');
+            setNotice(null);
+            scheduleDraft();
+          };
+
+          const applyTitleInput = (next) => {
+            if (!chapterRef.current) return;
+            const value = String(next || '');
+            const now = Date.now();
+            if (now - lastCheckpointRef.current > 800) {
+              pushCheckpoint(
+                { title: lastTitleRef.current, content: textRef.current },
+                { title: value, content: textRef.current },
+                '改标题',
+              );
+              lastCheckpointRef.current = now;
+            }
+            lastTitleRef.current = value;
+            titleRef.current = value;
+            setTitle(value);
+            if (adapterRef.current) adapterRef.current.title = value;
+            editSeqRef.current += 1;
+            setDirtyFlag(true);
+            setDraftState('dirty');
+            setNotice(null);
+            scheduleDraft();
+          };
+
+          const undoEdit = () => {
+            if (!undoRef.current) return;
+            const item = undoRef.current.undo();
+            if (!item) return;
+            adoptDocument(item.before, '撤销', { record: false, autosave: true });
+            setUndoState({ undo: undoRef.current.canUndo, redo: undoRef.current.canRedo });
+          };
+
+          const redoEdit = () => {
+            if (!undoRef.current) return;
+            const item = undoRef.current.redo();
+            if (!item) return;
+            adoptDocument(item.after, '重做', { record: false, autosave: true });
+            setUndoState({ undo: undoRef.current.canUndo, redo: undoRef.current.canRedo });
+          };
+
+          const changeProject = (nextId) => {
+            if (String(nextId) === String(projectId)) return;
+            cancelDraftTimer();
+            if (dirtyRef.current) {
+              const capture = captureDraft();
+              if (capture) queueDraftSave(capture);
+            }
+            setProjectId(String(nextId));
+            setSelectedChapter(null);
+            setConflict(null);
+            conflictRef.current = null;
+            setNotice(null);
+            loadedKeyRef.current = '';
+            if (typeof props.selectProject === 'function') props.selectProject(String(nextId));
+          };
+
+          const selectChapter = (nextId) => {
+            if (String(nextId) === String(selectedChapter)) return;
+            cancelDraftTimer();
+            if (dirtyRef.current) {
+              const capture = captureDraft();
+              if (capture) queueDraftSave(capture);
+            }
+            setSelectedChapter(nextId === null || nextId === undefined ? null : nextId);
+            setConflict(null);
+            conflictRef.current = null;
+            setNotice(null);
+          };
+
+          const saveVersion = async () => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner || savingVersionRef.current) return;
+            if (composingRef.current) return;
+            savingVersionRef.current = true;
+            setSavingVersion(true);
+            cancelDraftTimer();
+            if (dirtyRef.current) {
+              const flushed = await flushDraft();
+              if (!flushed && conflictRef.current) {
+                savingVersionRef.current = false;
+                setSavingVersion(false);
+                return;
+              }
+            }
+            await draftChainRef.current;
+            const seq = editSeqRef.current;
+            const submittedTitle = titleRef.current;
+            const submittedContent = textRef.current;
+            const opId = wbOpId('save');
+            const body = wbVersionPayload({
+              title: submittedTitle,
+              content: submittedContent,
+              expectedVersionId: baseRef.current.version_id,
+              expectedSha: baseRef.current.sha256,
+              draftIdentity: identityRef.current,
+              opId,
+            });
+            try {
+              const result = await api(`/projects/${owner.id}/chapters/${state.id}`, { method: 'PUT', body });
+              const submitted = { ...identityRef.current };
+              baseRef.current = {
+                version_id: result.version_id || result.version_uid || baseRef.current.version_id,
+                sha256: result.sha256 || result.content_sha256 || baseRef.current.sha256,
+                content: submittedContent,
+              };
+              if (result.draft_cleared) {
+                identityRef.current = { draft_id: null, draft_epoch: (Number(submitted.draft_epoch) || 0) + 1, draft_revision: 0 };
+              }
+              /* draft_preserved means the server draft advanced while the
+                 version was saving. Keep the submitted identity: the next
+                 autosave must 409 and show the merge banner rather than
+                 silently replacing the other window's newer revision. */
+              if (seq === editSeqRef.current) {
+                setDirtyFlag(false);
+                setDraftState(result.draft_preserved ? 'saved' : 'idle');
+              }
+              setConflict(null);
+              conflictRef.current = null;
+              setNotice(result.draft_preserved
+                ? { tone: 'warn', text: `正式版本已保存；检测到更新的草稿修订 ${result.current_draft_revision || 1} 已保留，继续编辑并自动保存时会提示比对。` }
+                : { tone: 'ok', text: `正式版本已保存${result.unchanged ? '（正文无变化）' : ''}。` });
+              toast.push(result.unchanged ? '正文无变化，版本未新增' : '正式版本已保存', 'ok');
+              if (result.draft_preserved) {
+                /* Keep the saved text on screen. Reloading would replace it
+                   with the other window's newer draft because the editor is
+                   no longer dirty, hiding what was just committed. */
+                setDraftState('saved');
+              } else {
+                chapterPoll.reload(true);
+              }
+              chapterList.reload(true);
+              if (versions.key) loadVersions(true);
+              if (typeof props.refreshOverview === 'function') props.refreshOverview();
+            } catch (error) {
+              const code = error && error.code;
+              if (code === 'concurrent_modification') {
+                const payload = { kind: 'concurrent_modification', data: error.data || {} };
+                setConflict(payload);
+                conflictRef.current = payload;
+                toast.push('正文已被其他窗口更新，请先比对', 'err');
+              } else if (code === 'draft_conflict') {
+                const payload = { kind: 'draft_conflict', data: error.data || {} };
+                setConflict(payload);
+                conflictRef.current = payload;
+                toast.push('草稿已在其他窗口更新，请先比对', 'err');
+              } else {
+                toast.push(`保存正式版本失败：${error.message}`, 'err');
+              }
+            } finally {
+              savingVersionRef.current = false;
+              setSavingVersion(false);
+            }
+          };
+          saveVersionRef.current = saveVersion;
+
+          React.useEffect(() => {
+            const onKeyDown = (event) => {
+              if (!(event.ctrlKey || event.metaKey) || String(event.key || '').toLowerCase() !== 's') return;
+              if (composingRef.current || !chapterRef.current) return;
+              event.preventDefault();
+              if (saveVersionRef.current) saveVersionRef.current();
+            };
+            document.addEventListener('keydown', onKeyDown);
+            return () => document.removeEventListener('keydown', onKeyDown);
+          }, []);
+
+          React.useEffect(() => () => {
+            if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+            if (dirtyRef.current) {
+              const capture = captureDraft();
+              if (capture) queueDraftSave(capture);
+            }
+          }, []);
+
+          const loadVersions = async (force) => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner) return;
+            const key = `${owner.id}:${state.id}:${state.version_id || ''}`;
+            if (!force && versions.key === key) return;
+            setVersions((current) => ({ ...current, key, loading: true, error: '' }));
+            try {
+              const data = await api(`/projects/${owner.id}/chapters/${state.id}/versions`);
+              const rows = Array.isArray(data && data.versions) ? data.versions : [];
+              setVersions({ key, loading: false, error: '', rows, current: (data && data.current_version_id) || '' });
+            } catch (error) {
+              setVersions({ key, loading: false, error: error.message, rows: [], current: '' });
+            }
+          };
+
+          const loadReference = async () => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner) return;
+            const key = `${owner.id}:${state.id}`;
+            setReference((current) => ({ ...current, key, loading: true, error: '' }));
+            try {
+              const listing = await api(`/projects/${owner.id}/outline/files`);
+              const rows = (listing && listing.files) || [];
+              const match = rows.find((row) => Array.isArray(row.chapter_range)
+                && row.chapter_range.length === 2
+                && Number(row.chapter_range[0]) <= Number(state.id)
+                && Number(row.chapter_range[1]) >= Number(state.id)) || null;
+              if (!match) {
+                setReference({ key, loading: false, error: '', title: '', outline: '' });
+                return;
+              }
+              const file = await api(`/projects/${owner.id}/outline/files/${encodeURIComponent(match.name)}`);
+              setReference({
+                key,
+                loading: false,
+                error: '',
+                title: match.name,
+                outline: wbOutlineExcerpt(file && file.content, state.id),
+              });
+            } catch (error) {
+              setReference({ key, loading: false, error: error.message, title: '', outline: '' });
+            }
+          };
+
+          React.useEffect(() => {
+            if (tab === 'versions') loadVersions(false);
+            if (tab === 'reference') loadReference();
+          }, [tab, chapterKey, chapter ? chapter.id : '']);
+
+          const runQuickCheck = async () => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner) return;
+            const key = `${owner.id}:${state.id}`;
+            setTab('check');
+            setBusy('check');
+            setCheck((current) => ({ key, loading: true, error: '', data: current && current.key === key ? current.data : null }));
+            try {
+              const data = await api(`/projects/${owner.id}/chapters/${state.id}/quick-check`, {
+                method: 'POST',
+                body: { content: textRef.current },
+              });
+              setCheck({ key, loading: false, error: '', data });
+            } catch (error) {
+              setCheck({ key, loading: false, error: error.message, data: null });
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const afterMutation = async (target) => {
+            cancelDraftTimer();
+            if (dirtyRef.current) {
+              const flushed = await flushDraft();
+              if (!flushed && conflictRef.current) return;
+            }
+            const data = await chapterList.reload(true);
+            const rows = (data && data.chapters) || [];
+            if (target !== undefined && target !== null) {
+              if (String(target) === String(selectedChapter)) chapterPoll.reload(true);
+              else setSelectedChapter(target);
+            } else if (rows.length) {
+              const exists = rows.some((row) => String(row.id) === String(selectedChapter));
+              if (!exists) setSelectedChapter(rows[rows.length - 1].id);
+            } else {
+              setSelectedChapter(null);
+            }
+            if (typeof props.refreshOverview === 'function') props.refreshOverview();
+          };
+
+          const createChapter = async () => {
+            const owner = projectRef.current;
+            if (!owner || busy === 'new') return;
+            setBusy('new');
+            try {
+              const result = await api(`/projects/${owner.id}/chapters`, {
+                method: 'POST',
+                body: { title: '未命名章节', content: '' },
+              });
+              toast.push(`已新建第 ${result.chapter_id} 章`, 'ok');
+              await afterMutation(result.chapter_id);
+            } catch (error) {
+              toast.push(`新建章节失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const deleteTail = async () => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner || busy === 'delete') return;
+            if (dirtyRef.current) {
+              toast.push('当前章有未保存修改，请先保存正式版本', 'err');
+              return;
+            }
+            if (!wbConfirm(`删除第 ${state.id} 章（仅支持未发布的尾章）？会归档到回收站。`)) return;
+            setBusy('delete');
+            try {
+              await api(`/projects/${owner.id}/chapters/${state.id}`, {
+                method: 'DELETE',
+                body: { expected_content_sha256: baseRef.current.sha256, op_id: wbOpId('delete') },
+              });
+              toast.push(`已删除第 ${state.id} 章`, 'ok');
+              await afterMutation(null);
+            } catch (error) {
+              toast.push(`删除尾章失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const splitChapter = async () => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner || busy === 'split') return;
+            if (dirtyRef.current) {
+              toast.push('当前章有未保存修改，请先保存正式版本再拆分', 'err');
+              return;
+            }
+            const area = textareaRef.current;
+            const content = textRef.current;
+            let offset = 0;
+            try {
+              const start = area && typeof area.selectionStart === 'number' ? area.selectionStart : 0;
+              offset = WorkbenchCore.utf16ToCodepoint(content, start);
+            } catch { offset = 0; }
+            const total = Array.from(content).length;
+            if (!(offset > 0 && offset < total)) offset = Math.floor(total / 2);
+            if (offset <= 0 || offset >= total) {
+              toast.push('正文太短，无法拆分', 'err');
+              return;
+            }
+            if (!wbConfirm(`从光标处拆分为第 ${state.id} 章与第 ${state.id + 1} 章（仅支持未发布的尾章）？`)) return;
+            setBusy('split');
+            try {
+              const result = await api(`/projects/${owner.id}/chapters/${state.id}/split`, {
+                method: 'POST',
+                body: {
+                  offset,
+                  title: titleRef.current,
+                  expected_content_sha256: baseRef.current.sha256,
+                  op_id: wbOpId('split'),
+                },
+              });
+              toast.push(`已拆分为第 ${result.chapter_id} / ${result.new_chapter_id} 章`, 'ok');
+              await afterMutation(result.chapter_id);
+            } catch (error) {
+              toast.push(`拆分失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const mergeTail = async () => {
+            const owner = projectRef.current;
+            if (!owner || busy === 'merge') return;
+            if (dirtyRef.current) {
+              toast.push('当前章有未保存修改，请先保存正式版本再合并', 'err');
+              return;
+            }
+            if (!wbConfirm('合并最后两章？被合并的末章会归档到回收站。')) return;
+            setBusy('merge');
+            try {
+              const result = await api(`/projects/${owner.id}/chapters/merge-tail`, {
+                method: 'POST',
+                body: { op_id: wbOpId('merge') },
+              });
+              toast.push(`已合并为第 ${result.chapter_id} 章`, 'ok');
+              await afterMutation(result.chapter_id);
+            } catch (error) {
+              toast.push(`合并尾章失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const restoreVersion = async (row) => {
+            const state = chapterRef.current;
+            const owner = projectRef.current;
+            if (!state || !owner || !row) return;
+            const versionId = row.version_uid || row.version_id;
+            if (!versionId) return;
+            if (!wbConfirm(`恢复到 ${wbShortId(versionId)}？当前正文会先自动备份，未提交的草稿会被丢弃。`)) return;
+            setBusy(`restore-${versionId}`);
+            try {
+              if (identityRef.current.draft_id) {
+                try {
+                  await api(`/projects/${owner.id}/chapters/${state.id}/draft`, {
+                    method: 'DELETE',
+                    body: { draft_id: identityRef.current.draft_id },
+                  });
+                  identityRef.current = {
+                    draft_id: null,
+                    draft_epoch: (Number(identityRef.current.draft_epoch) || 0) + 1,
+                    draft_revision: 0,
+                  };
+                } catch (error) {
+                  toast.push(`无法丢弃现有草稿，已取消恢复：${error.message}`, 'err');
+                  return;
+                }
+              }
+              await api(`/projects/${owner.id}/chapters/${state.id}/restore`, {
+                method: 'POST',
+                body: { version_id: versionId, restore_title: true, op_id: wbOpId('restore') },
+              });
+              setDirtyFlag(false);
+              setDraftState('idle');
+              setConflict(null);
+              conflictRef.current = null;
+              setNotice({ tone: 'ok', text: `已恢复版本 ${wbShortId(versionId)}；当前正文已重新载入。` });
+              toast.push('历史版本已恢复', 'ok');
+              chapterPoll.reload(true);
+              chapterList.reload(true);
+              loadVersions(true);
+              if (typeof props.refreshOverview === 'function') props.refreshOverview();
+            } catch (error) {
+              toast.push(`恢复版本失败：${error.message}`, 'err');
+            } finally {
+              setBusy('');
+            }
+          };
+
+          const reloadConflict = () => {
+            if (!conflict) return;
+            const data = conflict.data || {};
+            if (conflict.kind === 'draft_conflict') {
+              const current = data.current_draft || {};
+              if (!current || typeof current.content !== 'string') {
+                setNotice({ tone: 'err', text: '服务器未返回当前草稿（可能已在其他窗口丢弃）。请刷新章节后重新编辑；本地文本仍保留在编辑器中。' });
+                setConflict(null);
+                conflictRef.current = null;
+                return;
+              }
+              baseRef.current = {
+                version_id: current.base_version_id || baseRef.current.version_id,
+                sha256: current.base_content_sha256 || baseRef.current.sha256,
+                content: current.content,
+              };
+              identityRef.current = {
+                draft_id: current.draft_id || null,
+                draft_epoch: Number(current.draft_epoch) || 0,
+                draft_revision: Number(current.draft_revision) || 0,
+              };
+              adoptDocument(
+                { title: current.title !== null && current.title !== undefined ? current.title : titleRef.current, content: current.content },
+                '载入服务器草稿',
+                { autosave: false },
+              );
+              setDirtyFlag(false);
+              setDraftState(current.draft_id ? 'saved' : 'idle');
+            } else {
+              const nextContent = typeof data.current_content === 'string' ? data.current_content : textRef.current;
+              const nextTitle = data.current_title || titleRef.current;
+              baseRef.current = {
+                version_id: data.current_version_id || baseRef.current.version_id,
+                sha256: data.current_content_sha256 || baseRef.current.sha256,
+                content: nextContent,
+              };
+              adoptDocument({ title: nextTitle, content: nextContent }, '载入最新正文', { autosave: false });
+              setDirtyFlag(false);
+              setDraftState('idle');
+            }
+            setConflict(null);
+            conflictRef.current = null;
+          };
+
+          const mergeConflict = () => {
+            if (!conflict) return;
+            const data = conflict.data || {};
+            if (conflict.kind === 'draft_conflict') {
+              const current = data.current_draft || {};
+              if (!current || typeof current.content !== 'string') {
+                reloadConflict();
+                return;
+              }
+              const merged = wbMergeTexts(baseRef.current.content, textRef.current, current.content);
+              adoptDocument({ title: titleRef.current, content: merged.text }, '合并服务器草稿', { autosave: merged.clean });
+              identityRef.current = {
+                draft_id: current.draft_id || null,
+                draft_epoch: Number(current.draft_epoch) || 0,
+                draft_revision: Number(current.draft_revision) || 0,
+              };
+              setNotice(merged.clean
+                ? { tone: 'ok', text: '已与服务端草稿合并，正在自动保存。' }
+                : { tone: 'warn', text: `已合并，${merged.conflicts.length} 处冲突已用 <<<<<<< / ======= / >>>>>>> 标记标出，请手工处理后保存。` });
+              if (merged.clean) {
+                const capture = captureDraft();
+                if (capture) queueDraftSave(capture);
+              }
+            } else {
+              const server = typeof data.current_content === 'string' ? data.current_content : '';
+              const merged = wbMergeTexts(baseRef.current.content, textRef.current, server);
+              baseRef.current = {
+                version_id: data.current_version_id || baseRef.current.version_id,
+                sha256: data.current_content_sha256 || baseRef.current.sha256,
+                content: server,
+              };
+              adoptDocument({ title: titleRef.current, content: merged.text }, '合并最新正文', { autosave: merged.clean });
+              setNotice(merged.clean
+                ? { tone: 'ok', text: '已合并最新正文，请检查后再次按 Ctrl+S 保存。' }
+                : { tone: 'warn', text: `已合并，${merged.conflicts.length} 处冲突已用标记标出，请手工处理后再次按 Ctrl+S。` });
+            }
+            setConflict(null);
+            conflictRef.current = null;
+          };
+
+          const filtered = chapters.filter((row) => {
+            if (!query) return true;
+            const needle = query.toLowerCase();
+            return String(row.id).includes(query) || String(row.title || '').toLowerCase().includes(needle);
+          });
+          const chapterIndex = chapters.findIndex((row) => String(row.id) === String(selectedChapter));
+          const previousChapter = chapterIndex > 0 ? chapters[chapterIndex - 1] : null;
+          const nextChapter = chapterIndex >= 0 && chapterIndex < chapters.length - 1 ? chapters[chapterIndex + 1] : null;
+          const liveWords = wbVisibleWords(text);
+          const draftLabel = draftState === 'saving'
+            ? '草稿保存中…'
+            : dirty
+              ? '未保存 · 1.5 秒后自动存草稿'
+              : draftState === 'saved'
+                ? '草稿已保存'
+                : draftState === 'error'
+                  ? '草稿保存失败'
+                  : '无未保存修改';
+          const currentCheck = check && check.key === chapterKey ? check : null;
+          const currentVersions = versions.key.startsWith(chapterKey + ':') ? versions : { loading: false, error: '', rows: [] };
+          const currentReference = reference.key === chapterKey ? reference : { loading: false, error: '', title: '', outline: '' };
+
+          const banner = (tone, text, actions) => e(
+            'div',
+            { className: 'wb-banner', 'data-tone': tone },
+            e('span', { className: 'wb-bannertext' }, text),
+            actions ? e('div', { className: 'wb-banner-actions' }, actions) : null,
+          );
+
+          let rightBody = null;
+          if (!chapter) {
+            rightBody = e(Empty, null, '选择章节后查看批注、体检、版本与参考');
+          } else if (tab === 'annotations') {
+            const summary = chapter.annotations_summary || {};
+            rightBody = e(
+              React.Fragment,
+              null,
+              e('div', { className: 'wb-kpis' },
+                e('div', { className: 'wb-kpi' }, e('span', null, '待处理'), e('strong', null, num(summary.open_count || 0))),
+                e('div', { className: 'wb-kpi' }, e('span', null, '候选'), e('strong', null, num(summary.proposed_count || 0))),
+                e('div', { className: 'wb-kpi' }, e('span', null, '待预览'), e('strong', null, num(summary.pending_previews || 0)))),
+              e('p', { className: 'nh-muted' }, '批注列表与选区锚点由批注接口提供；本页先展示本章批注计数，避免在没有定位数据时给出虚假锚点。'),
+              e('div', { className: 'wb-tabhead' },
+                e('span', null, `本章批注 ${num((summary.open_count || 0) + (summary.proposed_count || 0))} 条`),
+                e(Button, { size: 'sm', kind: 'ghost', icon: 'refresh', onClick: () => chapterPoll.reload(true) }, '刷新')),
+            );
+          } else if (tab === 'check') {
+            rightBody = e(
+              React.Fragment,
+              null,
+              e('div', { className: 'wb-tabhead' },
+                e(Button, { size: 'sm', kind: 'primary', icon: 'check', busy: busy === 'check', onClick: runQuickCheck }, '运行快速体检'),
+                currentCheck && currentCheck.data ? e('span', null, `${currentCheck.data.issue_count || 0} 项 · ${currentCheck.data.elapsed_ms || 0}ms`) : null),
+              currentCheck && currentCheck.loading ? e(Skeleton, { height: 60 }) : null,
+              currentCheck && currentCheck.error ? e('div', { className: 'wb-banner', 'data-tone': 'err' }, currentCheck.error) : null,
+              currentCheck && currentCheck.data
+                ? (currentCheck.data.issues || []).length
+                  ? e(React.Fragment, null, ...(currentCheck.data.issues || []).map((issue, index) => e(
+                      'div',
+                      { key: `${issue.type || 'issue'}-${index}`, className: 'wb-issue', 'data-tone': wbIssueTone(issue.severity) },
+                      e('div', { className: 'wb-issuemet' },
+                        e('span', null, `${issue.type || '规则'} · ${issue.severity || 'info'}`),
+                        Number.isFinite(Number(issue.start)) && issue.start !== null && issue.start !== undefined ? e('span', null, `@${issue.start}`) : null),
+                      e('div', { className: 'wb-issuetext' }, issue.message || '规则命中'),
+                      issue.quote ? e('div', { className: 'wb-issuequote' }, String(issue.quote).slice(0, 120)) : null,
+                    )))
+                  : e('div', { className: 'wb-banner', 'data-tone': 'ok' }, '本地快速体检未发现问题（0 次模型调用）。')
+                : e('p', { className: 'nh-muted' }, '本地词表与规则即时检查，不消耗模型额度。'),
+            );
+          } else if (tab === 'versions') {
+            rightBody = e(
+              React.Fragment,
+              null,
+              e('div', { className: 'wb-tabhead' },
+                e('span', null, `${currentVersions.rows.length} 个历史版本`),
+                e(Button, { size: 'sm', kind: 'ghost', icon: 'refresh', onClick: () => loadVersions(true) }, '刷新')),
+              currentVersions.loading ? e(Skeleton, { height: 60 }) : null,
+              currentVersions.error ? e('div', { className: 'wb-banner', 'data-tone': 'err' }, currentVersions.error) : null,
+              e(React.Fragment, null, ...currentVersions.rows.map((row) => {
+                const versionId = row.version_uid || row.version_id;
+                return e(
+                  'div',
+                  { key: versionId || String(row.sha256), className: 'wb-version', 'data-current': row.current ? 'true' : 'false' },
+                  e('div', { className: 'wb-version-main' },
+                    e('strong', null, row.current ? '当前正文' : wbShortId(versionId)),
+                    e('span', null, `${row.source || '未知来源'} · ${wbFormatTime(row.created_at)}`),
+                    e('span', null, `${num(row.bytes || 0)} 字节 · ${wbShortId(row.sha256 || row.version_id)}`)),
+                  row.current
+                    ? e('span', { className: 'wb-pill' }, '当前')
+                    : e(Button, { size: 'sm', kind: 'ghost', busy: busy === `restore-${versionId}`, onClick: () => restoreVersion(row) }, '恢复'),
+                );
+              })),
+              !currentVersions.loading && !currentVersions.error && !currentVersions.rows.length ? e(Empty, null, '还没有保存过的版本') : null,
+            );
+          } else {
+            rightBody = e(
+              React.Fragment,
+              null,
+              e('div', { className: 'wb-kpis' },
+                e('div', { className: 'wb-kpi' }, e('span', null, '章节'), e('strong', null, `第 ${chapter.id} 章`)),
+                e('div', { className: 'wb-kpi' }, e('span', null, '版本'), e('strong', null, chapter.version_seq ? `v${chapter.version_seq}` : '—')),
+                e('div', { className: 'wb-kpi' }, e('span', null, '字数'), e('strong', null, num(chapter.words || liveWords)))),
+              e('div', { className: 'wb-tabhead' }, e('strong', null, '本章细纲'), e('span', null, currentReference.title || '大纲与规划')),
+              currentReference.loading ? e(Skeleton, { height: 80 }) : null,
+              currentReference.error ? e('div', { className: 'wb-banner', 'data-tone': 'err' }, currentReference.error) : null,
+              currentReference.outline
+                ? e('pre', { className: 'wb-outline' }, currentReference.outline)
+                : !currentReference.loading && !currentReference.error
+                  ? e('div', { className: 'nh-muted' }, '大纲文件中未找到本章细纲。')
+                  : null,
+              e('p', { className: 'nh-muted' }, `当前标题：${title || chapter.title || '未命名'}`),
+            );
+          }
+
+          const chapterPane = chapter
+            ? e(
+                'main',
+                { className: 'wb-pane wb-center' },
+                e('div', { className: 'wb-panehead wb-centerhead' },
+                  e('div', null,
+                    e('span', { className: 'wb-crumb' }, `第 ${chapter.id} 章`),
+                    e('span', { className: 'wb-pill' }, chapter.version_seq ? `线上 v${chapter.version_seq}` : '未定稿')),
+                  e('span', { className: 'wb-status' },
+                    e('span', { className: 'nh-dot', 'data-state': dirty ? 'warn' : 'ok' }),
+                    draftLabel)),
+                e('input', {
+                  className: 'wb-titleinput',
+                  value: title,
+                  placeholder: '章节标题',
+                  'aria-label': '章节标题',
+                  onChange: (event) => applyTitleInput(event.target.value),
+                }),
+                e('div', { className: 'wb-actions' },
+                  e(Button, { kind: 'primary', size: 'sm', icon: 'check', busy: savingVersion, onClick: saveVersion }, '保存版本 (Ctrl+S)'),
+                  e(Button, { size: 'sm', icon: 'spark', busy: busy === 'check', onClick: runQuickCheck }, '快速体检'),
+                  e(Button, { size: 'sm', kind: 'ghost', icon: 'refresh', disabled: !undoState.undo, onClick: undoEdit }, '撤销'),
+                  e(Button, { size: 'sm', kind: 'ghost', disabled: !undoState.redo, onClick: redoEdit }, '重做'),
+                  e('span', { className: 'nh-spacer' }),
+                  e('details', { className: 'wb-menu' },
+                    e('summary', null, '更多操作'),
+                    e('div', { className: 'wb-menupanel' },
+                      e('button', { type: 'button', onClick: createChapter, disabled: busy === 'new' }, '新建空白章节'),
+                      e('button', { type: 'button', onClick: splitChapter, disabled: busy === 'split' }, '从光标处拆分尾章'),
+                      e('button', { type: 'button', onClick: mergeTail, disabled: busy === 'merge' }, '合并最后两章'),
+                      e('button', { type: 'button', 'data-tone': 'danger', onClick: deleteTail, disabled: busy === 'delete' }, '删除尾章（归档）')))),
+                conflict && conflict.kind === 'draft_conflict'
+                  ? banner('warn', '草稿已在其他窗口更新，本地输入尚未丢失。可载入服务器草稿，或与本地内容合并。', [
+                      e(Button, { size: 'sm', onClick: reloadConflict }, '载入服务器草稿'),
+                      e(Button, { size: 'sm', kind: 'primary', onClick: mergeConflict }, '合并并保留本地'),
+                    ])
+                  : null,
+                conflict && conflict.kind === 'concurrent_modification'
+                  ? banner('warn', '正文已在其他窗口、任务或外部编辑器中更新。请先比对，再决定载入或合并。', [
+                      e(Button, { size: 'sm', onClick: reloadConflict }, '载入最新正文'),
+                      e(Button, { size: 'sm', kind: 'primary', onClick: mergeConflict }, '合并后重试'),
+                    ])
+                  : null,
+                notice ? banner(notice.tone || 'info', notice.text, e(Button, { size: 'sm', kind: 'ghost', icon: 'x', onClick: () => setNotice(null) }, '')) : null,
+                e('textarea', {
+                  ref: textareaRef,
+                  className: 'wb-textarea',
+                  value: text,
+                  placeholder: '光标落入稿纸，直接开始写…',
+                  'aria-label': '章节正文',
+                  spellCheck: false,
+                  onChange: (event) => applyContentInput(event.target.value),
+                  onCompositionStart: () => {
+                    composingRef.current = true;
+                    if (adapterRef.current) adapterRef.current.beginComposition();
+                  },
+                  onCompositionEnd: (event) => {
+                    composingRef.current = false;
+                    if (adapterRef.current) {
+                      adapterRef.current.endComposition();
+                      adapterRef.current.setValue(event.target.value, true);
+                    }
+                    applyContentInput(event.target.value);
+                  },
+                }),
+                e('div', { className: 'wb-foot' },
+                  e(Button, { size: 'sm', kind: 'ghost', disabled: !previousChapter, onClick: () => previousChapter && selectChapter(previousChapter.id) }, `上一章${previousChapter ? ` · ${previousChapter.id}` : ''}`),
+                  e('span', null, `${num(liveWords)} 字 · ${num(wbParagraphCount(text))} 段 · 撤销 ${num(undoState.undo ? undoRef.current.size : 0)} 步`),
+                  e(Button, { size: 'sm', kind: 'ghost', disabled: !nextChapter, onClick: () => nextChapter && selectChapter(nextChapter.id) }, `下一章${nextChapter ? ` · ${nextChapter.id}` : ''}`)),
+              )
+            : e(
+                'main',
+                { className: 'wb-pane wb-center' },
+                e('div', { className: 'wb-emptycenter' },
+                  e('strong', null, project ? '选择或新建一个章节' : '还没有作品'),
+                  e('span', { className: 'nh-muted' }, project ? '从左侧章节列表选择章节，或新建空白章节开始直写。' : '先在码章鲸中创建作品，创作室会在这里展开三栏工作台。'),
+                  project
+                    ? e(Button, { kind: 'primary', size: 'sm', icon: 'plus', busy: busy === 'new', onClick: createChapter }, '新建空白章节')
+                    : typeof props.openNewBook === 'function'
+                      ? e(Button, { kind: 'primary', size: 'sm', icon: 'plus', onClick: props.openNewBook }, '新建作品')
+                      : null),
+              );
+
+          return e(
+            'div',
+            { className: 'wb-root' },
+            e('div', { className: 'wb-head' },
+              e('div', { className: 'wb-headline' },
+                e('strong', null, '创作室 · 直写工作台'),
+                e('span', { className: 'nh-muted' }, project ? `${project.title} · ${chapters.length} 章` : '未选择作品')),
+              e('div', { className: 'wb-toolbar' },
+                projectRows.length > 1
+                  ? e('select', {
+                      className: 'nh-select',
+                      value: projectId,
+                      'aria-label': '切换作品',
+                      onChange: (event) => changeProject(event.target.value),
+                    }, projectRows.map((item) => e('option', { key: item.id, value: item.id }, item.title || item.id)))
+                  : null,
+                e(Button, { size: 'sm', icon: 'refresh', busy: projectsPoll.loading || chapterList.loading, onClick: () => { projectsPoll.reload(true); chapterList.reload(true); chapterPoll.reload(true); } }, '刷新'),
+                e(Button, { kind: 'primary', size: 'sm', icon: 'plus', busy: busy === 'new', disabled: !project, onClick: createChapter }, '新建章节'))),
+            e('div', { className: 'wb-grid' },
+              e('aside', { className: 'wb-pane wb-left' },
+                e('div', { className: 'wb-panehead' },
+                  e('strong', null, '章节'),
+                  e('span', { className: 'nh-muted' }, `${num(filtered.length)} / ${num(chapters.length)}`)),
+                e('div', { className: 'wb-filter' },
+                  e(Icon, { name: 'search', size: 12 }),
+                  e('input', {
+                    className: 'nh-input',
+                    value: query,
+                    placeholder: '搜索章号或标题',
+                    'aria-label': '搜索章节',
+                    onChange: (event) => setQuery(event.target.value),
+                  })),
+                e('div', { className: 'wb-list' },
+                  ...filtered.map((row) => e(
+                    'button',
+                    {
+                      key: row.id,
+                      type: 'button',
+                      className: 'wb-item',
+                      'data-active': String(selectedChapter) === String(row.id) ? 'true' : 'false',
+                      onClick: () => selectChapter(row.id),
+                    },
+                    e('span', { className: 'wb-itemid' }, `第 ${row.id} 章`),
+                    e('span', { className: 'wb-itemtitle' }, row.title || '未命名章节'),
+                    e('span', { className: 'wb-itemmeta' }, `${num(row.words || 0)} 字${row.human_review_required ? ' · 待复核' : ''}`),
+                  )),
+                  filtered.length ? null : e(Empty, null, query ? '没有匹配的章节' : '还没有章节'))),
+              chapterPane,
+              e('aside', { className: 'wb-pane wb-right' },
+                e('div', { className: 'wb-panehead' },
+                  e('strong', null, '本章工具'),
+                  chapter ? e('span', { className: 'nh-muted' }, wbShortId(chapter.version_id || chapter.sha256)) : null),
+                e('div', { style: { padding: '8px 10px 0' } },
+                  e(Segmented, {
+                    value: tab,
+                    onChange: setTab,
+                    options: [
+                      { value: 'annotations', label: '批注' },
+                      { value: 'check', label: '体检' },
+                      { value: 'versions', label: '版本' },
+                      { value: 'reference', label: '参考' },
+                    ],
+                  })),
+                e('div', { className: 'wb-sidebody' }, rightBody))),
+          );
+        }
+
 
         /* ------------------------------------------------------------ 共享记忆 */
 
@@ -10994,6 +13448,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             group: '创作',
             items: [
               { id: 'chapters', label: '作品与章节', icon: 'book' },
+              { id: 'workbench', label: '直写工作台', icon: 'pen' },
               { id: 'memory', label: '共享记忆', icon: 'memory' },
               { id: 'brief', label: '创作约定', icon: 'doc' },
               { id: 'outline', label: '大纲与规划', icon: 'tree' },
@@ -11417,7 +13872,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         const HUBS = [
           { id: 'work', label: '工作台', groupId: 'overview', routes: ['dashboard'] },
-          { id: 'studio', label: '创作室', groupId: 'creation', routes: ['chapters', 'outline', 'memory', 'readers'] },
+          { id: 'studio', label: '创作室', groupId: 'creation', routes: ['chapters', 'workbench', 'outline', 'memory', 'readers'] },
           { id: 'publish', label: '发布与日更', groupId: 'publish', routes: ['jobs', 'publish'] },
           { id: 'system', label: '模型与系统', groupId: 'system', routes: ['ai', 'costs'] },
         ];
@@ -11699,6 +14154,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               setup: () => e(DashboardPage, { ...pageProps, key: project ? project.id : 'empty' }),
               dashboard: () => e(DashboardPage, { ...pageProps, key: project ? project.id : 'empty' }),
               chapters: () => e(ChaptersPage, { ...pageProps, key: project?.id || 'empty' }),
+              workbench: () => e(WorkbenchPage, { ...pageProps }),
               memory: () => e(MemoryPage, { ...pageProps, key: project?.id || 'empty' }),
               brief: () => e(OutlinePage, { ...pageProps, initialTab: 'brief', key: project?.id || 'empty' }),
               outline: () => e(OutlinePage, { ...pageProps, initialTab: subTabs.outline || undefined, key: project?.id || 'empty' }),
@@ -11947,7 +14403,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (!document.querySelector('style[data-plugin-css="dsh-chapter-whale/styles"]')) {
               owned = document.createElement('style');
               owned.setAttribute('data-plugin-css', 'dsh-chapter-whale/styles');
-              owned.textContent = CSS + '\n' + ATELIER_CSS;
+              owned.textContent = CSS + '\n' + ATELIER_CSS + '\n' + WORKBENCH_CSS;
               document.head.appendChild(owned);
             }
             return () => {
@@ -11991,7 +14447,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         exports.apply = apply;
         /* Pure functions the panel's own test harness drives across every cycle
            shape. Exposed read-only: nothing here touches React or the DOM. */
-        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES };
+        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES, WorkbenchPage, wbPickProject, wbDraftIdentityFrom, wbInitialDocument, wbDraftPayload, wbVersionPayload, wbMergeTexts, wbOutlineExcerpt, wbVisibleWords, wbParagraphCount, wbFormatTime, wbShortId, wbIssueTone };
         return module.exports;
       },
     });

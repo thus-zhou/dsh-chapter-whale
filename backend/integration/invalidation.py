@@ -8,7 +8,9 @@
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
+from typing import Dict
 
 from . import bridge, writer_runner as writer
 
@@ -112,8 +114,12 @@ def _mark_facts(project, chapters, *, reason, source, actor):
     return marked
 
 
-def invalidate(project, *, chapters, reason, source="", actor="author", op_id=""):
-    """统一失效入口：记一条日志、标出受影响证据、重建连续性索引。"""
+def invalidate(project, *, chapters, reason, source="", actor="author", op_id="", async_rebuild=False):
+    """统一失效入口：记一条日志、标出受影响证据、重建连续性索引。
+
+    ``async_rebuild=True`` 供大书 ``Ctrl+S`` 使用：日志与证据标记同步落盘，
+    连续性索引由合并写回的后台线程重建，避免 500–1000 章时阻塞保存响应。
+    """
     if reason not in REASONS:
         raise ValueError("失效原因无效")
     chapters = _chapters(chapters)
@@ -131,9 +137,52 @@ def invalidate(project, *, chapters, reason, source="", actor="author", op_id=""
     doc["entries"] = [*doc["entries"], entry][-MAX_ENTRIES:]
     writer.atomic_json(_path(project), doc)
     reviewing = _mark_facts(project, chapters, reason=reason, source=source, actor=actor)
-    rebuilt = _rebuild(project)
+    if async_rebuild:
+        rebuilt = _schedule_rebuild(project)
+    else:
+        rebuilt = _rebuild(project)
     return {"status": "invalidated", "entry": entry, "marked": marked, "reviewing": len(reviewing),
             "rebuilt": rebuilt}
+
+
+_REBUILD_LOCK = threading.Lock()
+_REBUILD_PENDING: Dict[str, threading.Event] = {}
+
+
+def _schedule_rebuild(project) -> bool:
+    """Coalesce concurrent rebuild requests per project; return False if failed to start."""
+    key = str(Path(project).resolve())
+    with _REBUILD_LOCK:
+        if key in _REBUILD_PENDING:
+            return True
+        event = threading.Event()
+        _REBUILD_PENDING[key] = event
+
+    def work():
+        try:
+            _rebuild(project)
+        finally:
+            with _REBUILD_LOCK:
+                _REBUILD_PENDING.pop(key, None)
+            event.set()
+
+    try:
+        threading.Thread(target=work, name="invalidation-rebuild", daemon=True).start()
+        return True
+    except RuntimeError:
+        with _REBUILD_LOCK:
+            _REBUILD_PENDING.pop(key, None)
+        return False
+
+
+def wait_rebuild(project, timeout: float = 10.0) -> bool:
+    """Test/verification helper: wait for the coalesced background rebuild."""
+    key = str(Path(project).resolve())
+    with _REBUILD_LOCK:
+        event = _REBUILD_PENDING.get(key)
+    if event is None:
+        return True
+    return bool(event.wait(timeout))
 
 
 def _rebuild(project):

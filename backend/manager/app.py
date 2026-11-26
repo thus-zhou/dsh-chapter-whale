@@ -33,7 +33,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
-from manager import ai_tools, device_access
+from manager import ai_tools, device_access, api_v08, api_v085, api_v09
 from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer, workflow
 from integration import entity_state, evidence_usage, invalidation, retrieval_plan, style_rules
 from integration import observation, reader_metrics
@@ -766,7 +766,9 @@ class PublishReconcileInput(BaseModel):
 
 
 class RestoreInput(BaseModel):
-    version_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    version_id: str = Field(pattern=r"^(?:[0-9a-f]{64}|ver_\d{4}_[0-9a-f]{8})$")
+    restore_title: bool = True
+    op_id: str | None = None
 
 
 class StageInput(BaseModel):
@@ -1214,6 +1216,10 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     app.state.operations = ops
     from manager import provider_api
     provider_api.install(app, load_ai, AI_PATH, costs_db=DATA / "costs.sqlite3")
+    api_v08.install(app, project=project, ops=ops, load_ai=load_ai,
+                    project_title=project_title, data_dir=DATA)
+    api_v085.install(app, project=project, data_dir=DATA)
+    api_v09.install(app, project=project, data_dir=DATA)
     access = device_access.DeviceAccess(network_hosts, port, pairing_required=device_pairing_required)
     app.state.device_access = access
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver", *network_hosts])
@@ -1979,20 +1985,19 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/chapters/{chapter}")
     def chapter(identity: str, chapter: int):
         path = Path(project(identity)["path"])
-        items = [x for x in bridge.iter_source_chapters(path) if x[1] == chapter]
-        if len(items) != 1:
-            raise HTTPException(409 if items else 404, "章节重复，请检查正文文件" if items else "未找到章节")
-        words = len([c for c in items[0][3] if not c.isspace()])
-        from integration import writer_runner
-        reviewed = writer_runner.reviewed_chapters(path)
-        committed = writer_runner.committed_chapters(path)
-        receipt = committed.get(chapter) or reviewed.get(chapter) or {}
-        review = receipt.get("review") or {}
-        return {"content": items[0][3], "title": items[0][2], "id": chapter, "words": words,
-                "reviewed": chapter in reviewed,
-                "human_review_required": chapter in committed and chapter not in reviewed,
-                "review_status": review.get("review_decision"),
-                "auto_review_count": review.get("auto_review_count")}
+        from integration import chapter_editor
+        try:
+            return chapter_editor.chapter_state(path, chapter)
+        except chapter_editor.ChapterError as exc:
+            raise HTTPException(exc.status, exc.code) from None
+        except Exception as exc:
+            # 保持 v0.7.5 的 409/404 语义：章节重复或未找到
+            from integration.chapter_versions import VersionConflict, VersionNotFound
+            if isinstance(exc, VersionConflict):
+                raise HTTPException(409, "章节重复，请检查正文文件") from None
+            if isinstance(exc, VersionNotFound):
+                raise HTTPException(404, "未找到章节") from None
+            raise
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/approve-review")
     def approve_chapter_review(identity: str, chapter: int, data: dict | None = None):
@@ -2054,7 +2059,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/chapters/{chapter}/versions/{version}")
     def chapter_version_body(identity: str, chapter: int, version: str):
         if chapter <= 0: raise ValueError("章节号无效")
-        if not re.fullmatch(r"[0-9a-f]{64}", version): raise ValueError("版本标识无效")
+        if not re.fullmatch(r"(?:[0-9a-f]{64}|ver_\d{4}_[0-9a-f]{8})", version): raise ValueError("版本标识无效")
         from integration import version_history
         return version_history.read(Path(project(identity)["path"]), chapter, version)
 
@@ -2062,7 +2067,9 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def restore_chapter(identity: str, chapter: int, data: RestoreInput):
         if chapter <= 0: raise ValueError("章节号无效")
         from integration import version_history
-        return version_history.restore(Path(project(identity)["path"]), chapter, data.version_id, config=load_ai())
+        return version_history.restore(Path(project(identity)["path"]), chapter, data.version_id,
+                                       op_id=data.op_id, restore_title=data.restore_title,
+                                       config=load_ai())
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/review")
     def review_existing(identity: str, chapter: int):

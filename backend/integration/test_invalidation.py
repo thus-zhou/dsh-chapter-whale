@@ -22,6 +22,9 @@ class InvalidationTests(unittest.TestCase):
         chapter_versions.write_chapter(self.project, 1, FIRST, op_id="op-1", title="雨停", allow_new=True)
         chapter_versions.write_chapter(self.project, 1, SECOND, op_id="op-2", title="雨停")
         chapter_versions.write_chapter(self.project, 3, FIRST, op_id="op-3", title="第三日", allow_new=True)
+        # v0.8：提交层现在会为每次写章记一条失效日志；这些用例只验证各自的
+        # 失效入口，先清空建场日志，避免把初始化当作用例产物。
+        (self.project / ".webnovel" / "invalidation_log.json").unlink(missing_ok=True)
 
     def fact(self, chapter=3, title="钥匙在谁手里"):
         doc = memory_library.read(self.project)

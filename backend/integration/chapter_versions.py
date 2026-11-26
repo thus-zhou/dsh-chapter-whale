@@ -73,6 +73,24 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def normalize_title(title: str) -> str:
+    """章节标题的统一比较形态：NFC + 去首尾空白（不改写磁盘文件名）。"""
+    return unicodedata.normalize("NFC", str(title or "")).strip()
+
+
+def title_digest(title: str) -> str:
+    return hashlib.sha256(normalize_title(title).encode("utf-8")).hexdigest()
+
+
+def version_fingerprint(content_sha256: str, title_sha256: str) -> str:
+    """综合版本指纹：正文原始字节哈希 + NUL + 标题摘要（全套件统一）。"""
+    return hashlib.sha256((str(content_sha256) + "\x00" + str(title_sha256)).encode("utf-8")).hexdigest()
+
+
+def new_version_id(seq: int) -> str:
+    return f"ver_{int(seq):04d}_{uuid.uuid4().hex[:8]}"
+
+
 def store_root(project) -> Path:
     return Path(project) / ".webnovel" / "chapter_versions"
 
@@ -373,9 +391,15 @@ def _register_version(entry, *, sha256: str, digest: str, size: int, source: str
                       op_id: Optional[str], run_id: Optional[str],
                       attempt_id: Optional[str], parent: Optional[str],
                       title: str, note: str) -> Dict[str, Any]:
-    meta = {"seq": _next_seq(entry), "sha256": sha256, "body_digest": digest,
+    seq = _next_seq(entry)
+    version_id = new_version_id(seq)
+    t_digest = title_digest(title)
+    meta = {"seq": seq, "version_seq": seq, "version_id": version_id,
+            "sha256": sha256, "content_sha256": sha256, "body_digest": digest,
             "bytes": size, "source": source, "op_id": op_id, "run_id": run_id,
             "attempt_id": attempt_id, "parent": parent, "title": title,
+            "title_digest": t_digest,
+            "version_fingerprint": version_fingerprint(sha256, t_digest),
             "note": note, "created_at": _now()}
     entry["versions"].append(meta)
     return meta
@@ -460,9 +484,11 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
                                  run_id=candidate.get("run_id"), attempt_id=candidate.get("attempt_id"),
                                  parent=current_sha, title=final_title, note=candidate.get("note", ""))
         entry["current"] = sha
+        entry["current_version_id"] = meta["version_id"]
         _save_index(project, index)
         record["done"].append("index")
         record["version"] = meta
+        record["version_id"] = meta["version_id"]
         record["state"] = "committed"
         record["updated_at"] = _now()
         atomic_json(_commit_path(project, op), record)
@@ -481,14 +507,15 @@ def write_chapter(project, chapter: int, content: str, *, op_id: Optional[str] =
                               op_id=op_id)
     result = commit_candidate(project, chapter, document["candidate_id"], op_id=op_id,
                               expected_sha256=expected_sha256, title=title, allow_new=allow_new)
-    if str(result.get("status") or "") == "committed":
+    if str(result.get("state") or "") == "committed":
         # 正文一旦换了版本，依据旧正文的事实就不再成立：走统一失效入口，不各写一套。
         try:
             from . import invalidation
             digest = str(result.get("content_sha256") or result.get("sha256") or expected_sha256 or "")[:12]
             result["invalidation"] = invalidation.invalidate(
                 project, chapters=[chapter], reason="chapter_edited",
-                source=f"versions:write_chapter:{digest}", op_id=f"write-{chapter}-{digest}")
+                source=f"versions:write_chapter:{digest}",
+                op_id=str(op_id or f"write-{chapter}-{digest}"))
         except (ValueError, OSError, RuntimeError) as exc:
             result["invalidation"] = {"status": "skipped", "error": str(exc)[:200]}
     return result
@@ -520,16 +547,37 @@ def recover_pending(project) -> List[Dict[str, Any]]:
             if entry.get("current") == sha:
                 record.setdefault("done", []).append("index")
                 record["state"] = "committed"
+                record["version_id"] = entry.get("current_version_id")
+            elif current_sha == sha:
+                # 正文已写、索引未写：向前补索引，不能把现场判成冲突。
+                entry.setdefault("versions", [])
+                meta = next((v for v in entry["versions"]
+                             if v.get("op_id") == record.get("op_id")), None)
+                if meta is None:
+                    meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)),
+                                             size=len(data), source=candidate.get("source", "recovered"),
+                                             op_id=record.get("op_id"), run_id=None, attempt_id=None,
+                                             parent=record.get("previous_sha256"),
+                                             title=record.get("title") or _chapter_title(project, chapter),
+                                             note="recovered after interrupted commit")
+                record["version_id"] = meta.get("version_id")
+                entry["current"] = sha
+                entry["current_version_id"] = record["version_id"] or entry.get("current_version_id")
+                _save_index(project, index)
+                record.setdefault("done", []).append("index")
+                record["state"] = "committed"
             elif current_sha in (record.get("previous_sha256"), None):
                 _write_chapter_bytes(project, chapter, data, record.get("title") or _chapter_title(project, chapter))
                 entry.setdefault("versions", [])
                 if not any(v.get("op_id") == record.get("op_id") for v in entry["versions"]):
-                    _register_version(entry, sha256=sha, digest=body_digest(_decode(data)),
+                    meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)),
                                       size=len(data), source=candidate.get("source", "recovered"), op_id=record.get("op_id"),
                                       run_id=None, attempt_id=None, parent=record.get("previous_sha256"),
                                       title=record.get("title") or _chapter_title(project, chapter),
                                       note="recovered after interrupted commit")
+                    record["version_id"] = meta.get("version_id")
                 entry["current"] = sha
+                entry["current_version_id"] = record.get("version_id") or entry.get("current_version_id")
                 _save_index(project, index)
                 record["state"] = "committed"
             else:
@@ -552,7 +600,13 @@ def list_versions(project, chapter: int) -> List[Dict[str, Any]]:
 def current_version(project, chapter: int) -> Optional[Dict[str, Any]]:
     entry = load_index(project)["chapters"].get(str(int(chapter))) or {}
     current = entry.get("current") if isinstance(entry, dict) else None
-    for meta in entry.get("versions", []) if isinstance(entry, dict) else []:
+    current_uid = entry.get("current_version_id") if isinstance(entry, dict) else None
+    versions = entry.get("versions", []) if isinstance(entry, dict) else []
+    if current_uid:
+        for meta in versions:
+            if meta.get("version_id") == current_uid:
+                return meta
+    for meta in versions:
         if meta.get("sha256") == current:
             return meta
     return None
@@ -560,6 +614,7 @@ def current_version(project, chapter: int) -> Optional[Dict[str, Any]]:
 
 def read_version(project, chapter: int, version_id: Optional[str] = None) -> Dict[str, Any]:
     """按版本读取正文。默认读索引里的当前版本；不存在则回退到磁盘当前稿。"""
+    meta: Optional[Dict[str, Any]] = None
     if version_id is None:
         meta = current_version(project, chapter)
         if meta is None:
@@ -569,11 +624,15 @@ def read_version(project, chapter: int, version_id: Optional[str] = None) -> Dic
             data = path.read_bytes()
             return {"text": _decode(data), "meta": None, "path": str(path),
                     "sha256": raw_sha256(data), "source": "disk"}
-        version_id = meta["sha256"]
+        version_id = str(meta.get("sha256"))
+    else:
+        meta, version_id = _resolve_version(project, chapter, version_id)
     data = read_object(project, version_id)
-    meta = next((m for m in list_versions(project, chapter) if m.get("sha256") == version_id), None)
+    if meta is None:
+        meta = next((m for m in list_versions(project, chapter) if m.get("sha256") == version_id), None)
     return {"text": _decode(data), "meta": meta, "path": str(_object_path(project, version_id)),
-            "sha256": version_id, "source": "object"}
+            "sha256": version_id, "version_id": (meta or {}).get("version_id"),
+            "source": "object"}
 
 
 def compare_current(project, chapter: int, expected_sha256: str) -> Dict[str, Any]:
@@ -583,6 +642,8 @@ def compare_current(project, chapter: int, expected_sha256: str) -> Dict[str, An
     return {"equal": current == expected_sha256, "current_sha256": current,
             "chapter_path": str(path) if path else None,
             "version_sha256": (meta or {}).get("sha256"),
+            "version_id": (meta or {}).get("version_id"),
+            "version_fingerprint": (meta or {}).get("version_fingerprint"),
             "body_digest": (meta or {}).get("body_digest"),
             "version_matches_disk": bool(meta) and meta.get("sha256") == current}
 
@@ -604,17 +665,22 @@ def find_by_body_digest(project, digest: str, chapter: Optional[int] = None) -> 
 
 def report_ref(project, chapter: int, version_id: Optional[str] = None) -> Dict[str, Any]:
     """给审查报告用的最小引用契约；报告正文变化即视为过期。"""
-    meta = current_version(project, chapter) if version_id is None else \
-        next((m for m in list_versions(project, chapter) if m.get("sha256") == version_id), None)
+    if version_id is None:
+        meta = current_version(project, chapter)
+    else:
+        meta, _sha = _resolve_version(project, chapter, version_id)
     path = chapter_path(project, chapter)
     disk = file_sha256(path)
     if meta is None:
-        return {"chapter_id": int(chapter), "version_id": None,
+        return {"chapter_id": int(chapter), "version_id": None, "version_uid": None,
                 "sha256": disk, "body_digest": None, "path": str(path) if path else None,
                 "stale": True, "reason": "no_version_record"}
-    return {"chapter_id": int(chapter), "version_id": meta["sha256"], "sha256": meta["sha256"],
+    return {"chapter_id": int(chapter), "version_id": meta.get("sha256"),
+            "version_uid": meta.get("version_id"), "sha256": meta.get("sha256"),
+            "content_sha256": meta.get("content_sha256") or meta.get("sha256"),
+            "version_fingerprint": meta.get("version_fingerprint"),
             "body_digest": meta.get("body_digest"), "path": str(path) if path else None,
-            "stale": disk != meta["sha256"], "reason": None if disk == meta["sha256"] else "chapter_changed"}
+            "stale": disk != meta.get("sha256"), "reason": None if disk == meta.get("sha256") else "chapter_changed"}
 
 
 def snapshot(project, chapter: int, *, source: str = "backup", note: str = "") -> Optional[Dict[str, Any]]:
@@ -635,6 +701,8 @@ def snapshot(project, chapter: int, *, source: str = "backup", note: str = "") -
         for meta in entry.get("versions", []):
             if meta.get("sha256") == sha:
                 entry["current"] = sha
+                if meta.get("version_id"):
+                    entry["current_version_id"] = meta["version_id"]
                 _save_index(project, index)
                 return meta
         _store_object(project, data)
@@ -643,17 +711,119 @@ def snapshot(project, chapter: int, *, source: str = "backup", note: str = "") -
                                  parent=entry.get("current"), title=_chapter_title(project, chapter),
                                  note=note or "恢复前备份")
         entry["current"] = sha
+        entry["current_version_id"] = meta["version_id"]
         _save_index(project, index)
     return meta
 
 
+def _resolve_version(project, chapter: int, version_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Resolve either a ``ver_...`` identity or a legacy 64-hex content sha."""
+    selector = str(version_id or "").strip()
+    meta = next((m for m in list_versions(project, chapter)
+                 if selector and (m.get("version_id") == selector or m.get("sha256") == selector)), None)
+    if meta is not None:
+        return meta, str(meta.get("sha256") or selector)
+    if re.fullmatch(r"[0-9a-f]{64}", selector):
+        return None, selector
+    raise VersionNotFound("version_not_found")
+
+
+def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str] = None,
+                     op_id: Optional[str] = None, expected_sha256: Optional[str] = None,
+                     source: str = "restored", note: str = "",
+                     allow_new: bool = False,
+                     invalidation_reason: Optional[str] = "chapter_edited") -> Dict[str, Any]:
+    """Byte-exact commit used for legacy restore (keeps BOM and CRLF intact).
+
+    Unlike :func:`write_chapter` the payload is never decoded/re-encoded, so the
+    SHA-256 of the restored file equals the archived object byte for byte.
+    """
+    if chapter <= 0:
+        raise VersionConflict("chapter_invalid")
+    paths = _ensure(project)
+    data = bytes(data)
+    sha = raw_sha256(data)
+    op = op_id or uuid.uuid4().hex
+    with file_lock(paths["lock"]):
+        existing = _load_commit(project, op)
+        if existing is not None:
+            if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
+                return existing
+            raise VersionConflict("operation_id_reused")
+        current_path = chapter_path(project, chapter)
+        current_sha = file_sha256(current_path)
+        if current_sha is None and not allow_new:
+            raise VersionNotFound("chapter_missing")
+        if expected_sha256 is not None and expected_sha256 != current_sha:
+            raise VersionConflict("concurrent_modification")
+        index = load_index(project)
+        entry = _chapter_entry(index, chapter)
+        final_title = title if title is not None else _chapter_title(project, chapter)
+        record = {
+            "schema_version": SCHEMA_VERSION, "op_id": op, "project_id": project_id(project),
+            "chapter_id": int(chapter), "candidate_id": None, "content_sha256": sha,
+            "previous_sha256": current_sha, "state": "prepared", "done": [],
+            "title": final_title, "index_reconciled": entry.get("current") not in (None, current_sha),
+            "raw_bytes": True, "created_at": _now(), "updated_at": _now(),
+        }
+        atomic_json(_commit_path(project, op), record)
+        _store_object(project, data)
+        record["done"].append("object")
+        atomic_json(_commit_path(project, op), record)
+        path = _write_chapter_bytes(project, chapter, data, final_title)
+        record["chapter_path"] = str(path)
+        record["done"].append("chapter")
+        record["state"] = "chapter_written"
+        atomic_json(_commit_path(project, op), record)
+        meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)), size=len(data),
+                                 source=source, op_id=op, run_id=None, attempt_id=None,
+                                 parent=current_sha, title=final_title, note=note)
+        entry["current"] = sha
+        entry["current_version_id"] = meta["version_id"]
+        _save_index(project, index)
+        record["done"].append("index")
+        record["version"] = meta
+        record["version_id"] = meta["version_id"]
+        record["state"] = "committed"
+        record["updated_at"] = _now()
+        atomic_json(_commit_path(project, op), record)
+    if invalidation_reason:
+        try:
+            from . import invalidation
+            record["invalidation"] = invalidation.invalidate(
+                project, chapters=[chapter], reason=invalidation_reason,
+                source=f"versions:{source}:{sha[:12]}", op_id=str(op_id or op))
+        except (ValueError, OSError, RuntimeError) as exc:
+            record["invalidation"] = {"status": "skipped", "error": str(exc)[:200]}
+    return record
+
+
 def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[str] = None,
-                    note: str = "") -> Dict[str, Any]:
-    """恢复历史版本也是新操作：写入当前稿并登记为新版本（parent = 当时的当前）。"""
-    text = _decode(read_object(project, version_id))
+                    note: str = "", restore_title: bool = True) -> Dict[str, Any]:
+    """Restore a historical version byte-exactly (BOM/CRLF preserved).
+
+    ``version_id`` accepts both the new ``ver_...`` identity and a legacy
+    64-hex content sha.  When ``restore_title`` is false the current on-disk
+    title is kept and only the body bytes are restored.
+    """
+    meta, sha = _resolve_version(project, chapter, version_id)
+    if not sha:
+        raise VersionNotFound("version_not_found")
+    data = read_object(project, sha)
     path = chapter_path(project, chapter)
-    return write_chapter(project, chapter, text, op_id=op_id, expected_sha256=file_sha256(path),
-                         source="restored", note=note or f"restore {version_id[:12]}", allow_new=path is None)
+    current_title = _chapter_title(project, chapter, path)
+    title = None
+    if restore_title and meta and meta.get("title") is not None:
+        title = str(meta.get("title") or "")
+    elif not restore_title:
+        title = current_title
+    result = commit_raw_bytes(project, chapter, data, title=title, op_id=op_id,
+                              expected_sha256=file_sha256(path),
+                              source="restored", note=note or f"restore {sha[:12]}",
+                              allow_new=path is None,
+                              invalidation_reason="version_restored")
+    result["restored_version_id"] = (meta or {}).get("version_id") or sha
+    return result
 
 
 def prune_adopted(project, chapter: Optional[int] = None) -> Dict[str, Any]:
@@ -677,6 +847,7 @@ def prune_adopted(project, chapter: Optional[int] = None) -> Dict[str, Any]:
                 continue
             entry["versions"] = keep
             entry["current"] = keep[-1]["sha256"] if keep else None
+            entry["current_version_id"] = keep[-1].get("version_id") if keep else None
             if not keep:
                 index["chapters"].pop(key, None)
         if chapter is None:
@@ -715,6 +886,8 @@ def adopt_legacy(project, chapter: Optional[int] = None) -> List[Dict[str, Any]]
         if any(v.get("sha256") == sha for v in entry["versions"]):
             if entry.get("current") is None:
                 entry["current"] = sha
+                existing = next((v for v in entry["versions"] if v.get("sha256") == sha), None)
+                entry["current_version_id"] = (existing or {}).get("version_id")
             continue
         _store_object(project, data)
         meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)), size=len(data),
@@ -723,6 +896,7 @@ def adopt_legacy(project, chapter: Optional[int] = None) -> List[Dict[str, Any]]
                                  title=_chapter_title(project, number, path),
                                  note="adopted from 正文 without changing the file")
         entry["current"] = sha
+        entry["current_version_id"] = meta["version_id"]
         added.append(meta)
     if added:
         _save_index(project, index)
