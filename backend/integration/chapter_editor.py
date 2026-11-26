@@ -264,13 +264,17 @@ def chapter_state(project, chapter: int, *, include_draft: bool = True) -> Dict[
         "annotations_summary": summary,
     }
     if include_draft:
+        epoch = (draft or {}).get("draft_epoch")
+        if epoch is None:
+            epoch = wb.draft_epoch(project, chapter)
         payload["draft"] = {
             "exists": bool(draft),
             "draft_id": (draft or {}).get("draft_id"),
-            "draft_epoch": (draft or {}).get("draft_epoch"),
+            "draft_epoch": epoch,
             "draft_revision": (draft or {}).get("draft_revision"),
             "base_version_id": (draft or {}).get("base_version_id"),
             "base_sha256": (draft or {}).get("base_content_sha256"),
+            "base_content_sha256": (draft or {}).get("base_content_sha256"),
             "title": (draft or {}).get("title"),
             "content": (draft or {}).get("content"),
             "cursor": (draft or {}).get("cursor", {}),
@@ -286,8 +290,18 @@ def chapter_state(project, chapter: int, *, include_draft: bool = True) -> Dict[
     return payload
 
 
+def _drop_draft_doc(project, chapter: int, draft_id: Optional[str]) -> None:
+    if not draft_id:
+        return
+    try:
+        wb.drop_document(project, f"draft:{int(chapter)}:{draft_id}")
+    except Exception:
+        pass
+
+
 def save_draft(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     chapter = int(chapter)
+    previous = wb.get_draft(project, chapter)
     title = _validate_title(data.get("title", ""))
     content = _validate_content(data.get("content", ""))
     try:
@@ -314,6 +328,8 @@ def save_draft(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
                           chapter_id=chapter, title=title, content=content)
     except Exception:
         pass
+    if previous and previous.get("draft_id") != draft.get("draft_id"):
+        _drop_draft_doc(project, chapter, previous.get("draft_id"))
     return {"status": "saved", "chapter_id": chapter, "draft": draft}
 
 
@@ -331,6 +347,7 @@ def discard_draft(project, chapter: int, *, draft_id: Optional[str] = None) -> D
         reverted = annotations.revert_draft_hunks(project, chapter, draft.get("draft_id"))
     except Exception:
         reverted = []
+    _drop_draft_doc(project, chapter, draft.get("draft_id"))
     return {"status": "discarded", "chapter_id": chapter, **result, "reverted_hunks": reverted}
 
 
@@ -445,6 +462,8 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
             draft_id=str(data.get("submitted_draft_id") or ""),
             draft_epoch=int(data.get("submitted_draft_epoch") or 0),
             draft_revision=int(data.get("submitted_draft_revision") or 0))
+        if draft_result.get("cleared"):
+            _drop_draft_doc(project, chapter, data.get("submitted_draft_id"))
     published = _published_state(project, chapter)
     response = {
         **result,
@@ -603,6 +622,8 @@ def delete_chapter(project, chapter: int, *, expected_version_id: str = "",
         wb.drop_document(project, f"正文:{chapter}")
     except Exception:
         pass
+    if isinstance(manifest.get("draft"), dict):
+        _drop_draft_doc(project, chapter, manifest["draft"].get("draft_id"))
     return {"status": "deleted", "chapter_id": chapter, "trash_entry": archive.name,
             "archived_to": str(archive)}
 

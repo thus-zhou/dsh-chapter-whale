@@ -542,6 +542,11 @@ class DraftConflict(RuntimeError):
         self.current = current or {}
 
 
+def draft_epoch(project, chapter: int) -> int:
+    """Current anti-ABA epoch, available even when no draft row exists."""
+    return int(ensure_chapter_meta(project, int(chapter)).get("draft_epoch") or 0)
+
+
 def get_draft(project, chapter: int) -> Optional[Dict[str, Any]]:
     _ensure(project)
     with connect(project) as db:
@@ -594,6 +599,11 @@ def save_draft(project, chapter: int, *, title: str, content: str,
             revision = int(current["draft_revision"]) + 1
             epoch = int(current["draft_epoch"])
             draft_id = str(current["draft_id"])
+            # 后续自动保存通常不带 base_*；保留首次草稿建立的三方合并基线。
+            if base_version_id is None:
+                base_version_id = current.get("base_version_id")
+            if base_content_sha256 is None:
+                base_content_sha256 = current.get("base_content_sha256")
         else:
             if expected_draft_id not in (None, ""):
                 raise DraftConflict(None)
