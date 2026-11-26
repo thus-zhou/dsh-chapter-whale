@@ -56,7 +56,7 @@ class AuditFixCTests(unittest.TestCase):
         self.client = TestClient(self.app)
         self.addCleanup(self.client.close)
         self.headers = {"X-Novel-Helper": "1"}
-        self.register()
+        self.project_id = self.register()
 
     def register(self) -> str:
         response = self.client.post("/api/projects", json={"path": str(self.project)}, headers=self.headers)
@@ -194,13 +194,39 @@ class AuditFixCTests(unittest.TestCase):
         self.assertEqual(started["kind"], "daily")
         stored = [item for item in module.Store(self.db_path).operations() if item["kind"] == "daily"]
         self.assertEqual(len(stored), 1)
-        expected = module.project_path_key(str(self.project.resolve()))
-        self.assertEqual(stored[0]["project_id"], expected)
+        # 已登记作品必须解析为登记表 ID，才能与 generate/dispatch 互斥。
+        self.assertEqual(stored[0]["project_id"], self.project_id)
 
-        # 真正生效的项目互斥：同书第二个 daily 必须被挡住，而不是因 project_id 为空放行。
+        # 真正生效的项目互斥：同书第二个 daily 与正常带 project_id 的 generate 都必须被挡住。
         with self.assertRaises(module.HTTPException) as raised:
             operations.start("daily", ["run", "--job-id", "daily"], "job:daily-2")
         self.assertEqual(raised.exception.status_code, 409)
+        with self.assertRaises(module.HTTPException) as cross:
+            operations.start("generate", ["batch", "--project", str(self.project)],
+                             f"project:{self.project_id}", {"project_id": self.project_id})
+        self.assertEqual(cross.exception.status_code, 409)
+
+        # 反向交叉碰撞：已登记 generate 在途时，无 metadata 的 daily 也必须被挡住。
+        operations.store.save_operation({**stored[0], "status": "succeeded"})
+        operations.start("generate", ["batch", "--project", str(self.project)],
+                         f"project:{self.project_id}", {"project_id": self.project_id})
+        with self.assertRaises(module.HTTPException) as reverse_cross:
+            operations.start("daily", ["run", "--job-id", "daily"], "job:daily-3")
+        self.assertEqual(reverse_cross.exception.status_code, 409)
+
+    def test_daily_operation_unregistered_project_falls_back_to_path_key(self):
+        unregistered = self.root / "unregistered-book"
+        for folder in ("正文", "大纲", ".webnovel"):
+            (unregistered / folder).mkdir(parents=True, exist_ok=True)
+        self.seed_jobs({"unreg": {
+            "name": "未登记日更", "project": str(unregistered), "book": "外书", "account": "",
+            "publication_mode": "draft_only", "enabled": True, "daily_time": "08:00",
+            "timezone": "Asia/Shanghai", "chapters_per_run": 1, "word_count": 3500,
+            "max_revisions": 1, "delivery_mode": "batch",
+        }})
+        operations = module.Operations(module.Store(self.db_path))
+        started = operations.start("daily", ["run", "--job-id", "unreg"], "job:unreg")
+        self.assertEqual(started["project_id"], module.project_path_key(str(unregistered.resolve())))
 
     def test_daily_operation_unknown_job_still_starts_without_project_key(self):
         operations = module.Operations(module.Store(self.db_path))
@@ -240,6 +266,13 @@ class AuditFixCTests(unittest.TestCase):
         self.assertIn("'已批准'", segment)
         self.assertIn("row.human_review_required && !row.reviewed", segment)
         self.assertLess(segment.index("'已批准'"), segment.index("'重新审查'"))
+
+    def test_ui_does_not_hardcode_two_review_limit_in_pending_banners(self):
+        client_src = (module.ROOT.parent / "client.js").read_text(encoding="utf-8")
+        app_src = (Path(module.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("已满 2 次", client_src)
+        self.assertNotIn("已达 2 次上限", client_src)
+        self.assertNotIn("已自动审查2次", app_src)
 
 
 if __name__ == "__main__":

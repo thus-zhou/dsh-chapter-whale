@@ -274,6 +274,21 @@ class OwnedPortProcTests(unittest.TestCase):
                                              'cmdline': 'node /opt/our-free-model/ofm_service.mjs'}):
             self.assertTrue(free_channels._host_process('node', '9002'))
 
+    def test_identity_owned_rejects_substring_and_flags(self):
+        for bad in (
+            {'exe': '/usr/bin/node', 'cmdline': 'node /tmp/oldsh/server.js'},
+            {'exe': '/usr/bin/node', 'cmdline': 'node /tmp/evil.js --dsh'},
+            {'exe': '/usr/bin/node', 'cmdline': 'node /tmp/evil.js --deepseek'},
+            {'exe': '/usr/bin/node', 'cmdline': 'node /tmp/evil.js dsh'},
+        ):
+            self.assertFalse(free_channels._identity_owned(bad), bad)
+        for good in (
+            {'exe': '/opt/.dsh/bin/node', 'cmdline': 'node worker.js'},
+            {'exe': '/usr/bin/node', 'cmdline': 'node /opt/vendor/ofm_service.mjs'},
+            {'exe': '/opt/DeepSeek Harness/DeepSeek Harness', 'cmdline': 'DeepSeek Harness --type=renderer'},
+        ):
+            self.assertTrue(free_channels._identity_owned(good), good)
+
     @unittest.skipIf(os.name == 'nt', 'Unix lsof branch')
     def test_real_node_listener_needs_a_dsh_cmdline_marker(self):
         node = shutil.which('node')
@@ -325,20 +340,31 @@ class DshIdentityTests(unittest.TestCase):
     def test_fake_loopback_health_with_node_listener_is_rejected_before_key(self):
         with RecordingServer(health_ok) as server:
             config = self._config(server.url)
-            # lsof says a process named node owns the port, but its real
-            # /proc identity is this Python test process: no DSH path marker.
-            completed = mock.Mock(returncode=0, stdout='\n'.join(
-                [f'p{os.getpid()}', 'cnode', f'n127.0.0.1:{server.port}']))
-            with (
-                mock.patch.object(free_channels.subprocess, 'run', return_value=completed),
-                mock.patch.object(free_channels, '_proc_identity',
-                                  return_value={'exe': '/usr/bin/node',
-                                                'cmdline': 'node server.js'}),
-                mock.patch('manager.ai_tools.discover') as discover,
-            ):
-                with self.assertRaises(ValueError) as caught:
-                    providers.discover(config, 'dsh')
-                discover.assert_not_called()
+            if os.name == 'nt':
+                completed = mock.Mock(returncode=0, stdout=b'[]')
+                patches = (
+                    mock.patch.object(free_channels.subprocess, 'run', return_value=completed),
+                    mock.patch('manager.ai_tools.discover'),
+                )
+                with patches[0], patches[1] as discover:
+                    with self.assertRaises(ValueError) as caught:
+                        providers.discover(config, 'dsh')
+                    discover.assert_not_called()
+            else:
+                # lsof says a process named node owns the port, but its real
+                # /proc identity is this Python test process: no DSH path marker.
+                completed = mock.Mock(returncode=0, stdout='\n'.join(
+                    [f'p{os.getpid()}', 'cnode', f'n127.0.0.1:{server.port}']))
+                with (
+                    mock.patch.object(free_channels.subprocess, 'run', return_value=completed),
+                    mock.patch.object(free_channels, '_proc_identity',
+                                      return_value={'exe': '/usr/bin/node',
+                                                    'cmdline': 'node server.js'}),
+                    mock.patch('manager.ai_tools.discover') as discover,
+                ):
+                    with self.assertRaises(ValueError) as caught:
+                        providers.discover(config, 'dsh')
+                    discover.assert_not_called()
             self.assertIn('尚未发送网关密钥', str(caught.exception))
             self.assertEqual(server.requests, [], 'verify must fail before GET /health')
 
@@ -387,6 +413,12 @@ class ModelControlCharacterTests(unittest.TestCase):
         doc, identity = providers.save({'provider_schema': 1, 'providers': {}}, None,
                                        self._payload(models=['a', 'b']))
         self.assertEqual(doc['providers'][identity]['models'], ['a', 'b'])
+
+    def test_pricing_rejects_control_characters(self):
+        for bad in ('m\x00', 'm\nb', 'm\x7f'):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                providers.save({'provider_schema': 1, 'providers': {}}, None,
+                               self._payload(pricing={bad: {'input': '1', 'output': '2'}}))
 
 
 class NodeRuntimeEnvTests(unittest.TestCase):
@@ -472,9 +504,10 @@ class PackageMetadataTests(unittest.TestCase):
             self.skipTest('npm is not installed')
         completed = subprocess.run(
             [npm, 'pack', '--dry-run', '--json', '--ignore-scripts'],
-            cwd=ROOT, capture_output=True, text=True, timeout=120)
+            cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=120)
         self.assertEqual(completed.returncode, 0, completed.stderr[-2000:])
-        document = next(iter(json.loads(completed.stdout).values()))
+        parsed = json.loads(completed.stdout)
+        document = parsed[0] if isinstance(parsed, list) else next(iter(parsed.values()))
         paths = [row['path'] for row in document['files']]
         self.assertNotIn('docs/plan', paths)
         self.assertFalse([p for p in paths if p.startswith('docs/plan/')],

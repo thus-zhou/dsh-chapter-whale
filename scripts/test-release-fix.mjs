@@ -223,6 +223,13 @@ build = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
 
     // A failed bundle must leave the published runtime spec untouched too.
     const beforeFailure = await readFile(join(root, 'runtime-download.json'), 'utf8');
+    const pkgPath = join(root, 'package.json');
+    const originalPkg = await readFile(pkgPath, 'utf8');
+    await writeFile(pkgPath, JSON.stringify({ ...JSON.parse(originalPkg), private: true }, null, 2));
+    const privateFailed = spawnSync(pythonBinary(), [join(root, 'scripts', 'pack-bundle.py')], { cwd: root, encoding: 'utf8' });
+    assert.notEqual(privateFailed.status, 0, '完整包门禁不得传 --local，private 包必须失败');
+    await writeFile(pkgPath, originalPkg);
+
     await mkdir(join(root, 'backend', 'integration_data'), { recursive: true });
     await writeFile(join(root, 'backend', 'integration_data', 'state.json'), '{}');
     const failed = spawnSync(pythonBinary(), [join(root, 'scripts', 'pack-bundle.py')], { cwd: root, encoding: 'utf8' });
@@ -255,11 +262,11 @@ test('P2-25 文档先跑发行门禁再跑 backend 测试，并明确清理 inte
   });
 });
 
-test('P3-4 README 平台说明与 0.7.5 分支一致', async () => {
+test('P3-4 README 平台说明与 0.7.5 一致', async () => {
   const readme = await readFile(join(REPO, 'README.md'), 'utf8');
-  assert.match(readme, /当前分支 `0\.7\.5` 插件正式声明支持/);
+  assert.match(readme, /当前(?:分支)? `0\.7\.5` 插件正式声明支持/);
   assert.doesNotMatch(readme, /当前 `0\.7\.4` 插件正式声明支持/);
-  assert.match(readme, /当前分支版本为 `0\.7\.5`（尚未发布/);
+  assert.match(readme, /当前(?:分支)?版本为 `0\.7\.5`/);
 });
 
 function pythonBinary() {

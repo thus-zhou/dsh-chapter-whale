@@ -116,6 +116,7 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
         from .studio import reject_sample_copy
         reject_sample_copy(project,rewritten)
         digest=bridge.body_digest(rewritten)
+        previous_review=state.get('review') or (history[-1] if history else None)
         review=state.get('review')
         if state.get('review_body_sha256')!=digest:
             review=None;state.pop('review',None);state.pop('authorization',None)
@@ -126,14 +127,17 @@ async def revise(project,chapter,content,source_sha,contract,executor,config,min
                     raise revision_plan.RevisionStopped('human_review_required',
                         f'已完成 {writer.MAX_AUTO_REVIEWS} 次自动审查，后续交由人工复核',
                         candidate=rewritten,author_issues=(plan or {}).get('author',[]))
-                review=writer.human_handoff_review(state.get('review'),digest,auto_reviews)
+                if not (isinstance(previous_review,dict) and previous_review.get('success') is True):
+                    raise ReviewIncomplete(previous_review,'修订自动审查预算已耗尽且未取得有效审查结果')
+                review=writer.human_handoff_review(previous_review,digest,auto_reviews)
                 state.update(review=review,review_body_sha256=digest,phase='needs_human_review');save()
                 return rewritten,review
+            auto_reviews+=1
+            save()
             review=await executor.execute_review(chapter,rewritten)
             writer._record_review_attempt(project,chapter,rewritten,review)
             if not isinstance(review,dict) or review.get('success') is not True:
                 raise ReviewIncomplete(review,'修订审查未完成；补写稿已保存为检查点')
-            auto_reviews+=1
             state.update(review=review,review_body_sha256=digest);history.append(review);save()
         qualified=review
         if not writer.review_passed(review) and roles.enabled(config) and config.get('review_policy')=='e_decides':

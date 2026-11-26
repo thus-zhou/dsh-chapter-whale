@@ -209,6 +209,22 @@ class Operations:
                 raise
             raise HTTPException(409, '正在维护或接收其他任务，请稍后重试') from None
 
+    def _project_id_for_path(self, path_str: str) -> str:
+        raw = str(path_str or "").strip()
+        if not raw:
+            return ""
+        try:
+            target = str(Path(raw).expanduser().resolve())
+        except (OSError, RuntimeError):
+            target = raw
+        for p in self.store.projects():
+            try:
+                if str(Path(p["path"]).expanduser().resolve()) == target:
+                    return p["id"]
+            except (OSError, RuntimeError, KeyError, TypeError):
+                continue
+        return project_path_key(target)
+
     def _start_admitted(self, kind: str, args: list[str], identity: str, metadata: dict | None = None,
               operation_key: str | None = None):
         signature = None
@@ -248,7 +264,7 @@ class Operations:
                     except (ValueError, IndexError, OSError, RuntimeError):
                         daily_job = None
                     if isinstance(daily_job, dict):
-                        meta_pid = project_path_key(str(daily_job.get("project") or ""))
+                        meta_pid = self._project_id_for_path(str(daily_job.get("project") or ""))
                         if meta_pid:
                             metadata = {**(metadata or {}), "project_id": meta_pid}
                 if not meta_pid:
@@ -256,7 +272,7 @@ class Operations:
                     # project_id must never silently disable the project mutex.
                     try:
                         position = list(args).index("--project")
-                        meta_pid = project_path_key(str(args[position + 1]))
+                        meta_pid = self._project_id_for_path(str(args[position + 1]))
                     except (ValueError, IndexError):
                         meta_pid = ""
                     if meta_pid:
@@ -2273,7 +2289,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             # 旧 PUT 不带这个键时必须保留任务原值，否则发布任务会被静默降级成只存稿。
             values.pop("publication_mode", None)
         if hasattr(scheduler, "update_job"):
-            return scheduler.update_job(identity, values)
+            with _JOBS_CREATE_LOCK:
+                return scheduler.update_job(identity, values)
         raise HTTPException(503, "任务更新接口尚不可用")
 
     # ---- 平台排期缓冲（0.6.1） ------------------------------------------------

@@ -301,15 +301,19 @@ class DraftDeliveryTest(unittest.TestCase):
                 self.receipts.clear()
                 job_id = "missing-" + key
                 self.add_job(job_id=job_id)
-                def partial(project, word_count, max_revisions, chapter_id):
-                    value = self.generate_ok(project, word_count, max_revisions, chapter_id)
-                    self.receipts[chapter_id]["post_save"][key] = False
-                    return value
-                self.generate.side_effect = partial
-                result = scheduler.run_once(job_id)
-                self.assertEqual(result["status"], "metadata_pending")
-                job = scheduler.load_scheduler()["jobs"][job_id]
-                self.assertFalse(job.get("completed_slots"))
+                try:
+                    def partial(project, word_count, max_revisions, chapter_id):
+                        value = self.generate_ok(project, word_count, max_revisions, chapter_id)
+                        self.receipts[chapter_id]["post_save"][key] = False
+                        return value
+                    self.generate.side_effect = partial
+                    result = scheduler.run_once(job_id)
+                    self.assertEqual(result["status"], "metadata_pending")
+                    job = scheduler.load_scheduler()["jobs"][job_id]
+                    self.assertFalse(job.get("completed_slots"))
+                finally:
+                    with scheduler.config_transaction() as data:
+                        data["jobs"].pop(job_id, None)
 
     def test_missing_model_blocks_without_writing(self):
         self.add_job()

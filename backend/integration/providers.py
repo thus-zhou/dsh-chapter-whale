@@ -139,7 +139,7 @@ def save(config, identity, payload):
     if not isinstance(price, dict):raise ValueError('价格必须为模型映射')
     from .costs import number
     for model, value in price.items():
-        if not isinstance(model,str) or not model.strip() or len(model)>200:raise ValueError('报价模型ID无效')
+        if not isinstance(model,str) or not model.strip() or len(model)>200 or _has_control_char(model):raise ValueError('报价模型ID无效')
         if not isinstance(value, dict) or value.get('currency', 'CNY') not in {'CNY', 'USD'} or any(k not in value for k in ('input','output')):raise ValueError('模型报价必须包含输入和输出价格')
         for field in ('input', 'output', 'cached'):
             if field in value:number(value[field])

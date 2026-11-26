@@ -22,7 +22,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from fanqie_auto_publish import publication_safety
-from integration import character_state, memory_library, quality_gate, writer_runner
+from integration import character_state, memory_library, quality_gate, revision_workflow, writer_runner
 from manager import app as manager_app
 
 HEADER = "# 第1章 起风\n\n"
@@ -370,17 +370,45 @@ class ReviewGuardsTests(unittest.TestCase):
 
     def test_p2_4_approve_marks_sync_pending_then_next_generation_repairs(self):
         writer_runner.approve_chapter_review(self.project, 1)
-        receipts = json.loads((self.project / ".webnovel" / "writer_receipts.json").read_text(encoding="utf-8"))
+        receipts_path = self.project / ".webnovel" / "writer_receipts.json"
+        receipts = json.loads(receipts_path.read_text(encoding="utf-8"))
         self.assertEqual(receipts["1"]["post_save"]["status"], "pending_approval")
-        synced = {"status": "synced", "entities": {"status": "synced"},
-                  "shared_memory": {"status": "synced"}, "rag_indexed": True,
-                  "continuity_written": True}
-        with patch.object(writer_runner, "_sync_committed_artifacts",
-                          new=AsyncMock(return_value=synced)) as repair:
-            asyncio.run(writer_runner._repair_approved_artifacts(self.project, 2, Mock()))
-        repair.assert_awaited_once()
-        # _sync_committed_artifacts owns the receipt write; the helper only
-        # dispatches it. The real end-to-end path is covered by the suite.
+
+        executor = install_executor()
+        executor._generate_continuity_summary = AsyncMock(return_value="第1章状态摘要")
+        asyncio.run(writer_runner._repair_approved_artifacts(self.project, 2, executor))
+        self.assertEqual(executor._extract_chapter_entities.await_count, 1)
+        self.assertEqual(executor.sync_post_save_artifacts.await_count, 1)
+
+        repaired = json.loads(receipts_path.read_text(encoding="utf-8"))
+        post = repaired["1"]["post_save"]
+        self.assertNotIn(post.get("status"), {"pending_approval", "failed"})
+        self.assertEqual(post["entities"]["status"], "synced")
+        self.assertEqual(post["shared_memory"]["status"], "synced")
+        self.assertTrue(post["rag_indexed"])
+        self.assertTrue(post["continuity_written"])
+
+        # 二次进入下一章时不能重复触发补同步（否则无限烧钱）。
+        asyncio.run(writer_runner._repair_approved_artifacts(self.project, 3, executor))
+        self.assertEqual(executor._extract_chapter_entities.await_count, 1)
+        self.assertEqual(executor.sync_post_save_artifacts.await_count, 1)
+
+        # 若 shared_memory 已先同步而 entities/RAG 仍未就绪，仍必须补齐缺失部分。
+        repaired["1"]["post_save"] = {
+            "status": "pending_approval",
+            "entities": {"status": "pending_approval"},
+            "shared_memory": {"status": "synced"},
+            "rag_indexed": False,
+            "continuity_written": False,
+        }
+        receipts_path.write_text(json.dumps(repaired, ensure_ascii=False), encoding="utf-8")
+        asyncio.run(writer_runner._repair_approved_artifacts(self.project, 3, executor))
+        self.assertEqual(executor._extract_chapter_entities.await_count, 2)
+        self.assertEqual(executor.sync_post_save_artifacts.await_count, 2)
+        final_post = json.loads(receipts_path.read_text(encoding="utf-8"))["1"]["post_save"]
+        self.assertNotIn(final_post.get("status"), {"pending_approval", "failed"})
+        self.assertEqual(final_post["entities"]["status"], "synced")
+        self.assertTrue(final_post["rag_indexed"])
 
     def test_p3_1_approve_requires_a_valid_body_digest(self):
         receipts_path = self.project / ".webnovel" / "writer_receipts.json"
@@ -424,6 +452,74 @@ class P25ReviewBudgetAtomicTests(unittest.TestCase):
                 self.assertEqual(saved["auto_review_count"], 2)
                 self.assertEqual(result["review"]["review_decision"], "needs_human_review")
                 self.assertEqual(result["review"]["auto_review_count"], 2)
+
+    def test_p2_1_two_crashes_do_not_forge_zero_review_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_project(Path(tmp))
+            outline_file(project, "## 第1章 起风\n故事梗概。\n")
+            executor = install_executor(stream_review=None,
+                                        reviews=[RuntimeError("D 崩溃 1"), RuntimeError("D 崩溃 2")])
+            env = {"NOVEL_HELPER_AI_CONFIG": str(project / "offline-ai.json"),
+                   "AI_API_KEY": "", "AI_MODEL": ""}
+            with patch.dict(os.environ, env), patch_loader(executor):
+                for _ in range(2):
+                    with self.assertRaises(RuntimeError):
+                        asyncio.run(writer_runner._generate_and_review(project, 1, 100, 0))
+                # 两次均崩溃导致从未拿到有效审查结果，第 3 次绝不能伪造交接稿。
+                with self.assertRaises(RuntimeError) as caught:
+                    asyncio.run(writer_runner._generate_and_review(project, 1, 100, 0))
+                self.assertIn("未获得有效审查结果", str(caught.exception))
+                self.assertEqual(executor.execute_review.await_count, 2)
+
+
+class P31RevisionWorkflowTests(unittest.TestCase):
+    """P3-1: revision_workflow reserves budget before D and preserves review on handoff."""
+
+    def test_revise_reserves_budget_and_preserves_previous_review_on_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_project(Path(tmp))
+            source = write_body(project, BODY, 1)
+            source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            polished = BODY + "\n他推开山门。"
+            identity = {"chapter": 1, "source_sha256": source_sha, "contract": "", "min_words": 0}
+            key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:20]
+            cp_path = project / ".webnovel" / "draft_checkpoints" / f"revision-1-{key}.json"
+            cp_path.parent.mkdir(parents=True, exist_ok=True)
+            prev_review = {
+                "success": True,
+                "review_decision": "needs_revision",
+                "needs_revision": True,
+                "issues": ["逻辑跳跃"],
+                "fact_candidates": [{"title": "线索", "content": "山门旧约", "quote": "站在山门前"}],
+            }
+            cp_path.write_text(json.dumps({
+                **identity,
+                "polished": polished,
+                "revision_attempts": 1,
+                "auto_review_count": 1,
+                "review": prev_review,
+                "reviews": [prev_review],
+                "review_body_sha256": "0" * 64,
+            }, ensure_ascii=False), encoding="utf-8")
+
+            executor = install_executor(reviews=[RuntimeError("D 崩溃")])
+            with patch("integration.studio.reject_sample_copy"):
+                with self.assertRaises(RuntimeError):
+                    asyncio.run(revision_workflow.revise(
+                        project, 1, BODY, source_sha, "", executor, {}))
+            saved = json.loads(cp_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["auto_review_count"], 2)
+
+            executor.execute_review.reset_mock()
+            with patch("integration.studio.reject_sample_copy"):
+                rewritten, handoff = asyncio.run(revision_workflow.revise(
+                    project, 1, BODY, source_sha, "", executor, {}))
+            executor.execute_review.assert_not_awaited()
+            self.assertEqual(rewritten, polished)
+            self.assertEqual(handoff["review_decision"], "needs_human_review")
+            self.assertEqual(handoff["auto_review_count"], 2)
+            self.assertEqual(handoff["issues"], ["逻辑跳跃"])
+            self.assertEqual(handoff["fact_candidates"][0]["title"], "线索")
 
 
 if __name__ == "__main__":

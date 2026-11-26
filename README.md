@@ -17,7 +17,7 @@ Windows 10/11 x64 · macOS（Apple Silicon / Intel）· Linux 常驻存稿归档
 
 ![码章鲸 0.7.0：液态玻璃工作台、全自动小说写作与番茄发布](assets/screenshots/02-dashboard.jpg)
 
-## 0.7.5 审计修复（开发分支）
+## 0.7.5 修复与改进
 
 - 修复 Windows 轻量包全新安装：运行时清单恢复为 v0.7.0 归档的原始字节哈希，`downloadRuntime` 不再因 182 项 CRLF 差异拒绝安装。
 - 修复多书日更去重覆盖任务配置、handoff 章节候选污染共享记忆/人物档案、排期路径绕过人工复核门禁。
@@ -247,7 +247,7 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 
 **支持什么系统和平台？**
 
-当前分支 `0.7.5` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
+当前 `0.7.5` 插件正式声明支持 Windows 10/11 x64 与 macOS（Apple Silicon `arm64` / Intel `x86_64`），要求 DSH ≥ 0.2.2-rc.1；发布适配番茄小说（审核与发布规则仍由平台决定）。macOS 上基于 Windows DPAPI 的免费额度独立服务通道暂不开放（建议直接复用 DSH 已登录模型或自配 API Key）。Linux / macOS 无头常驻存稿见 [deploy/linux](deploy/linux/README.md) 与 [deploy/macos](deploy/macos/README.md)。
 
 ## 许可证与第三方组件
 
@@ -263,6 +263,6 @@ Windows 默认保存在 `%LOCALAPPDATA%\ChapterWhale\workspace`，macOS 默认�
 - [插件市场收录进度](market/SUBMISSION.md)：已提交的申请与已核对的自动收录记录。
 - [反馈问题](https://github.com/thus-zhou/dsh-chapter-whale/issues)：附上版本、错误提示和脱敏截图，方便定位。
 
-包名为 `dsh-chapter-whale`，当前分支版本为 `0.7.5`（尚未发布；公开下载仍为 `0.7.4`，许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
+包名为 `dsh-chapter-whale`，当前版本为 `0.7.5`（许可证 `GPL-3.0-only`）。项目使用 AI 辅助开发，组件与归因声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [`LICENSES/`](LICENSES/)。
 
-**[查看 0.7.4 发布状态与验证边界（0.7.5 待验收） →](RELEASE_STATUS.md)**
+**[查看 0.7.5 发布状态与验证边界 →](RELEASE_STATUS.md)**

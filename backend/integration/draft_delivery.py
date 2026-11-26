@@ -31,7 +31,7 @@ def _post_failure(post):
     post = post if isinstance(post, dict) else {}
     for key in ("continuity_failure", "rag_failure", "entities", "shared_memory"):
         value = post.get(key)
-        if isinstance(value, dict) and value.get("status") not in {"synced", "pending_review", "skipped_pending_review"}:
+        if isinstance(value, dict) and value.get("status") not in {"synced", "pending_review", "pending_approval", "skipped_pending_review"}:
             return value
     return {}
 
@@ -402,7 +402,7 @@ def step(job_id: str, job: Dict[str, Any], cycle: Dict[str, Any], quota: Dict[st
     # 口径必须跟着模式走：排期模式的本章只完成“本地已审定”，远端还没确认。
     tail = "本地已审定，排期待平台回读确认" if mode == "platform_scheduled" else "仅本机，未发布"
     if human_review_ids:
-        tail += f"；第 {','.join(str(c) for c in human_review_ids)} 章已自动审查 2 次，转待人工复核"
+        tail += f"；第 {','.join(str(c) for c in human_review_ids)} 章已转待人工复核"
     return finish(cycle, record, "success",
                   f"已存稿 {len(targets)} 章（{words} 字，{tail}）")
 

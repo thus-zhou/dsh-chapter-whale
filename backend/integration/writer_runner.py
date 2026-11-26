@@ -608,15 +608,28 @@ async def _repair_approved_artifacts(project_root: Path, before_chapter: int, ex
     receipts = strict_json(receipts_path, {})
     if not isinstance(receipts, dict):
         return
-    for chapter, receipt in sorted(reviewed_chapters(project_root).items()):
-        if chapter >= before_chapter or not isinstance(receipt, dict):
+    for chapter, _ in sorted(reviewed_chapters(project_root).items()):
+        if chapter >= before_chapter:
+            continue
+        receipt = receipts.get(str(chapter))
+        if not isinstance(receipt, dict):
             continue
         review = receipt.get("review") if isinstance(receipt.get("review"), dict) else {}
-        post = receipt.get("post_save") if isinstance(receipt.get("post_save"), dict) else {}
-        shared = post.get("shared_memory") if isinstance(post.get("shared_memory"), dict) else {}
         if review.get("review_decision") != "human_approved":
             continue
-        if shared.get("status") not in {"pending_approval", "failed"}:
+        post = receipt.get("post_save")
+        if not isinstance(post, dict) or not post:
+            continue
+        shared = post.get("shared_memory") if isinstance(post.get("shared_memory"), dict) else {}
+        entities = post.get("entities") if isinstance(post.get("entities"), dict) else {}
+        needs_sync = (
+            post.get("status") in {"pending_approval", "failed"}
+            or shared.get("status") in {"pending_approval", "failed"}
+            or entities.get("status") in {"pending_approval", "failed"}
+            or post.get("rag_indexed") is False
+            or post.get("continuity_written") is False
+        )
+        if not needs_sync:
             continue
         destination = Path(str(receipt.get("destination") or ""))
         try:
@@ -752,7 +765,11 @@ async def _generate_and_review(
     def capped_handoff(current):
         """Use the review already in hand; never call D just to discover the cap."""
         nonlocal review
-        review = human_handoff_review(current, body_digest(content), auto_review_count)
+        effective = current if (isinstance(current, dict) and current.get('success') is True) else checkpoint.get('last_review')
+        if not (isinstance(effective, dict) and effective.get('success') is True):
+            from integration.failure_info import ReviewIncomplete
+            raise ReviewIncomplete(current, f'第{chapter_id}章自动审查预算已耗尽且未获得有效审查结果，禁止按交接稿保存')
+        review = human_handoff_review(effective, body_digest(content), auto_review_count)
         checkpoint['last_reviewed_sha256'] = body_digest(content)
         checkpoint['last_review'] = review
         preserve('polished', content)
@@ -1054,7 +1071,14 @@ async def _sync_committed_artifacts(
         except Exception as exc:
             # A committed draft is never regenerated because memory extraction failed.
             post_save['shared_memory'] = {'status':'failed',**_safe_error(exc)}
+    if (post_save.get("status") == "pending_approval"
+            and entities.get("status") == "synced"
+            and post_save.get("shared_memory", {}).get("status") == "synced"
+            and post_save.get("rag_indexed") is True
+            and post_save.get("continuity_written") is True):
+        post_save["status"] = "synced"
     receipt["post_save"] = post_save
+    receipts[str(chapter)] = receipt
     try:
         atomic_json(receipts_path, receipts)
     except OSError:

@@ -660,6 +660,7 @@ def add_job(args: argparse.Namespace) -> Dict[str, Any]:
         if job_id in data["jobs"]:
             raise ValueError(f"任务已存在：{job_id}")
         _check_binding(data, job_id, job)
+        _check_duplicate_publication_mode(data, job_id, job)
         data["jobs"][job_id] = job
     return _job_summary(job_id, job)
 
@@ -736,6 +737,12 @@ def scheduled_human_pending_block(project: Path, published: Iterable[int] = ()) 
     if later:
         return f"第 {pending} 章待人工复核，已阻止排期后续章节 {later}"
     return None
+
+
+def _merge_skipped(existing: Any, added: Iterable[int]) -> List[int]:
+    merged = {int(c) for c in (existing or ()) if type(c) is int and c > 0}
+    merged.update(int(c) for c in added if type(c) is int and c > 0)
+    return sorted(merged)
 
 
 def split_targets_by_pending(pending: Sequence[int], targets: Sequence[int]):
@@ -974,9 +981,10 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
                 raise RuntimeError(
                     f"第 {min(human_pending)} 章待人工复核通过后再发布；本批目标 {blocked_targets} 已阻止")
             # 已通过的前序章继续发布，只跳过待复核章及其后续。
+            merged_skipped = _merge_skipped(cycle.get("skipped_pending"), blocked_targets)
             cycle["target_ids"] = list(targets)
-            cycle["skipped_pending"] = blocked_targets
-            record["skipped_pending"] = blocked_targets
+            cycle["skipped_pending"] = merged_skipped
+            record["skipped_pending"] = merged_skipped
             record["target_ids"] = list(targets)
             record["quota"] = {"chapters_per_run": len(targets), "word_count": cycle["word_count"]}
         cycle['status']='running'
@@ -1009,9 +1017,10 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
             if not targets:
                 raise RuntimeError(
                     f"第 {min(pending_now)} 章待人工复核通过后再发布；本批目标 {blocked_now} 已阻止")
+            merged_skipped = _merge_skipped(cycle.get("skipped_pending"), blocked_now)
             cycle["target_ids"] = list(targets)
-            cycle["skipped_pending"] = blocked_now
-            record["skipped_pending"] = blocked_now
+            cycle["skipped_pending"] = merged_skipped
+            record["skipped_pending"] = merged_skipped
             record["target_ids"] = list(targets)
             record["quota"] = {"chapters_per_run": len(targets), "word_count": cycle["word_count"]}
         if not set(targets).issubset(receipts):
@@ -1043,19 +1052,26 @@ def _run_once_locked(job_id: str, force: bool) -> Dict[str, Any]:
                 if not targets:
                     raise RuntimeError(
                         f"第 {min(pending_now)} 章待人工复核通过后再发布；本批目标 {blocked_now} 已阻止")
+                merged_skipped = _merge_skipped(cycle.get("skipped_pending"), blocked_now)
                 cycle["target_ids"] = list(targets)
-                cycle["skipped_pending"] = blocked_now
-                record["skipped_pending"] = blocked_now
+                cycle["skipped_pending"] = merged_skipped
+                record["skipped_pending"] = merged_skipped
                 record["target_ids"] = list(targets)
                 record["quota"] = {"chapters_per_run": len(targets), "word_count": cycle["word_count"]}
+                remaining = [i for i in targets if i not in archive]
             if not set(targets).issubset(receipts):
                 raise RuntimeError("发布前正文审查记录失效")
-            _verify_queue(book, receipts)
-            bridge.validate_queue_origin(book, project=project, account=account)
-            record["queued_before_publish"] = sorted(queue)
-            code = bridge.run_publish(book, count=len(remaining), volume=job.get("volume"), account=account)
-            record["publish_exit_code"] = code
-            bridge.sync_manifest()
+            queue = _verify_queue(book, receipts)
+            if remaining:
+                if sorted(queue)[:len(remaining)] != sorted(remaining):
+                    raise RuntimeError("发布前发布器队列顺序与本批次不一致")
+                bridge.validate_queue_origin(book, project=project, account=account)
+                record["queued_before_publish"] = sorted(queue)
+                code = bridge.run_publish(book, count=len(remaining), volume=job.get("volume"), account=account)
+                record["publish_exit_code"] = code
+                bridge.sync_manifest()
+            else:
+                code = 0
         else:
             code = 0
             record["mode"] = "reconcile_archive"

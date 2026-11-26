@@ -9,6 +9,7 @@ second job with the same project + publication mode).
 from __future__ import annotations
 
 import asyncio
+import argparse
 import hashlib
 import json
 import os
@@ -529,6 +530,68 @@ class UpdateJobDuplicateModeTests(unittest.TestCase):
         self.assertEqual(result["name"], "改名")
         saved = json.loads(self.path.read_text("utf-8"))["jobs"]["draft"]
         self.assertEqual(saved["publication_mode"], "draft_only")
+
+    def test_add_job_rejects_duplicate_publication_mode(self):
+        args = argparse.Namespace(
+            job_id="draft-dup", name="重复存稿", project=str(self.project),
+            book="书丙", account="", publication_mode="draft_only",
+            platform="fanqie", schedule_buffer={}, daily_time="09:00",
+            daily_times=[], quota_phases=[], slot_quotas=None,
+            delivery_mode="batch", timezone="Asia/Shanghai",
+            chapters_per_run=1, word_count=1000, max_revisions=1,
+            volume=None, approval_mode="unattended", enabled=True,
+        )
+        with self.assertRaises(FileExistsError) as caught:
+            scheduler.add_job(args)
+        self.assertIn("相同发布方式", str(caught.exception))
+        self.assertEqual(sorted(json.loads(self.path.read_text("utf-8"))["jobs"]), ["draft", "live"])
+
+
+class PrePublishPendingRecomputeTests(unittest.TestCase):
+    """P2-2: pre-publish split recomputes remaining count and merges skipped_pending."""
+
+    def test_pre_publish_blocking_recomputes_remaining_and_merges_skipped(self):
+        with tempfile.TemporaryDirectory(prefix="audit-b-prepub-") as tmp:
+            root = Path(tmp)
+            project = make_project(root)
+            ch1 = write_chapter(project, 1)
+            ch2 = write_chapter(project, 2)
+            sched_path = root / "scheduler.json"
+            runs_root = root / "runs"
+            account_file = root / "account.json"
+            account_file.write_text("{}", encoding="utf-8")
+            job = scheduler_job(project, BOOK, "publish_now")
+            today = scheduler._job_today(job)
+            job["cycle"] = {
+                "run_date": today, "slot": f"{today}@08:00",
+                "target_ids": [1, 2], "skipped_pending": [3],
+                "status": "running", "word_count": 1000, "max_revisions": 1,
+            }
+            sched_path.write_text(json.dumps({
+                "version": 2, "settings": {"auto_schedule": True},
+                "jobs": {"daily": job},
+            }, ensure_ascii=False), encoding="utf-8")
+
+            with (
+                patch.object(scheduler, "SCHEDULER_PATH", sched_path),
+                patch.object(scheduler, "RUNS_ROOT", runs_root),
+                patch.object(scheduler.bridge, "account_state_path", return_value=account_file),
+                patch.object(scheduler, "_published_ids", return_value=[]),
+                patch.object(scheduler, "_verified_archive", side_effect=[[], [], [1]]),
+                patch.object(scheduler, "_verify_queue", side_effect=[{1: ch1, 2: ch2}, {1: ch1, 2: ch2}, {1: ch1, 2: ch2}, {2: ch2}]),
+                patch.object(scheduler, "human_pending_chapters", side_effect=[[], [2]]),
+                patch.object(scheduler.writer_runner, "generate_chapter",
+                             side_effect=lambda *a, **kw: {"status": "recovered", "chapter_id": kw["chapter_id"]}),
+                patch.object(scheduler.bridge, "stage_project", return_value={"conflicts": [], "invalid": []}),
+                patch.object(scheduler.bridge, "validate_queue_origin"),
+                patch.object(scheduler.bridge, "sync_manifest"),
+                patch.object(scheduler.bridge, "run_publish", return_value=0) as run_publish,
+            ):
+                record = scheduler._run_once_locked("daily", force=True)
+            run_publish.assert_called_once()
+            self.assertEqual(run_publish.call_args.kwargs["count"], 1)
+            self.assertEqual(record["target_ids"], [1])
+            self.assertEqual(record["skipped_pending"], [2, 3])
 
 
 if __name__ == "__main__":

@@ -139,7 +139,7 @@ function chapterRows(id) {
  const items=chapterCache.get(id); if(!items)return `<div class="loading-text">正在读取章节…</div>`;
  if(items.error)return `<div class="error-inline">${esc(items.error)}</div>`;
  if(!items.length)return `<div class="loading-text">尚无正文。请先完善大纲，然后生成第一章。</div>`;
- return `<div class="chapter-table">${items.map(c=>`<div class="chapter-row"><div><strong>第 ${fmt(c.id)} 章 · ${esc(c.title || "无标题")}</strong><small>${fmt(c.words)} 字 · ${c.reviewed?(c.review_status==="human_approved"?"人工复核通过":c.review_status==="waived_by_author_rule"?"按作者规则免审":c.review_status==="waived_by_E"?"E 授权继续":"审查通过"):c.human_review_required?"待人工复核（已自动审查2次）":"待处理"}</small></div><div class="chapter-actions">${c.human_review_required && !c.reviewed ? button("approve-review",id,"复核通过","button-primary",`data-chapter="${c.id}"`):""}${button("preview",id,"查看","button-secondary",`data-chapter="${c.id}"`)}</div></div>`).join("")}</div>`;
+ return `<div class="chapter-table">${items.map(c=>`<div class="chapter-row"><div><strong>第 ${fmt(c.id)} 章 · ${esc(c.title || "无标题")}</strong><small>${fmt(c.words)} 字 · ${c.reviewed?(c.review_status==="human_approved"?"人工复核通过":c.review_status==="waived_by_author_rule"?"按作者规则免审":c.review_status==="waived_by_E"?"E 授权继续":"审查通过"):c.human_review_required?(c.auto_review_count?`待人工复核（已自动审查${c.auto_review_count}次）`:"待人工复核"):"待处理"}</small></div><div class="chapter-actions">${c.human_review_required && !c.reviewed ? button("approve-review",id,"复核通过","button-primary",`data-chapter="${c.id}"`):""}${button("preview",id,"查看","button-secondary",`data-chapter="${c.id}"`)}</div></div>`).join("")}</div>`;
 }
 function renderProjects() {
  const query=$("project-search").value.trim().toLowerCase();

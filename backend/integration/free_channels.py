@@ -6,6 +6,7 @@ The channel gateway is NOT OFM's anonymous forward listener.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -87,7 +88,9 @@ HOST_PROCESS_RE = re.compile(r'^(node|nodejs|electron|dsh|deepseek)', re.IGNOREC
 # a port and would then receive the gateway key. Require the kernel-reported
 # executable/command line to carry a DSH-family install path as well.
 OWNER_PATH_MARKERS = ('our-free-model', 'ofm_service.mjs', 'dsh-chapter-whale',
-    'chapter-whale', 'deepseek harness', 'deepseek-harness', 'deepseek', 'dsh')
+    'chapter-whale', 'deepseek harness', 'deepseek-harness', 'deepseek')
+_EXE_DSH_RE = re.compile(r'(?:^|[/\\])\.?dsh(?:[/\\]|$)')
+_ARG_DSH_RE = re.compile(r'(?:^|[/\\])\.?dsh[/\\]|[/\\]\.?dsh$')
 
 
 def _proc_identity(pid):
@@ -124,8 +127,19 @@ def _proc_identity(pid):
 def _identity_owned(identity):
     if not isinstance(identity, dict):
         return False
-    haystack = (str(identity.get('exe') or '') + ' ' + str(identity.get('cmdline') or '')).casefold()
-    return any(marker in haystack for marker in OWNER_PATH_MARKERS)
+    exe = str(identity.get('exe') or '').casefold()
+    if any(marker in exe for marker in OWNER_PATH_MARKERS) or _EXE_DSH_RE.search(exe):
+        return True
+    cmdline = str(identity.get('cmdline') or '').casefold()
+    try:
+        tokens = shlex.split(cmdline, posix=True)
+    except ValueError:
+        tokens = cmdline.split()
+    non_flags = [tok for tok in tokens if tok and not tok.startswith('-')]
+    for tok in non_flags:
+        if any(marker in tok for marker in OWNER_PATH_MARKERS) or _ARG_DSH_RE.search(tok):
+            return True
+    return False
 
 
 def _loopback_port(name):

@@ -99,7 +99,7 @@ def build(keep_stage=False):
         tar.extractall(stage_dir, filter="data")
     packs[0].unlink()
     data, copied = stage(ROOT, stage_dir)
-    subprocess.run(["node", str(stage_dir / "package/scripts/check-release.mjs"), "--local",
+    subprocess.run(["node", str(stage_dir / "package/scripts/check-release.mjs"),
                     "--root", str(stage_dir / "package")], check=True)
     with tarfile.open(target, "w:gz", compresslevel=6) as tar:
         tar.add(stage_dir / "package", arcname="package")
