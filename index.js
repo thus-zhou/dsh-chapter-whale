@@ -854,20 +854,30 @@ function readBody(request, limit) {
   return new Promise((done, fail) => {
     const chunks = [];
     let size = 0;
+    let tooLarge = false;
     let failed = false;
     request.on('data', (chunk) => {
       if (failed) return;
       size += chunk.length;
       if (size > limit) {
-        // 审计 C-40：这里只标记失败，不 destroy；调用方先发 413 再关闭连接。
-        failed = true;
-        fail(new Error(`请求体超过 ${Math.round(limit / 1024 / 1024)}MB`));
+        // C-40 on Windows: rejecting and destroying while the client is still
+        // writing produces ECONNRESET before the 413 reaches it.  Keep
+        // consuming (without retaining bytes) and decide after 'end'; the
+        // caller then writes 413 with connection: close.
+        tooLarge = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(chunk);
     });
     request.on('end', () => {
-      if (!failed) done(Buffer.concat(chunks));
+      if (failed) return;
+      if (tooLarge) {
+        failed = true;
+        fail(new Error(`请求体超过 ${Math.round(limit / 1024 / 1024)}MB`));
+      } else {
+        done(Buffer.concat(chunks));
+      }
     });
     request.on('error', (error) => {
       if (failed) return;
@@ -924,11 +934,8 @@ async function forward(request, response, config, context, targetPath, search) {
         // 审计 C-40：先写 413 并结束响应，再关闭请求，客户端才会收到 JSON。
         sendJson(response, tooLarge ? 413 : 400, { detail },
           tooLarge ? { connection: 'close' } : undefined);
-        if (tooLarge) {
-          const closeRequest = () => { try { request.destroy(); } catch { /* already gone */ } };
-          if (typeof response.once === 'function') response.once('finish', closeRequest);
-          else if (typeof request.destroy === 'function') request.destroy();
-        }
+        // The body has already been drained to 'end' for chunked uploads;
+        // do not destroy the socket here or Windows turns the 413 into RST.
         return;
       }
     }
