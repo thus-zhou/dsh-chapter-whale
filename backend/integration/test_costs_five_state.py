@@ -189,8 +189,12 @@ class BudgetTest(unittest.TestCase):
                     if expected == "unknown_charge":
                         meter.output("半截输出")
                     meter.finish()
-                row = sqlite3.connect(self.db).execute(
-                    "SELECT state FROM request_budget WHERE id=?", (meter.reservation,)).fetchone()
+                db = sqlite3.connect(self.db)
+                try:
+                    row = db.execute(
+                        "SELECT state FROM request_budget WHERE id=?", (meter.reservation,)).fetchone()
+                finally:
+                    db.close()
                 self.assertEqual(row[0], expected)
         self.assertEqual(costs.ledger_gaps(self.db), 0)
 
