@@ -162,7 +162,7 @@ class ReserveTest(BudgetBase):
         costs.settle_request(self.db, 'not-a-real-id', project=self.project)
         self.assertEqual(costs.ledger_gaps(self.db), 1)
         gaps = costs.gap_records(self.db)
-        self.assertEqual(gaps[0]['project'], str(self.project.resolve()))
+        self.assertEqual(Path(gaps[0]['project']).resolve(), self.project.resolve())
 
     def test_missing_reservation_without_project_never_writes_a_global_gap(self):
         # R-03: an unowned settlement failure must not block every book's paid
