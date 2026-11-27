@@ -25,6 +25,7 @@ from integration import workbench_db as wb
 PRIORITIES = ("P0", "P1", "P2")
 MAX_PENDING_FRAMES = 256
 LEASE_SECONDS = 30.0
+_GLOBAL_PAUSE_PATH: Optional[Path] = None
 
 
 class SchedulerError(RuntimeError):
@@ -75,7 +76,7 @@ def submit(project, payload: Dict[str, Any], *, priority: str = "P2",
     hold = None
     if parent_task_id:
         parent = get(project, parent_task_id)
-        if parent.get("hold_amendment_id"):
+        if parent.get("hold_amendment_id") and amendment_fallback == "wait":
             state = "held"
             hold = parent["hold_amendment_id"]
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -125,7 +126,45 @@ def _paused(project, scope: str) -> bool:
         return db.execute("SELECT 1 FROM task_pauses WHERE scope=?", (scope,)).fetchone() is not None
 
 
+def configure_global_pause(path) -> None:
+    global _GLOBAL_PAUSE_PATH
+    _GLOBAL_PAUSE_PATH = Path(path)
+
+
+def _global_pause_path() -> Optional[Path]:
+    if _GLOBAL_PAUSE_PATH is not None:
+        return _GLOBAL_PAUSE_PATH
+    value = os.getenv("NOVEL_HELPER_GLOBAL_PAUSE")
+    return Path(value) if value else None
+
+
+def global_paused() -> bool:
+    path = _global_pause_path()
+    if path is None or not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return bool(data.get("paused"))
+    except Exception:
+        return False
+
+
+def set_global_pause(paused: bool, reason: str = "") -> Dict[str, Any]:
+    path = _global_pause_path()
+    if path is None:
+        raise SchedulerError("global_pause_path_missing", status=500)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"paused": bool(paused), "reason": str(reason or ""),
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary, path)
+    return {"status": "paused" if paused else "resumed", "scope": "global", **data}
+
+
 def _task_paused(project, item: Dict[str, Any]) -> bool:
+    if global_paused():
+        return True
     if _paused(project, "global") or _paused(project, "project:" + str(Path(project).resolve())):
         return True
     task_id = item["task_id"]
@@ -189,6 +228,8 @@ def _ready(project, item: Dict[str, Any]) -> bool:
 def claim(project, owner: str, *, max_slots: int = 4, lease_seconds: float = LEASE_SECONDS) -> Optional[Dict[str, Any]]:
     """Lease one ready task; returns None when the pool is full or idle."""
     wb.initialize(project)
+    # 每次派发前回收过期租约；无需依赖作者手动调用 /tasks/recover。
+    recover(project)
     max_slots = max(1, int(max_slots))
     with wb.write_tx(project) as db:
         running = [dict(row) for row in db.execute(
@@ -248,30 +289,42 @@ def begin_commit(project, task_id: str, owner: str) -> Dict[str, Any]:
 
 def _mark_recovery(project, task_id: str) -> None:
     with wb.write_tx(project) as db:
-        db.execute("UPDATE task_queue SET state='recovery_required', updated_at=? WHERE task_id=?",
+        db.execute("UPDATE task_queue SET state='recovery_required', updated_at=? "
+                   "WHERE task_id=? AND state='running'",
                    (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id))
     _event(project, task_id, "recovery_required")
 
 
 def complete(project, task_id: str, *, owner: str = "") -> Dict[str, Any]:
     item = get(project, task_id)
-    if owner and item.get("lease_owner") not in {owner, None}:
-        raise SchedulerError("lease_owner_mismatch")
+    if item.get("state") == "completed":
+        return item
+    if item.get("state") != "running" or not owner or item.get("lease_owner") != owner:
+        raise SchedulerError("task_not_running", status=409)
     with wb.write_tx(project) as db:
-        db.execute("UPDATE task_queue SET state='completed', lease_owner=NULL, lease_expires=NULL, "
-                   "committing=0, updated_at=? WHERE task_id=?",
-                   (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id))
+        cur =        db.execute("UPDATE task_queue SET state='completed', lease_owner=NULL, lease_expires=NULL, "
+                   "committing=0, hold_amendment_id=NULL, amendment_fallback='wait', updated_at=? "
+                   "WHERE task_id=? AND state='running' AND lease_owner=?",
+                   (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id, owner))
+        if not cur.rowcount:
+            raise SchedulerError("task_not_running", status=409)
     _event(project, task_id, "completed")
     return get(project, task_id)
 
 
 def fail(project, task_id: str, *, error: str = "", max_attempts: int = 3) -> Dict[str, Any]:
     item = get(project, task_id)
+    if item.get("state") == "completed":
+        return item
+    if item.get("state") not in {"running", "committing"}:
+        raise SchedulerError("task_not_running", status=409)
     state = "pending" if int(item.get("attempts") or 0) < int(max_attempts) else "failed"
     with wb.write_tx(project) as db:
-        db.execute("UPDATE task_queue SET state=?, lease_owner=NULL, lease_expires=NULL, "
-                   "committing=0, updated_at=? WHERE task_id=?",
-                   (state, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id))
+        cur = db.execute("UPDATE task_queue SET state=?, lease_owner=NULL, lease_expires=NULL, "
+                         "committing=0, updated_at=? WHERE task_id=? AND state IN ('running','committing')",
+                         (state, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id))
+        if not cur.rowcount:
+            raise SchedulerError("task_not_running", status=409)
     _event(project, task_id, "failed", {"error": error, "next": state})
     return get(project, task_id)
 
@@ -290,8 +343,9 @@ def recover(project) -> List[Dict[str, Any]]:
         else:
             with wb.write_tx(project) as db:
                 db.execute("UPDATE task_queue SET state='pending', lease_owner=NULL, lease_expires=NULL, "
-                           "updated_at=? WHERE task_id=?",
-                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), item["task_id"]))
+                           "updated_at=? WHERE task_id=? AND state='running' AND lease_owner=?",
+                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), item["task_id"],
+                            item.get("lease_owner")))
             _event(project, item["task_id"], "lease_expired_requeued")
         rows.append(get(project, item["task_id"]))
     return rows

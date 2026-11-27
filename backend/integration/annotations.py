@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,7 +57,19 @@ def save_snapshot(project, text: str) -> str:
     path = _snapshot_path(project, digest)
     if not path.is_file():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8", newline="\n")
+        handle, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            from fanqie_auto_publish.publication_safety import replace_with_retry
+            replace_with_retry(Path(temporary), path)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
     return digest
 
 
@@ -320,9 +334,23 @@ def parse_edit_output(raw: str, *, expected_ids: Sequence[str] = ()) -> Dict[str
 def triage(project, chapter: int, annotations: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     """Group annotations: conflicts, adjacent/semantic coupled, independent."""
     rows = []
+    try:
+        current_text, _ = _current_text(project, chapter, against="draft")
+    except Exception:
+        current_text = ""
     for item in annotations:
         anchor = item.get("anchor") or {}
-        rows.append((item, int(anchor.get("char_start") or 0), int(anchor.get("char_end") or 0),
+        start = int(anchor.get("char_start") or 0)
+        end = int(anchor.get("char_end") or 0)
+        if anchor and current_text:
+            try:
+                base_text = read_snapshot(project, anchor.get("base_snapshot_id"))
+                located = text_merge.relocate_anchor(base_text, current_text, anchor)
+                if located.get("start") is not None and located.get("end") is not None:
+                    start, end = int(located["start"]), int(located["end"])
+            except Exception:
+                pass
+        rows.append((item, start, end,
                      int(anchor.get("para_start") or 0), int(anchor.get("para_end") or 0)))
     conflicts: List[List[str]] = []
     coupled: List[List[str]] = []
@@ -424,7 +452,7 @@ def run_annotations(project, chapter: int, data: Dict[str, Any], *,
                 errors.append({"annotation_id": item["id"], "variant": variant,
                                "error": getattr(exc, "code", None) or str(exc)[:200]})
                 continue
-            built = _build_candidate(project, chapter, item, base_text, current_text,
+            built = _build_candidate(project, chapter, {**item, "variant": variant}, base_text, current_text,
                                      located, parsed, group_id=group_id)
             previews.append(built)
     for item in rows:
@@ -433,6 +461,11 @@ def run_annotations(project, chapter: int, data: Dict[str, Any], *,
             with wb.write_tx(project) as db:
                 db.execute("UPDATE annotations SET status='proposed', updated_at=? WHERE id=?",
                            (_now(), item["id"]))
+        else:
+            # 全部 variant 失败时不能把批注永久留在 running；恢复为 open 让默认重跑能选中。
+            with wb.write_tx(project) as db:
+                db.execute("UPDATE annotations SET status='open', updated_at=? "
+                           "WHERE id=? AND status='running'", (_now(), item["id"]))
     return {"status": "proposed" if previews else "failed", "chapter_id": chapter,
             "group_id": group_id, "previews": previews, "triage": triage_result,
             "errors": errors, "op_id": op_id}
@@ -444,8 +477,15 @@ def _build_candidate(project, chapter: int, annotation: Dict[str, Any], base_tex
     variant = int(annotation.get("variant") or 0)
     variant_name = "AB"[variant] if variant < 2 else str(variant)
     preview_id = wb.new_id("prev") + "_" + variant_name.lower()
-    start = int(located.get("start") or 0)
-    end = int(located.get("end") or 0)
+    # ``located`` is in current-draft coordinates (it was relocated against the
+    # draft).  Hunk coordinates, before_text and candidate_text must all use
+    # the *base snapshot* coordinates the preview is built on, or an insertion
+    # before the selection silently turns the edit into an append.
+    anchor = annotation.get("anchor") or {}
+    start = int(anchor.get("char_start", located.get("start") or 0))
+    end = int(anchor.get("char_end", located.get("end") or 0))
+    if end < start:
+        start, end = end, start
     if parsed.get("format") == "xml_patches":
         hunks = []
         for index, patch in enumerate(parsed["patches"], 1):
@@ -596,9 +636,14 @@ def apply_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
         })
         draft = updated["draft"]
     else:
+        epoch = wb.draft_epoch(project, chapter)
+        client_epoch = data.get("expected_draft_epoch")
+        if client_epoch is not None and int(client_epoch) != int(epoch):
+            raise AnnotationError("draft_conflict", status=409,
+                                  detail={"current_draft": None, "draft_epoch": epoch})
         updated = chapter_editor.save_draft(project, chapter, {
             "title": data.get("title") or current_title,
-            "content": text, "expected_draft_id": None, "expected_draft_epoch": 0,
+            "content": text, "expected_draft_id": None, "expected_draft_epoch": epoch,
             "expected_draft_revision": 0,
         })
         draft = updated["draft"]
@@ -638,6 +683,18 @@ def apply_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
                         "AND char_start < ? AND ? < char_end",
                         (stamp, group_id, hunk_id,
                          int(item.get("end") or 0), int(item.get("start") or 0)))
+        preview_ids = {row.get("preview_id") for row in pending_rows if row.get("preview_id")}
+        for preview_id in preview_ids:
+            states = [row[0] for row in db.execute(
+                "SELECT status FROM annotation_hunks WHERE preview_id=?", (preview_id,))]
+            if any(state in {"applied_to_draft", "committed", "committed_modified"} for state in states):
+                preview_status = "applied"
+            elif states and all(state == "superseded" for state in states):
+                preview_status = "superseded"
+            else:
+                preview_status = "pending"
+            db.execute("UPDATE preview_index SET status=?, updated_at=? WHERE preview_id=?",
+                       (preview_status, stamp, preview_id))
     _recompute_annotation_status(project, {row["annotation_id"] for row in rows})
     return {"status": "applied", "chapter_id": chapter, "draft": draft,
             "applied": [item for item in result["results"] if item["status"] == "applied"],
@@ -693,7 +750,7 @@ def undo_apply(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
 def revert_draft_hunks(project, chapter: int, draft_id: Optional[str]) -> List[str]:
     with wb.connect(project) as db:
         rows = [dict(r) for r in db.execute(
-            "SELECT id FROM annotation_hunks WHERE chapter_id=? AND applied_draft_id=? "
+            "SELECT id, annotation_id FROM annotation_hunks WHERE chapter_id=? AND applied_draft_id=? "
             "AND status='applied_to_draft'", (int(chapter), draft_id))]
         db.execute("DELETE FROM patch_ledger WHERE chapter_id=? AND draft_id=?", (int(chapter), draft_id))
         db.execute("UPDATE annotation_hunks SET status='pending', applied_draft_id=NULL, "
@@ -701,7 +758,8 @@ def revert_draft_hunks(project, chapter: int, draft_id: Optional[str]) -> List[s
                    "WHERE chapter_id=? AND applied_draft_id=? AND status='applied_to_draft'",
                    (_now(), int(chapter), draft_id))
     ids = [row["id"] for row in rows]
-    _recompute_annotation_status(project, set())
+    _recompute_annotation_status(project, {row["annotation_id"] for row in rows
+                                           if row.get("annotation_id")})
     return ids
 
 
@@ -716,7 +774,8 @@ def mark_committed(project, chapter: int, *, text: str, draft_id: Optional[str] 
             (chapter,))]
         for row in rows:
             applied_range = row.get("applied_range") or []
-            applied_text = row.get("after_text") or ""
+            applied_text = (row.get("custom_text") if row.get("custom_text") is not None
+                            else row.get("after_text") or "")
             start = int(applied_range[0]) if len(applied_range) == 2 else 0
             window = text_merge.slice_codepoints(text, max(0, start - 120),
                                                  start + text_merge.codepoint_length(applied_text) + 120)
@@ -727,6 +786,9 @@ def mark_committed(project, chapter: int, *, text: str, draft_id: Optional[str] 
             modified += status == "committed_modified"
             if row.get("annotation_id"):
                 _recompute_annotation_status(project, {row["annotation_id"]})
+            if row.get("preview_id"):
+                db.execute("UPDATE preview_index SET status='committed', updated_at=? "
+                           "WHERE preview_id=?", (_now(), row["preview_id"]))
         db.execute("DELETE FROM patch_ledger WHERE chapter_id=?", (chapter,))
     return {"committed": committed, "committed_modified": modified}
 

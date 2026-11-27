@@ -244,5 +244,109 @@ class TriageTest(unittest.TestCase):
                                 for group in triage["coupled_batch"]))
 
 
+class CandidateCoordinatesTest(unittest.TestCase):
+    def test_candidate_uses_base_snapshot_coordinates_after_prefix_insert(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头一句。\n她推开门。\n结尾一句。\n"
+            seed(project, text)
+            aid = ann.create_annotation(project, 1, {
+                "scope": "selection", "instruction": "改动作", "against": "version",
+                "anchor": anchor_for(text, "她推开门。")})["id"]
+            draft = draft_identity(project)
+            ce.save_draft(project, 1, {"title": "开端",
+                                       "content": "前缀插入。\n" + text,
+                                       "expected_draft_id": draft["draft_id"],
+                                       "expected_draft_epoch": draft["draft_epoch"],
+                                       "expected_draft_revision": draft["draft_revision"]})
+            result = ann.run_annotations(project, 1, {"op_id": "coords", "annotation_ids": [aid]},
+                                         generate=lambda a, c: "<replacement>她攥紧门把手。</replacement>")
+            preview = result["previews"][0]
+            hunk = preview["hunks"][0]
+            self.assertEqual(hunk["before_text"], "她推开门。")
+            self.assertEqual(preview["candidate_text"],
+                             "开头一句。\n她攥紧门把手。\n结尾一句。\n")
+            # 应用这份候选后，新句在目标位置，而不是被追加到文末。
+            self.assertNotIn("结尾一句。\n她攥紧门把手。", preview["candidate_text"])
+
+
+class OverlapAndLifecycleTest(unittest.TestCase):
+    def _create(self, project, text, quote="她推开门。"):
+        return ann.create_annotation(project, 1, {
+            "scope": "selection", "instruction": "改", "against": "version",
+            "anchor": anchor_for(text, quote)})["id"]
+
+    def test_two_variant_hunks_in_one_request_do_not_both_apply(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "她说：我很害怕。\n"
+            seed(project, text)
+            aid = self._create(project, text, "我很害怕")
+            def generate(annotation, context):
+                return ("<replacement>她攥紧门把手。</replacement>" if annotation.get("variant") == 0
+                        else "<replacement>她声音发抖。</replacement>")
+            result = ann.run_annotations(project, 1, {"op_id": "overlap", "annotation_ids": [aid],
+                                                      "variants": 2}, generate=generate)
+            ids = [preview["hunks"][0]["id"] for preview in result["previews"]]
+            draft = draft_identity(project)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "overlap-apply", "hunk_ids": ids,
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertFalse(applied["clean"])
+            self.assertTrue(any(item["reason"] == "hunk_overlap" for item in applied["conflicts"]))
+            self.assertEqual(len(applied["applied"]), 1)
+            self.assertIn("她说：", applied["draft"]["content"])
+            self.assertIn("。", applied["draft"]["content"])
+
+    def test_commit_via_save_version_marks_hunk_committed_and_clears_ledger(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "她推开门。\n"
+            seed(project, text)
+            aid = self._create(project, text)
+            preview = ann.run_annotations(project, 1, {"op_id": "commit-run", "annotation_ids": [aid]},
+                                          generate=lambda a, c: "<replacement>她撞开门。</replacement>")["previews"][0]
+            draft = draft_identity(project)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "commit-apply", "hunk_ids": [preview["hunks"][0]["id"]],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            current = cv.snapshot(project, 1, source="test", note="commit test") or {}
+            ce.save_version(project, 1, {
+                "op_id": "commit-save", "title": "开端", "content": applied["draft"]["content"],
+                "expected_version_id": current.get("version_id"),
+                "expected_content_sha256": cv.file_sha256(cv.chapter_path(project, 1)),
+                "submitted_draft_id": applied["draft"]["draft_id"],
+                "submitted_draft_epoch": applied["draft"]["draft_epoch"],
+                "submitted_draft_revision": applied["draft"]["draft_revision"]})
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["status"], "committed")
+            with wb.connect(project) as db:
+                count = db.execute("SELECT COUNT(*) FROM patch_ledger WHERE chapter_id=1").fetchone()[0]
+            self.assertEqual(count, 0)
+
+    def test_apply_without_draft_uses_current_epoch_after_commit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头。\n她推开门。\n结尾。\n"
+            seed(project, text)
+            aid = self._create(project, text)
+            preview = ann.run_annotations(project, 1, {"op_id": "epoch-run", "annotation_ids": [aid]},
+                                          generate=lambda a, c: "<replacement>她撞开门。</replacement>")["previews"][0]
+            draft = draft_identity(project)
+            ann.apply_hunks(project, 1, {"op_id": "epoch-apply-1", "hunk_ids": [preview["hunks"][0]["id"]],
+                                         "expected_draft_id": draft["draft_id"],
+                                         "expected_draft_epoch": draft["draft_epoch"],
+                                         "expected_draft_revision": draft["draft_revision"]})
+            ce.discard_draft(project, 1)
+            epoch = wb.draft_epoch(project, 1)
+            self.assertGreater(epoch, 0)
+            second = ann.apply_hunks(project, 1, {"op_id": "epoch-apply-2",
+                                                  "hunk_ids": [preview["hunks"][0]["id"]],
+                                                  "expected_draft_epoch": epoch})
+            self.assertEqual(second["status"], "applied")
+            self.assertIn("她撞开门。", second["draft"]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -766,7 +766,7 @@ class PublishReconcileInput(BaseModel):
 
 
 class RestoreInput(BaseModel):
-    version_id: str = Field(pattern=r"^(?:[0-9a-f]{64}|ver_\d{4}_[0-9a-f]{8})$")
+    version_id: str = Field(pattern=r"^(?:[0-9a-f]{64}|ver_\d{4,}_[0-9a-f]{8})$")
     restore_title: bool = True
     op_id: str | None = None
 
@@ -2059,7 +2059,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/chapters/{chapter}/versions/{version}")
     def chapter_version_body(identity: str, chapter: int, version: str):
         if chapter <= 0: raise ValueError("章节号无效")
-        if not re.fullmatch(r"(?:[0-9a-f]{64}|ver_\d{4}_[0-9a-f]{8})", version): raise ValueError("版本标识无效")
+        if not re.fullmatch(r"(?:[0-9a-f]{64}|ver_\d{4,}_[0-9a-f]{8})", version): raise ValueError("版本标识无效")
         from integration import version_history
         return version_history.read(Path(project(identity)["path"]), chapter, version)
 

@@ -545,9 +545,6 @@ def write_file(project, filename: str, *, content: str, revision: Optional[str] 
 def create_file(project, *, filename: str, content: str = "") -> Dict[str, Any]:
     name = _validate_filename(filename)
     path = _outline_dir(project) / name
-    if path.exists():
-        raise OutlineError("outline_file_exists", status=409)
-    path.parent.mkdir(parents=True, exist_ok=True)
     if not isinstance(content, str) or "\x00" in content:
         raise OutlineError("invalid_content")
     text = content.replace("\r\n", "\n").replace("\r", "\n")
@@ -557,15 +554,19 @@ def create_file(project, *, filename: str, content: str = "") -> Dict[str, Any]:
         raise OutlineError("invalid_content") from exc
     if len(encoded) > MAX_FILE_BYTES:
         raise OutlineError("outline_too_large", status=413)
-    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
-    try:
-        with temporary.open("xb") as stream:
-            stream.write(text.encode("utf-8"))
-            stream.flush()
-            os.fsync(stream.fileno())
-        safety.replace_with_retry(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    with _lock(project):
+        if path.exists():
+            raise OutlineError("outline_file_exists", status=409)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+        try:
+            with temporary.open("xb") as stream:
+                stream.write(text.encode("utf-8"))
+                stream.flush()
+                os.fsync(stream.fileno())
+            safety.replace_with_retry(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
     return {"status": "created", "name": name, "revision": _revision_of(path)}
 
 

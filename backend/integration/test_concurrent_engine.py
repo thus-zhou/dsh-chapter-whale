@@ -27,7 +27,7 @@ class SchedulingTest(unittest.TestCase):
             second = ce.claim(book, "w2", max_slots=2)
             self.assertEqual(second["priority"], "P1")
             self.assertIsNone(ce.claim(book, "w3", max_slots=2))
-            ce.complete(book, p0["task_id"])
+            ce.complete(book, p0["task_id"], owner="w1")
             third = ce.claim(book, "w3", max_slots=2)
             self.assertEqual(third["task_id"], p2a["task_id"])
 
@@ -49,7 +49,7 @@ class SchedulingTest(unittest.TestCase):
             claimed = ce.claim(book, "w", max_slots=4)
             self.assertEqual(claimed["task_id"], parent["task_id"])
             ce.pause(book, "global", "全站维护")
-            ce.complete(book, parent["task_id"])
+            ce.complete(book, parent["task_id"], owner="w")
             self.assertIsNone(ce.claim(book, "w", max_slots=4))
             ce.resume(book, "global")
             self.assertEqual(ce.claim(book, "w", max_slots=4)["task_id"], child["task_id"])
@@ -60,7 +60,7 @@ class SchedulingTest(unittest.TestCase):
             first = ce.submit(book, {}, priority="P1")
             second = ce.submit(book, {}, priority="P0", blocked_by=[first["task_id"]])
             self.assertEqual(ce.claim(book, "w")["task_id"], first["task_id"])
-            ce.complete(book, first["task_id"])
+            ce.complete(book, first["task_id"], owner="w")
             self.assertEqual(ce.claim(book, "w")["task_id"], second["task_id"])
 
     def test_amendment_hold_and_continue_fallback(self):

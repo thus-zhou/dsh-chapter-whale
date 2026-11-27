@@ -174,7 +174,10 @@ class ModelGateway:
             raise GatewayError("messages_required")
         service = self._service_factory(role, self.config)
         token = None
-        if self.db_path is not None:
+        # ``AIService`` already reserves a budget row for every network attempt.
+        # Reserve here only when a directive-level guard must be enforced before
+        # dispatch; doing it for ordinary calls double-counts one logical call.
+        if self.db_path is not None and directive_guard is not None:
             token = costs.reserve_request(
                 self.db_path, self.project, chapter, stage, tokens=0, cost_cny=None,
                 operation=op_id, config=self.config,

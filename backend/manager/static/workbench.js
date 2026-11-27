@@ -376,6 +376,16 @@
       if (state.adapter) state.adapter.endComposition();
       handleEditorInput();
     });
+    on(els.editor, "blur", () => {
+      if (!state.composing) return;
+      state.composing = false;
+      if (state.adapter) state.adapter.endComposition();
+    });
+    on(document, "visibilitychange", () => {
+      if (document.visibilityState !== "hidden" || !state.composing) return;
+      state.composing = false;
+      if (state.adapter) state.adapter.endComposition();
+    });
     on(els.editor, "input", handleEditorInput);
     on(els.editor, "select", () => captureSelection(false));
     on(els.editor, "mouseup", handleEditorMouseUp);
@@ -518,6 +528,12 @@
       hideSelectionUI();
     });
     on(document, "keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && String(event.key || "").toLowerCase() === "s") {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        saveVersion().catch(() => {});
+        return;
+      }
       if (event.key !== "Escape") return;
       if (state.moreOpen) toggleMore(false);
       if (els.dialog.open) closeDialog();
@@ -832,7 +848,6 @@
       const button = node("button", "wb-chapter");
       button.type = "button";
       button.dataset.chapter = String(chapter.id);
-      button.setAttribute("role", "listitem");
       const number = node("span", "wb-chapter-number", String(chapter.id).padStart(2, "0"));
       const body = node("span", "wb-chapter-body");
       const title = node("strong", "wb-chapter-title", chapter.title || "无标题");
@@ -1043,8 +1058,7 @@
 
   function setEditorValue(text, title, force) {
     if (!els.editor) return false;
-    if (state.composing || (state.adapter && state.adapter.composing)) return false;
-    if (!force && state.composing) return false;
+    if (!force && (state.composing || (state.adapter && state.adapter.composing))) return false;
     els.editor.value = text;
     els.title.value = title;
     if (state.adapter) state.adapter.setValue(text, true);
@@ -1238,6 +1252,9 @@
     if (!mobile) {
       target.classList.remove("is-open");
       setHidden(els.backdrop, true);
+      document.body.classList.remove("modal-open");
+      if (els.mobileLeft) els.mobileLeft.setAttribute("aria-expanded", "false");
+      if (els.mobileRight) els.mobileRight.setAttribute("aria-expanded", "false");
       return;
     }
     const open = typeof force === "boolean" ? force : !target.classList.contains("is-open");
@@ -1248,6 +1265,9 @@
     }
     const anyOpen = els.left.classList.contains("is-open") || els.right.classList.contains("is-open");
     setHidden(els.backdrop, !anyOpen);
+    document.body.classList.toggle("modal-open", anyOpen);
+    if (els.mobileLeft) els.mobileLeft.setAttribute("aria-expanded", String(els.left.classList.contains("is-open")));
+    if (els.mobileRight) els.mobileRight.setAttribute("aria-expanded", String(els.right.classList.contains("is-open")));
   }
 
   function setView(view, options) {
@@ -1377,10 +1397,12 @@
       const candidates = [];
       const remembered = recallDraftEpoch();
       if (remembered !== null && remembered !== tried) candidates.push(remembered);
-      for (let epoch = 0; epoch <= 64; epoch += 1) {
+      for (let epoch = Math.max(0, tried - 2); epoch <= Math.min(64, tried + 2); epoch += 1) {
         if (epoch !== tried) candidates.push(epoch);
       }
-      for (const epoch of candidates) {
+      const deadline = Date.now() + 20000;
+      for (const epoch of candidates.slice(0, 5)) {
+        if (Date.now() > deadline) break;
         const retry = {
           ...payload,
           expected_draft_id: null,
@@ -1390,7 +1412,7 @@
           revision: 0,
         };
         try {
-          const result = await api(path, "PUT", retry, 15000);
+          const result = await api(path, "PUT", retry, 5000);
           rememberDraftEpoch(epoch);
           return result;
         } catch (inner) {
@@ -1439,7 +1461,11 @@
 
   async function saveVersion(options) {
     const settings = options || {};
-    if (!state.currentId || state.savingVersion || state.versionSavePending) return;
+    if (!state.currentId) return;
+    if (state.savingVersion || state.versionSavePending) {
+      toast("正在保存，请稍候", false);
+      return;
+    }
     if (state.composing) {
       toast("输入法仍在组合文字，请完成后再保存", true);
       return;
@@ -1846,6 +1872,7 @@
       barWidth: barRect.width,
       barHeight: barRect.height,
       margin: 8,
+      viewport: { top: 0, bottom: window.innerHeight },
     });
     if (!position) {
       els.bubble.hidden = true;
@@ -1987,6 +2014,7 @@
       toast("批注后端暂不可用，当前只能本地暂存", true);
       return;
     }
+    captureSelection(false);
     if (!state.selection.text) {
       toast("请先选择一段文字", true);
       return;
@@ -2954,7 +2982,11 @@
     if (tab === "annotations") probeAnnotationEndpoint();
     if (tab === "versions" && state.currentId && state.versionsFor !== state.currentId) loadVersions().catch(() => {});
     if (tab === "reference" && state.currentId) loadReference().catch(() => {});
-    if (tab === "insights") loadInsights().catch(() => {});
+    if (tab === "insights") {
+      loadInsights().catch((error) => {
+        if (els.insightStatus) setText(els.insightStatus, "读取失败：" + describeError(error));
+      });
+    }
   }
 
   /* ------------------------------------------------------------- insights */

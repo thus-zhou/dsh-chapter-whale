@@ -242,7 +242,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
         body = data or {}
         target = body.get("destination")
         destination = Path(target).expanduser() if target else (
-            _book(identity) / ".webnovel" / "exports" / f"legacy-{time.strftime('%Y%m%dT%H%M%S')}")
+            Path(data_dir) / "exports" / f"legacy-{time.strftime('%Y%m%dT%H%M%S')}")
         return transaction_journal.export_legacy(
             _book(identity), destination, mode=str(body.get("mode") or "current"),
             snapshot_dir=body.get("snapshot_dir"))

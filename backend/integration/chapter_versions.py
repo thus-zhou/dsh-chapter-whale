@@ -47,6 +47,14 @@ except ImportError:  # 直接以脚本运行本文件所在目录时
 SCHEMA_VERSION = 1
 _LOCK_NAME = ".lock"
 _WINDOWS_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+_SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+
+
+def _require_id(value: str, code: str = "invalid_operation_id") -> str:
+    text = str(value or "")
+    if not _SAFE_ID.fullmatch(text):
+        raise VersionConflict(code)
+    return text
 _CHAPTER_PATTERNS = (
     re.compile(r"第\s*0*(\d+)\s*章(?:[：:\-＿_\s]*(.*))?$"),
     re.compile(r"^\s*0*(\d+)(?:[：:\-＿_\s]*(.*))?$"),
@@ -317,11 +325,14 @@ def _store_object(project, data: bytes) -> str:
 
 
 def read_object(project, sha: str) -> bytes:
-    path = _object_path(project, sha)
+    selector = str(sha or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", selector):
+        raise VersionNotFound("object_missing")
+    path = _object_path(project, selector)
     if not path.is_file():
         raise VersionNotFound("object_missing")
     data = path.read_bytes()
-    if raw_sha256(data) != sha:
+    if raw_sha256(data) != selector:
         raise VersionCorrupt("object_hash_mismatch")
     return data
 
@@ -336,7 +347,7 @@ def save_candidate(project, chapter: int, content: str, *, source: str = "candid
     if not isinstance(content, str):
         raise VersionConflict("content_not_text")
     paths = _ensure(project)
-    candidate_id = op_id or uuid.uuid4().hex
+    candidate_id = _require_id(op_id) if op_id else uuid.uuid4().hex
     target = paths["candidates"] / f"{candidate_id}.json"
     data = _encode(content)
     record = {
@@ -367,7 +378,7 @@ def save_candidate(project, chapter: int, content: str, *, source: str = "candid
 
 
 def read_candidate(project, candidate_id: str) -> Dict[str, Any]:
-    path = _paths(project)["candidates"] / f"{candidate_id}.json"
+    path = _paths(project)["candidates"] / f"{_require_id(candidate_id, 'invalid_candidate_id')}.json"
     if not path.is_file():
         raise VersionNotFound("candidate_missing")
     record = read_json_strict(path)
@@ -379,7 +390,7 @@ def read_candidate(project, candidate_id: str) -> Dict[str, Any]:
 # ------------------------------------------------------------------- 提交与恢复
 
 def _commit_path(project, op_id: str) -> Path:
-    return _paths(project)["commits"] / f"{op_id}.json"
+    return _paths(project)["commits"] / f"{_require_id(op_id)}.json"
 
 
 def _load_commit(project, op_id: str) -> Optional[Dict[str, Any]]:
@@ -445,7 +456,13 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
         existing = _load_commit(project, op)
         if existing is not None:
             if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
-                return existing  # 幂等：同一操作不重复加版本
+                index = load_index(project)
+                entry = _chapter_entry(index, chapter)
+                if (existing.get("state") == "committed"
+                        and file_sha256(chapter_path(project, chapter)) == sha
+                        and entry.get("current") == sha):
+                    return existing
+                raise VersionConflict("operation_incomplete")
             raise VersionConflict("operation_id_reused")
 
         current_path = chapter_path(project, chapter)
@@ -698,13 +715,17 @@ def snapshot(project, chapter: int, *, source: str = "backup", note: str = "") -
     with file_lock(paths["lock"]):
         index = load_index(project)
         entry = _chapter_entry(index, chapter)
-        for meta in entry.get("versions", []):
-            if meta.get("sha256") == sha:
-                entry["current"] = sha
-                if meta.get("version_id"):
-                    entry["current_version_id"] = meta["version_id"]
-                _save_index(project, index)
-                return meta
+        for meta in reversed(entry.get("versions", [])):
+            if meta.get("sha256") != sha:
+                continue
+            if entry.get("current") == sha and entry.get("current_version_id"):
+                meta = next((item for item in entry.get("versions", [])
+                             if item.get("version_id") == entry.get("current_version_id")), meta)
+            entry["current"] = sha
+            if meta.get("version_id"):
+                entry["current_version_id"] = meta["version_id"]
+            _save_index(project, index)
+            return meta
         _store_object(project, data)
         meta = _register_version(entry, sha256=sha, digest=body_digest(text), size=len(data),
                                  source=source, op_id=None, run_id=None, attempt_id=None,
@@ -723,15 +744,13 @@ def _resolve_version(project, chapter: int, version_id: str) -> Tuple[Optional[D
                  if selector and (m.get("version_id") == selector or m.get("sha256") == selector)), None)
     if meta is not None:
         return meta, str(meta.get("sha256") or selector)
-    if re.fullmatch(r"[0-9a-f]{64}", selector):
-        return None, selector
     raise VersionNotFound("version_not_found")
 
 
 def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str] = None,
                      op_id: Optional[str] = None, expected_sha256: Optional[str] = None,
                      source: str = "restored", note: str = "",
-                     allow_new: bool = False,
+                     allow_new: bool = False, expect_absent: bool = False,
                      invalidation_reason: Optional[str] = "chapter_edited") -> Dict[str, Any]:
     """Byte-exact commit used for legacy restore (keeps BOM and CRLF intact).
 
@@ -748,12 +767,20 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
         existing = _load_commit(project, op)
         if existing is not None:
             if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
-                return existing
+                index = load_index(project)
+                entry = _chapter_entry(index, chapter)
+                if (existing.get("state") == "committed"
+                        and file_sha256(chapter_path(project, chapter)) == sha
+                        and entry.get("current") == sha):
+                    return existing
+                raise VersionConflict("operation_incomplete")
             raise VersionConflict("operation_id_reused")
         current_path = chapter_path(project, chapter)
         current_sha = file_sha256(current_path)
         if current_sha is None and not allow_new:
             raise VersionNotFound("chapter_missing")
+        if expect_absent and current_sha is not None:
+            raise VersionConflict("chapter_exists")
         if expected_sha256 is not None and expected_sha256 != current_sha:
             raise VersionConflict("concurrent_modification")
         index = load_index(project)
@@ -822,6 +849,12 @@ def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[s
                               source="restored", note=note or f"restore {sha[:12]}",
                               allow_new=path is None,
                               invalidation_reason="version_restored")
+    if path is not None and restore_title and title is not None:
+        target = path.with_name(f"第{int(chapter)}章" + (f"-{title}" if title else "") + ".md")
+        if target.resolve() != path.resolve():
+            if target.exists():
+                raise VersionConflict("restore_title_conflict")
+            replace_with_retry(path, target)
     result["restored_version_id"] = (meta or {}).get("version_id") or sha
     return result
 

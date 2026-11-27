@@ -62,7 +62,10 @@ MAX_DAG_DEPTH = 2
 
 
 def untrusted(text: str) -> str:
-    return "<UNTRUSTED_MATERIAL>\n" + str(text) + "\n</UNTRUSTED_MATERIAL>"
+    """Wrap external material and neutralize any embedded closing delimiter."""
+    safe = re.sub(r"</\s*UNTRUSTED_MATERIAL\s*>", "&lt;/UNTRUSTED_MATERIAL&gt;",
+                  str(text), flags=re.IGNORECASE)
+    return "<UNTRUSTED_MATERIAL>\n" + safe + "\n</UNTRUSTED_MATERIAL>"
 
 
 def _node(node_id: str, role: str, tool: str, title: str,

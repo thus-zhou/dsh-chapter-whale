@@ -79,10 +79,12 @@ class V09ApiTests(unittest.TestCase):
 
     def test_quality_limit_and_dashboard(self):
         base = f"/api/projects/{self.identity}/quality"
-        first = self.client.post(base + "/1/review", json={}, headers=self.headers)
+        judgments = [{"scores": {"plot": 80, "character": 80, "prose": 80,
+                                  "continuity": 80, "pacing": 80, "commercial": 80}}]
+        first = self.client.post(base + "/1/review", json={"judgments": judgments}, headers=self.headers)
         self.assertEqual(first.status_code, 200, first.text)
-        self.client.post(base + "/1/review", json={}, headers=self.headers)
-        third = self.client.post(base + "/1/review", json={}, headers=self.headers)
+        self.client.post(base + "/1/review", json={"judgments": judgments}, headers=self.headers)
+        third = self.client.post(base + "/1/review", json={"judgments": judgments}, headers=self.headers)
         self.assertEqual(third.status_code, 409, third.text)
         self.assertEqual(third.json()["code"], "auto_review_limit")
         board = self.client.get(base)

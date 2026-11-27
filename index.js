@@ -258,6 +258,8 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/directives/:directive/resume',
   'POST /api/projects/:identity/world/facts',
   'POST /api/projects/:identity/world/facts/:fact/ignore',
+  'POST /api/projects/:identity/world/facts/:fact/confirm',
+  'POST /api/projects/:identity/world/facts/:fact/reject',
   'POST /api/projects/:identity/world/cards',
   'POST /api/projects/:identity/world/extract',
   'POST /api/projects/:identity/world/causal-scan',

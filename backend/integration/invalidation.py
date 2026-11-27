@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 from typing import Dict
 
@@ -88,6 +89,12 @@ def _mark_facts(project, chapters, *, reason, source, actor):
     旧内容一律保留，只改状态与复核元数据，作者可以据此逐条恢复。
     """
     from . import memory_library
+    with writer.file_lock(memory_library._path(project, "memory.lock")):
+        return _mark_facts_unlocked(project, chapters, reason=reason, source=source, actor=actor)
+
+
+def _mark_facts_unlocked(project, chapters, *, reason, source, actor):
+    from . import memory_library
     doc = memory_library.read(project)
     wanted = set(chapters)
     marked = []
@@ -120,6 +127,19 @@ def invalidate(project, *, chapters, reason, source="", actor="author", op_id=""
     ``async_rebuild=True`` 供大书 ``Ctrl+S`` 使用：日志与证据标记同步落盘，
     连续性索引由合并写回的后台线程重建，避免 500–1000 章时阻塞保存响应。
     """
+    for attempt in range(20):
+        try:
+            with writer.file_lock(_path(project, "invalidation.lock")):
+                return _invalidate_once(project, chapters=chapters, reason=reason, source=source,
+                                        actor=actor, op_id=op_id, async_rebuild=async_rebuild)
+        except Exception as exc:
+            if exc.__class__.__name__ == "PublicationBlocked" and attempt < 19:
+                time.sleep(0.05)
+                continue
+            raise
+
+
+def _invalidate_once(project, *, chapters, reason, source="", actor="author", op_id="", async_rebuild=False):
     if reason not in REASONS:
         raise ValueError("失效原因无效")
     chapters = _chapters(chapters)

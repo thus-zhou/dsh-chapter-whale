@@ -63,7 +63,7 @@ def sync_workbench_core():
             raise SystemExit('client.js anchor "const e = React.createElement;" not found')
         s = s.replace(WORKBENCH_ANCHOR, WORKBENCH_ANCHOR + block, 1)
     p.write_text(s, encoding='utf-8', newline='\n')
-    (ROOT/'backend/manager/static/workbench-core.js').write_bytes(core_bytes)
+    (ROOT/'backend/manager/static/workbench-core.js').write_bytes(core_text.encode('utf-8'))
     print('Workbench core bytes:', len(core_bytes))
 
 

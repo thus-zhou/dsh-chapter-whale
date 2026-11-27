@@ -721,7 +721,19 @@ def idempotency_begin(project, *, actor: str, project_id: str, action: str, op_i
                 return {"status": "completed", "record": item,
                         "response": json.loads(item["response_json"] or "null")}
             if item["state"] == "in_progress":
-                return {"status": "in_progress", "record": item}
+                try:
+                    age = (datetime.now(timezone.utc) - datetime.fromisoformat(
+                        str(item.get("created_at")).replace("Z", "+00:00"))).total_seconds()
+                except ValueError:
+                    age = 0
+                if age < 600:
+                    return {"status": "in_progress", "record": item}
+                db.execute(
+                    "UPDATE idempotency_keys SET params_hash=?, operation_id=?, response_json=NULL, "
+                    "created_at=?, expires_at=? WHERE actor=? AND project_id=? AND action=? AND op_id=?",
+                    (digest, operation_id, stamp, expires, actor, project_id, action, op_id),
+                )
+                return {"status": "failed_retry", "record": item}
             db.execute(
                 "UPDATE idempotency_keys SET state='in_progress', params_hash=?, operation_id=?, "
                 "response_json=NULL, created_at=?, expires_at=? "
@@ -822,7 +834,21 @@ def index_document(project, *, doc_key: str, kind: str, chapter_id: Optional[int
         db.execute("INSERT INTO search_fts(doc_key, tokens) VALUES(?,?)", (doc_key, tokens))
 
 
-def search(project, query: str, *, limit: int = 20) -> List[Dict[str, Any]]:
+def rebuild_search(project) -> int:
+    """Rebuild the FTS mirror from authoritative ``search_docs`` rows."""
+    _ensure(project)
+    count = 0
+    with write_tx(project) as db:
+        db.execute("DELETE FROM search_fts")
+        for row in db.execute("SELECT doc_key, title, content FROM search_docs"):
+            db.execute("INSERT INTO search_fts(doc_key, tokens) VALUES(?,?)",
+                       (row[0], tokenize(f"{row[1]}\n{row[2]}")))
+            count += 1
+    return count
+
+
+def search(project, query: str, *, limit: int = 20, chapter: Optional[int] = None,
+           max_chapter: Optional[int] = None) -> List[Dict[str, Any]]:
     """Deterministic local full-book search (0 model calls)."""
     terms = tokenize(query).split()
     if not terms:
@@ -836,11 +862,20 @@ def search(project, query: str, *, limit: int = 20) -> List[Dict[str, Any]]:
         ).fetchone()
         if not exists:
             return []
+        where = "search_fts MATCH ?"
+        params: List[Any] = [expr]
+        if chapter is not None:
+            where += " AND (d.chapter_id IS NULL OR d.chapter_id=?)"
+            params.append(int(chapter))
+        elif max_chapter is not None:
+            where += " AND (d.chapter_id IS NULL OR d.chapter_id<=?)"
+            params.append(int(max_chapter))
+        params.append(int(limit))
         rows = db.execute(
             "SELECT d.doc_key, d.kind, d.chapter_id, d.title, d.content, d.updated_at, "
             "bm25(search_fts) AS rank FROM search_fts JOIN search_docs d ON d.doc_key=search_fts.doc_key "
-            "WHERE search_fts MATCH ? ORDER BY rank LIMIT ?",
-            (expr, int(limit)),
+            "WHERE " + where + " ORDER BY rank LIMIT ?",
+            tuple(params),
         ).fetchall()
     results = []
     for row in rows:

@@ -6,6 +6,7 @@ import re
 import uuid
 from pathlib import Path
 from . import writer_runner as writer, bridge, model_roles as roles, memory_library
+from . import chapter_versions as versions
 from . import costs
 from . import style_profile, style_stats
 
@@ -531,13 +532,17 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         bridge._write_text_atomic(backup,content)
         payload=rewritten.encode("utf-8");receipts_path=project/".webnovel"/"writer_receipts.json"
         receipts=writer.strict_json(receipts_path,{})
-        receipt={"destination":str(source.resolve()),"sha256":hashlib.sha256(payload).hexdigest(),"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
+        prepared_sha = hashlib.sha256(payload).hexdigest()
+        versions.commit_raw_bytes(project, chapter, payload,
+                                  op_id=f"polish-{uuid.uuid4().hex[:16]}",
+                                  source="studio_polish", note="润色回写",
+                                  allow_new=False)
+        receipt={"destination":str(source.resolve()),"sha256":prepared_sha,"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
         handoff=isinstance(review,dict) and review.get("review_decision")=="needs_human_review" and review.get("human_review_required") is True
         # P2-6: write the new body before saving candidates. save_candidates
         # re-reads the body file and rejects a digest that does not match, so
         # saving the receipt first would leave both modules "failed" until the
         # next approve. Body first, candidates second, receipt last.
-        bridge._write_text_atomic(source,rewritten)
         if handoff:
             # 非预览润色到达两次审查上限：正文保留为交接稿，候选只存 pending，
             # 人工 approve-review 时再提交，避免未审定内容进入记忆。

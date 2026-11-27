@@ -340,6 +340,7 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
     prepared.sort(key=lambda item: (item[1].get("start") is None,
                                     -(item[1].get("start") or 0)))
     text_points = to_codepoints(current)
+    applied_ranges = []
     for hunk, located in prepared:
         hunk_id = str(hunk.get("id") or hunk.get("hunk_id") or "")
         replacement = str(hunk.get("custom_text") if hunk.get("custom_text") is not None
@@ -357,6 +358,15 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
             results.append({"hunk_id": hunk_id, "status": "overlap_conflict"})
             continue
         start, end = int(located["start"]), int(located["end"])
+        if any(_overlaps(start, end, [other]) or
+               (start == end and other[0] <= start < max(other[1], other[0] + 1))
+               for other in applied_ranges):
+            conflicts.append({"hunk_id": hunk_id, "status": "overlap_conflict",
+                              "reason": "hunk_overlap", "start": start, "end": end,
+                              "current_text": "".join(text_points[start:end]),
+                              "candidate_text": replacement})
+            results.append({"hunk_id": hunk_id, "status": "overlap_conflict"})
+            continue
         if _overlaps(start, end, delta_ranges):
             # Same replacement already present -> dedupe; otherwise conflict.
             existing = "".join(text_points[start:end])
@@ -370,6 +380,7 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
             results.append({"hunk_id": hunk_id, "status": "overlap_conflict"})
             continue
         text_points[start:end] = to_codepoints(replacement)
+        applied_ranges.append((start, start + codepoint_length(replacement)))
         results.append({"hunk_id": hunk_id, "status": "applied", "start": start,
                         "end": start + codepoint_length(replacement),
                         "applied_text": replacement, "before_text": before})
@@ -389,10 +400,18 @@ def reverse_patch(current_text: str, entry: Dict[str, Any]) -> Dict[str, Any]:
     current = normalize_lf(current_text)
     applied = str(entry.get("applied_text") or "")
     before = str(entry.get("before_quote") or "")
-    if not applied:
-        return {"text": current, "status": "noop", "reason": "empty_applied_text"}
     start = entry.get("char_start", entry.get("applied_start"))
     end = entry.get("char_end", entry.get("applied_end"))
+    if not applied:
+        if not before:
+            return {"text": current, "status": "noop", "reason": "empty_applied_text"}
+        # 删除型补丁：applied_text 为空，但 before_quote 仍保存被删原文。
+        points = to_codepoints(current)
+        position = int(start) if start is not None else 0
+        position = max(0, min(position, len(points)))
+        points[position:position] = to_codepoints(before)
+        return {"text": "".join(points), "status": "reversed", "start": position,
+                "end": position + codepoint_length(before)}
     points = to_codepoints(current)
     if start is not None and end is not None:
         start, end = clamp_range(current, start, end)

@@ -215,7 +215,7 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         db.execute('BEGIN IMMEDIATE')
         rows = db.execute("SELECT chapter,day,state,tokens,cost_cny,unknown_cost FROM request_budget WHERE project=?",
                           (project,)).fetchall()
-        today_rows = [row for row in rows if row['day'] == day]
+        today_rows = [row for row in rows if row['day'] == day and row['state'] != 'released']
         chapter_rows = [row for row in rows if int(row['chapter']) == int(chapter or 0)]
         def cost_of(group):
             return sum((Decimal(row['cost_cny']) for row in group if row['cost_cny'] is not None), Decimal(0))
@@ -378,20 +378,29 @@ def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='sett
             record_gap(db_path, 'budget_settlement_missing')
             return None
         amount = row['cost_cny']
+        if state not in {'settled', 'unknown_charge', 'released'}:
+            db.rollback()
+            raise ValueError('budget_state_invalid')
         if state == 'released':
             # 已安全释放的预留不得被 v0.7.5 旧版 costs.py 误计为已花费。
-            db.execute("UPDATE request_budget SET state='released', tokens=0, cost_cny='0', "
-                       "unknown_cost=0 WHERE id=?", (identity,))
+            cur = db.execute("UPDATE request_budget SET state='released', tokens=0, cost_cny='0', "
+                             "unknown_cost=0 WHERE id=? AND state IN ('reserved','dispatched')",
+                             (identity,))
             db.commit()
-            return identity
+            return identity if cur.rowcount else None
+        if row['state'] in {'settled', 'unknown_charge', 'released'}:
+            # 终态幂等：迟到的重试不能覆盖已发生的费用，也不能把释放的预留复活。
+            db.rollback()
+            return identity if row['state'] == state else None
         if cost_cny is not None:
             amount = str(Decimal(str(cost_cny)))
         elif row['unknown_cost']:
             amount = row['cost_cny']
-        db.execute('UPDATE request_budget SET state=?, tokens=COALESCE(?,tokens), cost_cny=? WHERE id=?',
-                   (state, None if tokens is None else int(tokens), amount, identity))
+        cur = db.execute('UPDATE request_budget SET state=?, tokens=COALESCE(?,tokens), cost_cny=? '
+                         'WHERE id=? AND state IN (\'reserved\',\'dispatched\')',
+                         (state, None if tokens is None else int(tokens), amount, identity))
         db.commit()
-        return identity
+        return identity if cur.rowcount else None
     except BaseException:
         db.rollback()
         raise

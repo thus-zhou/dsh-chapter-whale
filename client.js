@@ -363,6 +363,11 @@ const WorkbenchCore = (() => {
     const editorTop = _rectValue(editorRect, 'top', _rectValue(editorRect, 'y', 0));
     const editorRight = _rectValue(editorRect, 'right', editorLeft + _rectValue(editorRect, 'width', 0));
     const editorBottom = _rectValue(editorRect, 'bottom', editorTop + _rectValue(editorRect, 'height', 0));
+    const viewport = settings.viewport || null;
+    const viewportTop = viewport ? _rectValue(viewport, 'top', 0) : null;
+    const viewportBottom = viewport ? _rectValue(viewport, 'bottom', 0) : null;
+    const clipTop = viewportTop === null ? editorTop : Math.max(editorTop, viewportTop);
+    const clipBottom = viewportBottom === null ? editorBottom : Math.min(editorBottom, viewportBottom);
 
     const selectionLeft = _rectValue(selectionRect, 'left', _rectValue(selectionRect, 'x', editorLeft));
     const selectionTop = _rectValue(selectionRect, 'top', _rectValue(selectionRect, 'y', editorTop));
@@ -374,8 +379,8 @@ const WorkbenchCore = (() => {
     let left = selectionLeft + (selectionRight - selectionLeft) / 2 - barWidth / 2;
     left = maximumLeft >= minimumLeft ? _clamp(left, minimumLeft, maximumLeft) : minimumLeft;
 
-    const minimumTop = editorTop + margin;
-    const maximumTop = editorBottom - margin - barHeight;
+    const minimumTop = clipTop + margin;
+    const maximumTop = clipBottom - margin - barHeight;
     const above = selectionTop - margin - barHeight;
     const below = selectionBottom + margin;
     let placement = above >= minimumTop ? 'above' : 'below';
@@ -6488,12 +6493,29 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             return () => document.removeEventListener('keydown', onKeyDown);
           }, []);
 
-          React.useEffect(() => () => {
-            if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
-            if (dirtyRef.current) {
+          React.useEffect(() => {
+            const onBeforeUnload = (event) => {
+              if (!dirtyRef.current) return undefined;
+              event.preventDefault();
+              event.returnValue = '';
+              return '';
+            };
+            const onVisibility = () => {
+              if (document.visibilityState !== 'hidden' || !dirtyRef.current) return;
               const capture = captureDraft();
               if (capture) queueDraftSave(capture);
-            }
+            };
+            window.addEventListener('beforeunload', onBeforeUnload);
+            document.addEventListener('visibilitychange', onVisibility);
+            return () => {
+              window.removeEventListener('beforeunload', onBeforeUnload);
+              document.removeEventListener('visibilitychange', onVisibility);
+              if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+              if (dirtyRef.current) {
+                const capture = captureDraft();
+                if (capture) queueDraftSave(capture);
+              }
+            };
           }, []);
 
           const loadVersions = async (force) => {
@@ -6941,8 +6963,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const chapterPane = chapter
             ? e(
-                'main',
-                { className: 'wb-pane wb-center' },
+                'section',
+                { className: 'wb-pane wb-center', 'aria-label': '正文编辑' },
                 e('div', { className: 'wb-panehead wb-centerhead' },
                   e('div', null,
                     e('span', { className: 'wb-crumb' }, `第 ${chapter.id} 章`),
@@ -7010,8 +7032,8 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   e(Button, { size: 'sm', kind: 'ghost', disabled: !nextChapter, onClick: () => nextChapter && selectChapter(nextChapter.id) }, `下一章${nextChapter ? ` · ${nextChapter.id}` : ''}`)),
               )
             : e(
-                'main',
-                { className: 'wb-pane wb-center' },
+                'section',
+                { className: 'wb-pane wb-center', 'aria-label': '正文编辑' },
                 e('div', { className: 'wb-emptycenter' },
                   e('strong', null, project ? '选择或新建一个章节' : '还没有作品'),
                   e('span', { className: 'nh-muted' }, project ? '从左侧章节列表选择章节，或新建空白章节开始直写。' : '先在码章鲸中创建作品，创作室会在这里展开三栏工作台。'),

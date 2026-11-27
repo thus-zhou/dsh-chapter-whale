@@ -43,7 +43,7 @@ _TRASH = "trash"
 _WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
                      *(f"LPT{i}" for i in range(1, 10))}
 _WINDOWS_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
-_OP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
+_OP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _CHAPTER_HEADING = re.compile(
     r"^\s*(?:第\s*([0-9０-９零〇一二三四五六七八九十百千]+)\s*[章节回]|Chapter\s+(\d+))[ \t　]*(.*)$",
     re.IGNORECASE | re.MULTILINE,
@@ -394,6 +394,10 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
               "submitted_draft_id": data.get("submitted_draft_id"),
               "submitted_draft_epoch": data.get("submitted_draft_epoch"),
               "submitted_draft_revision": data.get("submitted_draft_revision")}
+    try:
+        versions.recover_pending(project)
+    except Exception:
+        pass
     existing = _idempotent(project, "chapter_save", op_id, params)
     if existing is not None:
         return {**existing, "reused": True}
@@ -437,8 +441,7 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
 
         current_title = versions.parse_chapter_name(path.name)[1] if path and versions.parse_chapter_name(path.name) else ""
         current_text = _decode(path.read_bytes()) if path else ""
-        unchanged = bool(path and _body_digest(current_text) == _body_digest(content)
-                         and current_title == title)
+        unchanged = bool(path and current_text == content and current_title == title)
 
         # Rename preflight before touching the body/index: a directory or file
         # squatting on the target name must not produce a half-committed version.
@@ -472,6 +475,13 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
             draft_revision=int(data.get("submitted_draft_revision") or 0))
         if draft_result.get("cleared"):
             _drop_draft_doc(project, chapter, data.get("submitted_draft_id"))
+            try:
+                from integration import annotations as _annotations
+                _annotations.mark_committed(project, chapter, text=content,
+                                            draft_id=str(data.get("submitted_draft_id") or ""))
+            except Exception:
+                # 批注结算失败不能回滚已经成功的正文提交；下次提交会再次尝试清理。
+                pass
     published = _published_state(project, chapter)
     response = {
         **result,
@@ -526,7 +536,8 @@ def new_chapter(project, data: Dict[str, Any]) -> Dict[str, Any]:
     uid = wb.chapter_uid(project, chapter)
     result = versions.commit_raw_bytes(project, chapter, content.encode("utf-8"), title=title,
                                        op_id=_validate_op_id(data.get("op_id") or uuid.uuid4().hex),
-                                       source="author_new", note="新建空白章节", allow_new=True)
+                                       source="author_new", note="新建空白章节", allow_new=True,
+                                       expect_absent=True)
     try:
         wb.index_document(project, doc_key=f"正文:{chapter}", kind="chapter", chapter_id=chapter,
                           title=title, content=content)
@@ -545,10 +556,11 @@ def _index_entry(project, chapter: int) -> Dict[str, Any]:
 
 
 def _drop_index_entry(project, chapter: int) -> None:
-    index = versions.load_index(project)
-    if str(int(chapter)) in index["chapters"]:
-        index["chapters"].pop(str(int(chapter)), None)
-        versions._save_index(project, index)
+    with safety.file_lock(versions._paths(project)["lock"]):
+        index = versions.load_index(project)
+        if str(int(chapter)) in index["chapters"]:
+            index["chapters"].pop(str(int(chapter)), None)
+            versions._save_index(project, index)
 
 
 def _drop_receipt(project, chapter: int) -> None:
@@ -655,7 +667,7 @@ def list_trash(project) -> Dict[str, Any]:
 
 def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
     safe_entry = str(entry or "")
-    if not re.fullmatch(r"[0-9A-Za-z._-]+", safe_entry):
+    if safe_entry in {".", ".."} or not re.fullmatch(r"[0-9A-Za-z._-]+", safe_entry):
         raise ChapterError("trash_entry_invalid")
     archive = Path(project) / ".webnovel" / _TRASH / safe_entry
     manifest_path = archive / "manifest.json"
@@ -695,7 +707,9 @@ def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
     if expected_sha and hashlib.sha256(data).hexdigest() != expected_sha:
         raise ChapterError("trash_payload_corrupt")
     title = str(manifest.get("title") or "")
-    uid = str(manifest.get("chapter_uid") or "")
+    uid = "" if renumbered else str(manifest.get("chapter_uid") or "")
+    if renumbered:
+        uid = wb.chapter_uid(project, chapter)
     result = versions.commit_raw_bytes(project, chapter, data, title=title,
                                        op_id=op_id or f"restore-trash-{uuid.uuid4().hex[:8]}",
                                        source="trash-restored", allow_new=True,
@@ -706,13 +720,14 @@ def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
                        (uid, wb.now_iso(), chapter))
     entry_data = manifest.get("index_entry") or {}
     if isinstance(entry_data, dict) and entry_data.get("versions"):
-        index = versions.load_index(project)
-        target = versions._chapter_entry(index, chapter)
-        existing = {v.get("sha256") for v in target.get("versions", [])}
-        target["versions"] = [v for v in entry_data["versions"] if v.get("sha256") not in existing] + target.get("versions", [])
-        target["current"] = result.get("content_sha256")
-        target["current_version_id"] = result.get("version_id")
-        versions._save_index(project, index)
+        with safety.file_lock(versions._paths(project)["lock"]):
+            index = versions.load_index(project)
+            target = versions._chapter_entry(index, chapter)
+            existing = {v.get("sha256") for v in target.get("versions", [])}
+            target["versions"] = [v for v in entry_data["versions"] if v.get("sha256") not in existing] + target.get("versions", [])
+            target["current"] = result.get("content_sha256")
+            target["current_version_id"] = result.get("version_id")
+            versions._save_index(project, index)
     receipt = manifest.get("receipt") or {}
     if isinstance(receipt, dict) and receipt:
         receipt = dict(receipt)
@@ -763,29 +778,33 @@ def split_chapter(project, chapter: int, *, offset: int, title: str = "",
     backup_index = json.dumps(versions.load_index(project), ensure_ascii=False)
     old_bytes = raw
     new_path = versions._new_chapter_path(project, chapter + 1, second_title)
+    second_existed = versions.chapter_path(project, chapter + 1) is not None
     try:
-        versions.commit_raw_bytes(project, chapter, first.encode("utf-8"), title=first_title,
-                                  op_id=(op_id + "-a") if op_id else f"split-{chapter}-a",
-                                  source="split", expected_sha256=_raw_sha(raw),
-                                  note="尾章拆分（上）")
+        # 先落后半章，再截断前半章：即使两次提交之间进程死亡，原文仍完整存在于
+        # 前一章，不会出现“后半章永久丢失”；重试可幂等补齐。
         created = versions.commit_raw_bytes(project, chapter + 1, second.encode("utf-8"),
                                             title=second_title,
                                             op_id=(op_id + "-b") if op_id else f"split-{chapter + 1}-b",
                                             source="split", allow_new=True,
                                             note="尾章拆分（下）")
+        versions.commit_raw_bytes(project, chapter, first.encode("utf-8"), title=first_title,
+                                  op_id=(op_id + "-a") if op_id else f"split-{chapter}-a",
+                                  source="split", expected_sha256=_raw_sha(raw),
+                                  note="尾章拆分（上）")
     except Exception:
         path.write_bytes(old_bytes)
         from fanqie_auto_publish.publication_safety import atomic_json as _atomic
-        # 恢复拆分前的索引快照，并清掉可能已创建的下半章文件。
+        # 恢复拆分前的索引快照；只有本次新建的后半章才清理。
         _atomic(versions._paths(project)["index"], json.loads(backup_index))
-        for candidate in (new_path, versions.chapter_path(project, chapter + 1)):
-            if candidate and Path(candidate).exists():
-                try:
-                    Path(candidate).unlink()
-                except OSError:
-                    pass
-        _drop_index_entry(project, chapter + 1)
-        _drop_receipt(project, chapter + 1)
+        if not second_existed:
+            for candidate in (new_path, versions.chapter_path(project, chapter + 1)):
+                if candidate and Path(candidate).exists():
+                    try:
+                        Path(candidate).unlink()
+                    except OSError:
+                        pass
+            _drop_index_entry(project, chapter + 1)
+            _drop_receipt(project, chapter + 1)
         raise
     wb.chapter_uid(project, chapter + 1)
     return {"status": "split", "chapter_id": chapter, "new_chapter_id": chapter + 1,
@@ -808,13 +827,42 @@ def merge_tail(project, *, op_id: str = "") -> Dict[str, Any]:
     second_text = _normalize_lf(_decode(mapping[last].read_bytes())).lstrip("\n")
     merged = first_text + "\n\n" + second_text
     title = versions.parse_chapter_name(mapping[previous].name)[1]
-    result = versions.write_chapter(project, previous, merged,
-                                    op_id=(op_id + "-merge") if op_id else f"merge-{previous}-{last}",
-                                    expected_sha256=_raw_sha(mapping[previous].read_bytes()),
-                                    title=title, source="merge", note="尾章合并")
-    deleted = delete_chapter(project, last,
-                             expected_content_sha256=_raw_sha(mapping[last].read_bytes()),
-                             op_id=(op_id + "-drop") if op_id else f"merge-drop-{last}")
+    old_bytes = mapping[previous].read_bytes()
+    backup_index = json.dumps(versions.load_index(project), ensure_ascii=False)
+    try:
+        result = versions.write_chapter(project, previous, merged,
+                                        op_id=(op_id + "-merge") if op_id else f"merge-{previous}-{last}",
+                                        expected_sha256=_raw_sha(mapping[previous].read_bytes()),
+                                        title=title, source="merge", note="尾章合并")
+        deleted = delete_chapter(project, last,
+                                 expected_content_sha256=_raw_sha(mapping[last].read_bytes()),
+                                 op_id=(op_id + "-drop") if op_id else f"merge-drop-{last}")
+    except Exception:
+        # 若前半章已是完整合并稿（典型：上次崩溃在合并写入之后、删除尾章之前），
+        # 重试只需补删尾章，不能把已合并正文回滚掉。
+        try:
+            current_prev = versions.chapter_path(project, previous)
+            current_last = versions.chapter_path(project, last)
+            if (current_prev is not None and current_last is not None
+                    and _normalize_lf(_decode(current_prev.read_bytes())) == merged):
+                deleted = delete_chapter(
+                    project, last,
+                    expected_content_sha256=_raw_sha(current_last.read_bytes()),
+                    op_id=(op_id + "-drop") if op_id else f"merge-drop-{last}")
+                current = versions.current_version(project, previous) or {}
+                return {"status": "merged", "chapter_id": previous, "dropped_chapter_id": last,
+                        "version_id": current.get("version_id"),
+                        "trash_entry": deleted.get("trash_entry")}
+        except Exception:
+            pass
+        # 合并前半失败：把前一章恢复原字节与索引，绝不留下“已合并但尾章仍在”的半状态。
+        try:
+            mapping[previous].write_bytes(old_bytes)
+            from fanqie_auto_publish.publication_safety import atomic_json as _atomic
+            _atomic(versions._paths(project)["index"], json.loads(backup_index))
+        except Exception:
+            pass
+        raise
     return {"status": "merged", "chapter_id": previous, "dropped_chapter_id": last,
             "version_id": result.get("version_id"), "trash_entry": deleted.get("trash_entry")}
 
@@ -865,6 +913,7 @@ def import_chapters(project, *, text: str, start_chapter: Optional[int] = None,
                                                op_id=(op_id + f"-{chapter}") if op_id else f"import-{chapter}-{uuid.uuid4().hex[:8]}",
                                                source="imported", allow_new=True, note="导入旧稿")
             created.append({"chapter_id": chapter, "title": title, "version_id": result.get("version_id"),
+                            "commit_op": (op_id + f"-{chapter}") if op_id else result.get("op_id"),
                             "words": item["words"]})
     except Exception:
         # 整批导入失败时不留下前半批孤儿章
@@ -878,6 +927,12 @@ def import_chapters(project, *, text: str, start_chapter: Optional[int] = None,
                     pass
             _drop_index_entry(project, number)
             _drop_receipt(project, number)
+            commit_op = str(row.get("commit_op") or "")
+            if commit_op:
+                try:
+                    versions._commit_path(project, commit_op).unlink(missing_ok=True)
+                except OSError:
+                    pass
         raise
     return {"status": "imported", "count": len(created), "chapters": created}
 

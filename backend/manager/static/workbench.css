@@ -636,7 +636,7 @@
 
 .wb-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 2px;
 }
 
@@ -1773,7 +1773,7 @@
   .wb-selbar {
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: calc(85px + env(safe-area-inset-bottom));
     transform: none;
     border-radius: 0;
     border-left: 0;
@@ -1838,6 +1838,14 @@
 
   .wb-import-item .wb-mono {
     display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .wb-filters button {
+    min-height: 28px;
+    padding: 6px 10px;
+    font-size: 10.5px;
   }
 }
 

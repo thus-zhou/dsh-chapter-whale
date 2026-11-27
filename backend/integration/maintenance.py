@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import sqlite3
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -17,7 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from integration import chapter_versions as versions
 from integration import workbench_db as wb
 
-_PREVIEW_DIRS = ("previews", "preview-cache", "history", "snapshots", "outline-backups")
+_PREVIEW_DIRS = ("previews", "preview-cache", "revision_previews", "history", "snapshots")
 _KEEP_NAMES = {"manifest.json", "index.json", "receipts.json", "writer_receipts.json"}
 _SECRET_KEYS = {"api_key", "apikey", "token", "secret", "password", "authorization",
                 "content", "body", "outline", "master_outline", "card_md", "text"}
@@ -49,11 +50,8 @@ def _protected_paths(project) -> Set[str]:
     try:
         wb.initialize(project)
         with wb.connect(project) as db:
-            for row in db.execute("SELECT content_path FROM chapter_drafts WHERE content_path IS NOT NULL"):
-                if row[0]:
-                    protected.add(str((Path(project) / row[0]).resolve()))
-            for row in db.execute("SELECT content_path FROM drafts_history WHERE content_path IS NOT NULL"):
-                if row[0]:
+            for row in db.execute("SELECT path, ref_count, protected FROM artifact_refs"):
+                if row[0] and (int(row[1] or 0) > 0 or int(row[2] or 0)):
                     protected.add(str((Path(project) / row[0]).resolve()))
     except sqlite3.Error:
         pass
@@ -62,13 +60,24 @@ def _protected_paths(project) -> Set[str]:
 
 def _candidate_files(project) -> List[Path]:
     root = Path(project) / ".webnovel"
+    project_root = Path(project).resolve()
     result = []
     for name in _PREVIEW_DIRS:
         folder = root / name
-        if not folder.is_dir():
+        if folder.is_symlink() or not folder.is_dir():
+            continue
+        try:
+            if project_root not in folder.resolve().parents and folder.resolve() != project_root:
+                continue
+        except OSError:
             continue
         for path in folder.rglob("*"):
             if path.is_file() and path.name not in _KEEP_NAMES and not path.is_symlink():
+                try:
+                    if project_root not in path.resolve().parents:
+                        continue
+                except OSError:
+                    continue
                 result.append(path)
     return sorted(result)
 
@@ -119,20 +128,38 @@ def register_artifact(project, path, *, kind: str = "history", ref_count: int = 
     return {"artifact_id": artifact_id, "path": str(file_path), "bytes": file_path.stat().st_size}
 
 
-def resource_ledger(project) -> Dict[str, Any]:
+def resource_ledger(project, costs_db=None) -> Dict[str, Any]:
     wb.initialize(project)
     states = {state: {"count": 0, "tokens": 0, "cost_cny": 0.0}
               for state in ("reserved", "dispatched", "settled", "unknown_charge", "released")}
-    try:
-        with wb.connect(project) as db:
+    budget_db = Path(costs_db) if costs_db is not None and Path(costs_db).is_file() else None
+    if budget_db is None:
+        candidate = wb.db_path(project)
+        probe = None
+        try:
+            probe = sqlite3.connect(str(candidate))
+            if probe.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='request_budget'").fetchone():
+                budget_db = candidate
+        except sqlite3.Error:
+            budget_db = None
+        finally:
+            if probe is not None:
+                probe.close()
+    if budget_db is not None:
+        db = None
+        try:
+            db = sqlite3.connect(str(budget_db))
             for row in db.execute("SELECT state, COUNT(*), COALESCE(SUM(tokens),0), "
                                   "COALESCE(SUM(cost_cny),0) FROM request_budget GROUP BY state"):
                 state = str(row[0])
                 if state in states:
                     states[state] = {"count": int(row[1]), "tokens": int(row[2]),
                                      "cost_cny": round(float(row[3]), 4)}
-    except sqlite3.Error:
-        pass
+        except sqlite3.Error:
+            pass
+        finally:
+            if db is not None:
+                db.close()
     tasks = {}
     try:
         with wb.connect(project) as db:
@@ -154,7 +181,12 @@ def resource_ledger(project) -> Dict[str, Any]:
 
 def health(project) -> Dict[str, Any]:
     issues: List[Dict[str, Any]] = []
-    wb.initialize(project)
+    try:
+        wb.initialize(project)
+    except sqlite3.Error as exc:
+        return {"status": "degraded", "integrity": "error", "issues": [
+            {"code": "db_open_failed", "severity": "P0", "detail": str(exc)}],
+            "chapters": 0, "versions": 0, "drafts": 0}
     db_path = wb.db_path(project)
     integrity = "missing"
     if db_path.exists():
@@ -213,7 +245,18 @@ def _strip(value):
 
 
 def export_bundle(project, destination) -> Dict[str, Any]:
-    destination = Path(destination)
+    destination = Path(destination).expanduser()
+    project_root = Path(project).resolve()
+    try:
+        resolved = destination.resolve(strict=False)
+    except OSError:
+        raise MaintenanceError("destination_invalid")
+    if resolved.suffix.lower() != ".zip":
+        raise MaintenanceError("destination_must_be_zip")
+    if project_root == resolved or project_root in resolved.parents:
+        raise MaintenanceError("destination_inside_project")
+    if resolved.exists():
+        raise MaintenanceError("destination_exists")
     destination.parent.mkdir(parents=True, exist_ok=True)
     report = {"health": health(project), "ledger": resource_ledger(project),
               "schema_version": wb.SCHEMA_VERSION, "generated_at": _now()}
@@ -221,15 +264,24 @@ def export_bundle(project, destination) -> Dict[str, Any]:
     index = []
     for chapter in sorted(mapping):
         meta = versions.current_version(project, chapter) or {}
-        index.append({"chapter_id": chapter, "title": meta.get("title", ""),
-                      "version_id": meta.get("version_id"),
+        index.append({"chapter_id": chapter, "version_id": meta.get("version_id"),
                       "sha256": versions.file_sha256(mapping[chapter]),
                       "bytes": mapping[chapter].stat().st_size})
     manifest = {"chapters": _strip(index), "count": len(index)}
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-        bundle.writestr("diagnostics.json", json.dumps(_strip(report), ensure_ascii=False, indent=2))
-        bundle.writestr("chapters.index.json", json.dumps(manifest, ensure_ascii=False, indent=2))
-        bundle.writestr("README.txt", "诊断包默认不含正文、大纲与密钥；仅哈希与计数。\n")
+    handle, temporary = tempfile.mkstemp(prefix=destination.name + ".", suffix=".tmp",
+                                         dir=str(destination.parent))
+    os.close(handle)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+            bundle.writestr("diagnostics.json", json.dumps(_strip(report), ensure_ascii=False, indent=2))
+            bundle.writestr("chapters.index.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            bundle.writestr("README.txt", "诊断包默认不含正文、大纲与密钥；仅哈希与计数。\n")
+        os.replace(temporary, destination)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
     return {"status": "exported", "path": str(destination), "bytes": destination.stat().st_size,
             "contains_content": False}
 
@@ -251,8 +303,8 @@ def system_health(data_dir) -> Dict[str, Any]:
 
 def self_heal(project, action: str) -> Dict[str, Any]:
     if action == "rebuild_search":
-        wb.rebuild_search(project) if hasattr(wb, "rebuild_search") else None
-        return {"status": "healed", "action": action}
+        count = wb.rebuild_search(project)
+        return {"status": "healed", "action": action, "documents": count}
     if action == "checkpoint":
         wb.initialize(project)
         with wb.connect(project) as db:

@@ -40,10 +40,14 @@ class QualityTest(unittest.TestCase):
             first = quality.review(book, 1)
             self.assertEqual(first["track"], "A")
             quality.review(book, 1)
+            # A 轨本地体检零模型调用，可无限运行，不占 B 轨额度。
+            self.assertEqual(quality.review(book, 1)["track"], "A")
+            # B 轨（六维融合）最多两次。
+            for _ in range(2):
+                quality.review(book, 1, judgments=[{"scores": quality.local_scores("第一段。\n" * 20)}])
             with self.assertRaises(quality.QualityError) as caught:
-                quality.review(book, 1)
+                quality.review(book, 1, judgments=[{"scores": quality.local_scores("第一段。\n" * 20)}])
             self.assertEqual(caught.exception.code, "auto_review_limit")
-            self.assertEqual(len(quality.history(book, 1)), 2)
             manual = quality.review(book, 1, reviewer="author", force=True)
             self.assertEqual(manual["track"], "B")
 

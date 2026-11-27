@@ -101,7 +101,7 @@ def _auto_count(project, chapter: int, version_id: str) -> int:
     wb.initialize(project)
     with wb.connect(project) as db:
         row = db.execute("SELECT COUNT(*) FROM quality_reviews WHERE chapter_id=? AND "
-                         "reviewer!='author' AND (version_id=? OR ?='')",
+                         "reviewer NOT IN ('author','A-local') AND (version_id=? OR ?='')",
                          (int(chapter), version_id, version_id)).fetchone()
     return int(row[0] if row else 0)
 
@@ -109,21 +109,31 @@ def _auto_count(project, chapter: int, version_id: str) -> int:
 def review(project, chapter: int, *, judgments: Optional[Iterable[Dict[str, Any]]] = None,
            reviewer: str = "auto", force: bool = False) -> Dict[str, Any]:
     chapter = int(chapter)
+    if reviewer not in {"auto", "author"}:
+        raise QualityError("invalid_reviewer")
+    judgment_list = list(judgments) if judgments is not None else None
+    if judgment_list is not None and len(judgment_list) > 8:
+        raise QualityError("too_many_reviewers")
     text = _chapter_text(project, chapter)
     meta = versions.current_version(project, chapter) or {}
     version_id = str(meta.get("version_id") or "")
-    if reviewer != "author" and not force and _auto_count(project, chapter, version_id) >= MAX_AUTO_REVIEWS:
-        raise QualityError("auto_review_limit", status=409,
-                           detail={"max_auto_reviews": MAX_AUTO_REVIEWS})
-    rows = list(judgments) if judgments is not None else [
+    rows = judgment_list if judgment_list is not None else [
         {"scores": local_scores(text), "reviewer": "A-local"},
     ]
     fused = fuse(rows)
     wb.initialize(project)
+    stored_reviewer = reviewer if judgment_list is not None else "A-local"
     with wb.write_tx(project) as db:
+        if judgment_list is not None and reviewer != "author" and not force:
+            row = db.execute("SELECT COUNT(*) FROM quality_reviews WHERE chapter_id=? AND "
+                             "reviewer NOT IN ('author','A-local') AND (version_id=? OR ?='')",
+                             (chapter, version_id, version_id)).fetchone()
+            if int(row[0] if row else 0) >= MAX_AUTO_REVIEWS:
+                raise QualityError("auto_review_limit", status=409,
+                                   detail={"max_auto_reviews": MAX_AUTO_REVIEWS})
         db.execute("INSERT INTO quality_reviews(chapter_id, chapter_uid, version_id, reviewer, "
                    "scores_json, total, verdict, created_at) VALUES(?,?,?,?,?,?,?,?)",
-                   (chapter, wb.chapter_uid(project, chapter), version_id, reviewer,
+                   (chapter, wb.chapter_uid(project, chapter), version_id, stored_reviewer,
                     json.dumps(fused["scores"], ensure_ascii=False), fused["total"],
                     fused["verdict"], _now()))
     return {"status": "reviewed", "chapter_id": chapter, "version_id": version_id,
@@ -164,6 +174,10 @@ def dashboard(project, *, limit: int = 200) -> Dict[str, Any]:
                 item["scores"] = {}
             item.update({"total": row["total"], "verdict": row["verdict"],
                          "reviewed_at": row["created_at"], "version_id": row["version_id"]})
+            current_id = str((versions.current_version(project, chapter) or {}).get("version_id") or "")
+            item["stale_review"] = bool(row["version_id"] and current_id and row["version_id"] != current_id)
+            if item["stale_review"]:
+                item["verdict"] = "stale"
         else:
             item["scores"] = local_scores(_chapter_text(project, chapter))
             item["total"] = round(sum(item["scores"][dim] * WEIGHTS[dim] for dim in DIMENSIONS), 2)
@@ -176,5 +190,5 @@ def dashboard(project, *, limit: int = 200) -> Dict[str, Any]:
                 for dim in DIMENSIONS}
     return {"chapters": chapters, "averages": averages,
             "labels": DIMENSION_LABELS, "weights": dict(WEIGHTS),
-            "reviewed": sum(1 for row in chapters if row["reviewed_at"]),
+            "reviewed": sum(1 for row in chapters if row["reviewed_at"] and not row.get("stale_review")),
             "total": len(chapters)}

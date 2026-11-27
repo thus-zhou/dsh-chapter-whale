@@ -38,7 +38,17 @@ class ProviderClient:
         return value if value.get('provider_id') else self._config['default_binding']
     def _options(self):
         binding=self._binding()
-        return [binding,*binding.get('fallbacks',[])]
+        options=[binding,*binding.get('fallbacks',[])]
+        # Privacy is a hard boundary: a fallback may only move to an equal or
+        # stricter domain.  Filtering here covers every retry/fallback path,
+        # not only explicit override_binding calls.
+        try:
+            from .model_gateway import privacy_of, privacy_allowed
+            source=privacy_of(self._config,binding)
+            options=[item for item in options if privacy_allowed(source,privacy_of(self._config,item))]
+        except Exception:
+            pass
+        return options
     def _project(self):
         from pathlib import Path
         value=costs.META.get().get('project')

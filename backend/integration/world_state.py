@@ -104,7 +104,23 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     if status not in FACT_STATUSES:
         raise WorldStateError("invalid_status")
     fact_id = str(fact.get("fact_id") or wb.new_id("fact"))
-    confidence = float(fact.get("confidence") or 0.0)
+    if not fact.get("fact_id"):
+        # 同一逻辑事实（实体+谓词+宾语+有效期）重复提取时复用既有 fact_id。
+        wb.initialize(project)
+        with wb.connect(project) as db:
+            existing_row = db.execute(
+                "SELECT fact_id FROM world_facts WHERE entity_id IS ? AND subject=? AND predicate=? "
+                "AND object=? AND COALESCE(valid_from_chapter,-1)=COALESCE(?,-1) "
+                "AND COALESCE(valid_until_chapter,-1)=COALESCE(?,-1) LIMIT 1",
+                (fact.get("entity_id"), str(fact.get("subject") or ""), str(fact.get("predicate") or ""),
+                 str(fact.get("object") or ""), fact.get("valid_from_chapter"),
+                 fact.get("valid_until_chapter"))).fetchone()
+        if existing_row:
+            fact_id = str(existing_row[0])
+    try:
+        confidence = float(fact.get("confidence") if fact.get("confidence") is not None else 0.0)
+    except (TypeError, ValueError) as exc:
+        raise WorldStateError("invalid_confidence") from exc
     if not 0.0 <= confidence <= 1.0:
         raise WorldStateError("invalid_confidence")
     pinned = 1 if fact.get("pinned") else 0
@@ -164,6 +180,7 @@ def facts_for_chapter(project, chapter: int, *, domain: Optional[str] = None,
                       entity_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Only facts valid at narrative chapter N; future plans are excluded here."""
     clauses = ["status='active'",
+               "authority_level NOT IN ('future_plan','discarded_candidate')",
                "(valid_from_chapter IS NULL OR valid_from_chapter <= ?)",
                "(valid_until_chapter IS NULL OR valid_until_chapter >= ?)"]
     params: List[Any] = [int(chapter), int(chapter)]
@@ -175,8 +192,45 @@ def facts_for_chapter(project, chapter: int, *, domain: Optional[str] = None,
     with wb.connect(project) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT * FROM world_facts WHERE " + " AND ".join(clauses) +
-            " ORDER BY pinned DESC, authority_level DESC, narrative_chapter", tuple(params))]
+            " ORDER BY pinned DESC, CASE authority_level "
+            "WHEN 'author_locked' THEN 6 WHEN 'published_prose' THEN 5 "
+            "WHEN 'confirmed_prose' THEN 4 WHEN 'draft_prose' THEN 3 "
+            "WHEN 'ai_inferred' THEN 2 WHEN 'future_plan' THEN 1 ELSE 0 END DESC, "
+            "narrative_chapter", tuple(params))]
     return [_row_fact(row) for row in rows]
+
+
+def facts_by_status(project, status: str, *, limit: int = 200) -> List[Dict[str, Any]]:
+    if status not in FACT_STATUSES:
+        raise WorldStateError("invalid_status")
+    wb.initialize(project)
+    with wb.connect(project) as db:
+        rows = [dict(row) for row in db.execute(
+            "SELECT * FROM world_facts WHERE status=? ORDER BY updated_at DESC LIMIT ?",
+            (status, max(1, min(int(limit), 1000))))]
+    return [_row_fact(row) for row in rows]
+
+
+def confirm_fact(project, fact_id: str, *, authority_level: str = "confirmed_prose") -> Dict[str, Any]:
+    """Author confirmation is the only path that raises AI-extracted authority."""
+    if authority_level not in AUTHORITY or authority_level in {"future_plan", "discarded_candidate"}:
+        raise WorldStateError("invalid_authority")
+    with wb.write_tx(project) as db:
+        cur = db.execute("UPDATE world_facts SET status='active', authority_level=?, updated_at=? "
+                         "WHERE fact_id=? AND status='pending_confirm'",
+                         (authority_level, _now(), fact_id))
+        if not cur.rowcount:
+            raise WorldStateError("fact_not_pending", status=409)
+    return get_fact(project, fact_id)
+
+
+def reject_fact(project, fact_id: str) -> Dict[str, Any]:
+    with wb.write_tx(project) as db:
+        cur = db.execute("UPDATE world_facts SET status='archived', updated_at=? "
+                         "WHERE fact_id=? AND status='pending_confirm'", (_now(), fact_id))
+        if not cur.rowcount:
+            raise WorldStateError("fact_not_pending", status=409)
+    return get_fact(project, fact_id)
 
 
 def set_card(project, card: Dict[str, Any]) -> Dict[str, Any]:
@@ -234,20 +288,19 @@ def index_chapter(project, chapter: int) -> int:
     return 1
 
 
-def search(project, query: str, *, chapter: Optional[int] = None, limit: int = 20) -> List[Dict[str, Any]]:
-    hits = wb.search(project, query, limit=limit)
-    if chapter is not None:
-        hits = [hit for hit in hits if hit.get("chapter_id") in (None, int(chapter))]
+def search(project, query: str, *, chapter: Optional[int] = None,
+           max_chapter: Optional[int] = None, limit: int = 20) -> List[Dict[str, Any]]:
+    hits = wb.search(project, query, limit=limit, chapter=chapter, max_chapter=max_chapter)
     return hits
 
 
 def ignore_conflict(project, fact_id: str, *, chapter_uid: str, version_id: str = "",
                     reason: str = "intentional_or_flashback") -> Dict[str, Any]:
+    if not str(chapter_uid or "").strip():
+        raise WorldStateError("chapter_uid_required")
     with wb.write_tx(project) as db:
         db.execute("INSERT OR REPLACE INTO conflict_ignores(fact_id, chapter_uid, version_id, reason, created_at) "
                    "VALUES(?,?,?,?,?)", (fact_id, chapter_uid, version_id, reason, _now()))
-        db.execute("UPDATE world_facts SET status='ignored_by_author', updated_at=? WHERE fact_id=?",
-                   (_now(), fact_id))
     return {"status": "ignored", "fact_id": fact_id, "chapter_uid": chapter_uid, "reason": reason}
 
 
@@ -326,7 +379,7 @@ def _previous_tail(project, chapter: int, limit: int = 300) -> str:
 
 
 def build_context(project, chapter: int, *, query: str = "", budget_chars: int = 24000,
-                  operation_id: Optional[str] = None) -> Dict[str, Any]:
+                  operation_id: Optional[str] = None, persist: bool = True) -> Dict[str, Any]:
     """Five-layer deterministic context + manifest (no model call)."""
     chapter = int(chapter)
     layers: List[Dict[str, Any]] = []
@@ -357,16 +410,18 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
     l4_text = f"- 上一章结尾：{previous}\n- 本章细纲：{outline.get('outline', '')}"
     add("L4", "近期短期记忆", [{"kind": "previous_chapter", "chapter": chapter - 1},
                               {"kind": "outline", "chapter": chapter}], l4_text, 0.30)
-    hits = search(project, query, limit=8) if str(query or "").strip() else []
+    hits = search(project, query, max_chapter=chapter, limit=8) if str(query or "").strip() else []
     l5_text = "\n".join(f"- 第{hit.get('chapter_id') or '?'}章：{hit.get('snippet', '')}" for hit in hits)
     add("L5", "按需精确检索", [{"kind": "retrieval", "doc_key": hit.get("doc_key"),
                                 "chapter_id": hit.get("chapter_id")} for hit in hits], l5_text, 0.25)
     # Budget trimming: drop L5 then L3 tails first, never L1 rules.
+    content_budget = max(0, int(budget_chars) - 64)
     total = sum(layer["chars"] for layer in layers)
-    for layer in sorted(layers, key=lambda item: item["layer"] in {"L1", "L2", "L4"}):
-        if total <= budget_chars:
+    priority = {"L5": 0, "L3": 1, "L4": 2, "L2": 3, "L1": 4}
+    for layer in sorted(layers, key=lambda item: priority.get(item["layer"], 9)):
+        if total <= content_budget:
             break
-        overflow = total - budget_chars
+        overflow = total - content_budget
         text = layer["text"]
         if layer["layer"] == "L1":
             continue
@@ -378,6 +433,9 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         total = sum(item["chars"] for item in layers)
     text = "\n\n".join(f"【{layer['layer']}·{layer['title']}】\n{layer['text']}"
                        for layer in layers if layer["text"])
+    if text:
+        text = text.replace("</UNTRUSTED_MATERIAL>", "&lt;/UNTRUSTED_MATERIAL&gt;")
+        text = "<UNTRUSTED_MATERIAL>\n" + text + "\n</UNTRUSTED_MATERIAL>"
     manifest = {
         "chapter_id": chapter,
         "chapter_uid": wb.chapter_uid(project, chapter),
@@ -390,19 +448,22 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         "items": [{**item, "layer": layer["layer"]} for layer in layers for item in layer["items"]],
         "generated_at": _now(),
     }
-    with wb.write_tx(project) as db:
-        db.execute("INSERT INTO context_manifests(chapter_id, operation_id, manifest_json, created_at) "
-                   "VALUES(?,?,?,?)",
-                   (chapter, operation_id, json.dumps(manifest, ensure_ascii=False), _now()))
+    if persist:
+        with wb.write_tx(project) as db:
+            db.execute("INSERT INTO context_manifests(chapter_id, operation_id, manifest_json, created_at) "
+                       "VALUES(?,?,?,?)",
+                       (chapter, operation_id, json.dumps(manifest, ensure_ascii=False), _now()))
     return {"text": text, "manifest": manifest}
 
 
 def state(project, *, chapter: int = 1, query: str = "") -> Dict[str, Any]:
     """Read-only world-state dashboard: cards, valid facts, conflicts, manifest."""
     chapter = max(1, int(chapter))
-    context = build_context(project, chapter, query=query)
+    context = build_context(project, chapter, query=query, persist=False)
+    pending = facts_by_status(project, "pending_confirm")
     return {"chapter_id": chapter, "cards": list_cards(project),
             "facts": facts_for_chapter(project, chapter),
+            "pending_facts": pending, "pending_count": len(pending),
             "conflicts": detect_conflicts(project, chapter),
             "manifest": context["manifest"], "context": context["text"],
             "search": search(project, query, chapter=chapter) if query else []}
@@ -444,7 +505,15 @@ def extract_candidates(project, chapter: int, payload: Dict[str, Any], *,
         if domain not in DOMAINS:
             rejected.append({"reason": "invalid_domain"})
             continue
-        confidence = float(raw.get("confidence") or 0)
+        confidence = raw.get("confidence")
+        try:
+            confidence = float(confidence if confidence is not None else 0)
+        except (TypeError, ValueError):
+            rejected.append({"reason": "invalid_confidence"})
+            continue
+        if not 0.0 <= confidence <= 1.0:
+            rejected.append({"reason": "invalid_confidence"})
+            continue
         assertion = str(raw.get("assertion_type") or "fact")
         if assertion not in ASSERTION_TYPES:
             rejected.append({"reason": "invalid_assertion_type"})
@@ -453,16 +522,27 @@ def extract_candidates(project, chapter: int, payload: Dict[str, Any], *,
             rejected.append({"reason": "low_confidence", "confidence": confidence})
             continue
         fact = {
-            **raw, "fact_id": raw.get("fact_id") or wb.new_id("fact"),
+            **raw, "fact_id": raw.get("fact_id"),
             "confidence": confidence, "assertion_type": assertion,
             "narrative_chapter": chapter, "source_chapter": chapter,
             "source_chapter_uid": wb.chapter_uid(project, chapter),
             "source_version_id": (versions.current_version(project, chapter) or {}).get("version_id"),
-            "status": "active", "authority_level": raw.get("authority_level") or "confirmed_prose",
+            "status": "active", "authority_level": "ai_inferred",
         }
-        high_risk = (fact.get("pinned") and assertion == "fact" and
-                     any(word in str(fact.get("predicate") or "") or word in str(fact.get("object") or "")
-                         for word in HIGH_RISK_PREDICATES))
+        # AI extraction may never self-promote to confirmed/author authority.
+        existing_pinned = False
+        if fact.get("entity_id"):
+            try:
+                with wb.connect(project) as db:
+                    existing_pinned = bool(db.execute(
+                        "SELECT 1 FROM world_facts WHERE entity_id=? AND "
+                        "(pinned=1 OR authority_level='author_locked' OR author_locked=1) LIMIT 1",
+                        (fact["entity_id"],)).fetchone())
+            except Exception:
+                existing_pinned = False
+        high_risk = (any(word in str(fact.get("predicate") or "") or word in str(fact.get("object") or "")
+                         for word in HIGH_RISK_PREDICATES) or
+                     (fact.get("pinned") and assertion == "fact"))
         if high_risk:
             fact["status"] = "pending_confirm"
             saved = upsert_fact(project, fact)

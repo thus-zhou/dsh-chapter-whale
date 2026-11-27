@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from manager import app as module
+from integration import agent_room
 
 
 class V085ApiTests(unittest.TestCase):
@@ -73,6 +74,32 @@ class V085ApiTests(unittest.TestCase):
                                  headers=self.headers)
         self.assertEqual(route.status_code, 200, route.text)
         self.assertIn("level", route.json())
+
+    def test_author_resolves_approval_with_fingerprint_bound_card(self):
+        db = self.root / "agent_room.sqlite3"
+        approval = agent_room.create_approval(
+            db, session_id="author", project_id=self.identity, directive_id="dir_1",
+            directive_revision=1, task_id=None, kind="publish", title="发布确认",
+            artifact_fingerprint="fp-1", approved_scope_hash="scope-1", detail={})
+        response = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
+            json={"approved": True, "note": "作者确认"}, headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "approved")
+        self.assertEqual(response.json()["resolved_by"], "author")
+        self.assertEqual(response.json()["decision"]["note"], "作者确认")
+
+    def test_agent_cannot_resolve_approval(self):
+        db = self.root / "agent_room.sqlite3"
+        approval = agent_room.create_approval(
+            db, session_id="author", project_id=self.identity, directive_id="dir_2",
+            directive_revision=1, task_id=None, kind="publish", title="发布确认",
+            artifact_fingerprint="fp-2", approved_scope_hash="scope-2", detail={})
+        response = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
+            json={"approved": True, "resolved_by": "agent"}, headers=self.headers)
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(response.json()["code"], "agents_cannot_approve")
 
 
 if __name__ == "__main__":

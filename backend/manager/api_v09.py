@@ -4,6 +4,8 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import os
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict
 
@@ -14,6 +16,7 @@ from integration import concurrent_engine, costs, maintenance, quality, world_st
 
 
 def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path) -> None:
+    concurrent_engine.configure_global_pause(Path(data_dir) / "global_pause.json")
     def _book(identity: str) -> Path:
         return Path(project(identity)["path"])
 
@@ -44,8 +47,28 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
 
     @app.get("/api/projects/{identity}/world/facts")
     @guard
-    def facts(identity: str, chapter: int = 1, domain: str | None = None):
+    def facts(identity: str, chapter: int = 1, domain: str | None = None,
+              status: str | None = None):
+        if status:
+            return {"facts": world_state.facts_by_status(_book(identity), status)}
         return {"facts": world_state.facts_for_chapter(_book(identity), int(chapter), domain=domain)}
+
+    @app.get("/api/projects/{identity}/world/facts/pending")
+    @guard
+    def pending_facts(identity: str):
+        return {"facts": world_state.facts_by_status(_book(identity), "pending_confirm")}
+
+    @app.post("/api/projects/{identity}/world/facts/{fact_id}/confirm")
+    @guard
+    def confirm_fact(identity: str, fact_id: str, data: dict | None = None):
+        body = data or {}
+        return world_state.confirm_fact(_book(identity), fact_id,
+                                       authority_level=str(body.get("authority_level") or "confirmed_prose"))
+
+    @app.post("/api/projects/{identity}/world/facts/{fact_id}/reject")
+    @guard
+    def reject_fact(identity: str, fact_id: str):
+        return world_state.reject_fact(_book(identity), fact_id)
 
     @app.post("/api/projects/{identity}/world/facts")
     @guard
@@ -75,7 +98,8 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @guard
     def context(identity: str, chapter: int = 1, q: str = "", budget: int = 24000):
         return world_state.build_context(_book(identity), int(chapter), query=q,
-                                         budget_chars=max(200, min(int(budget), 200000)))
+                                         budget_chars=max(200, min(int(budget), 200000)),
+                                         persist=False)
 
     @app.get("/api/projects/{identity}/world/conflicts")
     @guard
@@ -203,13 +227,17 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @guard
     def system_ai_pause(data: dict | None = None):
         body = data or {}
+        paused = bool(body.get("paused", True))
+        result = concurrent_engine.set_global_pause(
+            paused, reason=str(body.get("reason") or ("全站急停" if paused else "全站恢复")))
         identity = str(body.get("identity") or "")
-        if not identity:
-            return {"status": "ok", "scope": "global", "paused": bool(body.get("paused", True))}
-        book = _book(identity)
-        if body.get("paused", True):
-            return concurrent_engine.pause(book, "global", reason=str(body.get("reason") or "全站急停"))
-        return concurrent_engine.resume(book, "global")
+        if identity:
+            book = _book(identity)
+            if paused:
+                concurrent_engine.pause(book, "global", reason=str(body.get("reason") or "全站急停"))
+            else:
+                concurrent_engine.resume(book, "global")
+        return result
 
     @app.post("/api/projects/{identity}/tasks/pause")
     @guard
@@ -272,8 +300,11 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         if identity and body.get("action") in {"gc", "export"}:
             book = _book(identity)
             if body["action"] == "gc":
-                return maintenance.collect_garbage(book, dry_run=bool(body.get("dry_run", False)))
-            destination = Path(body.get("destination") or (data_dir / "diagnostics" / "recover.zip"))
+                return maintenance.collect_garbage(
+                    book, dry_run=bool(body.get("dry_run", True)),
+                    min_age_seconds=max(86400, int(body.get("min_age_seconds") or 7 * 86400)))
+            destination = Path(body.get("destination") or (
+                data_dir / "diagnostics" / f"recover-{os.getpid()}-{int(time.time())}.zip"))
             return maintenance.export_bundle(book, destination)
         return {"status": "ok", "recovered": [], "message": "没有可自动恢复的卡单"}
 
@@ -285,7 +316,8 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @app.get("/api/projects/{identity}/ledger")
     @guard
     def ledger(identity: str):
-        return maintenance.resource_ledger(_book(identity))
+        return maintenance.resource_ledger(_book(identity),
+                                           costs_db=Path(data_dir) / "costs.sqlite3")
 
     @app.post("/api/projects/{identity}/diagnostics/gc")
     @guard
@@ -293,14 +325,14 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         body = data or {}
         return maintenance.collect_garbage(_book(identity),
                                            dry_run=bool(body.get("dry_run", True)),
-                                           min_age_seconds=int(body.get("min_age_seconds") or 7 * 86400))
+                                           min_age_seconds=max(86400, int(body.get("min_age_seconds") or 7 * 86400)))
 
     @app.post("/api/projects/{identity}/diagnostics/export")
     @guard
     def export_diagnostics(identity: str, data: dict | None = None):
         target = (data or {}).get("destination")
         destination = Path(target).expanduser() if target else (
-            data_dir / "diagnostics" / f"diagnostics-{identity}.zip")
+            data_dir / "diagnostics" / f"diagnostics-{identity}-{int(time.time())}.zip")
         return maintenance.export_bundle(_book(identity), destination)
 
     @app.post("/api/projects/{identity}/diagnostics/heal")

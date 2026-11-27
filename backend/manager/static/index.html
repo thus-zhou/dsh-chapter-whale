@@ -164,7 +164,7 @@
               <div class="wb-editor-top">
                 <input id="wb-title" class="wb-title" type="text" maxlength="120" placeholder="章节标题" aria-label="章节标题" autocomplete="off">
                 <div class="wb-editor-buttons">
-                  <span class="wb-save-pill" id="wb-save-state">尚未选择</span>
+                  <span class="wb-save-pill" id="wb-save-state" role="status" aria-live="polite">尚未选择</span>
                   <button type="button" class="button button-secondary button-small" id="wb-quick-check">快速体检</button>
                   <button type="button" class="button button-primary button-small" id="wb-save">保存版本</button>
                 </div>
@@ -197,14 +197,14 @@
                   <div class="wb-note-meta"><span id="wb-selection-label">尚未选择文字</span><span id="wb-annotation-status">本地暂存 0 条</span></div>
                   <div class="wb-note-actions">
                     <button type="button" class="button button-secondary button-small" id="wb-annotation-add">暂存本地批注</button>
-                    <button type="button" class="button button-primary button-small" id="wb-annotation-submit" disabled title="批注接口将在 Wave 3 启用">提交到批注接口</button>
+                    <button type="button" class="button button-primary button-small" id="wb-annotation-submit" disabled title="批注后端未连接">提交到批注接口</button>
                   </div>
-                  <p class="wb-hint" id="wb-annotation-hint">批注接口将在 Wave 3 启用；当前批注只保存在本页内存，刷新后清空。</p>
+                  <p class="wb-hint" id="wb-annotation-hint">批注接口暂不可用；当前批注只保存在本页内存，刷新后清空。</p>
                 </div>
                 <div class="wb-annotation-list" id="wb-annotation-list"></div>
               </div>
               <div class="wb-panel" id="wb-panel-check" role="tabpanel" hidden>
-                <div class="wb-check-summary" id="wb-check-summary">尚未体检。快速检体不调用模型。</div>
+                <div class="wb-check-summary" id="wb-check-summary">尚未体检。快速体检不调用模型。</div>
                 <div class="wb-check-list" id="wb-check-list"></div>
               </div>
               <div class="wb-panel" id="wb-panel-versions" role="tabpanel" hidden>
@@ -288,7 +288,7 @@
             <input id="wb-bubble-input" type="text" maxlength="500" placeholder="写一条批注（本地暂存）" aria-label="选区批注">
             <button type="button" id="wb-bubble-add">添加</button>
           </div>
-          <p class="wb-bubble-hint">批注接口将在 Wave 3 启用，当前仅本地暂存。</p>
+          <p class="wb-bubble-hint">批注接口暂不可用，当前仅本地暂存。</p>
         </div>
         <div class="wb-selbar" id="wb-selbar" role="toolbar" aria-label="选区操作" hidden>
           <span id="wb-selbar-label">已选择 0 字</span>

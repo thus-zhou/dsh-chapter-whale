@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from integration import agent_hub, agent_room, annotations
+from integration import agent_hub, agent_room, annotations, chapter_editor
 
 
 def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path) -> None:
@@ -25,7 +25,8 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         def wrapper(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
-            except (annotations.AnnotationError, agent_room.RoomError, agent_hub.HubError) as exc:
+            except (annotations.AnnotationError, agent_room.RoomError, agent_hub.HubError,
+                    chapter_editor.ChapterError) as exc:
                 return JSONResponse(status_code=exc.status,
                                     content={"code": exc.code, "message": exc.code,
                                              **(getattr(exc, "detail", {}) or {})})
@@ -115,7 +116,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             payload=body.get("payload") or {}, mentions=body.get("mentions") or [])
 
     @app.get("/api/projects/{identity}/room/stream")
-    def room_stream(identity: str, request: Request, last_event_id: str = ""):
+    async def room_stream(identity: str, request: Request, last_event_id: str = ""):
         """SSE four-channel stream with Last-Event-ID replay and 256-frame backpressure."""
         after = 0
         header = request.headers.get("last-event-id") or last_event_id
@@ -123,12 +124,14 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             after = max(0, int(header or 0))
         except ValueError:
             after = 0
-        token, queue = agent_room.broadcaster.subscribe()
+        token, queue = agent_room.broadcaster.subscribe(project_id=identity)
 
         async def frames():
             try:
                 yield "retry: 1500\n\n"
-                for event in agent_room.events_after(room_db, after_seq=after, project_id=identity):
+                replayed = await asyncio.to_thread(
+                    agent_room.events_after, room_db, after_seq=after, project_id=identity)
+                for event in replayed:
                     yield f"id: {event['seq']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
                 while True:
                     if await request.is_disconnected():
@@ -139,6 +142,8 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
                         yield ": ping\n\n"
                         continue
                     yield f"id: {event.get('seq', '')}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    if event.get("kind") == "resync_required":
+                        break
             finally:
                 agent_room.broadcaster.unsubscribe(token)
 
@@ -188,12 +193,13 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @guard
     def amend_directive(identity: str, directive: str, data: dict | None = None):
         body = data or {}
-        revised = agent_room.bump_directive_revision(room_db, directive_id=directive)
         amendment = agent_hub.start_amendment(
             room_db, directive_id=directive,
             amendment_text=str(body.get("instruction") or body.get("text") or ""),
             task_ids=body.get("task_ids") or [], fallback=str(body.get("fallback") or "wait"))
-        return {**revised, "amendment": amendment}
+        return {"directive_id": directive,
+                "directive_revision": amendment["directive_revision"],
+                "amendment": amendment}
 
     @app.post("/api/projects/{identity}/directives/{directive}/cancel")
     @guard
@@ -215,10 +221,18 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @guard
     def resolve_approval(identity: str, approval: str, data: dict | None = None):
         body = data or {}
+        current = agent_room.get_approval(room_db, approval)
+        if str(current.get("project_id") or "") != str(identity):
+            raise agent_room.RoomError("approval_project_mismatch", status=404)
         return agent_room.resolve_approval(
             room_db, approval_id=approval, approved=bool(body.get("approved")),
             resolved_by=str(body.get("resolved_by") or "author"),
-            note=str(body.get("note") or ""))
+            artifact_fingerprint=str(body.get("artifact_fingerprint")
+                                     or current.get("artifact_fingerprint") or ""),
+            approved_scope_hash=str(body.get("approved_scope_hash")
+                                    or current.get("approved_scope_hash") or ""),
+            directive_revision=body.get("directive_revision", current.get("directive_revision")),
+            decision=body.get("decision") if isinstance(body.get("decision"), dict) else {"note": str(body.get("note") or "")})
 
     @app.post("/api/projects/{identity}/chief/route")
     @guard

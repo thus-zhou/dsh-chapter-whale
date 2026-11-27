@@ -299,7 +299,7 @@ textarea { line-height: 1.85; }
   .role-card:last-child { grid-column: 1 / -1; }
   .panel-header { padding: 22px; }
 }
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .topbar { position: sticky; top: 0; z-index: 25; background: var(--paper); }
   .topbar-actions .workspace-avatar { display: none; }
@@ -348,7 +348,7 @@ textarea { line-height: 1.85; }
   .hero h2 { font-size: 26px; }
   .hero p { max-width: 320px; }
 }
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   :root { --sidebar-width: 230px; }
   .topbar { height: 64px; padding: 0 22px; }
   main { padding: 26px 22px 0; }
@@ -435,7 +435,7 @@ input:not([type="checkbox"]):not([type="file"]),select,textarea{border-radius:8p
 @media(hover:hover){.stat-card{transition:transform .22s,box-shadow .22s}.stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 30px #17333e0a}.button-primary:hover:not(:disabled){box-shadow:0 4px 14px #187b7323}}
 @media(max-width:760px){.workspace:before{animation:none;will-change:auto}.topbar{backdrop-filter:none;background:var(--surface)}}
 @media(prefers-reduced-motion:reduce){.workspace:before{animation:none;will-change:auto}.page:not([hidden])>.page-heading{animation:none}.stat-card,.button-primary{transition:none}.stat-card:hover{transform:none}}
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   main:not(.pair-shell) { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
 /* Reading-room palette. One source for neutral surfaces and muted blue ink;
@@ -504,7 +504,7 @@ input:not([type="checkbox"]):not([type="file"]),select,textarea{border-radius:8p
 .project-card:hover, .account-card:hover { border-color: var(--green); box-shadow: var(--shadow); }
 :is(button, a, input, textarea, select, summary):focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .operation-wait { padding: 12px 14px; color: var(--green); background: var(--green-soft); border-radius: 8px; line-height: 1.8; }
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .topbar { background: var(--paper); }
   .chapter-preview { font-size: 18px; padding: 22px; }
 }

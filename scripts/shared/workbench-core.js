@@ -338,6 +338,11 @@ const WorkbenchCore = (() => {
     const editorTop = _rectValue(editorRect, 'top', _rectValue(editorRect, 'y', 0));
     const editorRight = _rectValue(editorRect, 'right', editorLeft + _rectValue(editorRect, 'width', 0));
     const editorBottom = _rectValue(editorRect, 'bottom', editorTop + _rectValue(editorRect, 'height', 0));
+    const viewport = settings.viewport || null;
+    const viewportTop = viewport ? _rectValue(viewport, 'top', 0) : null;
+    const viewportBottom = viewport ? _rectValue(viewport, 'bottom', 0) : null;
+    const clipTop = viewportTop === null ? editorTop : Math.max(editorTop, viewportTop);
+    const clipBottom = viewportBottom === null ? editorBottom : Math.min(editorBottom, viewportBottom);
 
     const selectionLeft = _rectValue(selectionRect, 'left', _rectValue(selectionRect, 'x', editorLeft));
     const selectionTop = _rectValue(selectionRect, 'top', _rectValue(selectionRect, 'y', editorTop));
@@ -349,8 +354,8 @@ const WorkbenchCore = (() => {
     let left = selectionLeft + (selectionRight - selectionLeft) / 2 - barWidth / 2;
     left = maximumLeft >= minimumLeft ? _clamp(left, minimumLeft, maximumLeft) : minimumLeft;
 
-    const minimumTop = editorTop + margin;
-    const maximumTop = editorBottom - margin - barHeight;
+    const minimumTop = clipTop + margin;
+    const maximumTop = clipBottom - margin - barHeight;
     const above = selectionTop - margin - barHeight;
     const below = selectionBottom + margin;
     let placement = above >= minimumTop ? 'above' : 'below';

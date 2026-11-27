@@ -244,11 +244,13 @@ def bind_session_to_project(db_path=None, session_id: str = "", project_id: str 
             cur = db.execute(f"UPDATE {table} SET project_id=? WHERE session_id=? AND project_id IS NULL",
                              (project_id, session_id))
             counts[table] = int(cur.rowcount or 0)
-        event = _append_event_db(db, session_id=session_id, topic_id="default",
-                                 project_id=project_id, directive_id=None, task_id=None,
-                                 channel="chief_chat", sender_role="system", mentions=[],
-                                 kind="project_bound", summary="已建书并绑定原开书对话",
-                                 payload={"project_id": project_id}, created_at=stamp)
+        event = None
+        if any(counts.values()):
+            event = _append_event_db(db, session_id=session_id, topic_id="default",
+                                     project_id=project_id, directive_id=None, task_id=None,
+                                     channel="chief_chat", sender_role="system", mentions=[],
+                                     kind="project_bound", summary="已建书并绑定原开书对话",
+                                     payload={"project_id": project_id}, created_at=stamp)
     return {"status": "bound", "session_id": session_id, "project_id": project_id,
             "updated": counts, "event": event}
 
@@ -306,7 +308,8 @@ def update_task(db_path=None, task_id: str = "", **fields) -> Dict[str, Any]:
 
 
 def list_tasks(db_path=None, *, project_id: Optional[str] = None,
-               directive_id: Optional[str] = None, active_only: bool = False) -> List[Dict[str, Any]]:
+               directive_id: Optional[str] = None, session_id: Optional[str] = None,
+               active_only: bool = False) -> List[Dict[str, Any]]:
     initialize(db_path)
     query = "SELECT * FROM agent_tasks"
     clauses, params = [], []
@@ -314,6 +317,8 @@ def list_tasks(db_path=None, *, project_id: Optional[str] = None,
         clauses.append("project_id=?"); params.append(project_id)
     if directive_id:
         clauses.append("directive_id=?"); params.append(directive_id)
+    if session_id:
+        clauses.append("session_id=?"); params.append(session_id)
     if active_only:
         clauses.append("status IN ('pending','waiting','running','held','awaiting_approval','paused_budget')")
     if clauses:
@@ -474,10 +479,11 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
 
 
 def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
-                      session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+                      session_id: Optional[str] = None,
+                      status: Optional[str] = "pending") -> List[Dict[str, Any]]:
     initialize(db_path)
-    clauses = ["status='pending'"]
-    params: List[Any] = []
+    clauses = ["status=?"]
+    params: List[Any] = [str(status or "pending")]
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
     if session_id:
@@ -505,13 +511,14 @@ def chat_context(db_path=None, *, project_id: str, topic_id: str = "default",
             "ORDER BY seq DESC LIMIT ?", (project_id, topic_id, max(1, int(limit) * 2)))]
     rows.reverse()
     picked, size = [], 0
-    for item in rows:
+    for item in reversed(rows):
         text = str(item.get("summary") or "")
         if size + len(text) > char_limit:
-            break
+            continue
         picked.append({"seq": item["seq"], "role": item["sender_role"], "kind": item["kind"],
                        "summary": text, "payload": _json(item.get("payload_json"), {})})
         size += len(text)
+    picked.reverse()
     return picked
 
 
@@ -549,7 +556,7 @@ def snapshot(db_path=None, *, project_id: Optional[str] = None,
                 (session_id,))]
         for item in directives:
             item["constraints"] = _json(item.pop("constraints_json"), [])
-    tasks = list_tasks(db_path, project_id=project_id, active_only=True)
+    tasks = list_tasks(db_path, project_id=project_id, session_id=session_id, active_only=True)
     return {"snapshot_seq": seq, "events": events, "directives": directives,
             "tasks": tasks, "approvals": pending_approvals(db_path, project_id=project_id,
                                                            session_id=session_id),
@@ -571,26 +578,40 @@ class BoundedBroadcaster:
     def __init__(self, maxsize: int = 256):
         self.maxsize = int(maxsize)
         self._subscribers: Dict[str, Tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = {}
+        self._filters: Dict[str, Optional[str]] = {}
+        self._closed: set = set()
         self._lock = threading.RLock()
 
-    def subscribe(self, loop: Optional[asyncio.AbstractEventLoop] = None) -> Tuple[str, asyncio.Queue]:
+    def subscribe(self, loop: Optional[asyncio.AbstractEventLoop] = None,
+                  *, project_id: Optional[str] = None) -> Tuple[str, asyncio.Queue]:
         loop = loop or asyncio.get_running_loop()
         token = uuid.uuid4().hex
         queue: asyncio.Queue = asyncio.Queue(maxsize=self.maxsize)
         with self._lock:
+            self._closed.discard(token)
             self._subscribers[token] = (loop, queue)
+            self._filters[token] = project_id
         return token, queue
 
     def unsubscribe(self, token: str) -> None:
         with self._lock:
+            self._closed.add(token)
             self._subscribers.pop(token, None)
+            self._filters.pop(token, None)
 
     def publish(self, event: Dict[str, Any]) -> int:
         dropped = 0
         with self._lock:
             items = list(self._subscribers.items())
         for token, (loop, queue) in items:
+            with self._lock:
+                wanted = self._filters.get(token)
+            if wanted and event.get("project_id") not in {None, wanted}:
+                continue
             def put(event=event, queue=queue, token=token):
+                with self._lock:
+                    if token in self._closed:
+                        return
                 try:
                     queue.put_nowait(event)
                     return
