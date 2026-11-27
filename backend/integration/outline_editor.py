@@ -178,10 +178,54 @@ def _parse_visible(text: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def _chapter_items(value) -> List[Dict[str, Any]]:
+    """Iterate chapter records whether the container is a list or a mapping."""
+    if isinstance(value, dict):
+        return [item for item in value.values() if isinstance(item, dict)]
+    if isinstance(value, (list, tuple)):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _normalize_chapter_map(value) -> Dict[str, Dict[str, Any]]:
+    """Canonical ``{str(chapter): item}`` for every legacy container shape.
+
+    v0.7.5 wrote ``story_plan.json.chapters`` as a list; current builds write a
+    mapping.  Every entry point normalizes before touching it so a legacy book
+    cannot 500 on ``.keys()``/``int(dict)`` or persist an empty migration
+    snapshot (A-P1-04).
+    """
+    result: Dict[str, Dict[str, Any]] = {}
+    if isinstance(value, dict):
+        items = list(value.items())
+    elif isinstance(value, (list, tuple)):
+        items = [(item.get("id"), item) for item in value if isinstance(item, dict)]
+    else:
+        return result
+    for key, item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            number = int(key if key is not None else item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        if number <= 0:
+            continue
+        result[str(number)] = item
+    return result
+
+
+def _chapter_sort_key(value) -> Tuple[int, Any]:
+    try:
+        return (0, int(value))
+    except (TypeError, ValueError):
+        return (1, str(value))
+
+
 def _chapter_rev(meta: Optional[Dict[str, Any]], chapter: int) -> int:
     if not isinstance(meta, dict):
         return 0
-    for item in meta.get("chapters") or []:
+    for item in _chapter_items(meta.get("chapters")):
         if isinstance(item, dict) and str(item.get("id")) == str(chapter):
             try:
                 return int(item.get("chapter_rev") or 0)
@@ -193,7 +237,7 @@ def _chapter_rev(meta: Optional[Dict[str, Any]], chapter: int) -> int:
 def _tombstones(meta: Optional[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
     result = {}
     if isinstance(meta, dict):
-        for item in meta.get("chapters") or []:
+        for item in _chapter_items(meta.get("chapters")):
             if isinstance(item, dict) and item.get("deleted"):
                 try:
                     result[int(item["id"])] = item
@@ -217,18 +261,23 @@ def load_meta(project) -> Dict[str, Any]:
         data.setdefault("volumes", "")
         data.setdefault("character_arcs", "")
         data.setdefault("foreshadowing", "")
-        data.setdefault("legacy_chapters", {})
+        data["legacy_chapters"] = _normalize_chapter_map(data.get("legacy_chapters"))
         return data
     # 兼容 v0.7.5：仅当 meta 尚不存在时，从旧 story_plan.json 一次性回填。
     legacy = {}
+    read_failed = False
     story = _story_plan_path(project)
     if story.is_file():
         try:
             value = safety.read_json_strict(story)
             if isinstance(value, dict):
                 legacy = value
-        except (OSError, ValueError):
-            legacy = {}
+            else:
+                read_failed = True
+        except (OSError, ValueError, RuntimeError):
+            read_failed = True
+    raw_chapters = legacy.get("chapters")
+    legacy_chapters = _normalize_chapter_map(raw_chapters)
     meta = {
         "schema_version": 1,
         "meta_revision": int(legacy.get("meta_revision") or 0) or 1,
@@ -236,9 +285,18 @@ def load_meta(project) -> Dict[str, Any]:
         "volumes": str(legacy.get("volumes") or ""),
         "character_arcs": str(legacy.get("character_arcs") or ""),
         "foreshadowing": str(legacy.get("foreshadowing") or ""),
-        "legacy_chapters": legacy.get("chapters") if isinstance(legacy.get("chapters"), dict) else {},
+        "legacy_chapters": legacy_chapters,
         "updated_at": _now(),
     }
+    if read_failed:
+        # A corrupt/unknown story_plan must not be replaced by an empty
+        # migration snapshot: keep the legacy file untouched for repair.
+        return meta
+    if raw_chapters and not legacy_chapters:
+        # Unknown container shape: preserve the original value in memory but
+        # do not overwrite the durable meta with an empty snapshot.
+        meta["legacy_chapters"] = raw_chapters if isinstance(raw_chapters, (dict, list)) else {}
+        return meta
     safety.atomic_json(path, meta)
     return meta
 
@@ -347,7 +405,7 @@ def _merge_chapters(meta: Dict[str, Any]) -> Tuple[Dict[str, Dict[str, Any]], Li
         visible_rows = {int(row["id"]): row for row in _parse_visible(visible)}
         embedded_rows = {}
         if isinstance(plan, dict):
-            for item in plan.get("chapters") or []:
+            for item in _chapter_items(plan.get("chapters")):
                 if isinstance(item, dict) and "id" in item:
                     try:
                         embedded_rows[int(item["id"])] = item
@@ -393,7 +451,7 @@ def _merge_chapters(meta: Dict[str, Any]) -> Tuple[Dict[str, Dict[str, Any]], Li
             conflicts.append({"kind": "plan_comment_missing", "file": path.name})
             continue
         for row in _parse_visible(visible):
-            stored = next((x for x in plan.get("chapters") or []
+            stored = next((x for x in _chapter_items(plan.get("chapters"))
                            if isinstance(x, dict) and str(x.get("id")) == str(row["id"])), None)
             if stored is not None and _sha(str(stored.get("outline") or "")) != _sha(row["outline"]):
                 conflicts.append({"kind": "visible_text_edited", "file": path.name,
@@ -417,7 +475,7 @@ def conflicts(project) -> List[Dict[str, Any]]:
     except (OSError, ValueError):
         story = {}
     if isinstance(story, dict):
-        indexed = set((story.get("chapters") or {}).keys())
+        indexed = set(_normalize_chapter_map(story.get("chapters")).keys())
     present = set()
     for path in _plan_files(project):
         visible, _ = _strip_plan_comment(_read_text(path))
@@ -449,7 +507,7 @@ def _tombstone_numbers(project) -> set:
     numbers = set()
     for path in _plan_files(project):
         _visible, plan = _strip_plan_comment(_read_text(path))
-        for item in (plan or {}).get("chapters") or []:
+        for item in _chapter_items((plan or {}).get("chapters")):
             if isinstance(item, dict) and item.get("deleted"):
                 try:
                     numbers.add(int(item.get("id")))
@@ -466,8 +524,8 @@ def _legacy_chapters(project, meta: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
     the rebuildable cache (tombstoned deletions stay deleted).
     """
     result: Dict[str, Dict[str, Any]] = {}
-    rows = meta.get("legacy_chapters")
-    if not isinstance(rows, dict):
+    rows = _normalize_chapter_map(meta.get("legacy_chapters"))
+    if not rows:
         return result
     for key, item in rows.items():
         if not isinstance(item, dict):
@@ -514,7 +572,7 @@ def recover_plan(project, persist: bool = True) -> Dict[str, Any]:
     if not _plan_files(_book_path(meta)):
         if preserved:
             found.append({"kind": "outline_file_missing",
-                          "chapters": sorted(preserved, key=lambda key: int(key))[:20]})
+                          "chapters": sorted(preserved, key=_chapter_sort_key)[:20]})
         else:
             previous = {}
             story = _story_plan_path(project)
@@ -522,15 +580,15 @@ def recover_plan(project, persist: bool = True) -> Dict[str, Any]:
                 try:
                     value = safety.read_json_strict(story)
                     if isinstance(value, dict):
-                        previous = value.get("chapters") or {}
+                        previous = _normalize_chapter_map(value.get("chapters"))
                 except Exception:
                     previous = {}
             if previous:
                 found.append({"kind": "outline_file_missing",
-                              "chapters": sorted(previous, key=lambda key: int(key))[:20]})
+                              "chapters": sorted(previous, key=_chapter_sort_key)[:20]})
     elif preserved:
         found.append({"kind": "legacy_chapters_preserved",
-                      "chapters": sorted(preserved, key=lambda key: int(key))[:20]})
+                      "chapters": sorted(preserved, key=_chapter_sort_key)[:20]})
     meta.pop("_project", None)
     if persist:
         _sync_story_plan(project, meta, chapters, found)
@@ -599,7 +657,7 @@ def write_file(project, filename: str, *, content: str, revision: Optional[str] 
             payload_chapters = []
             for row in new_rows:
                 key = str(row["id"])
-                old_item = next((item for item in (old_plan or {}).get("chapters") or []
+                old_item = next((item for item in _chapter_items((old_plan or {}).get("chapters"))
                                  if isinstance(item, dict) and str(item.get("id")) == key), {})
                 if old_item.get("deleted"):
                     rev = int(old_item.get("chapter_rev") or 0) or 1

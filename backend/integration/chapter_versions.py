@@ -46,6 +46,7 @@ except ImportError:  # 直接以脚本运行本文件所在目录时
 
 SCHEMA_VERSION = 1
 _LOCK_NAME = ".lock"
+_ORIGINAL_REPLACE = replace_with_retry
 _WINDOWS_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _FS_NAME_LIMIT = 255
@@ -61,6 +62,7 @@ _CHAPTER_PATTERNS = (
     re.compile(r"第\s*0*(\d+)\s*章(?:[：:\-＿_\s]*(.*))?$"),
     re.compile(r"^\s*0*(\d+)(?:[：:\-＿_\s]*(.*))?$"),
 )
+_VERSION_SUBDIRS = ("objects", "candidates", "commits", "staging")
 
 
 class VersionError(RuntimeError):
@@ -102,11 +104,13 @@ def new_version_id(seq: int) -> str:
 
 
 def _assert_version_store(project) -> None:
-    """Reject ``.webnovel`` / ``chapter_versions`` symlinks before any write.
+    """Reject ``.webnovel`` / ``chapter_versions`` and nested store symlinks.
 
     A project directory may arrive through a sync tool or a hostile archive;
     writing objects/index through a directory symlink would silently place
-    version data outside the project (A-P2-12).
+    version data outside the project (A-P2-12).  Checking only the two outer
+    directories left ``objects``/``candidates``/``commits``/``staging`` free to
+    point outside the book (A-P2-10).
     """
     root = Path(project).resolve()
     current = Path(project)
@@ -126,6 +130,18 @@ def _assert_version_store(project) -> None:
             raise VersionConflict("unsafe_version_store") from exc
         if resolved != root and root not in resolved.parents:
             raise VersionConflict("unsafe_version_store")
+        for name in _VERSION_SUBDIRS:
+            child = store / name
+            try:
+                if not child.exists() and not child.is_symlink():
+                    continue
+                if child.is_symlink():
+                    raise VersionConflict("unsafe_version_store")
+                child_resolved = child.resolve()
+            except OSError as exc:
+                raise VersionConflict("unsafe_version_store") from exc
+            if child_resolved != resolved and resolved not in child_resolved.parents:
+                raise VersionConflict("unsafe_version_store")
 
 
 def store_root(project) -> Path:
@@ -529,6 +545,9 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
         entry = _chapter_entry(index, chapter)
         index_reconciled = entry.get("current") not in (None, current_sha)
         final_title = title if title is not None else (candidate.get("title") or _chapter_title(project, chapter))
+        title_before = _chapter_title(project, chapter, current_path) if current_path is not None else None
+        title_pending = bool(current_path is not None
+                             and normalize_title(final_title or "") != normalize_title(title_before or ""))
         if current_path is None:
             # Refuse an impossible filesystem name before leaving a prepared
             # commit record behind (A-P2-6).
@@ -538,7 +557,8 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
             "schema_version": SCHEMA_VERSION, "op_id": op, "project_id": project_id(project),
             "chapter_id": int(chapter), "candidate_id": candidate_id, "content_sha256": sha,
             "previous_sha256": current_sha, "state": "prepared", "done": [],
-            "title": final_title,
+            "title": final_title, "title_before": title_before,
+            "title_pending": title_pending, "title_rename_done": not title_pending,
             "index_reconciled": index_reconciled,
             "created_at": _now(), "updated_at": _now(),
         }
@@ -660,11 +680,19 @@ def _mark_recovery_failure(path: Path, record: Dict[str, Any], exc: BaseExceptio
         pass
 
 
+def _is_lock_busy(exc: BaseException) -> bool:
+    return (isinstance(exc, BlockingIOError)
+            or exc.__class__.__name__ == "PublicationBlocked"
+            or "resource_busy" in str(exc))
+
+
 def recover_pending(project) -> List[Dict[str, Any]]:
     """补齐被中断的提交；逐条隔离，无法判定的标记终态并保留现场。
 
-    ``committed``/``conflict``/``abandoned`` 都是终态，绝不在下一次恢复时
-    重新评估——否则作者明确回退或删除的正文会被旧候选静默覆盖 (A-P1-3)。
+    ``conflict``/``abandoned`` 是终态，绝不在下一次恢复时重新评估——否则
+    作者明确回退或删除的正文会被旧候选静默覆盖 (A-P1-3)。``committed``
+    的正文不再重写，但若标题改名/回执同步尚未完成，会做一次幂等对账
+    (A-R-03/A-R-06)。
     """
     paths = _ensure(project)
     results: List[Dict[str, Any]] = []
@@ -675,7 +703,46 @@ def recover_pending(project) -> List[Dict[str, Any]]:
             results.append({"op_id": path.stem, "chapter_id": 0,
                             "state": "recovery_error", "error": str(exc)[:200]})
             continue
-        if not isinstance(record, dict) or record.get("state") in {"committed", "conflict", "abandoned"}:
+        if not isinstance(record, dict):
+            continue
+        state = str(record.get("state") or "")
+        if state == "committed":
+            # A crash between the body/index commit and the filename/receipt
+            # update leaves a real committed version with a stale filename.
+            # Finish only that metadata work; never replay the body.
+            if record.get("title_pending") or record.get("title_rename_done") is False:
+                try:
+                    chapter = int(record.get("chapter_id") or 0)
+                except (TypeError, ValueError):
+                    chapter = 0
+                if chapter <= 0:
+                    continue
+                try:
+                    current_entry = load_index(project)["chapters"].get(str(chapter)) or {}
+                except Exception:  # noqa: BLE001 - corrupt index must not stop recovery
+                    current_entry = {}
+                if (record.get("content_sha256") and current_entry.get("current")
+                        and current_entry.get("current") != record.get("content_sha256")):
+                    # Superseded commit: its title belongs to an old version.
+                    continue
+                op = str(record.get("op_id") or path.stem)
+                try:
+                    with file_lock(paths["lock"]):
+                        outcome = reconcile_title(project, chapter, op_id=op, record=record)
+                    if outcome.get("renamed") or outcome.get("status") == "partial":
+                        results.append({"op_id": op, "chapter_id": chapter, "state": "committed",
+                                        "title": outcome.get("status"),
+                                        "renamed": bool(outcome.get("renamed")),
+                                        "title_conflict": bool(outcome.get("title_conflict"))})
+                except Exception as exc:  # noqa: BLE001 - keep every record isolated
+                    if _is_lock_busy(exc):
+                        results.append({"op_id": op, "chapter_id": chapter,
+                                        "state": "deferred", "reason": "lock_busy"})
+                    else:
+                        results.append({"op_id": op, "chapter_id": chapter, "state": "committed",
+                                        "title": "error", "error": str(exc)[:200]})
+            continue
+        if state in {"conflict", "abandoned"}:
             continue
         try:
             chapter = int(record.get("chapter_id") or 0)
@@ -773,15 +840,31 @@ def recover_pending(project) -> List[Dict[str, Any]]:
                     record["conflict_current"] = current_sha
                 record["updated_at"] = _now()
                 atomic_json(path, record)
+                if record.get("state") == "committed":
+                    # The body/index are committed; finish the title rename and
+                    # receipt sync while we still hold the store lock.
+                    reconcile_title(project, chapter,
+                                    op_id=str(record.get("op_id") or ""),
+                                    record=record)
                 results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
                                 "state": record["state"]})
         except OSError as exc:
+            if _is_lock_busy(exc):
+                results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                                "state": "deferred", "reason": "lock_busy"})
+                continue
             # 文件名过长 / 磁盘错误：单条记录标 conflict，后续记录继续恢复。
             _mark_recovery_failure(path, record, exc, "conflict",
                                    f"recovery_failed:{type(exc).__name__}")
             results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
                             "state": "conflict", "reason": f"recovery_failed:{type(exc).__name__}"})
         except Exception as exc:  # noqa: BLE001 - isolate every commit record
+            if _is_lock_busy(exc):
+                # A concurrent writer owns the store lock: defer this record;
+                # never rewrite an in-flight commit as recovery_error (A-P3-07).
+                results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                                "state": "deferred", "reason": "lock_busy"})
+                continue
             _mark_recovery_failure(path, record, exc, "recovery_error",
                                    f"recovery_failed:{type(exc).__name__}")
             results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
@@ -1049,6 +1132,9 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
         index = load_index(project)
         entry = _chapter_entry(index, chapter)
         final_title = title if title is not None else _chapter_title(project, chapter)
+        title_before = _chapter_title(project, chapter, current_path) if current_path is not None else None
+        title_pending = bool(current_path is not None
+                             and normalize_title(final_title or "") != normalize_title(title_before or ""))
         if current_path is None:
             # Refuse an impossible filesystem name before leaving a prepared
             # commit record behind (A-P2-6).
@@ -1057,7 +1143,9 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
             "schema_version": SCHEMA_VERSION, "op_id": op, "project_id": project_id(project),
             "chapter_id": int(chapter), "candidate_id": None, "content_sha256": sha,
             "previous_sha256": current_sha, "state": "prepared", "done": [],
-            "title": final_title, "index_reconciled": entry.get("current") not in (None, current_sha),
+            "title": final_title, "title_before": title_before,
+            "title_pending": title_pending, "title_rename_done": not title_pending,
+            "index_reconciled": entry.get("current") not in (None, current_sha),
             "raw_bytes": True, "created_at": _now(), "updated_at": _now(),
         }
         atomic_json(_commit_path(project, op), record)
@@ -1092,25 +1180,54 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
     return record
 
 
+def _sync_receipt_destination(project, chapter: int, destination: str) -> Dict[str, Any]:
+    """Read-latest, change only ``destination``, write under ``receipts.lock``.
+
+    Never rewrite the whole entry from a stale snapshot (A-P2-14) and never
+    let a corrupt/locked receipts table escape as a 500 after the body has
+    already been committed (A-R-03).
+    """
+    path = Path(project) / ".webnovel" / "writer_receipts.json"
+    if not path.is_file():
+        return {"status": "missing"}
+    lock = path.parent / "receipts.lock"
+    try:
+        with file_lock(lock):
+            try:
+                receipts = read_json_strict(path)
+            except (OSError, ValueError, RuntimeError) as exc:
+                return {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+            if not isinstance(receipts, dict):
+                return {"status": "failed", "error": "receipts_not_object"}
+            entry = receipts.get(str(int(chapter)))
+            if not isinstance(entry, dict):
+                return {"status": "missing"}
+            if entry.get("destination") == destination:
+                return {"status": "unchanged"}
+            entry["destination"] = destination
+            try:
+                atomic_json(path, receipts)
+            except (OSError, RuntimeError) as exc:
+                return {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+            return {"status": "updated"}
+    except RuntimeError as exc:
+        return {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+
+
 def _update_receipt_destination(project, chapter: int, destination: str) -> bool:
     """Keep ``writer_receipts.json`` pointing at the renamed chapter file."""
+    return _sync_receipt_destination(project, chapter, destination).get("status") in {"updated", "unchanged"}
+
+
+def _receipt_entry_present(project, chapter: int) -> bool:
     path = Path(project) / ".webnovel" / "writer_receipts.json"
     if not path.is_file():
         return False
-    lock = path.parent / "receipts.lock"
-    with file_lock(lock):
-        try:
-            receipts = read_json_strict(path)
-        except (OSError, ValueError):
-            return False
-        if not isinstance(receipts, dict):
-            return False
-        entry = receipts.get(str(int(chapter)))
-        if not isinstance(entry, dict):
-            return False
-        entry["destination"] = destination
-        atomic_json(path, receipts)
+    try:
+        receipts = read_json_strict(path)
+    except (OSError, ValueError, RuntimeError):
         return True
+    return isinstance(receipts, dict) and isinstance(receipts.get(str(int(chapter))), dict)
 
 
 def _update_commit_chapter_path(project, op_id: Optional[str], chapter_path_value: str) -> bool:
@@ -1125,6 +1242,112 @@ def _update_commit_chapter_path(project, op_id: Optional[str], chapter_path_valu
         record["updated_at"] = _now()
         atomic_json(_commit_path(project, str(op_id)), record)
         return True
+
+
+def reconcile_title(project, chapter: int, *, title: Optional[str] = None,
+                    op_id: Optional[str] = None,
+                    record: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Make filename, receipt and commit record agree, idempotently.
+
+    The commit marker records ``title_pending`` when the body landed under a
+    filename whose title differs from the version title.  Every retry and
+    ``recover_pending`` can therefore finish the rename and receipt sync
+    without guessing; a rename that loses a race returns a structured partial
+    result instead of claiming success (A-R-03/A-R-06).
+    """
+    chapter = int(chapter)
+    paths = _ensure(project)
+    with file_lock(paths["lock"]):
+        if op_id:
+            fresh = _load_commit(project, str(op_id))
+            if isinstance(fresh, dict):
+                record = fresh
+        try:
+            path = chapter_path(project, chapter)
+        except VersionConflict as exc:
+            # Two files for one chapter number: do not guess, and do not let
+            # the reconciliation crash after the body has been committed.
+            return {"chapter_id": chapter, "status": "partial", "renamed": False,
+                    "title_renamed": False, "title_conflict": True,
+                    "error": str(exc)[:160]}
+        if path is None:
+            return {"chapter_id": chapter, "status": "chapter_missing",
+                    "renamed": False, "title_renamed": False}
+        if isinstance(record, dict) and record.get("content_sha256"):
+            index_entry = load_index(project)["chapters"].get(str(chapter)) or {}
+            current = index_entry.get("current")
+            if current and current != record.get("content_sha256"):
+                # An older commit must never rename the file that a newer
+                # version now owns.
+                return {"chapter_id": chapter, "status": "stale",
+                        "renamed": False, "title_renamed": False}
+        actual_title = _chapter_title(project, chapter, path)
+        desired = title
+        if desired is None and isinstance(record, dict):
+            desired = record.get("title")
+        if desired is None:
+            desired = actual_title
+        desired = str(desired or "")
+        outcome: Dict[str, Any] = {
+            "chapter_id": chapter, "status": "ok", "renamed": False,
+            "title_renamed": normalize_title(actual_title) == normalize_title(desired),
+            "actual_title": actual_title, "desired_title": desired,
+        }
+        if not outcome["title_renamed"]:
+            try:
+                validate_chapter_filename(chapter, desired, with_temporary=True)
+                target = path.with_name(f"第{chapter}章" + (f"-{desired}" if desired else "") + ".md")
+                if target.resolve() != path.resolve():
+                    if target.exists():
+                        raise FileExistsError(str(target))
+                    if replace_with_retry is not _ORIGINAL_REPLACE:
+                        # A caller-supplied/fault-injected replace strategy
+                        # stays authoritative for this atomic move.
+                        replace_with_retry(path, target)
+                    else:
+                        try:
+                            from . import transaction_journal as journal
+                        except ImportError:  # direct script execution
+                            journal = None
+                        if journal is not None:
+                            journal.rename_with_retry(path, target)
+                        else:
+                            replace_with_retry(path, target)
+                    path = target
+                    outcome["renamed"] = True
+                    outcome["title_renamed"] = True
+            except (OSError, ValueError, RuntimeError) as exc:
+                outcome.update(status="partial", title_conflict=True,
+                               error=f"{type(exc).__name__}: {str(exc)[:160]}")
+        receipt_present = _receipt_entry_present(project, chapter)
+        try:
+            receipt_synced_now = _update_receipt_destination(project, chapter, str(path.resolve()))
+            receipt = {"status": "synced" if receipt_synced_now
+                       else ("missing" if not receipt_present else "failed")}
+        except Exception as exc:  # noqa: BLE001 - body is committed; report partial
+            receipt_synced_now = False
+            receipt = {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:120]}"}
+        outcome["receipt_status"] = receipt.get("status")
+        outcome["receipt_synced"] = bool(receipt_synced_now) or receipt.get("status") == "missing"
+        if receipt.get("status") == "failed":
+            outcome["status"] = "partial"
+            outcome["receipt_error"] = receipt.get("error")
+        if isinstance(record, dict) and record.get("op_id"):
+            changed = {
+                "chapter_path": str(path),
+                "title_rename_done": bool(outcome["title_renamed"]),
+                "title_pending": not (outcome["title_renamed"] and outcome["receipt_synced"]),
+                "receipt_synced": bool(outcome["receipt_synced"]),
+            }
+            if any(record.get(key) != value for key, value in changed.items()):
+                record.update(changed)
+                record["updated_at"] = _now()
+                try:
+                    atomic_json(_commit_path(project, str(record["op_id"])), record)
+                except (OSError, RuntimeError) as exc:
+                    outcome["status"] = "partial"
+                    outcome["record_error"] = f"{type(exc).__name__}: {str(exc)[:160]}"
+        return outcome
 
 
 def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[str] = None,
@@ -1166,22 +1389,23 @@ def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[s
                               source="restored", note=note or f"restore {sha[:12]}",
                               allow_new=path is None,
                               invalidation_reason="version_restored")
-    result["title_renamed"] = not needs_rename
-    if needs_rename and path is not None and target is not None:
-        try:
-            if target.exists():
-                raise FileExistsError(str(target))
-            replace_with_retry(path, target)
-        except OSError as exc:
-            # Body is restored; only the title rename lost a race.  Never
-            # report the whole operation as failed after changing the body.
-            result["title_renamed"] = False
-            result["title_conflict"] = True
-            result["title_error"] = str(exc)[:160]
-        else:
-            result["title_renamed"] = True
-            _update_receipt_destination(project, chapter, str(target.resolve()))
-            _update_commit_chapter_path(project, result.get("op_id"), str(target))
+    # The body commit deliberately does not rename: finish the title/receipt/
+    # commit-path state through one idempotent reconciliation, so a retry with
+    # the same op_id repairs an earlier partial write instead of reporting a
+    # bare success (A-R-03/A-R-06).
+    outcome = reconcile_title(project, chapter, title=title, op_id=result.get("op_id"))
+    result["title_renamed"] = bool(outcome.get("title_renamed"))
+    result["renamed"] = bool(outcome.get("renamed"))
+    result["receipt_synced"] = bool(outcome.get("receipt_synced"))
+    if outcome.get("status") == "partial":
+        result["status"] = "partial"
+        result["title_conflict"] = bool(outcome.get("title_conflict"))
+        if outcome.get("error"):
+            result["title_error"] = outcome["error"]
+        if outcome.get("receipt_error"):
+            result["receipt_error"] = outcome["receipt_error"]
+    else:
+        result["status"] = "restored"
     result["restored_version_id"] = (meta or {}).get("version_id") or sha
     return result
 

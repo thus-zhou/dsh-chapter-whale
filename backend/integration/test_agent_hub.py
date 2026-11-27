@@ -2,6 +2,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from integration import agent_hub as hub
 from integration import agent_room as room
@@ -193,6 +194,111 @@ class AmendmentPersistenceTest(unittest.TestCase):
         resumed = hub.resume_directive(self.db, directive_id=self.directive["id"])
         self.assertEqual(resumed["status"], "running")
         self.assertEqual(resumed["released_tasks"], 1)
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "pending")
+
+
+class ApprovalLifecycleHubTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self.tmp.name) / "manager.sqlite3"
+        room.initialize(self.db)
+        self.directive = room.create_directive(self.db, session_id="s", project_id="p",
+                                               title="写前三章", raw_instruction="写前三章",
+                                               autonomy="auto_chain")
+        self.task = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",
+                                     project_id="p", role="writer", title="写第2章",
+                                     tool_name="write_chapter", status="running")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def card(self, revision=1):
+        return room.create_approval(self.db, session_id="s", project_id="p",
+                                    directive_id=self.directive["id"],
+                                    directive_revision=revision, task_id=None,
+                                    kind="publish", title="发布",
+                                    artifact_fingerprint="fp", approved_scope_hash="scope",
+                                    detail={})
+
+    def test_amendment_supersedes_pending_card(self):
+        card = self.card()
+        hub.start_amendment(self.db, directive_id=self.directive["id"],
+                            amendment_text="改", task_ids=[self.task["id"]])
+        item = room.get_approval(self.db, card["id"])
+        self.assertEqual(item["status"], "superseded")
+        self.assertTrue(item["resolved_at"])
+        self.assertEqual(room.pending_approvals(self.db, project_id="p"), [])
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, card["id"], approved=True,
+                                  capability=card["capability"])
+        self.assertEqual(caught.exception.code, "approval_not_pending")
+
+    def test_cancel_supersedes_card_and_covers_all_active_states(self):
+        waiting_approval = room.create_task(self.db, directive_id=self.directive["id"],
+                                            session_id="s", project_id="p", role="writer",
+                                            title="等审批", tool_name="write_chapter",
+                                            status="awaiting_approval")
+        paused = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",
+                                  project_id="p", role="writer", title="等预算",
+                                  tool_name="write_chapter", status="paused_budget")
+        card = self.card()
+        hub.cancel_directive(self.db, directive_id=self.directive["id"])
+        for task_id in (self.task["id"], waiting_approval["id"], paused["id"]):
+            self.assertEqual(room.get_task(self.db, task_id)["status"], "cancelled")
+        self.assertEqual(room.get_approval(self.db, card["id"])["status"], "superseded")
+        self.assertEqual(room.pending_approvals(self.db, project_id="p"), [])
+
+    def test_resume_supersedes_card_and_requeues_paused_budget(self):
+        paused = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",
+                                  project_id="p", role="writer", title="等预算",
+                                  tool_name="write_chapter", status="paused_budget")
+        card = self.card()
+        resumed = hub.resume_directive(self.db, directive_id=self.directive["id"])
+        self.assertEqual(resumed["released_tasks"], 1)
+        self.assertEqual(room.get_task(self.db, paused["id"])["status"], "pending")
+        self.assertEqual(room.get_approval(self.db, card["id"])["status"], "superseded")
+
+    def test_amend_and_resume_reject_cancel_committed_after_precheck(self):
+        hub.cancel_directive(self.db, directive_id=self.directive["id"])
+        stale = dict(self.directive, status="running")
+        with mock.patch.object(hub.room, "get_directive", return_value=stale):
+            with self.assertRaises(hub.HubError) as caught:
+                hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                    amendment_text="偷偷复活", task_ids=[])
+            self.assertEqual(caught.exception.code, "directive_cancelled")
+            with self.assertRaises(hub.HubError) as caught:
+                hub.resume_directive(self.db, directive_id=self.directive["id"])
+            self.assertEqual(caught.exception.code, "directive_cancelled")
+        self.assertEqual(room.get_directive(self.db, self.directive["id"])["status"],
+                         "cancelled")
+
+    def test_repeated_holds_preserve_original_running_status(self):
+        first = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                    amendment_text="一改", task_ids=[self.task["id"]])
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "held")
+        second = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                     amendment_text="二改", task_ids=[self.task["id"]])
+        self.assertEqual(second["held_task_ids"], [self.task["id"]])
+        released = hub.release_holds_for_current(self.db,
+                                                 directive_id=self.directive["id"],
+                                                 amendment_id=second["amendment_id"])
+        self.assertEqual(released, 1)
+        # The original status survives two amendments instead of degrading to
+        # pending (B3-14).
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "running")
+        self.assertEqual(hub.release_holds_for_current(
+            self.db, directive_id=self.directive["id"],
+            amendment_id=first["amendment_id"]), 0)
+
+    def test_pending_task_is_held_and_restored_to_pending(self):
+        room.update_task(self.db, task_id=self.task["id"], status="pending")
+        started = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                      amendment_text="改", task_ids=[self.task["id"]])
+        self.assertEqual(started["held_task_ids"], [self.task["id"]])
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "held")
+        self.assertEqual(hub.release_holds_for_current(
+            self.db, directive_id=self.directive["id"],
+            amendment_id=started["amendment_id"]), 1)
         self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "pending")
 
 

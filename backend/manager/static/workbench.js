@@ -80,6 +80,7 @@
     dirty: false,
     composing: false,
     draftBlocked: false,
+    draftEpochRetries: 0,
     saveTimer: null,
     savingDraft: false,
     savingVersion: false,
@@ -215,14 +216,23 @@
       // A draft without its own recorded base is not safe to save against the
       // newest version: block it instead of silently treating v-latest as the
       // base (D-01-N).  The server supplies base_content for three-way merge.
-      if (!draft.baseVersionId || !draft.baseSha) {
-        return { baseVersionId: "", baseSha: "", baseContent: "", blocked: true };
+      // A missing base_content is also unsafe: an empty string is a real base
+      // (a new chapter), while null means the base version body is unknown and
+      // falling back to the current file would make the merge treat the
+      // newest text as "unchanged" (D-01R).
+      const hasBaseContent = draft.baseContent !== null && draft.baseContent !== undefined;
+      if (!draft.baseVersionId || !draft.baseSha || !hasBaseContent) {
+        return {
+          baseVersionId: draft.baseVersionId ? String(draft.baseVersionId) : "",
+          baseSha: draft.baseSha ? String(draft.baseSha) : "",
+          baseContent: null,
+          blocked: true,
+        };
       }
       return {
         baseVersionId: String(draft.baseVersionId),
         baseSha: String(draft.baseSha),
-        baseContent: draft.baseContent === null || draft.baseContent === undefined
-          ? "" : String(draft.baseContent),
+        baseContent: String(draft.baseContent),
         blocked: false,
       };
     }
@@ -236,6 +246,51 @@
 
   function isEditorBusyComposing() {
     return chapterApplyDeferred(state.composing, state.adapter && state.adapter.composing);
+  }
+
+  /* A conflict payload is the other window's draft: its recorded base is the
+     version that draft was edited from (D-01R2).  When base_content is not in
+     the payload, the local base is only reusable if it names the same version
+     and hash; otherwise the merge base is unknown and the draft is blocked. */
+  function conflictDraftBaseline(current, fallback) {
+    const source = current || {};
+    const previous = fallback || {};
+    const baseVersionId = source.base_version_id ? String(source.base_version_id) : "";
+    const baseSha = source.base_content_sha256 || source.base_sha256
+      ? String(source.base_content_sha256 || source.base_sha256) : "";
+    if (!baseVersionId || !baseSha) {
+      return { baseVersionId: "", baseSha: "", baseContent: null, blocked: true };
+    }
+    if (source.base_content !== null && source.base_content !== undefined) {
+      return { baseVersionId: baseVersionId, baseSha: baseSha, baseContent: String(source.base_content), blocked: false };
+    }
+    const sameBase = String(previous.baseVersionId || "") === baseVersionId
+      && String(previous.baseSha || "") === baseSha;
+    if (sameBase && previous.baseContent !== null && previous.baseContent !== undefined) {
+      return { baseVersionId: baseVersionId, baseSha: baseSha, baseContent: String(previous.baseContent), blocked: false };
+    }
+    return { baseVersionId: baseVersionId, baseSha: baseSha, baseContent: null, blocked: true };
+  }
+
+  function draftConflictSharesBase(current, chapterBase) {
+    const source = current || {};
+    const base = chapterBase || {};
+    if (!source.base_version_id || !(source.base_content_sha256 || source.base_sha256)) return false;
+    return String(source.base_version_id) === String(base.baseVersionId || "")
+      && String(source.base_content_sha256 || source.base_sha256) === String(base.baseSha || "");
+  }
+
+  function pageHideAction(persisted, dirty, blocked) {
+    if (persisted) return "none";
+    return dirty && !blocked ? "keepalive" : "none";
+  }
+
+  function mergeTailDraftMessage(details) {
+    const rows = Array.isArray(details) ? details : [];
+    const drafted = rows.filter((row) => row && row.draft && row.draft.exists);
+    if (!drafted.length) return null;
+    return drafted.map((row) => "第 " + Number(row.id) + " 章").join("、") +
+      " 还有未提交草稿；合并会归档并在回收站中保留整章（含草稿）。继续？";
   }
 
   function chapterApplyDeferred(composing, adapterComposing) {
@@ -425,12 +480,18 @@
       if (!state.composing && !state.pendingChapter) return;
       state.composing = false;
       if (state.adapter) state.adapter.endComposition();
+      // Browsers may skip compositionend when focus leaves mid-composition;
+      // the text already in the textarea is author input and must become
+      // dirty (and autosaved) before a pending chapter replaces it (D-03P).
+      handleEditorInput();
       commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
     });
     on(document, "visibilitychange", () => {
       if (document.visibilityState !== "hidden" || !state.composing) return;
       state.composing = false;
       if (state.adapter) state.adapter.endComposition();
+      // Same fallback as blur: do not lose the composed tail on tab switch.
+      handleEditorInput();
       // visibility reset must not leave a pending chapter without an exit.
       commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
     });
@@ -579,8 +640,11 @@
         flushDraftNow().catch(() => {});
       }
     });
-    on(window, "pagehide", () => {
-      if (!state.dirty || state.draftBlocked) return;
+    on(window, "pagehide", (event) => {
+      // bfcache also fires pagehide; a keepalive write there would advance the
+      // draft revision behind this page's back and make the restored page
+      // report a false conflict (D-14K).  Only a real teardown needs it.
+      if (pageHideAction(Boolean(event && event.persisted), state.dirty, state.draftBlocked) !== "keepalive") return;
       flushDraftKeepalive();
     });
     on(document, "pointerdown", (event) => {
@@ -1149,16 +1213,23 @@
     state.chapterStates.set(state.currentId, data);
     state.draft = draftIdentityFrom(draftInfo);
     const baseline = resolveDraftBaseline(state.draft, data);
-    state.baseContent = baseline.baseContent || String(data.content || "");
+    // An empty string is a valid base (a new chapter); only null/undefined
+    // means the base body is unknown.  A plain `||` would silently substitute
+    // the current file and make three-way merge erase background edits (D-01R).
+    const hasBaseContent = baseline.baseContent !== null && baseline.baseContent !== undefined;
+    state.baseContent = hasBaseContent ? String(baseline.baseContent) : null;
     state.baseVersionId = baseline.baseVersionId;
     state.baseSha = baseline.baseSha;
     state.draftBlocked = Boolean(baseline.blocked);
+    state.draftEpochRetries = 0;
     if (state.draft.exists) rememberDraftEpoch(state.draft.epoch);
     else {
       const remembered = recallDraftEpoch();
-      if (remembered !== null) state.draft.epoch = remembered;
+      // draft_epoch is monotonic; a remembered value must never pull the
+      // server's larger epoch back down (D-11S).
+      if (remembered !== null) state.draft.epoch = Math.max(Number(state.draft.epoch) || 0, remembered);
+      rememberDraftEpoch(state.draft.epoch);
     }
-    if (state.draftBlocked) banner("草稿缺少基线版本，已禁止保存；请先载入最新正文或另存草稿。", "error");
     state.adapter = new Core.EditorAdapter({ text: content, title: title });
     state.undo = new Core.UndoStack(20);
     state.draftQueue = new Core.DraftQueue();
@@ -1192,7 +1263,11 @@
     updateToolAvailability();
     setText(els.mobileTitle, "第 " + state.currentId + " 章 · " + (title || "无标题"));
     if (hasDraft) {
-      banner("已恢复未提交草稿" + (draftInfo.stale ? "（基于旧版本，保存时会做并发对比）" : "") + "。按 Ctrl+S 保存为正式版本。", "info");
+      if (state.draftBlocked) {
+        banner("已恢复草稿，但缺少基线正文，自动草稿与三方合并已暂停；可按 Ctrl+S 直接保存正式版本。", "error");
+      } else {
+        banner("已恢复未提交草稿" + (draftInfo.stale ? "（基于旧版本，保存时会做并发对比）" : "") + "。按 Ctrl+S 保存为正式版本。", "info");
+      }
     }
     if (state.view === "outline") setView("write");
     if (state.rightTab === "versions") loadVersions().catch(() => {});
@@ -1388,6 +1463,7 @@
       setText(els.saveState, "已保存");
       els.saveState.className = "wb-save-pill is-saved";
     }
+    if (els.save) els.save.disabled = Boolean(!state.currentId);
     setText(els.mobileTitle, "第 " + state.currentId + " 章 · " + (els.title.value || "无标题"));
   }
 
@@ -1612,7 +1688,12 @@
 
   function recallDraftEpoch() {
     try {
-      const value = Number(localStorage.getItem(epochStorageKey()));
+      // localStorage.getItem returns null for a missing key; Number(null) is 0,
+      // which previously masked the server's real epoch and locked autosave
+      // (D-11S).
+      const raw = localStorage.getItem(epochStorageKey());
+      if (raw === null || raw === undefined || raw === "") return null;
+      const value = Number(raw);
       return Number.isFinite(value) && value >= 0 ? value : null;
     } catch (ignored) {
       return null;
@@ -1664,6 +1745,7 @@
       const draft = result && result.draft ? result.draft : null;
       if (draft) {
         state.draft = draftIdentityFrom(draft);
+        state.draftEpochRetries = 0;
         rememberDraftEpoch(state.draft.epoch);
         state.lastSavedAt = draft.updated_at || new Date().toISOString();
         state.lastSaveKind = "draft";
@@ -1701,10 +1783,17 @@
       if (current && current.draft_id) throw error;
       const tried = Number(payload.expected_draft_epoch || 0);
       const candidates = [];
+      // The conflict response carries the server's exact monotonic epoch even
+      // when no draft row exists.  Try it first instead of a ±2 walk that can
+      // never reach a large epoch (D-11S).
+      const serverEpoch = Number(current && current.draft_epoch);
+      if (Number.isFinite(serverEpoch) && serverEpoch >= 0 && serverEpoch !== tried) {
+        candidates.push(serverEpoch);
+      }
       const remembered = recallDraftEpoch();
-      if (remembered !== null && remembered !== tried) candidates.push(remembered);
+      if (remembered !== null && remembered !== tried && !candidates.includes(remembered)) candidates.push(remembered);
       for (let epoch = Math.max(0, tried - 2); epoch <= Math.min(64, tried + 2); epoch += 1) {
-        if (epoch !== tried) candidates.push(epoch);
+        if (epoch !== tried && !candidates.includes(epoch)) candidates.push(epoch);
       }
       const deadline = Date.now() + 20000;
       for (const epoch of candidates.slice(0, 5)) {
@@ -1774,8 +1863,23 @@
     if (error.code === "draft_conflict") {
       const current = error.payload && error.payload.current_draft;
       if (!current || !current.draft_id) {
+        const serverEpoch = Number(current && current.draft_epoch);
+        if (Number.isFinite(serverEpoch) && serverEpoch >= 0) {
+          state.draftEpochRetries = Number(state.draftEpochRetries || 0) + 1;
+          if (state.draftEpochRetries <= 3) {
+            // The response did carry the authoritative epoch; sync to it and
+            // retry instead of pausing autosave forever (D-11S).
+            state.draft.epoch = Math.max(Number(state.draft.epoch) || 0, serverEpoch);
+            rememberDraftEpoch(state.draft.epoch);
+            state.draftBlocked = false;
+            banner("草稿纪元已与服务端同步（epoch " + state.draft.epoch + "），正在重试自动草稿。", "info");
+            updateEditorMeta();
+            scheduleDraftSave(600);
+            return;
+          }
+        }
         state.draftBlocked = true;
-        banner("草稿纪元无法与服务端同步（响应未返回 draft_epoch），自动草稿已暂停；请先保存正式版本。", "error");
+        banner("草稿纪元仍无法同步，自动草稿已暂停；按 Ctrl+S 保存正式版本后会自动恢复。", "error");
         updateEditorMeta();
         return;
       }
@@ -1803,10 +1907,16 @@
           await flushDraftNow();
         } catch (error) {
           if (error instanceof ApiError && error.code === "draft_conflict") {
+            const current = error.payload && error.payload.current_draft;
             handleDraftError(error);
-            return;
+            // A live server draft needs an explicit compare/merge; an epoch
+            // mismatch with no draft row must not block the version save that
+            // is the documented recovery (D-11S).
+            if (current && current.draft_id) return;
+            toast("草稿纪元仍未同步，改为直接保存正式版本", true);
+          } else {
+            toast("草稿未能保存，改为直接保存正式版本：" + describeError(error), true);
           }
-          toast("草稿未能保存，改为直接保存正式版本：" + describeError(error), true);
         }
       }
       state.savingVersion = true;
@@ -1858,6 +1968,12 @@
     state.baseContent = savedContent;
     state.baseVersionId = String(response.version_id || state.baseVersionId || "");
     state.baseSha = String(response.content_sha256 || response.sha256 || state.baseSha || "");
+    // A committed version is a fresh authoritative base; a previous epoch
+    // mismatch or missing draft is no longer a reason to keep autosave paused
+    // (D-11S).  draft_preserved re-blocks below because another revision lives.
+    state.draftBlocked = false;
+    state.draftEpochRetries = 0;
+    banner("");
     if (state.chapter) {
       state.chapter.sha256 = state.baseSha;
       state.chapter.content_sha256 = state.baseSha;
@@ -1937,6 +2053,7 @@
         content: draft.content,
         base_version_id: draft.base_version_id,
         base_content_sha256: draft.base_content_sha256 || draft.base_sha256,
+        base_content: draft.base_content,
         updated_at: draft.updated_at,
       });
     } catch (error) {
@@ -2015,7 +2132,35 @@
     state.conflict = null;
   }
 
-  function resolveConflict(action) {
+  /* Conflict payloads do not carry base_content.  If the local base body is
+     unknown (blocked draft) or names another version, fetch the chapter's
+     draft base from the server; if that also fails, the caller stays blocked
+     instead of merging against the wrong text (D-01R/D-01R2). */
+  async function fetchConflictDraftBase(current) {
+    const source = current || {};
+    const fallback = state.baseContent === null || state.baseContent === undefined ? null : {
+      baseVersionId: state.baseVersionId,
+      baseSha: state.baseSha,
+      baseContent: state.baseContent,
+    };
+    let adopted = conflictDraftBaseline(source, fallback);
+    if (!adopted.blocked || !source.base_version_id || !state.projectId || !state.currentId) return adopted;
+    try {
+      const data = await api(
+        "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(state.currentId),
+        "GET", undefined, 15000,
+      );
+      const draft = data && data.draft;
+      if (!draft || !draft.exists) return adopted;
+      if (source.draft_id && draft.draft_id && String(draft.draft_id) !== String(source.draft_id)) return adopted;
+      adopted = conflictDraftBaseline({ ...source, base_content: draft.base_content }, fallback);
+    } catch (ignored) {
+      /* keep the blocked result: a failed lookup must not invent a base */
+    }
+    return adopted;
+  }
+
+  async function resolveConflict(action) {
     const conflict = state.conflict;
     if (!conflict) {
       hideConflict();
@@ -2032,24 +2177,33 @@
     if (action === "reload") {
       if (conflict.kind === "draft") {
         const current = conflict.current || {};
+        const adopted = await fetchConflictDraftBase(current);
         state.draft = {
           id: current.draft_id || null,
           epoch: Number(current.draft_epoch || 0),
           revision: Number(current.draft_revision || 0),
           exists: Boolean(current.draft_id),
-          baseVersionId: current.base_version_id || state.baseVersionId,
-          baseSha: current.base_content_sha256 || state.baseSha,
+          baseVersionId: adopted.baseVersionId || null,
+          baseSha: adopted.baseSha || null,
+          baseContent: adopted.blocked ? null : adopted.baseContent,
           updatedAt: current.updated_at || null,
         };
+        // The other draft was edited from its own base, not from the newest
+        // file version; adopting it keeps the next Ctrl+S on the right
+        // expected version (D-01R2).
+        state.baseVersionId = adopted.baseVersionId;
+        state.baseSha = adopted.baseSha;
+        state.baseContent = adopted.baseContent;
+        state.draftBlocked = Boolean(adopted.blocked);
         if (!setEditorValue(String(current.content || ""), String(current.title || ""), false)) {
           toast("输入法仍在组合文字，请完成后再载入对方版本", true);
           return;
         }
         state.persistedSignature = signature(els.title.value, els.editor.value);
         state.dirty = false;
-        state.draftBlocked = false;
         state.checkpointBase = els.editor.value;
         if (state.adapter) state.adapter.markRevision(state.draft.id, state.draft.epoch, state.draft.revision);
+        if (state.draftBlocked) banner("对方草稿的基线正文不可用，自动合并已暂停；请核对正文后保存或载入最新正文。", "error");
       } else {
         const payload = conflict.current || {};
         state.baseVersionId = String(payload.current_version_id || "");
@@ -2069,7 +2223,26 @@
       return;
     }
     if (action === "merge") {
-      if (state.draftBlocked || !state.baseContent) {
+      let adoptedDraft = null;
+      if (conflict.kind === "draft") {
+        if (!draftConflictSharesBase(conflict.current, {
+          baseVersionId: state.baseVersionId,
+          baseSha: state.baseSha,
+        })) {
+          // Merging a draft based on another version against the current file
+          // would present a stale draft as the author's intent and let a later
+          // Ctrl+S overwrite background text (D-01R/D-01R2).
+          setText(els.conflictMessage,
+            "对方草稿基于另一个版本（" + shortId((conflict.current && conflict.current.base_version_id) || "") +
+            "），自动合并可能覆盖后台正文。请先载入对方草稿，核对后再保存。");
+          return;
+        }
+        adoptedDraft = await fetchConflictDraftBase(conflict.current);
+        if (adoptedDraft.blocked) {
+          toast("草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。", true);
+          return;
+        }
+      } else if (state.draftBlocked) {
         toast("草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。", true);
         return;
       }
@@ -2077,7 +2250,7 @@
         ? String((conflict.current && conflict.current.content) || "")
         : String((conflict.current && conflict.current.current_content) || "");
       const local = els.editor.value;
-      const base = state.baseContent || "";
+      const base = conflict.kind === "draft" ? adoptedDraft.baseContent : String(state.baseContent === null || state.baseContent === undefined ? "" : state.baseContent);
       const merged = Core.threeWayTextMerge(base, server, local);
       if (merged.conflicts.length) {
         setText(els.conflictMessage,
@@ -2087,16 +2260,21 @@
       }
       if (conflict.kind === "draft") {
         const current = conflict.current || {};
+        const adopted = adoptedDraft;
         state.draft = {
           id: current.draft_id || null,
           epoch: Number(current.draft_epoch || 0),
           revision: Number(current.draft_revision || 0),
           exists: Boolean(current.draft_id),
-          baseVersionId: current.base_version_id || state.baseVersionId,
-          baseSha: current.base_content_sha256 || state.baseSha,
+          baseVersionId: adopted.baseVersionId || null,
+          baseSha: adopted.baseSha || null,
+          baseContent: adopted.blocked ? null : adopted.baseContent,
           updatedAt: current.updated_at || null,
         };
-        state.draftBlocked = false;
+        state.baseVersionId = adopted.baseVersionId;
+        state.baseSha = adopted.baseSha;
+        state.baseContent = adopted.baseContent;
+        state.draftBlocked = Boolean(adopted.blocked);
       } else {
         const payload = conflict.current || {};
         state.baseVersionId = String(payload.current_version_id || state.baseVersionId);
@@ -3187,11 +3365,31 @@
       return;
     }
     if (kind === "merge") {
-      const max = Math.max.apply(null, state.chapters.map((item) => item.id));
-      setText(els.mergeLabel, "把第 " + max + " 章并入第 " + (max - 1) + " 章；两章都必须未发布。");
-      openDialog("合并最后两章", "toolMerge");
+      prepareMergeTail().catch((error) => toast("检查尾章草稿失败：" + describeError(error), true));
       return;
     }
+  }
+
+  /* merge-tail merges the last two chapters regardless of which chapter is
+     open.  Their drafts are deleted by the backend, so check both chapters
+     before opening the tool (D-09R). */
+  async function prepareMergeTail() {
+    if (!state.projectId) return;
+    const ids = state.chapters.map((item) => Number(item.id)).filter((id) => Number.isFinite(id));
+    if (ids.length < 2) {
+      toast("至少需要两章才能合并", true);
+      return;
+    }
+    const last = Math.max.apply(null, ids);
+    const previous = last - 1;
+    const details = await Promise.all([previous, last].map((id) => api(
+      "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(id),
+      "GET", undefined, 15000,
+    )));
+    const warning = mergeTailDraftMessage(details);
+    if (warning && !window.confirm(warning)) return;
+    setText(els.mergeLabel, "把第 " + last + " 章并入第 " + previous + " 章；两章都必须未发布。");
+    openDialog("合并最后两章", "toolMerge");
   }
 
   function updateToolAvailability() {
@@ -3289,9 +3487,13 @@
     closeDialog();
     toast("已合并为第 " + result.chapter_id + " 章");
     await loadChapters(state.projectId);
-    const oldDraftId = state.draft.exists ? state.draft.id : null;
-    const cleaned = await discardChapterDraft(result.chapter_id, oldDraftId);
-    await openChapter(result.chapter_id, { force: true, skipDraft: cleaned });
+    // Only the currently open chapter's draft identity belongs to the merged
+    // chapter; using it for an unrelated chapter would delete that chapter's
+    // draft.  The dropped tail chapter's draft is archived by the backend.
+    const mergedId = Number(result.chapter_id);
+    const oldDraftId = state.currentId === mergedId && state.draft.exists ? state.draft.id : null;
+    const cleaned = oldDraftId ? await discardChapterDraft(mergedId, oldDraftId) : false;
+    await openChapter(mergedId, { force: true, skipDraft: cleaned });
   }
 
   async function readImportFile() {
@@ -3493,6 +3695,10 @@
   if (typeof globalThis !== "undefined") {
     globalThis.__workbenchTestHooks = Object.freeze({
       resolveDraftBaseline: resolveDraftBaseline,
+      conflictDraftBaseline: conflictDraftBaseline,
+      draftConflictSharesBase: draftConflictSharesBase,
+      pageHideAction: pageHideAction,
+      mergeTailDraftMessage: mergeTailDraftMessage,
       ctrlSIntentFor: ctrlSIntentFor,
       editorWriteBlocked: editorWriteBlocked,
       chapterApplyDeferred: chapterApplyDeferred,

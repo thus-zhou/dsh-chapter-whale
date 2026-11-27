@@ -122,37 +122,106 @@ def connection(db_path):
     return db
 
 
-def record_gap(db_path, kind):
-    """Independent of the possibly broken ledger; contains no prompt or credential."""
+def _project_key(value):
+    try:
+        return str(Path(str(value)).resolve()).casefold() if value else ""
+    except (OSError, ValueError):
+        return str(value or "").casefold()
+
+
+def record_gap(db_path, kind, project=None):
+    """Independent of the possibly broken ledger; contains no prompt or credential.
+
+    A gap records the project and can be resolved; the fallback gate only
+    consults this project's recent unresolved gaps (B3-05).
+    """
     global MISSED_EVENTS
     MISSED_EVENTS += 1
     try:
         from fanqie_auto_publish.publication_safety import atomic_json
         folder = Path(str(db_path) + '.gaps')
-        atomic_json(folder / (uuid.uuid4().hex + '.json'), {'at': datetime.now(timezone.utc).isoformat(), 'kind': kind})
+        atomic_json(folder / (uuid.uuid4().hex + '.json'),
+                    {'at': datetime.now(timezone.utc).isoformat(), 'kind': kind,
+                     'project': str(project) if project else None, 'resolved_at': None})
     except Exception:
         print('[费用记录] 严重：独立告警也无法写入，禁止自动付费回退', flush=True)
 
 
-def ledger_gaps(db_path, *, within_hours=None):
-    """Count gap markers, optionally only those recent enough to matter.
+def _gap_document(path):
+    try:
+        value = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def ledger_gaps(db_path, *, within_hours=None, project=None, unresolved_only=True):
+    """Count gap markers, optionally only recent/unresolved/for one project.
 
     A single transient write failure used to mark the whole report incomplete
     forever (B-25).  ``within_hours`` lets the report judge completeness by a
-    rolling window while still exposing the historical total.
+    rolling window while still exposing the historical total.  A gap without a
+    project (legacy row or a genuinely global ledger failure) still applies to
+    every project.
     """
-    files = list(Path(str(db_path) + '.gaps').glob('*.json'))
-    if within_hours is None:
-        return len(files)
-    cutoff = time.time() - float(within_hours) * 3600
+    folder = Path(str(db_path) + '.gaps')
+    files = list(folder.glob('*.json'))
+    cutoff = time.time() - float(within_hours) * 3600 if within_hours is not None else None
+    wanted = _project_key(project) if project else None
     count = 0
     for path in files:
         try:
-            if path.stat().st_mtime >= cutoff:
-                count += 1
+            if cutoff is not None and path.stat().st_mtime < cutoff:
+                continue
         except OSError:
             continue
+        document = _gap_document(path)
+        if unresolved_only and document.get('resolved_at'):
+            continue
+        recorded = document.get('project')
+        if wanted and recorded and _project_key(recorded) != wanted:
+            continue
+        count += 1
     return count
+
+
+def gap_records(db_path, *, project=None, unresolved_only=True):
+    """Return gap metadata for maintenance/UI (never contains prompts)."""
+    folder = Path(str(db_path) + '.gaps')
+    wanted = _project_key(project) if project else None
+    result = []
+    for path in folder.glob('*.json'):
+        document = _gap_document(path)
+        if unresolved_only and document.get('resolved_at'):
+            continue
+        recorded = document.get('project')
+        if wanted and recorded and _project_key(recorded) != wanted:
+            continue
+        result.append({'path': str(path), 'kind': document.get('kind'),
+                       'at': document.get('at'), 'project': recorded,
+                       'resolved_at': document.get('resolved_at')})
+    return result
+
+
+def resolve_gaps(db_path, *, kind=None, project=None):
+    """Mark matching gap markers resolved instead of requiring file deletion."""
+    from fanqie_auto_publish.publication_safety import atomic_json
+    folder = Path(str(db_path) + '.gaps')
+    wanted = _project_key(project) if project else None
+    resolved = 0
+    for path in folder.glob('*.json'):
+        document = _gap_document(path)
+        if document.get('resolved_at'):
+            continue
+        if kind is not None and document.get('kind') != kind:
+            continue
+        recorded = document.get('project')
+        if wanted and recorded and _project_key(recorded) != wanted:
+            continue
+        document['resolved_at'] = datetime.now(timezone.utc).isoformat()
+        atomic_json(path, document)
+        resolved += 1
+    return resolved
 
 
 def empty_prices(): return {"revision":0,"usd_to_cny":None,"rates":[]}
@@ -223,6 +292,10 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         return None
     capped = any(policy[key] is not None for key in ('requests_per_day', 'request_tokens', 'chapter_tokens',
                                                      'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))
+    if guard and not directive_id:
+        # A guard without its directive used to be dropped silently, leaving
+        # the caller believing max_calls/budget_cap_cny were enforced (B3-25).
+        raise ValueError('directive_id_required')
     guard = dict(guard or {}) if directive_id else {}
     if not capped and not guard:
         return None
@@ -306,7 +379,7 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         # 预算已开启但预留写不进去：不能假装限额仍然有效，必须挡住这次请求。
         if db is not None:
             db.rollback()
-        record_gap(db_path, 'budget_reserve_failed')
+        record_gap(db_path, 'budget_reserve_failed', project)
         raise BudgetExceeded('预算无法预留，已停止新请求', {'error_type': type(exc).__name__}) from exc
     finally:
         if db is not None:
@@ -595,8 +668,11 @@ def tokens(value):
         if value.is_integer() and 0 <= value <= 10**12:
             return int(value)
         return None
-    if isinstance(value, str) and re.fullmatch(r"\d{1,13}", value.strip()):
-        return int(value.strip())
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r"\d{1,13}", text):
+            parsed = int(text)
+            return parsed if 0 <= parsed <= 10**12 else None
     return None
 
 
@@ -742,7 +818,7 @@ class Attempt:
                 raise
             except Exception as exc:
                 # 限额已开启时，预留失败就等于没有限额：这次请求不能发出去。
-                record_gap(self.db_path, 'budget_reserve_failed')
+                record_gap(self.db_path, 'budget_reserve_failed', project)
                 raise BudgetExceeded('预算无法预留，已停止新请求',
                                      {'error_type': type(exc).__name__}) from exc
             self.persist()
@@ -751,7 +827,7 @@ class Attempt:
             raise
         except Exception as exc:
             self.event=None
-            record_gap(self.db_path, 'initial_record_failed')
+            record_gap(self.db_path, 'initial_record_failed', locals().get('project'))
             if capped:
                 raise BudgetExceeded('预算初始化失败，已停止新请求',
                                      {'error_type': type(exc).__name__}) from exc
@@ -882,7 +958,7 @@ def report(db_path, project=None, chapter=None, days=0):
             "daily":groups(lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat(),
                            lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()),
             "recent":list(reversed(events[-100:])),"total_records":len(events),
-            "missed_events":max(gaps_recent, MISSED_EVENTS)}
+            "missed_events":gaps_recent}
 
 
 def export_csv(db_path, **filters):

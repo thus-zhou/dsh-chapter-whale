@@ -6062,14 +6062,18 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         function wbRecallDraftEpoch(projectId, chapterId) {
           try {
-            const value = Number(localStorage.getItem(wbDraftEpochKey(projectId, chapterId)));
+            // A missing key is null, not epoch 0. Number(null) === 0 used to
+            // override the server's epoch and stall autosave (D-11S).
+            const raw = localStorage.getItem(wbDraftEpochKey(projectId, chapterId));
+            if (raw === null || raw === undefined || raw === '') return null;
+            const value = Number(raw);
             return Number.isFinite(value) && value >= 0 ? value : null;
           } catch {
             return null;
           }
         }
 
-        function wbDraftEpochCandidates(tried, remembered) {
+        function wbDraftEpochCandidates(tried, remembered, serverEpoch) {
           const current = Number(tried);
           const base = Number.isFinite(current) && current >= 0 ? current : 0;
           const candidates = [];
@@ -6080,6 +6084,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             seen.add(number);
             candidates.push(number);
           };
+          // The server's conflict response names the exact monotonic epoch even
+          // when no draft row exists; try it before the bounded ±2 window.
+          if (serverEpoch !== null && serverEpoch !== undefined) push(serverEpoch);
           if (remembered !== null && remembered !== undefined) push(remembered);
           for (let epoch = Math.max(0, base - 2); epoch <= Math.min(64, base + 2); epoch += 1) push(epoch);
           return candidates.slice(0, 5);
@@ -6087,7 +6094,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
         async function wbRetryDraftWithoutActive(put, payload, options) {
           const settings = options || {};
-          const candidates = wbDraftEpochCandidates(payload && payload.expected_draft_epoch, settings.rememberedEpoch);
+          const candidates = wbDraftEpochCandidates(
+            payload && payload.expected_draft_epoch,
+            settings.rememberedEpoch,
+            settings.serverEpoch,
+          );
           for (const epoch of candidates) {
             const retry = {
               ...payload,
@@ -6109,6 +6120,51 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         function wbResetComposition(composingRef, adapter) {
           if (composingRef) composingRef.current = false;
           if (adapter && typeof adapter.endComposition === 'function') adapter.endComposition();
+        }
+
+        /* A server draft's recorded base is the version it was edited from.
+           base_content is only present on chapter GETs, not on conflict
+           payloads; when it is absent, the local base is reusable only if it
+           names the same version and hash.  Never fall back to the newest file
+           body: that turns a stale draft into a "clean" merge that erases
+           background edits (D-01R/D-01R2). */
+        function wbDraftBaseAdoption(draft, fallback) {
+          const item = draft || {};
+          const previous = fallback || {};
+          const versionId = item.base_version_id ? String(item.base_version_id) : '';
+          const sha256 = item.base_content_sha256 || item.base_sha256
+            ? String(item.base_content_sha256 || item.base_sha256) : '';
+          if (!versionId || !sha256) return { version_id: '', sha256: '', content: '', blocked: true };
+          if (item.base_content !== null && item.base_content !== undefined) {
+            return { version_id: versionId, sha256, content: wbNormalizeLf(item.base_content), blocked: false };
+          }
+          if (String(previous.version_id || '') === versionId && String(previous.sha256 || '') === sha256) {
+            return { version_id: versionId, sha256, content: wbNormalizeLf(previous.content), blocked: false };
+          }
+          return { version_id: versionId, sha256, content: '', blocked: true };
+        }
+
+        function wbMergeBaseCompatible(base, draft) {
+          const item = draft || {};
+          const current = base || {};
+          const sha256 = item.base_content_sha256 || item.base_sha256;
+          if (!item.base_version_id || !sha256) return false;
+          return String(item.base_version_id) === String(current.version_id || '')
+            && String(sha256) === String(current.sha256 || '');
+        }
+
+        function wbSameChapterRef(chapter, project, owner) {
+          return Boolean(chapter && project && owner
+            && String(chapter.id) === String(owner.chapterId)
+            && String(project.id) === String(owner.projectId));
+        }
+
+        function wbMergeTailDraftMessage(rows) {
+          const details = Array.isArray(rows) ? rows : [];
+          const drafted = details.filter((row) => row && row.draft && row.draft.exists);
+          if (!drafted.length) return null;
+          return drafted.map((row) => `第 ${Number(row.id)} 章`).join('、')
+            + ' 还有未提交草稿；合并会归档并在回收站中保留整章（含草稿）。继续？';
         }
 
         /* A draft PUT that finishes after more typing must schedule another
@@ -6165,6 +6221,9 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const savingVersionRef = React.useRef(false);
           const roomTimerRef = React.useRef(null);
           const skipDraftRef = React.useRef(new Set());
+          const pendingChapterRef = React.useRef(null);
+          const commitPendingRef = React.useRef(null);
+          const compositionSyncRef = React.useRef(null);
 
           const projectsPoll = usePoll(() => api('/projects'), [], 0);
           const projectRows = Array.isArray(projectsPoll.data) ? projectsPoll.data.filter(Boolean) : ((props.overview && props.overview.projects) || []);
@@ -6223,9 +6282,14 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           };
 
           React.useEffect(() => {
-            const onWindowBlur = () => resetComposition();
+            const settleComposition = () => {
+              resetComposition();
+              if (compositionSyncRef.current) compositionSyncRef.current();
+              if (commitPendingRef.current) commitPendingRef.current().catch(() => {});
+            };
+            const onWindowBlur = () => settleComposition();
             const onVisibility = () => {
-              if (document.hidden) resetComposition();
+              if (document.hidden) settleComposition();
             };
             window.addEventListener('blur', onWindowBlur);
             document.addEventListener('visibilitychange', onVisibility);
@@ -6261,19 +6325,18 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
             const draft = !ignoreDraft && data.draft && data.draft.exists ? data.draft : null;
             const draftPresent = Boolean(draft && draft.exists);
-            const draftBaseContent = draftPresent && draft.base_content !== null
-              && draft.base_content !== undefined ? String(draft.base_content) : null;
-            baseRef.current = {
+            baseRef.current = draftPresent
               /* When a draft exists, its recorded base is the version the
-                 author actually edited. Trusting the newest file sha instead
-                 would let a stale draft silently overwrite a background save. */
-              version_id: draftPresent ? String(draft.base_version_id || '') : String(data.version_id || ''),
-              sha256: draftPresent ? String(draft.base_sha256 || '') : String(data.sha256 || data.content_sha256 || ''),
-              content: draftPresent
-                ? wbNormalizeLf(draftBaseContent === null ? '' : draftBaseContent)
-                : wbNormalizeLf(data.content),
-              blocked: draftPresent && (!draft.base_version_id || draftBaseContent === null),
-            };
+                 author actually edited.  Trusting the newest file sha instead
+                 would let a stale draft silently overwrite a background save;
+                 a null base_content blocks merge instead of substituting it. */
+              ? wbDraftBaseAdoption(draft, baseRef.current)
+              : {
+                  version_id: String(data.version_id || ''),
+                  sha256: String(data.sha256 || data.content_sha256 || ''),
+                  content: wbNormalizeLf(data.content),
+                  blocked: false,
+                };
             if (settings.reset) {
               undoRef.current = new WorkbenchCore.UndoStack(20);
               adapterRef.current = new WorkbenchCore.EditorAdapter({ text: doc.content, title: doc.title });
@@ -6306,6 +6369,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (!data) return;
             const key = `${projectId}:${data.id}`;
             if (key !== loadedKeyRef.current) {
+              if (composingRef.current) {
+                // Never replace the textarea while the IME owns it; keep the
+                // new chapter pending until composition ends or focus leaves
+                // (D-C1, mirroring the static pendingChapter path).
+                pendingChapterRef.current = { key, data };
+                return;
+              }
               loadedKeyRef.current = key;
               applyServerData(data, { reset: true, sameChapter: false });
             } else if (!composingRef.current && !dirtyRef.current) {
@@ -6381,7 +6451,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                           { method: 'PUT', body: retryBody },
                         ),
                         body,
-                        { rememberedEpoch: remembered },
+                        { rememberedEpoch: remembered, serverEpoch: current.draft_epoch },
                       );
                       if (retried) {
                         adopt((retried && retried.draft) || {});
@@ -6441,6 +6511,24 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (!dirtyRef.current) return true;
             return queueDraftSave(() => (dirtyRef.current ? captureDraft() : null));
           };
+
+          /* Apply a chapter held back during IME composition, after the old
+             chapter's draft is safely persisted.  A failed save keeps both the
+             text and the old chapter on screen (D-C1). */
+          const commitPendingChapter = async () => {
+            const pending = pendingChapterRef.current;
+            if (!pending || composingRef.current) return false;
+            if (dirtyRef.current) {
+              const flushed = await flushDraft();
+              if (!flushed) return false;
+            }
+            if (pendingChapterRef.current !== pending || composingRef.current) return false;
+            pendingChapterRef.current = null;
+            loadedKeyRef.current = pending.key;
+            applyServerData(pending.data, { reset: true, sameChapter: false });
+            return true;
+          };
+          commitPendingRef.current = commitPendingChapter;
 
           const flushDraftKeepalive = () => {
             if (!dirtyRef.current) return;
@@ -6511,6 +6599,16 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             scheduleDraft();
           };
 
+          /* Browsers can drop compositionend on blur/tab switch.  Take the
+             textarea's current value as input before the adapter is reset, so
+             the composed tail is marked dirty and autosaved (D-03P/D-C1). */
+          const syncComposedText = () => {
+            const area = textareaRef.current;
+            if (!area) return;
+            if (area.value !== textRef.current) applyContentInput(area.value);
+          };
+          compositionSyncRef.current = syncComposedText;
+
           const applyTitleInput = (next) => {
             if (!chapterRef.current) return;
             const value = String(next || '');
@@ -6550,13 +6648,25 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             setUndoState({ undo: undoRef.current.canUndo, redo: undoRef.current.canRedo });
           };
 
-          const changeProject = (nextId) => {
+          const changeProject = async (nextId) => {
             if (String(nextId) === String(projectId)) return;
             cancelDraftTimer();
             if (dirtyRef.current) {
-              const capture = captureDraft();
-              if (capture) queueDraftSave(capture);
+              // Wait for the old chapter's draft before switching.  A failed
+              // save keeps the author on the current project instead of
+              // dropping the last keystrokes with only a toast (D-C1).
+              await draftChainRef.current;
+              const saved = await flushDraft();
+              if (!saved) {
+                if (conflictRef.current) {
+                  setNotice({ tone: 'warn', text: '当前章草稿保存失败，已留在当前章；请先处理草稿冲突。' });
+                } else {
+                  toast.push('当前章草稿保存失败，已留在当前章；请重试或先保存正式版本', 'err');
+                }
+                return;
+              }
             }
+            pendingChapterRef.current = null;
             setProjectId(String(nextId));
             setSelectedChapter(null);
             setConflict(null);
@@ -6566,13 +6676,22 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (typeof props.selectProject === 'function') props.selectProject(String(nextId));
           };
 
-          const selectChapter = (nextId) => {
+          const selectChapter = async (nextId) => {
             if (String(nextId) === String(selectedChapter)) return;
             cancelDraftTimer();
             if (dirtyRef.current) {
-              const capture = captureDraft();
-              if (capture) queueDraftSave(capture);
+              await draftChainRef.current;
+              const saved = await flushDraft();
+              if (!saved) {
+                if (conflictRef.current) {
+                  setNotice({ tone: 'warn', text: '当前章草稿保存失败，已留在当前章；请先处理草稿冲突。' });
+                } else {
+                  toast.push('当前章草稿保存失败，已留在当前章；请重试或先保存正式版本', 'err');
+                }
+                return;
+              }
             }
+            pendingChapterRef.current = null;
             setSelectedChapter(nextId === null || nextId === undefined ? null : nextId);
             setConflict(null);
             conflictRef.current = null;
@@ -6610,6 +6729,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             });
             try {
               const result = await api(`/projects/${owner.id}/chapters/${state.id}`, { method: 'PUT', body });
+              if (!wbSameChapterRef(chapterRef.current, projectRef.current, { chapterId: state.id, projectId: owner.id })) {
+                // The author switched chapters while the save was in flight.
+                // The response describes the old chapter only: never write its
+                // base/identity/dirty into the newly opened chapter (D-C1).
+                chapterList.reload(true);
+                if (typeof props.refreshOverview === 'function') props.refreshOverview();
+                toast.push(`第 ${state.id} 章已保存；当前已切换章节`, 'ok');
+                return;
+              }
               const submitted = { ...identityRef.current };
               baseRef.current = {
                 version_id: result.version_id || result.version_uid || baseRef.current.version_id,
@@ -6738,7 +6866,11 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               // only for pagehide, where no next save will reuse it.
               flushDraft().catch(() => {});
             };
-            const onPageHide = () => {
+            const onPageHide = (event) => {
+              // bfcache fires pagehide too; keepalive there advances the draft
+              // revision behind the restored page's back and causes a false
+              // conflict (D-14K).  Only a real teardown needs the write.
+              if (event && event.persisted) return;
               if (dirtyRef.current) flushDraftKeepalive();
             };
             window.addEventListener('beforeunload', onBeforeUnload);
@@ -6959,6 +7091,24 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               toast.push('当前章有未保存修改或未提交草稿，请先保存正式版本再合并', 'err');
               return;
             }
+            const ids = chapters.map((row) => Number(row.id)).filter((id) => Number.isFinite(id));
+            if (ids.length < 2) {
+              toast.push('至少需要两章才能合并', 'err');
+              return;
+            }
+            const last = Math.max.apply(null, ids);
+            const previous = last - 1;
+            let details;
+            try {
+              details = await Promise.all([previous, last].map((id) => (
+                api(`/projects/${owner.id}/chapters/${id}`)
+              )));
+            } catch (error) {
+              toast.push(`检查尾章草稿失败：${error.message}`, 'err');
+              return;
+            }
+            const warning = wbMergeTailDraftMessage(details);
+            if (warning && !wbConfirm(warning)) return;
             if (!wbConfirm('合并最后两章？被合并的末章会归档到回收站。')) return;
             setBusy('merge');
             try {
@@ -6967,8 +7117,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 body: { op_id: wbOpId('merge') },
               });
               toast.push(`已合并为第 ${result.chapter_id} 章`, 'ok');
-              const oldDraftId = identityRef.current.draft_id;
-              const cleaned = await discardChapterDraft(result.chapter_id, oldDraftId);
+              const mergedId = Number(result.chapter_id);
+              const oldDraftId = chapterRef.current && Number(chapterRef.current.id) === mergedId
+                ? identityRef.current.draft_id : null;
+              const cleaned = oldDraftId ? await discardChapterDraft(mergedId, oldDraftId) : false;
               if (cleaned) {
                 skipDraftRef.current.add(String(result.chapter_id));
                 skipDraftRef.current.add(String(Number(result.chapter_id) + 1));
@@ -7046,11 +7198,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 scheduleDraft();
                 return;
               }
-              baseRef.current = {
-                version_id: current.base_version_id || baseRef.current.version_id,
-                sha256: current.base_content_sha256 || baseRef.current.sha256,
-                content: current.content,
-              };
+              baseRef.current = wbDraftBaseAdoption(current, baseRef.current);
               identityRef.current = {
                 draft_id: current.draft_id || null,
                 draft_epoch: Number(current.draft_epoch) || 0,
@@ -7081,7 +7229,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const mergeConflict = () => {
             if (!conflict) return;
-            if (baseRef.current.blocked || !baseRef.current.content) {
+            if (baseRef.current.blocked) {
               setNotice({ tone: 'warn', text: '草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。' });
               return;
             }
@@ -7092,8 +7240,15 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 reloadConflict();
                 return;
               }
+              if (!wbMergeBaseCompatible(baseRef.current, current)) {
+                // Different base version: this is not a clean three-way merge
+                // and could erase background text on the next save (D-01R).
+                setNotice({ tone: 'warn', text: '对方草稿基于另一个版本，自动合并可能覆盖后台正文；请先载入服务器草稿，核对后再保存。' });
+                return;
+              }
               const merged = wbMergeTexts(baseRef.current.content, textRef.current, current.content);
               adoptDocument({ title: titleRef.current, content: merged.text }, '合并服务器草稿', { autosave: merged.clean });
+              baseRef.current = wbDraftBaseAdoption(current, baseRef.current);
               identityRef.current = {
                 draft_id: current.draft_id || null,
                 draft_epoch: Number(current.draft_epoch) || 0,
@@ -7300,8 +7455,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                       adapterRef.current.setValue(event.target.value, true);
                     }
                     applyContentInput(event.target.value);
+                    if (commitPendingRef.current) commitPendingRef.current().catch(() => {});
                   },
-                  onBlur: () => resetComposition(),
+                  onBlur: () => {
+                    resetComposition();
+                    if (compositionSyncRef.current) compositionSyncRef.current();
+                    if (commitPendingRef.current) commitPendingRef.current().catch(() => {});
+                  },
                 }),
                 e('div', { className: 'wb-foot' },
                   e(Button, { size: 'sm', kind: 'ghost', disabled: !previousChapter, onClick: () => previousChapter && selectChapter(previousChapter.id) }, `上一章${previousChapter ? ` · ${previousChapter.id}` : ''}`),
@@ -14746,7 +14906,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         exports.apply = apply;
         /* Pure functions the panel's own test harness drives across every cycle
            shape. Exposed read-only: nothing here touches React or the DOM. */
-        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES, WorkbenchPage, wbPickProject, wbDraftIdentityFrom, wbInitialDocument, wbDraftPayload, wbVersionPayload, wbMergeTexts, wbOutlineExcerpt, wbVisibleWords, wbParagraphCount, wbFormatTime, wbShortId, wbIssueTone, wbDraftEpochCandidates, wbRetryDraftWithoutActive, wbResetComposition, wbDraftFollowUp, wbRememberDraftEpoch, wbRecallDraftEpoch };
+        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES, WorkbenchPage, wbPickProject, wbDraftIdentityFrom, wbInitialDocument, wbDraftPayload, wbVersionPayload, wbMergeTexts, wbOutlineExcerpt, wbVisibleWords, wbParagraphCount, wbFormatTime, wbShortId, wbIssueTone, wbDraftEpochCandidates, wbRetryDraftWithoutActive, wbResetComposition, wbDraftFollowUp, wbRememberDraftEpoch, wbRecallDraftEpoch, wbDraftBaseAdoption, wbMergeBaseCompatible, wbSameChapterRef, wbMergeTailDraftMessage };
         return module.exports;
       },
     });

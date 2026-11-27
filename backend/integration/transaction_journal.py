@@ -1330,16 +1330,21 @@ def _sqlite_backup(source, target) -> Tuple[str, int]:
     return _file_sha(target) or "", target.stat().st_size
 
 
-def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0) -> Dict[str, Any]:
+def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0,
+           allowed_dir=None) -> Dict[str, Any]:
     """跨存储一致性备份：先过屏障，再 SQLite 在线备份 + 原子复制文本。
 
     目标目录必须位于作品目录之外且为空（避免自我递归与覆盖旧备份）。
-    返回摘要；``backup_manifest.json`` 记录每个文件的 sha256/大小与代次。
+    审计 C3-02：``allowed_dir`` 把目标限制在调用方给定的目录树内（API 传入
+    ``data_dir/backups``），任意客户端路径在落盘前就被拒绝。返回摘要；
+    ``backup_manifest.json`` 记录每个文件的 sha256/大小与代次。
     """
     project_path = Path(project).resolve()
     if not project_path.is_dir():
         raise FileNotFoundError(f"作品目录不存在：{project_path}")
     dest = Path(destination)
+    if allowed_dir is not None and not _is_within(allowed_dir, dest):
+        raise UnsafePath("destination_outside_allowed", str(dest))
     if _is_within(project_path, dest):
         raise UnsafePath("destination_inside_project", str(dest))
     records: List[Dict[str, Any]] = []
@@ -1792,7 +1797,8 @@ _ROLLBACK_README = """v0.7.5 降级导出副本
 
 
 def export_legacy(project, destination, mode: str = "current",
-                  snapshot_dir=None) -> Dict[str, Any]:
+                  snapshot_dir=None, allowed_dir=None,
+                  allowed_snapshot_roots=None) -> Dict[str, Any]:
     """导出 v0.7.5 可读的纯文件副本。
 
     ``mode``：
@@ -1803,6 +1809,9 @@ def export_legacy(project, destination, mode: str = "current",
       （``version_id`` / ``content_sha256`` / ``title_digest`` /
       ``version_fingerprint`` / ``author_confirmed``），保留 ``current`` 与
       ``sha256``，方便旧版安全读取。
+
+    审计 C3-02：``allowed_dir`` 限制写目标，``allowed_snapshot_roots`` 限制
+    ``snapshot_dir`` 的可读根；任意目录既不能当来源也不能当目标。
 
     本函数按白名单复制，绝不携带 ``workbench.sqlite3``、``.webnovel/transactions``
     或任何凭据文件。
@@ -1819,9 +1828,15 @@ def export_legacy(project, destination, mode: str = "current",
         if not source.is_dir():
             raise FileNotFoundError(f"快照目录不存在：{source}")
         source = source.resolve()
+        if allowed_snapshot_roots:
+            roots = [Path(root) for root in allowed_snapshot_roots]
+            if not any(_is_within(root, source) for root in roots):
+                raise UnsafePath("snapshot_outside_allowed", str(source))
     else:
         source = project_path
     dest = Path(destination)
+    if allowed_dir is not None and not _is_within(allowed_dir, dest):
+        raise UnsafePath("destination_outside_allowed", str(dest))
     if _is_within(project_path, dest):
         raise UnsafePath("destination_inside_project", str(dest))
     if _is_within(source, dest):

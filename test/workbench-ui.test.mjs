@@ -140,11 +140,12 @@ test('a restored draft keeps the version it was based on (D-01)', () => {
   const hooks = loadWorkbenchHooks();
   const current = { version_id: 'v2', sha256: 'b'.repeat(64) };
   const stale = hooks.resolveDraftBaseline(
-    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64) },
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64), baseContent: 'v1 正文' },
     current,
   );
   assert.equal(stale.baseVersionId, 'v1');
   assert.equal(stale.baseSha, 'a'.repeat(64));
+  assert.equal(stale.baseContent, 'v1 正文');
   const fresh = hooks.resolveDraftBaseline({ exists: false }, current);
   assert.equal(fresh.baseVersionId, 'v2');
   assert.equal(fresh.baseSha, 'b'.repeat(64));
@@ -152,6 +153,79 @@ test('a restored draft keeps the version it was based on (D-01)', () => {
   assert.equal(unbased.baseVersionId, '');
   assert.equal(unbased.baseSha, '');
   assert.equal(unbased.blocked, true, 'a draft without its own base must not fall back to v3');
+});
+
+test('a null base_content blocks the draft but an empty string is a valid base (D-01R)', () => {
+  const hooks = loadWorkbenchHooks();
+  const current = { version_id: 'v2', sha256: 'b'.repeat(64), content: '后台新增段落' };
+  const missing = hooks.resolveDraftBaseline(
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64), baseContent: null },
+    current,
+  );
+  assert.equal(missing.blocked, true, 'unknown base body must never fall back to the current file');
+  assert.equal(missing.baseContent, null);
+  const empty = hooks.resolveDraftBaseline(
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64), baseContent: '' },
+    current,
+  );
+  assert.equal(empty.blocked, false, 'an empty new chapter is a legitimate base');
+  assert.equal(empty.baseContent, '');
+});
+
+test('draft conflict adoption uses the other draft base and refuses foreign bases (D-01R2)', () => {
+  const hooks = loadWorkbenchHooks();
+  const local = { baseVersionId: 'v1', baseSha: 'a'.repeat(64), baseContent: 'v1 正文' };
+
+  const same = hooks.conflictDraftBaseline({ base_version_id: 'v1', base_content_sha256: 'a'.repeat(64) }, local);
+  assert.equal(same.baseVersionId, 'v1');
+  assert.equal(same.baseContent, 'v1 正文', 'same version+hash may reuse the local base body');
+  assert.equal(same.blocked, false);
+
+  const content = hooks.conflictDraftBaseline({
+    base_version_id: 'v2', base_content_sha256: 'b'.repeat(64), base_content: 'v2 正文',
+  }, local);
+  assert.equal(content.baseVersionId, 'v2');
+  assert.equal(content.baseContent, 'v2 正文');
+  assert.equal(content.blocked, false);
+
+  const foreign = hooks.conflictDraftBaseline({ base_version_id: 'v2', base_content_sha256: 'b'.repeat(64) }, local);
+  assert.equal(foreign.blocked, true, 'a different base without body must not reuse v1 text');
+  assert.equal(foreign.baseContent, null);
+
+  assert.equal(hooks.draftConflictSharesBase(
+    { base_version_id: 'v1', base_content_sha256: 'a'.repeat(64) }, local,
+  ), true);
+  assert.equal(hooks.draftConflictSharesBase(
+    { base_version_id: 'v2', base_content_sha256: 'b'.repeat(64) }, local,
+  ), false);
+  assert.equal(hooks.draftConflictSharesBase({}, local), false);
+});
+
+test('pagehide skips keepalive for bfcache and writes only on teardown (D-14K)', () => {
+  const hooks = loadWorkbenchHooks();
+  assert.equal(hooks.pageHideAction(true, true, false), 'none', 'bfcache must rely on visibilitychange');
+  assert.equal(hooks.pageHideAction(false, true, false), 'keepalive');
+  assert.equal(hooks.pageHideAction(false, false, false), 'none');
+  assert.equal(hooks.pageHideAction(false, true, true), 'none');
+});
+
+test('merge-tail warns about drafts in either of the last two chapters (D-09R)', () => {
+  const hooks = loadWorkbenchHooks();
+  assert.equal(hooks.mergeTailDraftMessage([
+    { id: 1, draft: { exists: false } },
+    { id: 2, draft: { exists: false } },
+  ]), null);
+  const warning = hooks.mergeTailDraftMessage([
+    { id: 1, draft: { exists: false } },
+    { id: 2, draft: { exists: true } },
+  ]);
+  assert.match(warning, /第 2 章/);
+  assert.match(warning, /未提交草稿/);
+  const both = hooks.mergeTailDraftMessage([
+    { id: 1, draft: { exists: true } },
+    { id: 2, draft: { exists: true } },
+  ]);
+  assert.match(both, /第 1 章、第 2 章/);
 });
 
 test('Ctrl+S targets the focused editor instead of always saving a chapter (D-05)', () => {

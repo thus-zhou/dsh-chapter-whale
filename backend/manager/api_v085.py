@@ -3,14 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import hashlib
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from integration import agent_hub, agent_room, annotations, chapter_editor
+from integration import agent_hub, agent_room, annotations, chapter_editor, costs
 
 
 def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path) -> None:
@@ -30,9 +32,10 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
                 return JSONResponse(status_code=exc.status,
                                     content={"code": exc.code, "message": exc.code,
                                              **(getattr(exc, "detail", {}) or {})})
-            except (TypeError, ValueError, KeyError) as exc:
+            except (TypeError, ValueError, KeyError, OverflowError,
+                    sqlite3.ProgrammingError) as exc:
                 # Malformed scalar where a list/object was expected is a
-                # request error, never an unhandled 500 (B-15).
+                # request error, never an unhandled 500 (B-15/B3-16).
                 return JSONResponse(status_code=400,
                                     content={"code": "invalid_request",
                                              "message": f"请求字段不合法：{type(exc).__name__}"})
@@ -51,6 +54,73 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         if str(item.get("project_id") or "") != str(identity):
             raise agent_room.RoomError("directive_project_mismatch", status=404)
         return item
+
+    SENDER_ROLES = {"author", "system", "chief", "planner", "writer", "editor",
+                    "reviewer", "publisher", "agent", "worker"}
+
+    def _sender_role(body: dict) -> str:
+        # A body field is not identity.  Default to system so an agent that
+        # omits the field cannot silently speak as the author (B3-17).
+        value = str(body.get("sender_role") or "system").strip()
+        if value not in SENDER_ROLES:
+            raise agent_room.RoomError("invalid_sender_role",
+                                       detail={"field": "sender_role"})
+        return value
+
+    def _max_calls(body: dict) -> int:
+        value = body.get("max_calls")
+        if value is None:
+            return 20
+        if isinstance(value, bool):
+            raise agent_room.RoomError("invalid_request", detail={"field": "max_calls"})
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError, OverflowError):
+            raise agent_room.RoomError("invalid_request",
+                                       detail={"field": "max_calls"}) from None
+        if not 1 <= parsed <= 10**6:
+            raise agent_room.RoomError(
+                "invalid_request",
+                detail={"field": "max_calls", "message": "max_calls 必须在 1..1000000"})
+        return parsed
+
+    def _budget_cap(body: dict):
+        value = body.get("budget_cap_cny")
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            raise agent_room.RoomError("invalid_request",
+                                       detail={"field": "budget_cap_cny"})
+        try:
+            return costs.number(value)
+        except (TypeError, ValueError):
+            raise agent_room.RoomError(
+                "invalid_request", detail={"field": "budget_cap_cny",
+                                           "message": "budget_cap_cny 必须是非负数字"}) from None
+
+    def _artifact_still_valid(identity: str, item: dict) -> bool:
+        """Revalidate an artifact handle bound in ``detail`` at resolve time.
+
+        Cards that do not declare an artifact path keep their existing
+        contract; cards that do can no longer be approved after the file was
+        deleted or replaced (B3-01).
+        """
+        detail = item.get("detail") or {}
+        value = detail.get("artifact_path")
+        if not isinstance(value, str) or not value.strip():
+            return True
+        candidate = Path(value)
+        if not candidate.is_absolute():
+            candidate = Path(project(identity)["path"]) / candidate
+        try:
+            if not candidate.is_file():
+                return False
+            expected = str(detail.get("artifact_sha256") or "")
+            if str(detail.get("fingerprint_algo") or "") == "sha256" and expected:
+                return hashlib.sha256(candidate.read_bytes()).hexdigest() == expected
+        except OSError:
+            return False
+        return True
 
     # ------------------------------------------------------------ annotations
     @app.get("/api/projects/{identity}/chapters/{chapter}/annotations")
@@ -141,7 +211,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         session_id = str(body.get("session_id") or "author")
         return agent_room.append_event(
             room_db, session_id=session_id, topic_id=str(body.get("topic_id") or "default"),
-            project_id=None, channel="chief_chat", sender_role=str(body.get("sender_role") or "author"),
+            project_id=None, channel="chief_chat", sender_role=_sender_role(body),
             kind=str(body.get("kind") or "message"),
             summary=str(body.get("summary") or body.get("text") or ""),
             payload=body.get("payload") or {}, mentions=_seq(body.get("mentions"), "mentions"))
@@ -152,9 +222,12 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         after = 0
         header = request.headers.get("last-event-id") or last_event_id
         try:
-            after = max(0, int(header or 0))
-        except ValueError:
+            after = int(header or 0)
+        except (TypeError, ValueError):
             after = 0
+        # A hostile/corrupt cursor must not overflow SQLite inside the stream
+        # generator (B3-24).
+        after = max(0, min(after, 2**63 - 1))
         page_size = 200
 
         async def frames():
@@ -173,16 +246,21 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
                             yield f"id: {event['seq']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
                             cursor = int(event["seq"])
                             after = cursor
+                            if token is not None:
+                                # Replay frames were delivered too; without an
+                                # ack an overflow marker can fall back to 0
+                                # (B3-24).
+                                agent_room.broadcaster.ack(token, cursor)
                         if len(batch) < page_size:
                             break
 
-                # C-43: replay first, subscribe second.  A fresh client
-                # (after=0) gets the most recent page instead of the oldest
-                # 200 events (B-14/C-11).
+                # C-43/B3-07: replay first, subscribe second.  A fresh client
+                # gets the newest page of *its own* project, not
+                # ``global_latest - 200`` (sparse books would skip history).
                 if after == 0:
-                    latest = await asyncio.to_thread(agent_room.max_seq, room_db,
-                                                     project_id=identity)
-                    start = max(0, int(latest) - page_size)
+                    page = await asyncio.to_thread(agent_room.recent_events, room_db,
+                                                   project_id=identity, limit=page_size)
+                    start = 0 if not page else max(0, int(page[0]["seq"]) - 1)
                 else:
                     start = after
                 async for chunk in replay_from(start):
@@ -235,7 +313,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         event = agent_room.append_event(
             room_db, session_id=session_id, topic_id=topic_id, project_id=identity,
             channel=str(body.get("channel") or "chief_chat"),
-            sender_role=str(body.get("sender_role") or "author"),
+            sender_role=_sender_role(body),
             kind=str(body.get("kind") or "message"),
             summary=str(body.get("summary") or body.get("text") or ""),
             payload=body.get("payload") or {}, mentions=_seq(body.get("mentions"), "mentions"))
@@ -256,8 +334,8 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             raw_instruction=str(body.get("instruction") or body.get("raw_instruction") or ""),
             autonomy=str(body.get("autonomy") or "step_confirm"),
             constraints=_seq(body.get("constraints"), "constraints"),
-            budget_cap_cny=body.get("budget_cap_cny"),
-            max_calls=int(body.get("max_calls") or 20))
+            budget_cap_cny=_budget_cap(body),
+            max_calls=_max_calls(body))
 
     @app.post("/api/projects/{identity}/directives/{directive}/amend")
     @guard
@@ -328,26 +406,39 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         # surface refuses agent claims, then ignores the field entirely.
         if "resolved_by" in body and str(body.get("resolved_by") or "") != "author":
             raise agent_room.RoomError("agents_cannot_approve", status=403)
-        missing = [field for field in ("artifact_fingerprint", "approved_scope_hash")
-                   if not str(body.get(field) or "").strip()]
-        if "directive_revision" not in body:
-            missing.append("directive_revision")
+        if "approved" not in body or type(body.get("approved")) is not bool:
+            # bool("false") is True: a type slip must never become an
+            # irreversible approval (B3-19).
+            raise agent_room.RoomError(
+                "invalid_request",
+                detail={"field": "approved", "message": "approved 必须是布尔值"})
+        capability = str(body.get("capability") or "").strip()
+        missing = []
+        if not capability:
+            missing = [field for field in ("artifact_fingerprint", "approved_scope_hash")
+                       if not str(body.get(field) or "").strip()]
+            if "directive_revision" not in body:
+                missing.append("directive_revision")
         if missing:
             raise agent_room.RoomError(
                 "approval_binding_required", status=400,
                 detail={"missing": missing,
                         "message": "审批必须回传卡片绑定的指纹、作用域与指令 revision"})
-        try:
-            directive_revision = int(body.get("directive_revision"))
-        except (TypeError, ValueError):
-            raise agent_room.RoomError("approval_binding_required", status=400,
-                                       detail={"field": "directive_revision"}) from None
+        directive_revision = None
+        if "directive_revision" in body:
+            try:
+                directive_revision = int(body.get("directive_revision"))
+            except (TypeError, ValueError):
+                raise agent_room.RoomError("approval_binding_required", status=400,
+                                           detail={"field": "directive_revision"}) from None
         return agent_room.resolve_approval(
-            room_db, approval_id=approval, approved=bool(body.get("approved")),
+            room_db, approval_id=approval, approved=body["approved"],
             resolved_by="author",
-            artifact_fingerprint=str(body.get("artifact_fingerprint")),
-            approved_scope_hash=str(body.get("approved_scope_hash")),
+            artifact_fingerprint=str(body.get("artifact_fingerprint") or ""),
+            approved_scope_hash=str(body.get("approved_scope_hash") or ""),
             directive_revision=directive_revision,
+            capability=capability or None,
+            artifact_checker=lambda item: _artifact_still_valid(identity, item),
             decision=body.get("decision") if isinstance(body.get("decision"), dict) else {"note": str(body.get("note") or "")})
 
     @app.post("/api/projects/{identity}/chief/route")

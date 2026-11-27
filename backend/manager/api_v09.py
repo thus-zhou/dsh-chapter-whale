@@ -35,6 +35,12 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
+                identity = kwargs.get("identity")
+                if identity:
+                    # 审计 C3-03：部分恢复/旧构建写入的库可能缺表缺列，而旧
+                    # initialize() 只检查 9 张表。每个 v0.9 请求先按 SCHEMA
+                    # 自愈一次，避免 pause/exemptions/review 直接 500。
+                    maintenance.ensure_schema(_book(identity))
                 return fn(*args, **kwargs)
             except (world_state.WorldStateError, concurrent_engine.SchedulerError,
                     quality.QualityError, maintenance.MaintenanceError) as exc:

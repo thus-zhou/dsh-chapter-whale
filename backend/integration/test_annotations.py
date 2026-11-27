@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from integration import annotations as ann
 from integration import chapter_editor as ce
@@ -626,6 +627,106 @@ class AuditBRegressionTest(unittest.TestCase):
                 "op_id": "b23-reject", "hunk_ids": [pending["hunks"][0]["id"]]})
             self.assertEqual(rejected["status"], "rejected")
             self.assertEqual(ann.get_annotation(project, 1, other)["hunks"][0]["status"], "rejected")
+
+
+class ApplyAtomicityTest(unittest.TestCase):
+    """B-01R-4 / B3-04: draft and hunk state must not diverge."""
+
+    def _prepare(self, project, text, quote, replacement):
+        aid = ann.create_annotation(project, 1, {
+            "scope": "selection", "instruction": "改得更克制", "against": "version",
+            "anchor": {"char_start": text.index(quote), "char_end": text.index(quote) + len(quote),
+                       "quote": quote}})["id"]
+        result = ann.run_annotations(
+            project, 1, {"op_id": f"atomic-run-{aid}", "annotation_ids": [aid]},
+            generate=lambda a, c: f"<replacement>{replacement}</replacement>")
+        return aid, result["previews"][0]["hunks"][0]["id"]
+
+    def test_hunk_state_failure_rolls_draft_back_and_retry_applies_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头一句。\n她推开门。\n结尾一句。\n"
+            seed(project, text)
+            aid, hunk_id = self._prepare(project, text, "她推开门。", "她推开门。又停了停。")
+            identity = draft_identity(project)
+            with patch.object(ann, "_recompute_annotation_status",
+                              side_effect=RuntimeError("simulated crash in hunk tx")):
+                with self.assertRaises(RuntimeError):
+                    ann.apply_hunks(project, 1, {
+                        "op_id": "atomic-crash", "hunk_ids": [hunk_id],
+                        "expected_draft_id": identity["draft_id"],
+                        "expected_draft_epoch": identity["draft_epoch"],
+                        "expected_draft_revision": identity["draft_revision"]})
+            # The draft write is part of the same transaction: no orphan text.
+            self.assertIsNone(wb.get_draft(project, 1))
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["status"], "pending")
+            with wb.connect(project) as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM patch_ledger").fetchone()[0], 0)
+
+            fresh = draft_identity(project)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "atomic-retry", "hunk_ids": [hunk_id],
+                "expected_draft_id": fresh["draft_id"],
+                "expected_draft_epoch": fresh["draft_epoch"],
+                "expected_draft_revision": fresh["draft_revision"]})
+            self.assertEqual(applied["status"], "applied")
+            self.assertEqual(applied["draft"]["content"].count("又停了停"), 1)
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["status"],
+                             "applied_to_draft")
+            undone = ann.undo_apply(project, 1, {})
+            self.assertEqual(undone["status"], "reverted")
+            self.assertNotIn("又停了停", undone["draft"]["content"])
+
+    def test_pending_hunk_whose_text_already_landed_is_adopted_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头一句。\n她推开门。\n结尾一句。\n"
+            seed(project, text)
+            aid, hunk_id = self._prepare(project, text, "她推开门。", "她推开门。又停了停。")
+            # Simulate the old crash window: the draft already contains the
+            # candidate but the hunk/ledger transaction never ran.
+            draft = wb.save_draft(project, 1, title="开端",
+                                  content=text.replace("她推开门。", "她推开门。又停了停。"),
+                                  expected_draft_epoch=0, expected_draft_revision=0)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "atomic-orphan", "hunk_ids": [hunk_id],
+                "expected_draft_id": draft["draft_id"],
+                "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(applied["status"], "applied")
+            self.assertEqual(applied["draft"]["content"].count("又停了停"), 1)
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["status"],
+                             "applied_to_draft")
+            with wb.connect(project) as db:
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM patch_ledger WHERE hunk_id=?", (hunk_id,)
+                ).fetchone()[0], 1)
+            undone = ann.undo_apply(project, 1, {})
+            self.assertEqual(undone["status"], "reverted")
+            self.assertNotIn("又停了停", undone["draft"]["content"])
+
+
+    def test_pending_replacement_already_landed_is_not_left_pending(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头一句。\n她推开门。\n结尾一句。\n"
+            seed(project, text)
+            aid, hunk_id = self._prepare(project, text, "她推开门。", "她撞开门。")
+            draft = wb.save_draft(project, 1, title="开端",
+                                  content=text.replace("她推开门。", "她撞开门。"),
+                                  expected_draft_epoch=0, expected_draft_revision=0)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "atomic-orphan-replace", "hunk_ids": [hunk_id],
+                "expected_draft_id": draft["draft_id"],
+                "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(applied["status"], "applied")
+            self.assertEqual(applied["draft"]["content"].count("她撞开门。"), 1)
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["status"],
+                             "applied_to_draft")
+            undone = ann.undo_apply(project, 1, {})
+            self.assertEqual(undone["status"], "reverted")
+            self.assertIn("她推开门。", undone["draft"]["content"])
 
 
 if __name__ == "__main__":

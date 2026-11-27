@@ -5,10 +5,11 @@ import os
 import subprocess
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
-from integration import bridge, publishing as pub
+from integration import bridge, chapter_editor as ce, publishing as pub
 
 
 class Adapter:
@@ -54,6 +55,18 @@ class Base(unittest.TestCase):
         pub.authorize(self.project, platform=platform, account=account,
                       platform_book_id=book, chapters=[chapter],
                       note="作者本人在 09:00 授权第1章试投")
+
+    def write_chapter(self, chapter=1, text=BODY, title=TITLE):
+        """真实正文 + 作者定稿回执：submit 只接受已审查的当前版本（E-03）。"""
+        created = ce.new_chapter(self.project, {
+            "chapter": chapter, "title": title, "content": text,
+            "op_id": f"test-new-{chapter}-{uuid.uuid4().hex[:8]}"})
+        ce.author_confirm(self.project, chapter, {
+            "expected_version_id": created["version_id"],
+            "expected_content_sha256": created["sha256"],
+            "op_id": f"test-confirm-{chapter}-{uuid.uuid4().hex[:8]}",
+            "note": "测试定稿"})
+        return created
 
 
 class CapabilityTest(Base):
@@ -219,6 +232,7 @@ class SubmitTest(Base):
     def setUp(self):
         super().setUp()
         self.ready()
+        self.write_chapter()
 
     def test_accepted_writes_once_and_matches_body(self):
         adapter = Adapter()
@@ -254,6 +268,15 @@ class SubmitTest(Base):
         pub.submit_chapter(self.project, platform="fanqie", account="acc",
                            platform_book_id="b-1", chapter=1, title=TITLE, body=BODY)
         changed = BODY.replace("没有人", "只有风")
+        state = ce.chapter_state(self.project, 1)
+        saved = ce.save_version(self.project, 1, {
+            "title": TITLE, "content": changed, "source": "author_edit",
+            "op_id": "publish-edit-1", "expected_version_id": state["version_id"],
+            "expected_content_sha256": state["sha256"]})
+        ce.author_confirm(self.project, 1, {
+            "expected_version_id": saved["version_id"],
+            "expected_content_sha256": saved.get("sha256") or saved["content_sha256"],
+            "op_id": "publish-confirm-1", "note": "改稿后重新定稿"})
         result = pub.submit_chapter(self.project, platform="fanqie", account="acc",
                                     platform_book_id="b-1", chapter=1,
                                     title=TITLE, body=changed)
@@ -436,6 +459,7 @@ class Audit100RegressionTest(Base):
         adapter = Adapter()
         pub.register_adapter("fanqie", adapter)
         self.ready()
+        self.write_chapter()
         sha = pub.format_chapter(1, TITLE, BODY, platform="fanqie")["sha256"]
         accepted = pub.submit_chapter(self.project, platform="fanqie", account="acc",
                                       platform_book_id="b-1", chapter=1,

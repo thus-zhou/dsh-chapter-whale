@@ -710,5 +710,97 @@ class TrashAndSymlinkTest(unittest.TestCase):
 
 
 
+class SplitRollbackConcurrencyTest(unittest.TestCase):
+    def test_concurrent_chapter_plus_one_survives_split_rollback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            book = project(folder)
+            text = "第一段。\n\n第二段。\n"
+            seed(book, 1, text=text)
+            state = ce.chapter_state(book, 1)
+            real = cv.commit_raw_bytes
+            fired = {"done": False}
+
+            def race(prj, chapter, data, **kwargs):
+                if chapter == 1 and not fired["done"]:
+                    fired["done"] = True
+                    second = ce.chapter_state(prj, 2)
+                    ce.save_version(prj, 2, {
+                        "title": "并发下半章", "content": "并发保存的下半章\n",
+                        "op_id": "split-race-ch2", "expected_version_id": second["version_id"],
+                        "expected_content_sha256": second["sha256"]})
+                    ce.author_confirm(prj, 2, {
+                        "expected_version_id": cv.current_version(prj, 2)["version_id"],
+                        "expected_content_sha256": cv.file_sha256(cv.chapter_path(prj, 2))})
+                    raise RuntimeError("simulated first-half failure")
+                return real(prj, chapter, data, **kwargs)
+
+            with patch.object(cv, "commit_raw_bytes", side_effect=race):
+                with self.assertRaises(ce.ChapterError) as caught:
+                    ce.split_chapter(book, 1, offset=text.index("第二段"),
+                                     expected_content_sha256=state["sha256"])
+            self.assertEqual(caught.exception.code, "split_rollback_skipped_concurrent")
+            index = cv.load_index(book)["chapters"]
+            self.assertIn("2", index)
+            self.assertEqual(index["2"]["current"], cv.file_sha256(cv.chapter_path(book, 2)))
+            self.assertIsNotNone(cv.current_version(book, 2))
+            receipts = json.loads((book / ".webnovel" / "writer_receipts.json")
+                                  .read_text(encoding="utf-8"))
+            self.assertTrue(Path(receipts["2"]["destination"]).is_file())
+            self.assertEqual(sorted(cv.chapter_map(book)), [1, 2])
+
+
+class SaveRenamePartialTest(unittest.TestCase):
+    def test_rename_race_returns_partial_and_retry_finishes_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            book = project(folder)
+            seed(book)
+            state = ce.chapter_state(book, 1)
+            ce.author_confirm(book, 1, {"expected_version_id": state["version_id"],
+                                        "expected_content_sha256": state["sha256"]})
+            real_write = cv.write_chapter
+
+            def write_then_squat(*args, **kwargs):
+                result = real_write(*args, **kwargs)
+                (book / "正文" / "第1章-新标题.md").write_text(
+                    "外部占位\n", encoding="utf-8", newline="\n")
+                return result
+
+            payload = {"title": "新标题", "content": "第二版\n", "op_id": "rename-race-partial",
+                       "expected_version_id": state["version_id"],
+                       "expected_content_sha256": state["sha256"]}
+            with patch.object(cv, "write_chapter", side_effect=write_then_squat):
+                result = ce.save_version(book, 1, dict(payload))
+            self.assertEqual(result["status"], "partial")
+            self.assertTrue(result["title_conflict"])
+            self.assertFalse(result["title_renamed"])
+            self.assertEqual(len(list((book / "正文").glob("*.md"))), 2)
+
+            (book / "正文" / "第1章-新标题.md").unlink()
+            retried = ce.save_version(book, 1, dict(payload))
+            self.assertIn(retried["status"], {"saved", "partial"})
+            self.assertEqual(cv.chapter_path(book, 1).name, "第1章-新标题.md")
+            receipts = json.loads((book / ".webnovel" / "writer_receipts.json")
+                                  .read_text(encoding="utf-8"))
+            self.assertEqual(Path(receipts["1"]["destination"]).name, "第1章-新标题.md")
+
+
+class TrashIdempotencyTest(unittest.TestCase):
+    def test_restore_trash_rejects_a_second_copy_unless_forced(self):
+        with tempfile.TemporaryDirectory() as folder:
+            book = project(folder)
+            seed(book)
+            state = ce.chapter_state(book, 1)
+            deleted = ce.delete_chapter(book, 1, expected_content_sha256=state["sha256"])
+            first = ce.restore_trash(book, deleted["trash_entry"])
+            self.assertEqual(first["chapter_id"], 1)
+            with self.assertRaises(ce.ChapterError) as caught:
+                ce.restore_trash(book, deleted["trash_entry"])
+            self.assertEqual(caught.exception.code, "already_restored")
+            self.assertEqual(sorted(cv.chapter_map(book)), [1])
+            forced = ce.restore_trash(book, deleted["trash_entry"], force=True)
+            self.assertEqual(forced["chapter_id"], 2)
+            self.assertEqual(sorted(cv.chapter_map(book)), [1, 2])
+
+
 if __name__ == "__main__":
     unittest.main()

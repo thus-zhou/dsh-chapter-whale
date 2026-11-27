@@ -261,6 +261,92 @@ test('epoch 候选只包含有限的安全回退值 (D-11)', () => {
   assert.equal(internals.wbDraftEpochCandidates(64, 70).length <= 5, true);
 });
 
+test('服务端返回的 draft_epoch 优先于本地猜测，且缺失键不是 0 (D-11S)', () => {
+  assert.equal(internals.wbRecallDraftEpoch('p1', 1), null, 'missing localStorage key must be null, not epoch 0');
+  assert.equal(internals.wbDraftEpochCandidates(0, null, 9).join(','), '9,1,2', 'server epoch must be tried first');
+  assert.equal(internals.wbDraftEpochCandidates(2, 4, 2).join(','), '4,0,1,3', 'tried epoch is not retried');
+  assert.equal(internals.wbDraftEpochCandidates(2, null, 'bad').join(','), '0,1,3,4');
+});
+
+test('服务端 epoch=9 时无草稿重试可以直接成功，不会锁死自动保存 (D-11S)', async () => {
+  const attempts = [];
+  const put = async (body) => {
+    attempts.push(body.expected_draft_epoch);
+    if (body.expected_draft_epoch !== 9) {
+      const error = new Error('draft_conflict');
+      error.code = 'draft_conflict';
+      error.data = { current_draft: { draft_id: null, draft_epoch: 9 } };
+      throw error;
+    }
+    return { draft: { draft_id: 'drf_9', draft_epoch: 9, draft_revision: 1 } };
+  };
+  const result = await internals.wbRetryDraftWithoutActive(
+    put,
+    { expected_draft_id: 'drf_old', expected_draft_epoch: 0, expected_draft_revision: 3 },
+    { serverEpoch: 9 },
+  );
+  assert.deepEqual(attempts, [9]);
+  assert.equal(result.draft.draft_id, 'drf_9');
+});
+
+test('草稿基线采纳：null base_content 阻断，空串是合法基线 (D-01R/D-01R2)', () => {
+  const local = { version_id: 'v1', sha256: 'a'.repeat(64), content: 'v1 正文' };
+  const same = internals.wbDraftBaseAdoption(
+    { base_version_id: 'v1', base_content_sha256: 'a'.repeat(64) },
+    local,
+  );
+  assert.equal(same.version_id, 'v1');
+  assert.equal(same.content, 'v1 正文');
+  assert.equal(same.blocked, false);
+
+  const foreign = internals.wbDraftBaseAdoption(
+    { base_version_id: 'v2', base_content_sha256: 'b'.repeat(64) },
+    local,
+  );
+  assert.equal(foreign.version_id, 'v2');
+  assert.equal(foreign.content, '');
+  assert.equal(foreign.blocked, true, 'must not borrow another version body');
+
+  const explicitEmpty = internals.wbDraftBaseAdoption(
+    { base_version_id: 'v1', base_content_sha256: 'a'.repeat(64), base_content: '' },
+    local,
+  );
+  assert.equal(explicitEmpty.content, '');
+  assert.equal(explicitEmpty.blocked, false, 'empty base is legal');
+
+  const missing = internals.wbDraftBaseAdoption({ base_version_id: 'v1' }, local);
+  assert.equal(missing.blocked, true);
+});
+
+test('草稿合并只在同一版本基线上自动进行 (D-01R)', () => {
+  const base = { version_id: 'v1', sha256: 'a'.repeat(64), content: '' };
+  assert.equal(internals.wbMergeBaseCompatible(base, { base_version_id: 'v1', base_content_sha256: 'a'.repeat(64) }), true);
+  assert.equal(internals.wbMergeBaseCompatible(base, { base_version_id: 'v2', base_content_sha256: 'b'.repeat(64) }), false);
+  assert.equal(internals.wbMergeBaseCompatible(base, { base_version_id: 'v1' }), false);
+  assert.equal(internals.wbMergeBaseCompatible(base, {}), false);
+});
+
+test('版本保存响应只写给发起保存的章节 (D-C1)', () => {
+  const owner = { chapterId: 2, projectId: 'p1' };
+  assert.equal(internals.wbSameChapterRef({ id: 2 }, { id: 'p1' }, owner), true);
+  assert.equal(internals.wbSameChapterRef({ id: 3 }, { id: 'p1' }, owner), false, 'chapter switched');
+  assert.equal(internals.wbSameChapterRef({ id: 2 }, { id: 'p2' }, owner), false, 'project switched');
+  assert.equal(internals.wbSameChapterRef(null, { id: 'p1' }, owner), false);
+});
+
+test('merge-tail 检查尾章草稿后再确认 (D-09R)', () => {
+  assert.equal(internals.wbMergeTailDraftMessage([
+    { id: 1, draft: { exists: false } },
+    { id: 2, draft: { exists: false } },
+  ]), null);
+  const warning = internals.wbMergeTailDraftMessage([
+    { id: 1, draft: { exists: false } },
+    { id: 2, draft: { exists: true } },
+  ]);
+  assert.match(warning, /第 2 章/);
+  assert.match(warning, /未提交草稿/);
+});
+
 test('输入法兜底复位会清 composingRef 并结束 adapter 组合 (D-06)', () => {
   const ref = { current: true };
   let ended = 0;

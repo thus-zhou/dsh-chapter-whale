@@ -7,6 +7,7 @@ P0 快道永远先于 P1 自动日更与 P2 批量；P2 最多占用 ``max_slots
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -77,6 +78,111 @@ def _event(project, task_id: Optional[str], kind: str, detail: Optional[Dict] = 
         pass
 
 
+def _ensure(project, *, create: bool = True) -> bool:
+    """Initialize/heal the queue schema.
+
+    审计 C3-04：读路径 ``create=False`` 在作品没有 workbench 库时直接返回
+    False，不再让一次 GET 创建 ``.webnovel/workbench.sqlite3``。
+    """
+    if not wb.db_path(project).exists():
+        if not create:
+            return False
+        wb.initialize(project)
+        return True
+    from integration import maintenance
+    try:
+        maintenance.ensure_schema(project)
+        wb.initialize(project)
+    except sqlite3.Error:
+        return False
+    return True
+
+
+def _params_signature(priority: str, chapter_id, parent_task_id, blocked_by,
+                      payload, amendment_fallback: str) -> str:
+    """Canonical hash of everything that defines the submitted work (C3-14)."""
+    return hashlib.sha256(json.dumps({
+        "priority": priority,
+        "chapter_id": chapter_id,
+        "parent_task_id": parent_task_id,
+        "blocked_by": list(blocked_by or []),
+        "payload": payload or {},
+        "amendment_fallback": amendment_fallback,
+    }, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+
+
+def _row_signature(item: Dict[str, Any]) -> str:
+    return _params_signature(str(item.get("priority") or "P2"), item.get("chapter_id"),
+                             item.get("parent_task_id"), item.get("blocked_by") or [],
+                             item.get("payload") or {},
+                             str(item.get("amendment_fallback") or "wait"))
+
+
+def _blocker_edges(project) -> Dict[str, set]:
+    with wb.connect(project) as db:
+        edges: Dict[str, set] = {}
+        for row in db.execute("SELECT task_id, blocked_by_json FROM task_queue"):
+            try:
+                edges[str(row[0])] = set(json.loads(row[1] or "[]"))
+            except (TypeError, ValueError):
+                edges[str(row[0])] = set()
+        return edges
+
+
+def _reaches(edges: Dict[str, set], start: str, target: str) -> bool:
+    stack = [start]
+    seen = set()
+    while stack:
+        node = stack.pop()
+        if node == target:
+            return True
+        if node in seen:
+            continue
+        seen.add(node)
+        stack.extend(edges.get(node) or ())
+    return False
+
+
+def _validate_blockers(project, task_id: str, blockers: List[str]) -> List[str]:
+    """Reject missing/self/cyclic dependencies before the task is queued (C3-15)."""
+    unique: List[str] = []
+    seen = set()
+    for blocker in blockers:
+        if blocker == task_id:
+            raise SchedulerError("blocked_by_self", status=400,
+                                 detail={"task_id": task_id})
+        if blocker in seen:
+            continue
+        seen.add(blocker)
+        unique.append(blocker)
+    edges = _blocker_edges(project)
+    edges[task_id] = set(unique)
+    for blocker in unique:
+        try:
+            get(project, blocker)
+        except SchedulerError:
+            raise SchedulerError("blocked_by_missing", status=400,
+                                 detail={"task_id": task_id, "blocked_by": blocker}) from None
+        if _reaches(edges, blocker, task_id):
+            raise SchedulerError("blocked_by_cycle", status=400,
+                                 detail={"task_id": task_id, "blocked_by": blocker})
+    return unique
+
+
+def _blocked_reason(project, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Why ``_ready`` refuses this task; also surfaced by ``snapshot`` (C3-15)."""
+    for blocker in item.get("blocked_by") or []:
+        try:
+            other = get(project, blocker)
+        except SchedulerError:
+            return {"task_id": blocker, "reason": "missing"}
+        if other.get("state") == "failed":
+            return {"task_id": blocker, "reason": "failed"}
+        if other.get("state") not in {"completed", "cancelled"}:
+            return {"task_id": blocker, "reason": str(other.get("state") or "pending")}
+    return None
+
+
 def submit(project, payload: Dict[str, Any], *, priority: str = "P2",
            chapter_id: Optional[int] = None, task_id: Optional[str] = None,
            parent_task_id: Optional[str] = None, blocked_by: Iterable[str] = (),
@@ -93,15 +199,23 @@ def submit(project, payload: Dict[str, Any], *, priority: str = "P2",
     blocked_items = list(blocked_by)
     if any(not isinstance(item, str) or not item.strip() for item in blocked_items):
         raise SchedulerError("invalid_blocked_by", status=400)
-    wb.initialize(project)
+    _ensure(project)
     tid = str(task_id or wb.new_id("task"))
+    incoming = _params_signature(priority, chapter_id, parent_task_id, blocked_items,
+                                 payload, amendment_fallback)
     if task_id:
-        # 审计 C-36：调用方可以通过 task_id 重试；已存在的任务直接返回，
-        # 绝不生成第二条重复任务。
+        # 审计 C3-14：同一 task_id 重试只有在参数完全一致时才是幂等重放；
+        # 参数变化必须 409，绝不静默丢弃新意图。
         try:
-            return {**get(project, tid), "deduplicated": True}
+            existing = get(project, tid)
         except SchedulerError:
-            pass
+            existing = None
+        if existing is not None:
+            if _row_signature(existing) != incoming:
+                raise SchedulerError("task_id_payload_mismatch", status=409,
+                                     detail={"task_id": tid})
+            return {**existing, "deduplicated": True}
+    blocked_items = _validate_blockers(project, tid, blocked_items)
     state = "pending"
     hold = None
     if parent_task_id:
@@ -122,23 +236,17 @@ def submit(project, payload: Dict[str, Any], *, priority: str = "P2",
             )
     except sqlite3.IntegrityError:
         existing = get(project, tid)
+        if _row_signature(existing) != incoming:
+            raise SchedulerError("task_id_payload_mismatch", status=409,
+                                 detail={"task_id": tid}) from None
         return {**existing, "deduplicated": True}
     _event(project, tid, "submitted", {"priority": priority})
     return get(project, tid)
 
 
-def _ensure_queue(project) -> None:
-    if not wb.db_path(project).exists():
-        wb.initialize(project)
-        return
-    with wb.connect(project) as db:
-        row = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='task_queue'").fetchone()
-    if not row:
-        wb.initialize(project)
-
-
 def get(project, task_id: str) -> Dict[str, Any]:
-    _ensure_queue(project)
+    if not _ensure(project, create=False):
+        raise SchedulerError("task_missing", status=404)
     with wb.connect(project) as db:
         row = db.execute("SELECT * FROM task_queue WHERE task_id=?", (task_id,)).fetchone()
     if not row:
@@ -147,7 +255,8 @@ def get(project, task_id: str) -> Dict[str, Any]:
 
 
 def list_tasks(project, *, state: Optional[str] = None) -> List[Dict[str, Any]]:
-    _ensure_queue(project)
+    if not _ensure(project, create=False):
+        return []
     query = "SELECT * FROM task_queue" + (" WHERE state=?" if state else "") + \
             " ORDER BY CASE priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, created_at"
     with wb.connect(project) as db:
@@ -239,7 +348,7 @@ def _normalize_scope(project, scope: str) -> str:
 
 def pause(project, scope: str, reason: str = "") -> Dict[str, Any]:
     scope = _normalize_scope(project, scope)
-    wb.initialize(project)
+    _ensure(project)
     with wb.write_tx(project) as db:
         db.execute("INSERT OR REPLACE INTO task_pauses(scope, reason, created_at) VALUES(?,?,?)",
                    (scope, reason, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
@@ -255,7 +364,7 @@ def pause(project, scope: str, reason: str = "") -> Dict[str, Any]:
 
 def resume(project, scope: str) -> Dict[str, Any]:
     scope = _normalize_scope(project, scope)
-    wb.initialize(project)
+    _ensure(project)
     with wb.write_tx(project) as db:
         db.execute("DELETE FROM task_pauses WHERE scope=?", (scope,))
         if scope.startswith("task:"):
@@ -269,7 +378,8 @@ def resume(project, scope: str) -> Dict[str, Any]:
 
 
 def paused_scopes(project) -> List[Dict[str, Any]]:
-    _ensure_queue(project)
+    if not _ensure(project, create=False):
+        return []
     with wb.connect(project) as db:
         rows = db.execute("SELECT * FROM task_pauses ORDER BY scope").fetchall()
     return [dict(row) for row in rows]
@@ -296,20 +406,15 @@ def project_paused(project) -> bool:
 def _ready(project, item: Dict[str, Any], pause_path=None) -> bool:
     if item["state"] != "pending":
         return False
-    for blocker in item.get("blocked_by") or []:
-        try:
-            other = get(project, blocker)
-        except SchedulerError:
-            return False
-        if other["state"] not in {"completed", "cancelled"}:
-            return False
+    if _blocked_reason(project, item) is not None:
+        return False
     return not _task_paused(project, item, pause_path=pause_path)
 
 
 def claim(project, owner: str, *, max_slots: int = 4, lease_seconds: float = LEASE_SECONDS,
           pause_path=None, max_attempts: int = MAX_ATTEMPTS) -> Optional[Dict[str, Any]]:
     """Lease one ready task; returns None when the pool is full or idle."""
-    wb.initialize(project)
+    _ensure(project)
     # 每次派发前回收过期租约；无需依赖作者手动调用 /tasks/recover。
     recover(project, max_attempts=max_attempts)
     max_slots = max(1, int(max_slots))
@@ -378,14 +483,25 @@ def begin_commit(project, task_id: str, owner: str, *,
         raise SchedulerError("task_not_running", status=409)
     if item["lease_owner"] != owner:
         raise SchedulerError("lease_owner_mismatch")
-    expiry = _now() + float(commit_grace)
+    now = _now()
+    expiry = now + float(commit_grace)
     with wb.write_tx(project) as db:
+        # 审计 C3-11：已过期的租约不得借 begin_commit 复活并续 300 秒；
+        # 与 renew() 一样要求 lease_expires 仍然有效。
         cur = db.execute("UPDATE task_queue SET committing=1, lease_expires=?, updated_at=? "
-                         "WHERE task_id=? AND state='running' AND lease_owner=?",
+                         "WHERE task_id=? AND state='running' AND lease_owner=? "
+                         "AND (lease_expires IS NULL OR lease_expires >= ?)",
                          (expiry, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                          task_id, owner))
-        if not cur.rowcount:
+                          task_id, owner, now))
+        updated = bool(cur.rowcount)
+    if not updated:
+        current = get(project, task_id)
+        if current.get("state") == "recovery_required":
+            raise SchedulerError("recovery_required")
+        if current.get("state") != "running" or current.get("lease_owner") != owner:
             raise SchedulerError("task_not_running", status=409)
+        _mark_recovery(project, task_id, owner=owner, expired=True)
+        raise SchedulerError("recovery_required")
     _event(project, task_id, "committing", {"commit_grace": float(commit_grace)})
     return get(project, task_id)
 
@@ -431,16 +547,26 @@ def fail(project, task_id: str, *, owner: str = "", error: str = "",
     if item.get("state") not in {"running", "committing"}:
         raise SchedulerError("task_not_running", status=409)
     # 审计 C-33：调用者必须持有该租约，否则任何人都能打断别人的任务。
-    if item.get("lease_owner") and item.get("lease_owner") != owner:
+    expected_owner = str(item.get("lease_owner") or "")
+    if owner and owner != expected_owner:
         raise SchedulerError("lease_owner_mismatch")
     state = "pending" if int(item.get("attempts") or 0) < int(max_attempts) else "failed"
     with wb.write_tx(project) as db:
+        # 审计 C3-12：owner 条件必须和 UPDATE 同一条语句。读后到写前若租约
+        # 已过期并被新 worker 领取，旧 worker 的迟到失败不得清掉新租约。
         cur = db.execute("UPDATE task_queue SET state=?, lease_owner=NULL, lease_expires=NULL, "
                          "committing=0, hold_requested=0, updated_at=? "
-                         "WHERE task_id=? AND state IN ('running','committing')",
-                         (state, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id))
-        if not cur.rowcount:
-            raise SchedulerError("task_not_running", status=409)
+                         "WHERE task_id=? AND state IN ('running','committing') "
+                         "AND COALESCE(lease_owner,'')=?",
+                         (state, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                          task_id, expected_owner))
+        updated = bool(cur.rowcount)
+    if not updated:
+        current = get(project, task_id)
+        if current.get("state") == "completed":
+            return current
+        raise SchedulerError("task_not_running", status=409,
+                             detail={"state": current.get("state")})
     _event(project, task_id, "failed", {"error": error, "next": state})
     return get(project, task_id)
 
@@ -452,7 +578,7 @@ def recover(project, *, max_attempts: int = MAX_ATTEMPTS) -> List[Dict[str, Any]
     否则 ``claim()`` 每次先 recover 会形成 pending→running→过期→pending 的
     无限循环并持续计费。
     """
-    wb.initialize(project)
+    _ensure(project)
     rows = []
     with wb.connect(project) as db:
         expired = [dict(row) for row in db.execute(
@@ -492,6 +618,7 @@ def hold_for_amendment(project, amendment_id: str, task_ids: Iterable[str], *,
     """
     if fallback not in {"wait", "continue"}:
         raise SchedulerError("invalid_amendment_fallback", status=400)
+    _ensure(project)
     held, requested, continued = [], [], []
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     for task_id in task_ids:
@@ -541,6 +668,8 @@ def retry(project, task_id: str, *, owner: str = "author") -> Dict[str, Any]:
 
 def release_amendment(project, amendment_id: str) -> Dict[str, Any]:
     released = []
+    if not _ensure(project, create=False):
+        return {"status": "released", "amendment_id": amendment_id, "released_task_ids": []}
     with wb.connect(project) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT task_id, state FROM task_queue WHERE hold_amendment_id=? "
@@ -564,6 +693,12 @@ def release_amendment(project, amendment_id: str) -> Dict[str, Any]:
 
 def snapshot(project, *, max_slots: int = 4) -> Dict[str, Any]:
     rows = list_tasks(project)
+    for row in rows:
+        # 审计 C3-15：pending 任务必须能回答“为什么还没被领取”。
+        if row.get("state") == "pending":
+            reason = _blocked_reason(project, row)
+            if reason:
+                row["blocked_reason"] = reason
     return {"max_slots": max_slots,
             "counts": {state: sum(1 for row in rows if row["state"] == state)
                        for state in {row["state"] for row in rows}},

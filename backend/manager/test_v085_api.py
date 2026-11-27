@@ -64,6 +64,7 @@ class V085ApiTests(unittest.TestCase):
                                    headers=self.headers)
         self.assertEqual(message.status_code, 200, message.text)
         self.assertEqual(message.json()["channel"], "chief_chat")
+        self.assertEqual(message.json()["sender_role"], "system")
         snapshot = self.client.get(base)
         self.assertGreaterEqual(snapshot.json()["snapshot_seq"], 1)
         directive = self.client.post(base + "/directives",
@@ -79,19 +80,92 @@ class V085ApiTests(unittest.TestCase):
 
     def test_author_resolves_approval_with_fingerprint_bound_card(self):
         db = self.root / "agent_room.sqlite3"
+        directive = agent_room.create_directive(
+            db, session_id="author", project_id=self.identity, title="发布",
+            raw_instruction="发布")
         approval = agent_room.create_approval(
-            db, session_id="author", project_id=self.identity, directive_id="dir_1",
+            db, session_id="author", project_id=self.identity, directive_id=directive["id"],
             directive_revision=1, task_id=None, kind="publish", title="发布确认",
             artifact_fingerprint="fp-1", approved_scope_hash="scope-1", detail={})
         response = self.client.post(
             f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
             json={"approved": True, "note": "作者确认",
-                  "artifact_fingerprint": "fp-1", "approved_scope_hash": "scope-1",
-                  "directive_revision": 1}, headers=self.headers)
+                  "capability": approval["capability"]}, headers=self.headers)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["status"], "approved")
         self.assertEqual(response.json()["resolved_by"], "author")
         self.assertEqual(response.json()["decision"]["note"], "作者确认")
+
+    def test_approval_get_does_not_expose_replayable_binding_fields(self):
+        db = self.root / "agent_room.sqlite3"
+        directive = agent_room.create_directive(
+            db, session_id="author", project_id=self.identity, title="发布",
+            raw_instruction="发布")
+        approval = agent_room.create_approval(
+            db, session_id="author", project_id=self.identity, directive_id=directive["id"],
+            directive_revision=1, task_id=None, kind="publish", title="发布确认",
+            artifact_fingerprint="fp-secret", approved_scope_hash="scope-secret", detail={})
+        listing = self.client.get(f"/api/projects/{self.identity}/approvals").json()["approvals"]
+        row = next(item for item in listing if item["id"] == approval["id"])
+        for field in ("artifact_fingerprint", "approved_scope_hash", "directive_revision",
+                      "capability_hash"):
+            self.assertNotIn(field, row)
+        # Even a caller that knows the stored values cannot self-approve: the
+        # card requires the creator's one-time capability (B3-01).
+        response = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
+            json={"approved": True, "artifact_fingerprint": "fp-secret",
+                  "approved_scope_hash": "scope-secret", "directive_revision": 1},
+            headers=self.headers)
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(response.json()["code"], "approval_capability_required")
+
+    def test_approval_requires_strict_boolean(self):
+        db = self.root / "agent_room.sqlite3"
+        approval = agent_room.create_approval(
+            db, session_id="author", project_id=self.identity, directive_id=None,
+            directive_revision=1, task_id=None, kind="publish", title="发布确认",
+            artifact_fingerprint="fp", approved_scope_hash="scope", detail={})
+        base = f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve"
+        for body in ({"capability": approval["capability"]},
+                     {"approved": "false", "capability": approval["capability"]},
+                     {"approved": 0, "capability": approval["capability"]},
+                     {"approved": None, "capability": approval["capability"]}):
+            response = self.client.post(base, json=body, headers=self.headers)
+            self.assertEqual(response.status_code, 400, (body, response.text))
+            self.assertEqual(response.json()["code"], "invalid_request")
+        self.assertEqual(agent_room.get_approval(db, approval["id"])["status"], "pending")
+        ok = self.client.post(base, json={"approved": True,
+                                          "capability": approval["capability"]},
+                              headers=self.headers)
+        self.assertEqual(ok.status_code, 200, ok.text)
+
+    def test_approval_dies_with_amend_or_cancel(self):
+        db = self.root / "agent_room.sqlite3"
+        for action in ("amend", "cancel"):
+            directive = agent_room.create_directive(
+                db, session_id="author", project_id=self.identity,
+                title=action, raw_instruction="写")
+            approval = agent_room.create_approval(
+                db, session_id="author", project_id=self.identity,
+                directive_id=directive["id"], directive_revision=1, task_id=None,
+                kind="publish", title="发布确认", artifact_fingerprint="fp",
+                approved_scope_hash="scope", detail={})
+            if action == "amend":
+                changed = self.client.post(
+                    f"/api/projects/{self.identity}/directives/{directive['id']}/amend",
+                    json={"instruction": "改方向", "task_ids": []}, headers=self.headers)
+            else:
+                changed = self.client.post(
+                    f"/api/projects/{self.identity}/directives/{directive['id']}/cancel",
+                    headers=self.headers)
+            self.assertEqual(changed.status_code, 200, changed.text)
+            response = self.client.post(
+                f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
+                json={"approved": True, "capability": approval["capability"]},
+                headers=self.headers)
+            self.assertEqual(response.status_code, 409, (action, response.text))
+            self.assertEqual(response.json()["code"], "approval_not_pending")
 
     def test_agent_cannot_resolve_approval(self):
         db = self.root / "agent_room.sqlite3"
@@ -119,9 +193,12 @@ class V085ApiTests(unittest.TestCase):
 
     def test_approval_requires_card_binding_fields(self):
         db = self.root / "agent_room.sqlite3"
+        directive = agent_room.create_directive(
+            db, session_id="author", project_id=self.identity, title="绑定",
+            raw_instruction="绑定")
         approval = agent_room.create_approval(
-            db, session_id="author", project_id=self.identity, directive_id="dir_bind",
-            directive_revision=2, task_id=None, kind="publish", title="发布确认",
+            db, session_id="author", project_id=self.identity, directive_id=directive["id"],
+            directive_revision=1, task_id=None, kind="publish", title="发布确认",
             artifact_fingerprint="fp-bind", approved_scope_hash="scope-bind", detail={})
         missing = self.client.post(
             f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
@@ -136,7 +213,8 @@ class V085ApiTests(unittest.TestCase):
         stale = self.client.post(
             f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
             json={"approved": True, "artifact_fingerprint": "fp-edited",
-                  "approved_scope_hash": "scope-bind", "directive_revision": 2},
+                  "approved_scope_hash": "scope-bind", "directive_revision": 1,
+                  "capability": approval["capability"]},
             headers=self.headers)
         self.assertEqual(stale.status_code, 409, stale.text)
         self.assertEqual(stale.json()["code"], "approval_artifact_changed")
@@ -144,7 +222,8 @@ class V085ApiTests(unittest.TestCase):
             f"/api/projects/{self.identity}/approvals/{approval['id']}/resolve",
             json={"approved": True, "resolved_by": "chief",
                   "artifact_fingerprint": "fp-bind", "approved_scope_hash": "scope-bind",
-                  "directive_revision": 2}, headers=self.headers)
+                  "directive_revision": 1, "capability": approval["capability"]},
+            headers=self.headers)
         self.assertEqual(agent_claim.status_code, 403, agent_claim.text)
 
     def test_room_state_and_directive_endpoints_are_book_scoped(self):
@@ -231,6 +310,43 @@ class V085ApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400, response.text)
             self.assertEqual(response.json()["code"], "invalid_request")
 
+    def test_invalid_directive_limits_and_budget_are_400(self):
+        base = f"/api/projects/{self.identity}/chief/directives"
+        for payload in ({"max_calls": 0}, {"max_calls": -1}, {"max_calls": 10**30},
+                        {"max_calls": "many"}, {"max_calls": True},
+                        {"budget_cap_cny": {}}, {"budget_cap_cny": []},
+                        {"budget_cap_cny": "not-a-number"}, {"budget_cap_cny": True},
+                        {"budget_cap_cny": "-1"}):
+            response = self.client.post(base, json={"title": "x", "instruction": "y", **payload},
+                                        headers=self.headers)
+            self.assertEqual(response.status_code, 400, (payload, response.text))
+            self.assertEqual(response.json()["code"], "invalid_request", payload)
+        ok = self.client.post(base, json={"title": "x", "instruction": "y",
+                                          "max_calls": 0.5, "budget_cap_cny": "1.5"},
+                              headers=self.headers)
+        # 0.5 truncates to 0 and is rejected; a valid numeric cap alone works.
+        self.assertEqual(ok.status_code, 400, ok.text)
+        good = self.client.post(base, json={"title": "x", "instruction": "y",
+                                            "max_calls": 2, "budget_cap_cny": "1.5"},
+                                headers=self.headers)
+        self.assertEqual(good.status_code, 200, good.text)
+        self.assertEqual(good.json()["budget_cap_cny"], "1.5")
+
+    def test_message_default_sender_role_is_system(self):
+        base = f"/api/projects/{self.identity}/chief"
+        message = self.client.post(base + "/messages", json={"text": "随便聊聊"},
+                                   headers=self.headers)
+        self.assertEqual(message.status_code, 200, message.text)
+        self.assertEqual(message.json()["sender_role"], "system")
+        explicit = self.client.post(base + "/messages",
+                                    json={"text": "作者本人", "sender_role": "author"},
+                                    headers=self.headers)
+        self.assertEqual(explicit.json()["sender_role"], "author")
+        bad = self.client.post(base + "/messages",
+                               json={"text": "冒充", "sender_role": "root"},
+                               headers=self.headers)
+        self.assertEqual(bad.status_code, 400, bad.text)
+
     def _stream_ids(self, after: int, expected: int):
         async def collect():
             endpoint = next(route.endpoint for route in self.app.routes
@@ -278,6 +394,29 @@ class V085ApiTests(unittest.TestCase):
         self.assertEqual(paged[-1], 230)
         self.assertEqual(len(paged), 229)
         self.assertEqual(len(paged), len(set(paged)))
+
+    def test_sse_fresh_replay_is_project_scoped_not_global_window(self):
+        db_path = self.root / "agent_room.sqlite3"
+        first = [agent_room.append_event(
+            db_path, session_id="author", project_id=self.identity,
+            channel="task_signal", sender_role="system", kind="task_update",
+            summary=f"A {index}")["seq"] for index in range(100)]
+        for index in range(156):
+            agent_room.append_event(db_path, session_id="other", project_id="other-book",
+                                    channel="task_signal", sender_role="system",
+                                    kind="task_update", summary=f"B {index}")
+        second = [agent_room.append_event(
+            db_path, session_id="author", project_id=self.identity,
+            channel="task_signal", sender_role="system", kind="task_update",
+            summary=f"A late {index}")["seq"] for index in range(44)]
+        ids = self._stream_ids(0, 144)
+        # The global seq is sparse for this book; fresh replay must still
+        # include all 144 of its own events, not only the last 44 (B3-07).
+        self.assertEqual(ids, first + second)
+
+    def test_sse_huge_cursor_is_clamped(self):
+        ids = self._stream_ids(10**30, 0)
+        self.assertEqual(ids, [])
 
 
 if __name__ == "__main__":

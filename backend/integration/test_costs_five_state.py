@@ -1,4 +1,5 @@
 """五态预算、指令护栏与 v0.7.5 旧表零破坏。"""
+import json
 import os
 import sqlite3
 import tempfile
@@ -8,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from integration import costs
+from integration import costs, fallback_budget
 
 
 LIMITS = {"requests_per_day": 3, "request_tokens": None, "chapter_tokens": None,
@@ -209,6 +210,69 @@ class BudgetTest(unittest.TestCase):
         self.assertEqual(report["summary"]["ledger_gaps"], 1)
         self.assertEqual(report["summary"]["gaps_recent"], 0)
         self.assertTrue(report["summary"]["complete"])
+
+
+class FallbackGapTest(unittest.TestCase):
+    PRICE = {"input": "1", "output": "2", "currency": "CNY"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.db = self.root / "costs.sqlite3"
+        self.book_a = self.root / "book-a"
+        self.book_b = self.root / "book-b"
+        self.book_a.mkdir()
+        self.book_b.mkdir()
+        self.messages = [{"role": "user", "content": "x"}]
+        costs.connection(self.db).close()
+
+    def tearDown(self):
+        costs.MISSED_EVENTS = 0
+        self.tmp.cleanup()
+
+    def reserve(self, project):
+        return fallback_budget.reserve(self.db, project, self.PRICE, self.messages, 100)
+
+    def test_failed_settle_without_usage_is_cancelled_and_does_not_poison(self):
+        identity = self.reserve(self.book_a)
+        self.assertEqual(fallback_budget.settle(self.db, identity), "cancelled")
+        self.assertEqual(costs.ledger_gaps(self.db), 0)
+        self.assertEqual(costs.MISSED_EVENTS, 0)
+        # The not-billed reservation no longer consumes the daily 20 CNY cap.
+        self.reserve(self.book_a)
+
+    def test_gap_is_project_scoped_recent_and_resolvable(self):
+        costs.record_gap(self.db, "fallback_settlement_unknown", project=self.book_b)
+        self.reserve(self.book_a)
+        with self.assertRaises(ValueError):
+            self.reserve(self.book_b)
+        self.assertEqual(costs.resolve_gaps(self.db, project=self.book_b), 1)
+        self.reserve(self.book_b)
+        # A 48h-old gap no longer closes the fallback path.
+        costs.record_gap(self.db, "fallback_settlement_unknown", project=self.book_b)
+        gap = max(Path(str(self.db) + ".gaps").glob("*.json"),
+                  key=lambda path: path.stat().st_mtime)
+        os.utime(gap, (time.time() - 48 * 3600, time.time() - 48 * 3600))
+        self.reserve(self.book_b)
+
+    def test_process_global_missed_events_does_not_gate_fallback(self):
+        costs.MISSED_EVENTS = 7
+        self.reserve(self.book_a)
+
+    def test_unknown_usage_marks_unknown_without_gap(self):
+        identity = self.reserve(self.book_a)
+        db = costs.connection(self.db)
+        try:
+            db.execute("INSERT INTO usage_events VALUES(?,?,?,?,?,?,?)",
+                       ("evt-1", "2026-11-27T00:00:00+00:00", str(self.book_a), 1,
+                        "probe", "m", json.dumps(
+                            {"fallback_reservation": identity, "cost_cny": None,
+                             "metering": "unknown", "status": "pending"})))
+            db.commit()
+        finally:
+            db.close()
+        self.assertEqual(fallback_budget.settle(self.db, identity), "unknown")
+        self.assertEqual(costs.ledger_gaps(self.db), 0)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -224,6 +225,166 @@ def resource_ledger(project, costs_db=None) -> Dict[str, Any]:
             "total_cost_cny": round(sum(item["cost_cny"] for item in states.values()), 4)}
 
 
+# ------------------------------------------------------------ schema 自愈
+
+_SCHEMA_DEFINITIONS: Optional[Dict[str, Dict[str, str]]] = None
+_SCHEMA_CACHE: Dict[str, Any] = {}
+
+
+def _split_top_level(text: str) -> List[str]:
+    parts: List[str] = []
+    current: List[str] = []
+    depth = 0
+    for char in text:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current))
+    return parts
+
+
+def _schema_definitions() -> Dict[str, Dict[str, str]]:
+    """``{table: {column: definition}}`` parsed from ``workbench_db.SCHEMA``.
+
+    审计 C3-03：DDL 只在 ``workbench_db.SCHEMA`` 维护一份；维护层从同一来源
+    派生期望的表/列清单，避免自愈清单再次漂移（旧实现只检查 9 张表）。
+    """
+    global _SCHEMA_DEFINITIONS
+    if _SCHEMA_DEFINITIONS is not None:
+        return _SCHEMA_DEFINITIONS
+    definitions: Dict[str, Dict[str, str]] = {}
+    for statement in str(wb.SCHEMA).split(";"):
+        statement = statement.strip()
+        match = re.match(
+            r"(?is)^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$",
+            statement)
+        if not match:
+            continue
+        table, body = match.group(1), match.group(2)
+        columns: Dict[str, str] = {}
+        for part in _split_top_level(body):
+            part = part.strip()
+            if not part:
+                continue
+            name = part.split(None, 1)[0].strip('"`[]')
+            if re.match(r"(?i)^(PRIMARY|UNIQUE|FOREIGN|CHECK|CONSTRAINT)\b", part):
+                continue
+            columns[name] = part
+        if columns:
+            definitions[table] = columns
+    _SCHEMA_DEFINITIONS = definitions
+    return definitions
+
+
+def _required_tables() -> Set[str]:
+    # search_fts 是虚拟表，出现在 sqlite_master(type='table')，但不来自
+    # CREATE TABLE 语句；FTS5 的影子表由 SQLite 自行维护。
+    return set(_schema_definitions()) | {"search_fts"}
+
+
+def _inspect_schema(db: sqlite3.Connection) -> Dict[str, Any]:
+    tables = {str(row[0]) for row in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    definitions = _schema_definitions()
+    missing_tables = sorted(name for name in _required_tables() if name not in tables)
+    missing_columns: Dict[str, List[str]] = {}
+    for table, columns in definitions.items():
+        if table not in tables:
+            continue
+        actual = {str(row[1]) for row in db.execute(f"PRAGMA table_info({table})")}
+        missing = [name for name in columns if name not in actual]
+        if missing:
+            missing_columns[table] = missing
+    try:
+        row = db.execute("SELECT value FROM workbench_meta WHERE key='schema_version'").fetchone()
+        version = str(row[0]) if row else None
+    except sqlite3.Error:
+        version = None
+    current = (not missing_tables and not missing_columns
+               and version is not None and version == str(wb.SCHEMA_VERSION))
+    return {"current": current, "version": version,
+            "missing_tables": missing_tables, "missing_columns": missing_columns}
+
+
+def schema_report(project) -> Dict[str, Any]:
+    """Read-only schema drift report; never creates the database (audit C3-04)."""
+    path = wb.db_path(project)
+    base = {"current": False, "exists": path.is_file(), "version": None,
+            "missing_tables": [], "missing_columns": {}}
+    if not base["exists"]:
+        return base
+    key = str(path.resolve())
+    try:
+        with wb.connect(project) as db:
+            stamp = int(db.execute("PRAGMA schema_version").fetchone()[0])
+            cached = _SCHEMA_CACHE.get(key)
+            if cached is not None and cached[0] == stamp:
+                return {**base, **dict(cached[1])}
+            report = _inspect_schema(db)
+    except sqlite3.Error as exc:
+        return {**base, "error": str(exc)}
+    _SCHEMA_CACHE[key] = (stamp, report)
+    return {**base, **report}
+
+
+def _addable_column(definition: str) -> str:
+    """Turn one CREATE TABLE column definition into a legal ADD COLUMN clause."""
+    text = re.sub(r"(?i)\b(PRIMARY\s+KEY|AUTOINCREMENT|UNIQUE)\b", " ", definition)
+    text = re.sub(r"\s+", " ", text).strip().rstrip(",")
+    if re.search(r"(?i)\bNOT\s+NULL\b", text) and not re.search(r"(?i)\bDEFAULT\b", text):
+        # SQLite refuses NOT NULL without a default on a non-empty table.
+        affinity = "0" if re.search(r"(?i)\b(INT|REAL|NUMERIC)\b", text) else "''"
+        text = f"{text} DEFAULT {affinity}"
+    return text
+
+
+def ensure_schema(project, *, create: bool = False) -> Dict[str, Any]:
+    """Recreate missing tables/columns from ``SCHEMA``; idempotent.
+
+    审计 C3-03：``workbench_db.initialize`` 的存量检查过窄，部分恢复的旧库
+    永远停留在缺表/缺列状态并把功能变成 500。读取路径（``create=False``）
+    绝不创建数据库；只有确认数据库已存在时才做写修复。
+    """
+    path = wb.db_path(project)
+    if not path.is_file():
+        if not create:
+            return schema_report(project)
+        wb.initialize(project)
+        return schema_report(project)
+    report = schema_report(project)
+    if report.get("current") or report.get("error"):
+        return report
+    definitions = _schema_definitions()
+    try:
+        with wb.write_tx(project) as db:
+            for statement in (part.strip() for part in str(wb.SCHEMA).split(";") if part.strip()):
+                db.execute(statement)
+            for table, columns in (report.get("missing_columns") or {}).items():
+                actual = {str(row[1]) for row in db.execute(f"PRAGMA table_info({table})")}
+                for column in columns:
+                    if column in actual:
+                        continue
+                    definition = definitions.get(table, {}).get(column)
+                    if not definition:
+                        continue
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {_addable_column(definition)}")
+            db.execute("INSERT INTO workbench_meta(key, value) VALUES('schema_version', ?) "
+                       "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                       (str(wb.SCHEMA_VERSION),))
+            db.execute("INSERT OR IGNORE INTO workbench_meta(key, value) "
+                       "VALUES('commit_generation', '0')")
+    except sqlite3.Error as exc:
+        return {**schema_report(project), "repair_error": str(exc)}
+    _SCHEMA_CACHE.pop(str(path.resolve()), None)
+    return {"repaired": True, **schema_report(project)}
+
+
 def health(project) -> Dict[str, Any]:
     issues: List[Dict[str, Any]] = []
     root = Path(project)
@@ -233,17 +394,28 @@ def health(project) -> Dict[str, Any]:
         return {"status": "missing", "integrity": "missing", "issues": [],
                 "chapters": 0, "versions": 0, "drafts": 0,
                 "counts": {level: 0 for level in ("P0", "P1", "P2")},
+                "schema": {"current": False, "exists": False},
                 "disk_free_bytes": 0, "checked_at": _now()}
     db_path = wb.db_path(project)
     db_ready = db_path.exists()
     integrity = "missing"
+    schema: Dict[str, Any] = {"current": False, "exists": db_ready}
     if db_ready:
+        # 审计 C3-03：只检查 9 张表的旧自愈逻辑会把缺表/缺列的库报成健康。
+        # 先如实报告，再按 SCHEMA 修复；本次响应仍保留 P0 让作者知道发生过。
+        schema = schema_report(project)
+        if not schema.get("current"):
+            issues.append({"code": "schema_incomplete", "severity": "P0",
+                           "missing_tables": list(schema.get("missing_tables") or []),
+                           "missing_columns": dict(schema.get("missing_columns") or {}),
+                           "detail": schema.get("error") or ""})
+            schema = ensure_schema(project)
         try:
             wb.initialize(project)
         except sqlite3.Error as exc:
             return {"status": "degraded", "integrity": "error", "issues": [
                 {"code": "db_open_failed", "severity": "P0", "detail": str(exc)}],
-                "chapters": 0, "versions": 0, "drafts": 0}
+                "chapters": 0, "versions": 0, "drafts": 0, "schema": schema}
         db = None
         try:
             db = sqlite3.connect(str(db_path))
@@ -293,7 +465,7 @@ def health(project) -> Dict[str, Any]:
         issues.append({"code": "disk_low", "severity": "P1", "free_bytes": free})
     blocking = [item for item in issues if item["severity"] in {"P0", "P1"}]
     return {"status": "degraded" if blocking else "ok", "integrity": integrity,
-            "chapters": len(mapping), "issues": issues,
+            "chapters": len(mapping), "issues": issues, "schema": schema,
             "counts": {level: sum(1 for item in issues if item["severity"] == level)
                        for level in ("P0", "P1", "P2")},
             "disk_free_bytes": free, "checked_at": _now()}
@@ -385,12 +557,19 @@ def system_health(data_dir) -> Dict[str, Any]:
 
 
 def self_heal(project, action: str) -> Dict[str, Any]:
+    if action == "rebuild_schema":
+        # 审计 C3-03：缺表/缺列的库需要一条显式修复入口，而不只是 500。
+        with lock_manager.hold(project, "diagnostics", "diagnostics", timeout=10.0):
+            report = ensure_schema(project, create=True)
+        return {"status": "healed", "action": action, "schema": report}
     if action == "rebuild_search":
         with lock_manager.hold(project, "diagnostics", "diagnostics", timeout=10.0):
+            ensure_schema(project)
             count = wb.rebuild_search(project)
         return {"status": "healed", "action": action, "documents": count}
     if action == "checkpoint":
         with lock_manager.hold(project, "diagnostics", "diagnostics", timeout=10.0):
+            ensure_schema(project)
             wb.initialize(project)
             with wb.connect(project) as db:
                 db.execute("PRAGMA wal_checkpoint(TRUNCATE)")

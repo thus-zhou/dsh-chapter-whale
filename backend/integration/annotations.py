@@ -729,6 +729,53 @@ def apply_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _hunk_already_present(project, base_text: str, current_text: str,
+                          row: Dict[str, Any], base_snapshot_id: Optional[str] = None
+                          ) -> Optional[Dict[str, Any]]:
+    """Prove that a pending hunk's result is already in the current draft.
+
+    A crash between the old two transactions could leave the draft containing
+    the candidate while the hunk stayed ``pending``.  Re-applying an insertion
+    duplicated prose and a replacement became a permanent conflict.  This
+    check makes the retry adopt the landed text instead (B-01R-4/B3-04).
+    """
+    before = str(row.get("before_text") or "")
+    applied = str(row.get("custom_text") if row.get("custom_text") is not None
+                  else row.get("after_text") or "")
+    if not applied or applied == before:
+        return None
+    if before:
+        start, end = text_merge.clamp_range(base_text, row.get("char_start") or 0,
+                                            row.get("char_end") or 0)
+        if (text_merge.slice_codepoints(base_text, start, end) == before
+                and text_merge.slice_codepoints(current_text, start, end) == applied):
+            return {"start": start, "end": end, "applied_text": applied}
+    anchor = {"quote": before, "char_start": row.get("char_start"),
+              "char_end": row.get("char_end"),
+              "base_snapshot_id": base_snapshot_id or row.get("base_snapshot_id")}
+    if before:
+        located = text_merge.relocate_anchor(base_text, current_text, anchor)
+        if located.get("status") in {"exact", "relocated"}:
+            start, end = int(located["start"]), int(located["end"])
+            if text_merge.slice_codepoints(current_text, start, end) == applied:
+                return {"start": start, "end": end, "applied_text": applied}
+    # A replacement/deletion invalidates the old quote, so relocation returns
+    # ``overlap_conflict``.  If the candidate is uniquely present and the base
+    # never contained it, the earlier attempt landed it.
+    start = 0
+    hits = []
+    while True:
+        found = current_text.find(applied, start)
+        if found < 0:
+            break
+        hits.append(found)
+        start = found + max(1, len(applied))
+    if len(hits) == 1 and applied not in base_text:
+        found = hits[0]
+        return {"start": found, "end": found + len(applied), "applied_text": applied}
+    return None
+
+
 def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
                       op_id: str, target: str, selected: List[str]) -> Dict[str, Any]:
     chapter = int(chapter)
@@ -786,40 +833,76 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
     for row in pending_rows:
         if row["id"] in custom:
             row["custom_text"] = str(custom[row["id"]])
+    # Ledger rows are stronger evidence than a stale ``pending`` status: a
+    # crashed old transaction may have written the ledger but not the hunk.
+    ledger_by_hunk = {row.get("hunk_id"): row for row in ledger if row.get("hunk_id")}
+    pre_applied: List[Dict[str, Any]] = []
+    remaining: List[Dict[str, Any]] = []
+    for row in pending_rows:
+        ledger_row = ledger_by_hunk.get(row["id"])
+        if ledger_row:
+            applied_range = []
+            try:
+                applied_range = json.loads(ledger_row.get("applied_range_json") or "null") or []
+            except ValueError:
+                applied_range = []
+            pre_applied.append({
+                "hunk_id": row["id"], "status": "applied",
+                "start": applied_range[0] if len(applied_range) == 2 else row.get("char_start"),
+                "end": applied_range[1] if len(applied_range) == 2 else row.get("char_end"),
+                "applied_text": ledger_row.get("applied_text") or "",
+                "before_text": ledger_row.get("before_quote") or "",
+            })
+            continue
+        present = _hunk_already_present(project, base_text, current_text, row,
+                                        base_snapshot_id=base_snapshot_id)
+        if present is not None:
+            pre_applied.append({"hunk_id": row["id"], "status": "applied", **present,
+                                "before_text": str(row.get("before_text") or "")})
+            continue
+        remaining.append(row)
+    pending_rows = remaining
     result = text_merge.apply_hunks(base_text, current_text, pending_rows,
                                     already_applied=already, ledger=ledger_rows,
                                     base_snapshot_id=base_snapshot_id)
     text = result["text"]
     current_path = versions.chapter_path(project, chapter)
     current_title = versions.parse_chapter_name(current_path.name)[1] if current_path else ""
-    if draft:
-        updated = chapter_editor.save_draft(project, chapter, {
-            "title": data.get("title") or (draft.get("title") or current_title),
-            "content": text,
-            "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
-            "expected_draft_revision": draft["draft_revision"],
-            "base_version_id": draft.get("base_version_id"),
-            "base_content_sha256": draft.get("base_content_sha256"),
-        })
-        draft = updated["draft"]
-    else:
-        epoch = wb.draft_epoch(project, chapter)
-        client_epoch = data.get("expected_draft_epoch")
-        if client_epoch is not None and int(client_epoch) != int(epoch):
-            raise AnnotationError("draft_conflict", status=409,
-                                  detail={"current_draft": None, "draft_epoch": epoch})
-        updated = chapter_editor.save_draft(project, chapter, {
-            "title": data.get("title") or current_title,
-            "content": text, "expected_draft_id": None, "expected_draft_epoch": epoch,
-            "expected_draft_revision": 0,
-        })
-        draft = updated["draft"]
+    text_changed = text != current_text
     stamp = _now()
-    superseded_previews: set = set()
+    # Draft row and hunk/ledger/preview state share one SQLite transaction:
+    # a failure before COMMIT rolls the draft back with them, so a retry can
+    # never duplicate an insertion or leave a replacement permanently pending
+    # (B-01R-4/B3-04).
     with wb.write_tx(project) as db:
-        for item in result["results"]:
+        if draft:
+            if text_changed or not pre_applied:
+                updated = chapter_editor.save_draft(project, chapter, {
+                    "title": data.get("title") or (draft.get("title") or current_title),
+                    "content": text,
+                    "expected_draft_id": draft["draft_id"],
+                    "expected_draft_epoch": draft["draft_epoch"],
+                    "expected_draft_revision": draft["draft_revision"],
+                    "base_version_id": draft.get("base_version_id"),
+                    "base_content_sha256": draft.get("base_content_sha256"),
+                })
+                draft = updated["draft"]
+        else:
+            epoch = wb.draft_epoch(project, chapter)
+            client_epoch = data.get("expected_draft_epoch")
+            if client_epoch is not None and int(client_epoch) != int(epoch):
+                raise AnnotationError("draft_conflict", status=409,
+                                      detail={"current_draft": None, "draft_epoch": epoch})
+            updated = chapter_editor.save_draft(project, chapter, {
+                "title": data.get("title") or current_title,
+                "content": text, "expected_draft_id": None, "expected_draft_epoch": epoch,
+                "expected_draft_revision": 0,
+            })
+            draft = updated["draft"]
+        superseded_previews: set = set()
+        for item in list(result["results"]) + pre_applied:
             hunk_id = item["hunk_id"]
-            chosen = next((row for row in pending_rows if row["id"] == hunk_id), None)
+            chosen = next((row for row in rows if row["id"] == hunk_id), None)
             custom_value = (chosen or {}).get("custom_text")
             if item["status"] == "applied":
                 db.execute(
@@ -827,7 +910,7 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
                     "applied_draft_revision=?, applied_range_json=?, applied_text_sha256=?, "
                     "custom_text=?, updated_at=? WHERE id=?",
                     (draft["draft_id"], draft["draft_revision"],
-                     json.dumps([item["start"], item["end"]]),
+                     json.dumps([item.get("start"), item.get("end")]),
                      _sha(item.get("applied_text") or ""), custom_value, stamp, hunk_id))
                 db.execute(
                     "INSERT INTO patch_ledger(chapter_id, chapter_uid, preview_id, hunk_id, annotation_id, "
@@ -836,13 +919,28 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
                     (chapter, wb.chapter_uid(project, chapter),
                      (chosen or {}).get("preview_id"), hunk_id, (chosen or {}).get("annotation_id"),
                      draft["draft_id"], draft["draft_revision"],
-                     json.dumps([item.get("base_start", item["start"]), item.get("base_end", item["end"])]),
+                     json.dumps([item.get("base_start", item.get("start")),
+                                 item.get("base_end", item.get("end"))]),
                      item.get("before_text") or "",
                      item.get("applied_text") or "", 1 if custom_value is not None else 0, stamp))
             elif item["status"] == "already_applied":
                 db.execute("UPDATE annotation_hunks SET status='applied_to_draft', applied_draft_id=?, "
                            "applied_draft_revision=?, updated_at=? WHERE id=?",
                            (draft["draft_id"], draft["draft_revision"], stamp, hunk_id))
+                if hunk_id not in ledger_by_hunk:
+                    landed_text = ((chosen or {}).get("custom_text")
+                                   if (chosen or {}).get("custom_text") is not None
+                                   else (chosen or {}).get("after_text") or "")
+                    db.execute(
+                        "INSERT INTO patch_ledger(chapter_id, chapter_uid, preview_id, hunk_id, annotation_id, "
+                        "draft_id, draft_revision, applied_range_json, before_quote, applied_text, custom, created_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (chapter, wb.chapter_uid(project, chapter),
+                         (chosen or {}).get("preview_id"), hunk_id, (chosen or {}).get("annotation_id"),
+                         draft["draft_id"], draft["draft_revision"],
+                         json.dumps([item.get("start"), item.get("end")]),
+                         (chosen or {}).get("before_text") or "",
+                         landed_text, 1 if custom_value is not None else 0, stamp))
             if item["status"] in {"applied", "already_applied"}:
                 group_id = (chosen or {}).get("group_id")
                 if group_id:
@@ -871,7 +969,7 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
             db.execute("UPDATE preview_index SET status=?, updated_at=? WHERE preview_id=?",
                        (preview_status, stamp, preview_id))
         _recompute_annotation_status(project, {row["annotation_id"] for row in rows}, db=db)
-    applied = [item for item in result["results"] if item["status"] == "applied"]
+    applied = [item for item in result["results"] if item["status"] == "applied"] + pre_applied
     if applied:
         outcome = "applied"
     elif result["conflicts"]:

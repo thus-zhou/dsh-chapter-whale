@@ -60,6 +60,16 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
             except transaction_journal.UnsafePath as exc:
                 return JSONResponse(status_code=400,
                                     content={"code": "unsafe_path", "message": str(exc)})
+            except FileExistsError as exc:
+                return JSONResponse(status_code=409,
+                                    content={"code": "destination_not_empty",
+                                             "message": str(exc)})
+            except (TypeError, ValueError) as exc:
+                # 审计 C3-22（相邻）：JSON object 传给 int()/路径参数时给 400，
+                # 不再落到未捕获异常处理器的 500。
+                return JSONResponse(status_code=400,
+                                    content={"code": "invalid_request",
+                                             "message": str(exc)[:200]})
         return wrapper
 
     # ------------------------------------------------------------- chapters
@@ -243,25 +253,41 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
         return chapter_editor.search_project(_book(identity), q, limit=max(1, min(int(limit), 100)))
 
     # --------------------------------------------------------- backup/legacy
+    # 审计 C3-02：备份/旧版导出与 diagnostics 一样，只允许落在管理器自己的
+    # data_dir/backups 与 data_dir/exports 目录树内。客户端 destination 不再能
+    # 指向任意可写路径（LAN/已配对设备等同 C-14 的导出原语）。
+    backup_root = Path(data_dir) / "backups"
+    export_root = Path(data_dir) / "exports"
+
     @app.post("/api/projects/{identity}/backup")
     @guard
     def backup(identity: str, data: dict | None = None):
         body = data or {}
+        book = _book(identity)
         target = body.get("destination")
-        destination = Path(target).expanduser() if target else (
-            data_dir / "backups" / f"backup-{identity}-{time.strftime('%Y%m%dT%H%M%S')}")
-        extra = [data_dir / "manager.sqlite3", data_dir / "costs.sqlite3"]
-        return transaction_journal.backup(_book(identity), destination,
+        if target:
+            destination = Path(str(target)).expanduser()
+        else:
+            stamp = f"{time.strftime('%Y%m%dT%H%M%S')}-{os.urandom(3).hex()}"
+            destination = backup_root / f"backup-{identity}-{stamp}"
+        extra = [Path(data_dir) / "manager.sqlite3", Path(data_dir) / "costs.sqlite3"]
+        return transaction_journal.backup(book, destination,
                                           extra_sqlite=[p for p in extra if p.is_file()],
-                                          wait_seconds=float(body.get("wait_seconds") or 5.0))
+                                          wait_seconds=float(body.get("wait_seconds") or 5.0),
+                                          allowed_dir=backup_root)
 
     @app.post("/api/projects/{identity}/rollback/export-legacy")
     @guard
     def export_legacy(identity: str, data: dict | None = None):
         body = data or {}
+        book = _book(identity)
         target = body.get("destination")
-        destination = Path(target).expanduser() if target else (
-            Path(data_dir) / "exports" / f"legacy-{time.strftime('%Y%m%dT%H%M%S')}")
+        if target:
+            destination = Path(str(target)).expanduser()
+        else:
+            destination = export_root / f"legacy-{time.strftime('%Y%m%dT%H%M%S')}-{os.urandom(3).hex()}"
         return transaction_journal.export_legacy(
-            _book(identity), destination, mode=str(body.get("mode") or "current"),
-            snapshot_dir=body.get("snapshot_dir"))
+            book, destination, mode=str(body.get("mode") or "current"),
+            snapshot_dir=body.get("snapshot_dir"),
+            allowed_dir=export_root,
+            allowed_snapshot_roots=(book, backup_root, export_root))

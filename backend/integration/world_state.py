@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sqlite3
 import unicodedata
 import uuid
 from datetime import datetime, timezone
@@ -84,12 +85,88 @@ def _row_fact(row) -> Dict[str, Any]:
     return item
 
 
+# 审计 C3-10：窗口关闭的权威比较必须使用与 AUTHORITY 完全一致的等级，
+# 旧 SQL 只映射了三档，把 draft_prose 与 ai_inferred 当成同级。
+_AUTHORITY_CASE = ("CASE authority_level WHEN 'author_locked' THEN 6 "
+                   "WHEN 'published_prose' THEN 5 WHEN 'confirmed_prose' THEN 4 "
+                   "WHEN 'draft_prose' THEN 3 WHEN 'ai_inferred' THEN 2 "
+                   "WHEN 'future_plan' THEN 1 ELSE 0 END")
+
+
+def _db_exists(project) -> bool:
+    return wb.db_path(project).exists()
+
+
+def _ensure_readable(project) -> bool:
+    """Prepare the DB for a read path without ever creating it (audit C3-04).
+
+    Read-only mounts/archived books have no ``workbench.sqlite3``; the old
+    ``initialize()`` created one (and ``chapter_meta`` rows) from a plain GET.
+    An existing but unreadable database degrades to empty data, not a 500.
+    """
+    if not _db_exists(project):
+        return False
+    from integration import maintenance
+    try:
+        maintenance.ensure_schema(project)
+        wb.initialize(project)
+    except sqlite3.Error:
+        return False
+    return True
+
+
+def _ensure_writable(project) -> None:
+    if not _db_exists(project):
+        wb.initialize(project)
+        return
+    from integration import maintenance
+    maintenance.ensure_schema(project)
+    wb.initialize(project)
+
+
+def _peek_chapter_uid(project, chapter: int) -> str:
+    """Read-only ``chapter_uid`` lookup; never inserts a ghost chapter row."""
+    if not _db_exists(project):
+        return ""
+    try:
+        with wb.connect(project) as db:
+            row = db.execute("SELECT chapter_uid FROM chapter_meta WHERE chapter_id=?",
+                             (int(chapter),)).fetchone()
+    except sqlite3.Error:
+        return ""
+    return str(row[0]) if row else ""
+
+
+def _close_previous_windows(db, *, fact_id: str, entity_id, subject, predicate,
+                            authority: str, valid_from_chapter) -> None:
+    """Close older active windows with the same entity/subject/predicate.
+
+    Audit C3-07/C3-10: the authority rank comes from ``AUTHORITY`` (numeric
+    parameter), so ``ai_inferred`` can no longer close a ``draft_prose`` window.
+    """
+    if valid_from_chapter is None:
+        return
+    rank = AUTHORITY.get(str(authority), 0)
+    db.execute(
+        "UPDATE world_facts SET valid_until_chapter=?, updated_at=? "
+        "WHERE entity_id IS ? AND subject=? AND predicate=? AND assertion_type='fact' "
+        "AND status='active' AND fact_id!=? AND valid_until_chapter IS NULL "
+        "AND (pinned=0 OR ?='author_locked') "
+        "AND (author_locked=0 OR ?='author_locked') "
+        "AND " + _AUTHORITY_CASE + " <= ? "
+        "AND (valid_from_chapter IS NULL OR valid_from_chapter < ?)",
+        (int(valid_from_chapter) - 1, _now(), entity_id, str(subject or ""),
+         str(predicate or ""), fact_id, authority, authority, rank,
+         int(valid_from_chapter)),
+    )
+
+
 def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     """Insert/update one fact with authority + status validation.
 
-    The same logical fact (entity + predicate + object + validity window) is
-    updated instead of duplicated; a lower-authority inference never overwrites
-    a higher-authority row.
+    The same logical fact (entity + assertion + predicate + object + validity
+    window) is updated instead of duplicated; a lower-authority inference never
+    overwrites a higher-authority row.
     """
     domain = str(fact.get("domain") or "")
     if domain not in DOMAINS:
@@ -103,20 +180,9 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     status = str(fact.get("status") or "active")
     if status not in FACT_STATUSES:
         raise WorldStateError("invalid_status")
+    explicit_id = bool(fact.get("fact_id"))
     fact_id = str(fact.get("fact_id") or wb.new_id("fact"))
-    wb.initialize(project)
-    if not fact.get("fact_id"):
-        # 同一逻辑事实（实体+谓词+宾语+有效期）重复提取时复用既有 fact_id。
-        with wb.connect(project) as db:
-            existing_row = db.execute(
-                "SELECT fact_id FROM world_facts WHERE entity_id IS ? AND subject=? AND predicate=? "
-                "AND object=? AND COALESCE(valid_from_chapter,-1)=COALESCE(?,-1) "
-                "AND COALESCE(valid_until_chapter,-1)=COALESCE(?,-1) LIMIT 1",
-                (fact.get("entity_id"), str(fact.get("subject") or ""), str(fact.get("predicate") or ""),
-                 str(fact.get("object") or ""), fact.get("valid_from_chapter"),
-                 fact.get("valid_until_chapter"))).fetchone()
-        if existing_row:
-            fact_id = str(existing_row[0])
+    _ensure_writable(project)
     try:
         confidence = float(fact.get("confidence") if fact.get("confidence") is not None else 0.0)
     except (TypeError, ValueError) as exc:
@@ -127,9 +193,33 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     author_locked = 1 if fact.get("author_locked") else 0
     author_edit = bool(fact.get("author_edit"))
     with wb.write_tx(project) as db:
+        # 审计 C3-08：去重 SELECT 与写入必须在同一个 BEGIN IMMEDIATE 里，
+        # 否则两个并发 upsert 都先看到空结果再各插一行。
         existing = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
-        if existing:
-            previous = _row_fact(existing)
+        if existing is None and not explicit_id:
+            # 审计 C3-09：逻辑键含 assertion_type，同键传闻不得覆盖事实，
+            # 也不得复用其 fact_id 把叙述层次静默降级。
+            duplicate = db.execute(
+                "SELECT fact_id FROM world_facts WHERE entity_id IS ? AND subject=? AND predicate=? "
+                "AND object=? AND assertion_type=? "
+                "AND COALESCE(valid_from_chapter,-1)=COALESCE(?,-1) "
+                "AND COALESCE(valid_until_chapter,-1)=COALESCE(?,-1) LIMIT 1",
+                (fact.get("entity_id"), str(fact.get("subject") or ""),
+                 str(fact.get("predicate") or ""), str(fact.get("object") or ""), assertion,
+                 fact.get("valid_from_chapter"), fact.get("valid_until_chapter"))).fetchone()
+            if duplicate:
+                fact_id = str(duplicate[0])
+                existing = db.execute("SELECT * FROM world_facts WHERE fact_id=?",
+                                      (fact_id,)).fetchone()
+        previous = _row_fact(existing) if existing else None
+        if previous:
+            if (str(previous.get("assertion_type") or "fact") != assertion
+                    and not author_edit):
+                # 同一 fact_id 只允许同一叙述层次；不同层次必须换新 ID。
+                raise WorldStateError("assertion_type_mismatch", status=409,
+                                      detail={"fact_id": fact_id,
+                                              "existing": previous.get("assertion_type"),
+                                              "requested": assertion})
             if AUTHORITY.get(previous.get("authority_level"), 0) > AUTHORITY.get(authority, 0):
                 return {"status": "ignored_lower_authority", "fact": previous}
             # 审计 C-16：AI 再次提取同一事实不得静默清掉作者的 pin / 锁定。
@@ -137,29 +227,17 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
             if not author_edit:
                 pinned = max(pinned, 1 if previous.get("pinned") else 0)
                 author_locked = max(author_locked, 1 if previous.get("author_locked") else 0)
-        if (not fact.get("fact_id") and assertion == "fact"
-                and status == "active" and fact.get("valid_from_chapter") is not None):
-            # 审计 C-18/C-R2-01：同一 subject+谓词出现新值时关闭旧的有效窗口。
-            # Pending AI candidates must not close anything before author
-            # confirmation, and a lower-authority inference must never close
-            # pinned/author-confirmed prose (or another subject's null-entity
-            # fact).
-            db.execute(
-                "UPDATE world_facts SET valid_until_chapter=?, updated_at=? "
-                "WHERE entity_id IS ? AND subject=? AND predicate=? AND assertion_type='fact' "
-                "AND status='active' AND fact_id!=? AND valid_until_chapter IS NULL "
-                "AND (pinned=0 OR ?='author_locked') "
-                "AND (author_locked=0 OR ?='author_locked') "
-                "AND (CASE ? WHEN 'author_locked' THEN 4 WHEN 'published_prose' THEN 3 "
-                "WHEN 'confirmed_prose' THEN 2 ELSE 1 END >= "
-                "CASE authority_level WHEN 'author_locked' THEN 4 WHEN 'published_prose' THEN 3 "
-                "WHEN 'confirmed_prose' THEN 2 ELSE 1 END) "
-                "AND (valid_from_chapter IS NULL OR valid_from_chapter < ?)",
-                (int(fact["valid_from_chapter"]) - 1, _now(), fact.get("entity_id"),
-                 str(fact.get("subject") or ""), str(fact.get("predicate") or ""), fact_id,
-                 authority, authority, authority,
-                 int(fact["valid_from_chapter"])),
-            )
+                # 审计 C3-09：pending 只能由 confirm/reject 走出；普通 upsert
+                # 不得直接改成 active，也不能把已否决/归档的事实复活。
+                if previous.get("status") in {"pending_confirm", "archived",
+                                              "ignored_by_author"}:
+                    status = str(previous.get("status"))
+        if (not explicit_id or previous is None) and status == "active" and assertion == "fact":
+            # 审计 C3-07：显式 fact_id 的新事实同样要关闭旧窗口。
+            _close_previous_windows(db, fact_id=fact_id, entity_id=fact.get("entity_id"),
+                                    subject=fact.get("subject"), predicate=fact.get("predicate"),
+                                    authority=authority,
+                                    valid_from_chapter=fact.get("valid_from_chapter"))
         db.execute(
             "INSERT INTO world_facts(fact_id, entity_id, pinned, domain, assertion_type, subject, "
             "predicate, object, story_time, narrative_chapter, valid_from_chapter, valid_until_chapter, "
@@ -189,7 +267,8 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_fact(project, fact_id: str) -> Dict[str, Any]:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        raise WorldStateError("fact_missing", status=404)
     with wb.connect(project) as db:
         row = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
     if not row:
@@ -218,7 +297,8 @@ def facts_for_chapter(project, chapter: int, *, domain: Optional[str] = None,
         clauses.append("domain=?"); params.append(domain)
     if entity_id:
         clauses.append("entity_id=?"); params.append(entity_id)
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return []
     with wb.connect(project) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT * FROM world_facts WHERE " + " AND ".join(clauses) +
@@ -233,7 +313,8 @@ def facts_for_chapter(project, chapter: int, *, domain: Optional[str] = None,
 def facts_by_status(project, status: str, *, limit: int = 200) -> List[Dict[str, Any]]:
     if status not in FACT_STATUSES:
         raise WorldStateError("invalid_status")
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return []
     with wb.connect(project) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT * FROM world_facts WHERE status=? ORDER BY updated_at DESC LIMIT ?",
@@ -245,7 +326,8 @@ def count_facts_by_status(project, status: str) -> int:
     """Exact backlog count; ``facts_by_status`` truncates at 200 (audit C-24)."""
     if status not in FACT_STATUSES:
         raise WorldStateError("invalid_status")
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return 0
     with wb.connect(project) as db:
         row = db.execute("SELECT COUNT(*) FROM world_facts WHERE status=?", (status,)).fetchone()
     return int(row[0] if row else 0)
@@ -255,16 +337,28 @@ def confirm_fact(project, fact_id: str, *, authority_level: str = "confirmed_pro
     """Author confirmation is the only path that raises AI-extracted authority."""
     if authority_level not in AUTHORITY or authority_level in {"future_plan", "discarded_candidate"}:
         raise WorldStateError("invalid_authority")
+    _ensure_writable(project)
     with wb.write_tx(project) as db:
         cur = db.execute("UPDATE world_facts SET status='active', authority_level=?, updated_at=? "
                          "WHERE fact_id=? AND status='pending_confirm'",
                          (authority_level, _now(), fact_id))
         if not cur.rowcount:
             raise WorldStateError("fact_not_pending", status=409)
+        # 审计 C3-07：确认是 pending → active 的唯一出口，必须先提升权威再
+        # 关闭同一 subject+谓词的旧窗口；否则作者确认后两条 active 事实并存。
+        row = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
+        if row is not None:
+            confirmed = _row_fact(row)
+            _close_previous_windows(db, fact_id=fact_id, entity_id=confirmed.get("entity_id"),
+                                    subject=confirmed.get("subject"),
+                                    predicate=confirmed.get("predicate"),
+                                    authority=authority_level,
+                                    valid_from_chapter=confirmed.get("valid_from_chapter"))
     return get_fact(project, fact_id)
 
 
 def reject_fact(project, fact_id: str) -> Dict[str, Any]:
+    _ensure_writable(project)
     with wb.write_tx(project) as db:
         cur = db.execute("UPDATE world_facts SET status='archived', updated_at=? "
                          "WHERE fact_id=? AND status='pending_confirm'", (_now(), fact_id))
@@ -274,34 +368,50 @@ def reject_fact(project, fact_id: str) -> Dict[str, Any]:
 
 
 def set_card(project, card: Dict[str, Any]) -> Dict[str, Any]:
+    """Partial card update: absent fields keep the stored value (audit C3-16).
+
+    Explicit ``null``/``""`` still clears a field; only *missing* keys are
+    preserved, so renaming or pinning never wipes ``card_md``/aliases/kind.
+    """
     entity_id = str(card.get("entity_id") or wb.new_id("ent"))
     name = str(card.get("name") or "").strip()
     if not name:
         raise WorldStateError("card_name_required")
-    wb.initialize(project)
-    kind = str(card.get("kind") or "character")
-    aliases = list(card.get("aliases") or [])
+    _ensure_writable(project)
     with wb.write_tx(project) as db:
-        existing = db.execute("SELECT pinned FROM world_entities WHERE entity_id=?",
+        existing = db.execute("SELECT * FROM world_entities WHERE entity_id=?",
                               (entity_id,)).fetchone()
-        # 审计 C-16：局部更新卡片（未传 pinned）不得把作者已有的 pin 取消。
-        if "pinned" in card:
-            pinned_value = 1 if card.get("pinned") else 0
+        if existing is None:
+            db.execute(
+                "INSERT INTO world_entities(entity_id, name, kind, aliases_json, pinned, "
+                "story_time, card_md, updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                (entity_id, name, str(card.get("kind") or "character"),
+                 json.dumps(list(card.get("aliases") or []), ensure_ascii=False),
+                 1 if card.get("pinned") else 0, card.get("story_time"),
+                 str(card.get("card_md") or ""), _now()))
         else:
-            pinned_value = int(existing["pinned"]) if existing else 0
-        db.execute(
-            "INSERT INTO world_entities(entity_id, name, kind, aliases_json, pinned, story_time, card_md, updated_at) "
-            "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(entity_id) DO UPDATE SET name=excluded.name, kind=excluded.kind, "
-            "aliases_json=excluded.aliases_json, pinned=excluded.pinned, story_time=excluded.story_time, "
-            "card_md=excluded.card_md, updated_at=excluded.updated_at",
-            (entity_id, name, kind, json.dumps(aliases, ensure_ascii=False),
-             pinned_value, card.get("story_time"), str(card.get("card_md") or ""), _now()),
-        )
+            previous = dict(existing)
+            fields: Dict[str, Any] = {"name": name, "updated_at": _now()}
+            if "kind" in card:
+                fields["kind"] = str(card.get("kind") or previous.get("kind") or "character")
+            if "aliases" in card:
+                fields["aliases_json"] = json.dumps(list(card.get("aliases") or []),
+                                                    ensure_ascii=False)
+            if "pinned" in card:
+                fields["pinned"] = 1 if card.get("pinned") else 0
+            if "story_time" in card:
+                fields["story_time"] = card.get("story_time")
+            if "card_md" in card:
+                fields["card_md"] = str(card.get("card_md") or "")
+            assignments = ", ".join(f"{column}=?" for column in fields)
+            db.execute(f"UPDATE world_entities SET {assignments} WHERE entity_id=?",
+                       (*fields.values(), entity_id))
     return get_card(project, entity_id)
 
 
 def get_card(project, entity_id: str) -> Dict[str, Any]:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        raise WorldStateError("card_missing", status=404)
     with wb.connect(project) as db:
         row = db.execute("SELECT * FROM world_entities WHERE entity_id=?", (entity_id,)).fetchone()
     if not row:
@@ -313,7 +423,8 @@ def get_card(project, entity_id: str) -> Dict[str, Any]:
 
 
 def list_cards(project, *, pinned_only: bool = False) -> List[Dict[str, Any]]:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return []
     query = "SELECT * FROM world_entities" + (" WHERE pinned=1" if pinned_only else "") + \
             " ORDER BY pinned DESC, name"
     with wb.connect(project) as db:
@@ -337,6 +448,8 @@ def index_chapter(project, chapter: int) -> int:
 
 def search(project, query: str, *, chapter: Optional[int] = None,
            max_chapter: Optional[int] = None, limit: int = 20) -> List[Dict[str, Any]]:
+    if not _ensure_readable(project):
+        return []
     hits = wb.search(project, query, limit=limit, chapter=chapter, max_chapter=max_chapter)
     return hits
 
@@ -345,6 +458,7 @@ def ignore_conflict(project, fact_id: str, *, chapter_uid: str, version_id: str 
                     reason: str = "intentional_or_flashback") -> Dict[str, Any]:
     if not str(chapter_uid or "").strip():
         raise WorldStateError("chapter_uid_required")
+    _ensure_writable(project)
     with wb.write_tx(project) as db:
         db.execute("INSERT OR REPLACE INTO conflict_ignores(fact_id, chapter_uid, version_id, reason, created_at) "
                    "VALUES(?,?,?,?,?)", (fact_id, chapter_uid, version_id, reason, _now()))
@@ -352,7 +466,8 @@ def ignore_conflict(project, fact_id: str, *, chapter_uid: str, version_id: str 
 
 
 def is_ignored(project, fact_id: str, chapter_uid: str, version_id: str) -> bool:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return False
     with wb.connect(project) as db:
         row = db.execute("SELECT 1 FROM conflict_ignores WHERE fact_id=? AND chapter_uid=? "
                          "AND (version_id=? OR version_id='')",
@@ -376,7 +491,8 @@ def detect_conflicts(project, chapter: int) -> List[Dict[str, Any]]:
             continue
         objects = {_normalize(row.get("object")) for row in rows}
         if len(objects) > 1:
-            chapter_uid = wb.chapter_uid(project, chapter)
+            # 审计 C3-04：读路径不得为不存在的章号创建 chapter_meta 幽灵行。
+            chapter_uid = _peek_chapter_uid(project, chapter)
             version_id = (versions.current_version(project, chapter) or {}).get("version_id") or ""
             live = [row for row in rows if not is_ignored(project, row["fact_id"], chapter_uid, version_id)]
             if len({_normalize(row.get("object")) for row in live}) > 1:
@@ -495,7 +611,8 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         text = "<UNTRUSTED_MATERIAL>\n" + text + "\n</UNTRUSTED_MATERIAL>"
     manifest = {
         "chapter_id": chapter,
-        "chapter_uid": wb.chapter_uid(project, chapter),
+        # 审计 C3-04：读路径只 peek 已有 uid，不为任意章号创建永久 chapter_meta。
+        "chapter_uid": _peek_chapter_uid(project, chapter),
         "query": query,
         "budget_chars": budget_chars,
         "chars": len(text),
@@ -509,6 +626,9 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         "generated_at": _now(),
     }
     if persist:
+        _ensure_writable(project)
+        if not manifest["chapter_uid"]:
+            manifest["chapter_uid"] = wb.chapter_uid(project, chapter)
         with wb.write_tx(project) as db:
             db.execute("INSERT INTO context_manifests(chapter_id, operation_id, manifest_json, created_at) "
                        "VALUES(?,?,?,?)",
@@ -531,7 +651,8 @@ def state(project, *, chapter: int = 1, query: str = "") -> Dict[str, Any]:
 
 
 def latest_manifest(project, chapter: int) -> Optional[Dict[str, Any]]:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return None
     with wb.connect(project) as db:
         row = db.execute("SELECT manifest_json FROM context_manifests WHERE chapter_id=? "
                          "ORDER BY id DESC LIMIT 1", (int(chapter),)).fetchone()

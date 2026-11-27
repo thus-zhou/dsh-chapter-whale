@@ -218,12 +218,12 @@ class V075RollbackTest(unittest.TestCase):
         self.create_chapter(content=content)
         self.create_chapter(2, "第二章", "导出的第二章\n")
 
-        snapshot = self.root / "snapshot"
+        snapshot = self.root / "backups" / "snapshot"
         backed = self.client.post(f"/api/projects/{self.identity}/backup",
                                   json={"destination": str(snapshot)}, headers=self.headers)
         self.assertEqual(backed.status_code, 200, backed.text)
 
-        exported = self.root / "legacy-copy"
+        exported = self.root / "exports" / "legacy-copy"
         response = self.client.post(
             f"/api/projects/{self.identity}/rollback/export-legacy",
             json={"destination": str(exported), "mode": "snapshot",

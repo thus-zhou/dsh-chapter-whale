@@ -163,7 +163,10 @@ class FreePoolClient:
         if not project and not is_probe:
             raise ValueError('免费池请求缺少作品归属')
         pool=self.config['providers']['free-pool']
-        if not is_probe:
+        if project:
+            # ``stage='probe'`` is caller-controlled and must never bypass the
+            # shared-channel whitelist for a book's prose (B3-03).  Only a
+            # project-less connection probe may skip the project check.
             permitted={str(Path(p).resolve()).casefold() for p in pool.get('allowed_projects',[])}
             if str(Path(project).resolve()).casefold() not in permitted:
                 raise ValueError('此作品未授权免费渠道处理正文与必要记忆')

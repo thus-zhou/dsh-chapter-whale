@@ -36,6 +36,7 @@ from fanqie_auto_publish.publication_safety import (
     PublicationBlocked, account_lock, atomic_json, creative_contract_hash, digest_file, file_lock, review_eligible, body_digest,
     journal_path, queue_lock, read_json_strict, valid_receipt,
 )
+from integration import publication_state
 
 
 def park_unsubmitted_queue_for_revision(project,book,account,chapter,source):
@@ -387,6 +388,76 @@ def _queue_serialized(function):
     return call
 
 
+def _record_staged_receipts(project_root: Path, book: str,
+                            items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把已真实写进发布队列的章节记为 staged（E-01）。
+
+    单项失败只记录原因：队列文件已经写成，不能因为回执写不进去就谎报入队失败。
+    """
+    recorded: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("status") != "queued":
+            continue
+        try:
+            chapter = int(item.get("chapter_id"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            outcome = publication_state.record_staged(
+                project_root, chapter,
+                content_sha256=str(item.get("source_sha256") or ""),
+                source_path=item.get("source"),
+                book=book,
+                queue_file=str(item.get("destination") or ""),
+                body_sha256=str(item.get("sha256") or ""))
+        except Exception as error:  # noqa: BLE001 - 回执失败不得回滚已完成的入队
+            outcome = {"recorded": False, "reason": type(error).__name__}
+        recorded.append({"chapter": chapter, **outcome})
+    return recorded
+
+
+def _record_published_receipts(plan: Dict[str, Any], report: Dict[str, Any],
+                               account: Optional[str]) -> List[Dict[str, Any]]:
+    """发布器明确确认并归档后，把 published_sha256 写回来源项目（E-01）。
+
+    只使用计划里已验证过的 source_sha256；平台侧成功已经发生，回执写失败只
+    记录原因，不改变发布结果。
+    """
+    project = str(plan.get("project") or "")
+    if not project:
+        return []
+    sources: Dict[int, Dict[str, Any]] = {}
+    for item in plan.get("chapters", []):
+        if isinstance(item, dict):
+            try:
+                sources[int(item.get("chapter_id"))] = item
+            except (TypeError, ValueError):
+                continue
+    recorded: List[Dict[str, Any]] = []
+    for item in report.get("chapters", []):
+        if (not isinstance(item, dict) or item.get("state") != "platform_confirmed"
+                or item.get("archived") is not True):
+            continue
+        try:
+            chapter = int(item.get("chapter_id"))
+        except (TypeError, ValueError):
+            continue
+        source = sources.get(chapter)
+        if source is None:
+            continue
+        try:
+            outcome = publication_state.record_published(
+                project, chapter,
+                content_sha256=str(source.get("source_sha256") or ""),
+                platform="fanqie", account=str(account or "legacy-root"),
+                source="legacy_publish",
+                evidence=str(item.get("archive_path") or ""))
+        except Exception as error:  # noqa: BLE001 - 平台已确认，回执失败不回滚
+            outcome = {"recorded": False, "reason": type(error).__name__}
+        recorded.append({"chapter": chapter, **outcome})
+    return recorded
+
+
 def _stage_serialized(function):
     @wraps(function)
     def call(project_path, *args, **kwargs):
@@ -534,10 +605,13 @@ def stage_project(
             "updated_at": now_iso(),
         }
 
+    staged_receipts: List[Dict[str, Any]] = []
     if not dry_run:
         save_manifest(manifest)
+        # 入队成功后才写 staged 回执；delete/split/merge 的只读保护依赖它（E-01）。
+        staged_receipts = _record_staged_receipts(project_root, display_name, staged + skipped)
 
-    return {
+    response = {
         "project": str(project_root),
         "book": display_name,
         "queue_dir": str(queue_dir),
@@ -548,6 +622,9 @@ def stage_project(
         "staged_count": len(staged),
         "queued_count": len(queued_chapters(queue_dir)),
     }
+    if not dry_run:
+        response["publication_receipts"] = staged_receipts
+    return response
 
 
 def _write_text_atomic(path: Path, content: str):
@@ -972,6 +1049,9 @@ def run_publish(
                 child.setdefault("reason", "publication_evidence_incomplete")
                 atomic_json(report_path, child)
                 return 2
+            # 真实发布成功（平台确认 + 归档 + 证据齐全）才写 published 回执。
+            child["publication_receipts"] = _record_published_receipts(plan, child, identity)
+            atomic_json(report_path, child)
             return 0
     except Exception as exc:
         # No exception/page/credential payloads in machine reports.

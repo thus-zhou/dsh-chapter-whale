@@ -1,5 +1,6 @@
 ﻿"""M01 正文版本契约的隔离检查（固定数据，无模型、无网络）。"""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -179,6 +180,75 @@ class AdoptionAndRestoreTest(unittest.TestCase):
             self.assertEqual(len(versions), 3)
             self.assertEqual(versions[-1]['source'], 'restored')
             self.assertEqual(versions[-1]['parent'], cv.raw_sha256('第二版\n'.encode('utf-8')))
+
+
+class TitleReconcileTest(unittest.TestCase):
+    def test_receipt_failure_is_partial_and_retry_finishes_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            cv.write_chapter(project, 1, '第一版\n', op_id='v1', title='旧标题', allow_new=True)
+            first = cv.current_version(project, 1)
+            path = cv.chapter_path(project, 1)
+            safety_json = project / '.webnovel' / 'writer_receipts.json'
+            safety_json.write_text(json.dumps({'1': {'destination': str(path.resolve()),
+                                                     'review': {'note': 'first confirm'}}},
+                                              ensure_ascii=False), encoding='utf-8')
+            cv.write_chapter(project, 1, '第二版\n', op_id='v2', title='新标题',
+                             expected_sha256=first['sha256'])
+            cv.reconcile_title(project, 1, title='新标题', op_id='v2')
+            self.assertEqual(cv.chapter_path(project, 1).name, '第1章-新标题.md')
+            with patch.object(cv, '_sync_receipt_destination',
+                              return_value={'status': 'failed', 'error': 'simulated'}):
+                partial = cv.restore_version(project, 1, first['version_id'],
+                                             op_id='restore-partial')
+            self.assertEqual(partial['status'], 'partial')
+            self.assertTrue(partial['title_renamed'])
+            self.assertEqual(cv.chapter_path(project, 1).name, '第1章-旧标题.md')
+            receipt = json.loads(safety_json.read_text(encoding='utf-8'))
+            self.assertEqual(Path(receipt['1']['destination']).name, '第1章-新标题.md')
+
+            retried = cv.restore_version(project, 1, first['version_id'],
+                                         op_id='restore-partial')
+            self.assertEqual(retried['status'], 'restored')
+            self.assertTrue(retried['receipt_synced'])
+            receipt = json.loads(safety_json.read_text(encoding='utf-8'))
+            self.assertEqual(receipt['1']['destination'],
+                             str((project / '正文' / '第1章-旧标题.md').resolve()))
+            record = cv._load_commit(project, 'restore-partial')
+            self.assertEqual(Path(record['chapter_path']).name, '第1章-旧标题.md')
+            self.assertFalse(record.get('title_pending'))
+
+    def test_recover_pending_finishes_rename_after_commit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            cv.write_chapter(project, 1, '第一版\n', op_id='v1', title='旧标题', allow_new=True)
+            cv.commit_raw_bytes(project, 1, '第二版\n'.encode(), title='新标题',
+                                op_id='crash-rename')
+            self.assertEqual(cv.chapter_path(project, 1).name, '第1章-旧标题.md')
+            self.assertTrue(cv._load_commit(project, 'crash-rename')['title_pending'])
+            results = cv.recover_pending(project)
+            self.assertEqual([item['op_id'] for item in results], ['crash-rename'])
+            self.assertTrue(results[0]['renamed'])
+            self.assertEqual(cv.chapter_path(project, 1).name, '第1章-新标题.md')
+            record = cv._load_commit(project, 'crash-rename')
+            self.assertFalse(record['title_pending'])
+            self.assertTrue(record['title_rename_done'])
+            self.assertEqual(Path(record['chapter_path']).name, '第1章-新标题.md')
+
+
+class VersionStoreSymlinkTest(unittest.TestCase):
+    def test_nested_store_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            store = project / '.webnovel' / 'chapter_versions'
+            store.mkdir()
+            outside = Path(folder) / 'outside'
+            outside.mkdir()
+            os.symlink(outside, store / 'objects')
+            with self.assertRaises(cv.VersionConflict) as caught:
+                cv.commit_raw_bytes(project, 1, b'body\n', title='开端', op_id='symlink-objects')
+            self.assertEqual(caught.exception.args[0], 'unsafe_version_store')
+            self.assertEqual(list(outside.iterdir()), [])
 
 
 if __name__ == '__main__':

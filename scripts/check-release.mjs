@@ -23,6 +23,46 @@ const errors = [];
 const notes = [];
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const manifestText = readFileSync(join(root, 'runtime-manifest.json'), 'utf8');
+
+/* Every root entry the package itself promises must exist.  `files` is the
+   npm publish allow-list; `main`/`exports`/`dsh.bundle.patch` are the load
+   points the host uses.  Missing any of them yields an unloadable package,
+   so absence is an error even with --local (D-RG1). */
+function declaredRootEntries(definition) {
+  const names = new Set(['package.json', 'runtime-manifest.json']);
+  const add = (value) => {
+    if (typeof value !== 'string') return;
+    const entry = value.trim();
+    if (!entry.startsWith('./')) return;
+    const name = entry.slice(2);
+    if (!name || name.includes('*') || name.endsWith('/')) return;
+    names.add(name);
+  };
+  const walk = (value) => {
+    if (typeof value === 'string') { add(value); return; }
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  add(definition.main);
+  walk(definition.exports);
+  if (definition.dsh && typeof definition.dsh === 'object') {
+    add(definition.dsh.bundle && definition.dsh.bundle.patch);
+  }
+  for (const entry of Array.isArray(definition.files) ? definition.files : []) {
+    if (typeof entry !== 'string') continue;
+    const name = entry.trim().replace(/^\.\//, '');
+    if (!name || name.includes('*') || name.endsWith('/')) continue;
+    names.add(name);
+  }
+  return names;
+}
+const rootEntries = declaredRootEntries(pkg);
+for (const name of rootEntries) {
+  const path = join(root, name);
+  if (!existsSync(path) || !statSync(path).isFile()) {
+    errors.push(`缺少根入口：${name}（package.json 声明为发布包入口，缺失的包无法加载或安装）。`);
+  }
+}
 if (manifestText.includes('\r\n')) {
   errors.push("runtime-manifest.json 必须是 LF 换行（Windows 生成时需 newline='\\n'）。");
 }
@@ -320,7 +360,9 @@ try {
     join(root, 'assets', 'fonts', 'notoserifsc.woff2'),
   ];
   if (!existsSync(clientPath)) {
-    notes.push('未包含 client.js，跳过生成产物一致性校验。');
+    // A declared client entry is already a hard error above; only an
+    // undeclared/optional client.js may be skipped (D-RG1).
+    if (!rootEntries.has('client.js')) notes.push('未包含 client.js，跳过生成产物一致性校验。');
   } else if (!uiSources.every((path) => existsSync(path))) {
     errors.push('发行包缺少生成用前端源文件（assets/*.css 或字体），无法校验 client.js 内嵌样式。');
   } else {

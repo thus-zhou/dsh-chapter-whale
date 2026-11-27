@@ -220,8 +220,10 @@ def restore(project, chapter: int, version_id: str, *, op_id: Optional[str] = No
     after = chapter_versions.current_version(project, chapter)
     report = quality_gate.status(project, chapter, config=config)
     impact = result.get("invalidation") or {}
+    partial = (result.get("status") == "partial"
+               or result.get("title_renamed") is False)
     return {
-        "status": "restored",
+        "status": "partial" if partial else "restored",
         "chapter_id": int(chapter),
         "op_id": identifier,
         "version_id": (after or {}).get("sha256"),
@@ -231,6 +233,9 @@ def restore(project, chapter: int, version_id: str, *, op_id: Optional[str] = No
         "report_status": report,
         "invalidated": impact.get("marked", []),
         "index_rebuilt": bool(impact.get("rebuilt")),
+        "title_renamed": result.get("title_renamed"),
+        "title_conflict": result.get("title_conflict"),
+        "receipt_synced": result.get("receipt_synced"),
         "commit": result,
     }
 

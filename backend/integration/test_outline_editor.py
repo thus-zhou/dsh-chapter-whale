@@ -160,5 +160,52 @@ class OutlineFilesTest(unittest.TestCase):
             self.assertEqual(after["1"]["outline"], "AI细纲")
 
 
+class LegacyListChaptersTest(unittest.TestCase):
+    def test_list_shaped_legacy_plan_is_normalized_at_every_entry(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            legacy = {
+                "schema_version": 1,
+                "master_outline": "旧总纲",
+                "chapters": [
+                    {"id": 1, "title": "开端", "outline": "第一章细纲-旧版", "key_scene": True},
+                    {"id": 2, "title": "转折", "outline": "第二章细纲-旧版"},
+                ],
+            }
+            (project / ".webnovel" / "story_plan.json").write_text(
+                json.dumps(legacy, ensure_ascii=False), encoding="utf-8", newline="\n")
+            payload = {"schema_version": 1, "chapters": [
+                {"id": 1, "title": "开端", "outline": "AI第一章", "chapter_rev": 1},
+                {"id": 2, "title": "转折", "outline": "AI第二章", "chapter_rev": 1},
+            ]}
+            plan = "<!-- novel-plan:" + json.dumps(payload, ensure_ascii=False) + " -->\n\n"
+            plan += "## 第1章 开端\nAI第一章\n\n## 第2章 转折\nAI第二章\n"
+            path = project / "大纲" / "AI规划-0001-0002.md"
+            path.write_text(plan, encoding="utf-8", newline="\n")
+
+            files = oe.files(project)
+            self.assertEqual(len(files["files"]), 1)
+            meta = oe.load_meta(project)
+            self.assertEqual(sorted(meta["legacy_chapters"]), ["1", "2"])
+            self.assertEqual(len(oe.conflicts(project)), 0)
+
+            recovered = oe.recover_plan(project)
+            self.assertEqual(sorted(recovered["chapters"]), ["1", "2"])
+            self.assertEqual(recovered["chapters"]["1"]["outline"], "AI第一章")
+
+            oe.write_meta(project, {"volumes": "第一卷"})
+            story = json.loads((project / ".webnovel" / "story_plan.json")
+                               .read_text(encoding="utf-8"))
+            self.assertEqual(sorted(story["chapters"]), ["1", "2"])
+            self.assertEqual(story["chapters"]["1"]["outline"], "AI第一章")
+
+            revision = oe.read_file(project, path.name)["revision"]
+            saved = oe.write_file(project, path.name,
+                                  content="## 第1章 开端\n改过的细纲\n\n## 第2章 转折\nAI第二章\n",
+                                  revision=revision)
+            self.assertEqual(saved["status"], "saved")
+            self.assertEqual(saved["chapter_revs"]["1"] >= 2, True)
+
+
 if __name__ == "__main__":
     unittest.main()

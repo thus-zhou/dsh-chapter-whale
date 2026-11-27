@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import os
+import secrets
 import sqlite3
 import threading
 import uuid
@@ -154,7 +156,8 @@ CREATE TABLE IF NOT EXISTS agent_approvals (
     resolved_by TEXT,
     decision_json TEXT,
     created_at TEXT NOT NULL,
-    resolved_at TEXT
+    resolved_at TEXT,
+    capability_hash TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(project_id, status);
 
@@ -181,6 +184,11 @@ def initialize(db_path=None) -> Path:
         db.executescript(SCHEMA)
         db.execute("CREATE TABLE IF NOT EXISTS agent_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         db.execute("INSERT OR IGNORE INTO agent_meta(key, value) VALUES('schema_version', '1')")
+        columns = {row[1] for row in db.execute("PRAGMA table_info(agent_approvals)")}
+        if "capability_hash" not in columns:
+            # Additive migration for databases created before one-time
+            # approval capabilities (B3-01).
+            db.execute("ALTER TABLE agent_approvals ADD COLUMN capability_hash TEXT")
     return path
 
 
@@ -191,12 +199,28 @@ def _json(value, default):
         return default
 
 
+def _capability_hash(value: str) -> str:
+    """Store only a hash; the plaintext capability is returned once, never read back."""
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+
 def create_directive(db_path=None, *, session_id: str, project_id: Optional[str], title: str,
                      raw_instruction: str, autonomy: str = "step_confirm",
                      constraints: Optional[Sequence[str]] = None, status: str = "planning",
                      budget_cap_cny: Optional[str] = None, max_calls: int = 20) -> Dict[str, Any]:
     if autonomy not in {"propose", "step_confirm", "auto_chain", "dry_run_first"}:
         raise RoomError("invalid_autonomy")
+    if type(max_calls) is not int or isinstance(max_calls, bool) or not 1 <= max_calls <= 10**6:
+        raise RoomError("invalid_max_calls", detail={"field": "max_calls"})
+    if budget_cap_cny is not None:
+        if isinstance(budget_cap_cny, bool):
+            raise RoomError("invalid_budget_cap_cny", detail={"field": "budget_cap_cny"})
+        try:
+            from . import costs as cost_ledger
+            budget_cap_cny = cost_ledger.number(budget_cap_cny)
+        except (TypeError, ValueError):
+            raise RoomError("invalid_budget_cap_cny",
+                            detail={"field": "budget_cap_cny"}) from None
     directive_id = new_id("dir")
     stamp = now_iso()
     with write_tx(db_path) as db:
@@ -458,6 +482,35 @@ def max_seq(db_path=None, *, project_id: Optional[str] = None, session_id: Optio
     return int(row[0])
 
 
+def recent_events(db_path=None, *, project_id: Optional[str] = None,
+                  session_id: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    """Newest N events for one project/session, returned oldest-first.
+
+    ``seq`` is a global AUTOINCREMENT shared by every book.  A fresh SSE
+    client must page from the end of *its own* event list, not from
+    ``global_latest - N``, otherwise a sparse book silently skips its oldest
+    history (B3-07).
+    """
+    initialize(db_path)
+    if not project_id and not session_id:
+        raise RoomError("project_or_session_required")
+    clauses, params = [], []
+    if project_id:
+        clauses.append("project_id=?"); params.append(project_id)
+    elif session_id:
+        clauses.append("session_id=?"); params.append(session_id)
+        clauses.append("project_id IS NULL")
+    query = "SELECT * FROM agent_events WHERE " + " AND ".join(clauses) + " ORDER BY seq DESC LIMIT ?"
+    params.append(max(1, min(int(limit), 1000)))
+    with connect(db_path) as db:
+        rows = [dict(row) for row in db.execute(query, tuple(params))]
+    rows.reverse()
+    for item in rows:
+        item["mentions"] = _json(item.pop("mentions_json"), [])
+        item["payload"] = _json(item.pop("payload_json"), {})
+    return rows
+
+
 def create_approval(db_path=None, *, session_id: str, project_id: Optional[str], directive_id: Optional[str],
                     directive_revision: int, task_id: Optional[str], kind: str, title: str,
                     artifact_fingerprint: str, approved_scope_hash: str, detail: Dict[str, Any],
@@ -465,16 +518,21 @@ def create_approval(db_path=None, *, session_id: str, project_id: Optional[str],
     approval_id = new_id("apr")
     expires = (datetime.now(timezone.utc) + timedelta(minutes=int(ttl_minutes))).isoformat()
     stamp = now_iso()
+    # B3-01: the card creator receives a one-time capability.  Only its hash
+    # is stored; a GET or a database read can never reconstruct it.
+    capability = secrets.token_urlsafe(32)
     with write_tx(db_path) as db:
         db.execute(
             "INSERT INTO agent_approvals(id, session_id, project_id, directive_id, directive_revision, "
             "task_id, kind, title, artifact_fingerprint, approved_scope_hash, expires_at, detail_json, "
-            "status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status, created_at, capability_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (approval_id, session_id, project_id, directive_id, int(directive_revision), task_id,
              kind, title, artifact_fingerprint, approved_scope_hash, expires, json.dumps(detail, ensure_ascii=False),
-             "pending", stamp),
+             "pending", stamp, _capability_hash(capability)),
         )
-    return get_approval(db_path, approval_id)
+    result = get_approval(db_path, approval_id)
+    result["capability"] = capability
+    return result
 
 
 def get_approval(db_path=None, approval_id: str = "") -> Dict[str, Any]:
@@ -484,22 +542,37 @@ def get_approval(db_path=None, approval_id: str = "") -> Dict[str, Any]:
     if not row:
         raise RoomError("approval_missing", status=404)
     item = dict(row)
+    # Binding values are server-side only: a public GET must not hand back
+    # values that could be echoed into a resolution request (B3-01).
+    for field in ("capability_hash", "artifact_fingerprint", "approved_scope_hash",
+                  "directive_revision"):
+        item.pop(field, None)
     item["detail"] = _json(item.pop("detail_json"), {})
     item["decision"] = _json(item.pop("decision_json"), None)
     return item
 
 
 def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
-                     artifact_fingerprint: str, approved_scope_hash: str,
+                     artifact_fingerprint: str = "", approved_scope_hash: str = "",
                      directive_revision: Optional[int] = None, resolved_by: str = "author",
-                     decision: Optional[Dict[str, Any]] = None, now: Optional[str] = None) -> Dict[str, Any]:
-    """Five checks then atomic consumption; replay/expired/stale is 409."""
+                     decision: Optional[Dict[str, Any]] = None, now: Optional[str] = None,
+                     capability: Optional[str] = None,
+                     artifact_checker: Optional[Any] = None) -> Dict[str, Any]:
+    """Validate capability, live directive revision and binding, then consume atomically.
+
+    New cards (``capability_hash`` set) require the one-time ``capability``
+    returned by :func:`create_approval`; echoing fields that a GET could leak
+    is no longer sufficient.  Legacy cards without a hash keep the old
+    binding-echo contract.  A card whose directive was cancelled or amended
+    after the card was created is rejected with 409.
+    """
     stamp = now or now_iso()
     if resolved_by != "author":
         raise RoomError("agents_cannot_approve", status=403)
-    if not str(artifact_fingerprint or "").strip() or not str(approved_scope_hash or "").strip():
-        # The caller must echo the card's binding fields; server defaults made
-        # the three binding checks compare stored==stored (B-03).
+    capability = str(capability or "").strip()
+    if not capability and (not str(artifact_fingerprint or "").strip()
+                           or not str(approved_scope_hash or "").strip()):
+        # Legacy binding echo; new cards additionally require a capability.
         raise RoomError("approval_binding_required", status=400)
     expired = False
     with write_tx(db_path) as db:
@@ -515,15 +588,40 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
             expired = True
         if expired:
             pass
-        elif directive_revision is not None and int(directive_revision) != int(item.get("directive_revision") or 0):
-            raise RoomError("approval_directive_revision_stale", status=409)
-        elif artifact_fingerprint != item.get("artifact_fingerprint"):
-            raise RoomError("approval_artifact_changed", status=409)
-        elif approved_scope_hash != item.get("approved_scope_hash"):
-            raise RoomError("approval_scope_mismatch", status=409)
         else:
-            db.execute("UPDATE agent_approvals SET status=?, resolved_by=?, decision_json=?, resolved_at=? "
-                       "WHERE id=? AND status='pending'",
+            stored_capability = str(item.get("capability_hash") or "")
+            if stored_capability:
+                if not capability:
+                    raise RoomError(
+                        "approval_capability_required", status=403,
+                        detail={"message": "审批卡需要创建者提供的一次性 capability，不能只回传库内字段"})
+                if not hmac.compare_digest(stored_capability, _capability_hash(capability)):
+                    raise RoomError("approval_capability_invalid", status=403)
+            # Read the live directive inside the same write transaction: a
+            # cancel or revision bump that committed after the card was read
+            # must invalidate the card (B3-02).
+            if item.get("directive_id"):
+                live = db.execute("SELECT status, directive_revision FROM agent_directives WHERE id=?",
+                                  (item["directive_id"],)).fetchone()
+                if not live:
+                    raise RoomError("approval_directive_missing", status=409)
+                if str(live["status"]) == "cancelled":
+                    raise RoomError("approval_directive_cancelled", status=409)
+                if int(live["directive_revision"]) != int(item.get("directive_revision") or 0):
+                    raise RoomError("approval_directive_revision_stale", status=409)
+            if directive_revision is not None and int(directive_revision) != int(item.get("directive_revision") or 0):
+                raise RoomError("approval_directive_revision_stale", status=409)
+            if artifact_fingerprint and artifact_fingerprint != item.get("artifact_fingerprint"):
+                raise RoomError("approval_artifact_changed", status=409)
+            if approved_scope_hash and approved_scope_hash != item.get("approved_scope_hash"):
+                raise RoomError("approval_scope_mismatch", status=409)
+            if artifact_checker is not None:
+                card = dict(item)
+                card["detail"] = _json(item.get("detail_json"), {})
+                if not artifact_checker(card):
+                    raise RoomError("approval_artifact_missing", status=409)
+            db.execute("UPDATE agent_approvals SET status=?, resolved_by=?, decision_json=?, resolved_at=?, "
+                       "capability_hash=NULL WHERE id=? AND status='pending'",
                        ("approved" if approved else "rejected", resolved_by,
                         json.dumps(decision or {}, ensure_ascii=False), stamp, approval_id))
     if expired:
@@ -536,18 +634,32 @@ def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
                       status: Optional[str] = "pending",
                       unbound_only: bool = False) -> List[Dict[str, Any]]:
     initialize(db_path)
+    wanted = str(status or "pending")
     clauses = ["status=?"]
-    params: List[Any] = [str(status or "pending")]
+    params: List[Any] = [wanted]
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
     elif unbound_only:
         clauses.append("project_id IS NULL")
     if session_id:
         clauses.append("session_id=?"); params.append(session_id)
+    if wanted == "pending":
+        # Expired cards and cards of cancelled/amended directives are not
+        # actionable; never show them as pending (B3-02/B3-30).
+        stamp = now_iso()
+        clauses.append("(expires_at IS NULL OR expires_at > ?)"); params.append(stamp)
+        clauses.append("(directive_id IS NULL OR EXISTS (SELECT 1 FROM agent_directives d "
+                       "WHERE d.id=agent_approvals.directive_id AND d.status!='cancelled' "
+                       "AND d.directive_revision=agent_approvals.directive_revision))")
     with connect(db_path) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT * FROM agent_approvals WHERE " + " AND ".join(clauses) + " ORDER BY created_at", tuple(params))]
     for item in rows:
+        item.pop("capability_hash", None)
+        # Public listings must not hand back replayable binding values.
+        item.pop("artifact_fingerprint", None)
+        item.pop("approved_scope_hash", None)
+        item.pop("directive_revision", None)
         item["detail"] = _json(item.pop("detail_json"), {})
         item["decision"] = _json(item.pop("decision_json"), None)
     return rows

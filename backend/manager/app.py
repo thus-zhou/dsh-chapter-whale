@@ -191,6 +191,11 @@ def stop_process_tree(process: subprocess.Popen):
                 process.terminate()
 
 
+# 审计 C3-18：所有会读写正文/回执/发布队列的操作共享同一把项目互斥；
+# 旧实现只拦 generate/daily，publish/stage/polish/review 可与日更同时启动。
+_PROJECT_MUTEX_KINDS = {"generate", "daily", "publish", "stage", "polish", "review"}
+
+
 class Operations:
     def __init__(self, store: Store):
         self.store = store
@@ -270,7 +275,7 @@ class Operations:
             if any(x.get("identity") == identity for x in active):
                 raise HTTPException(409, "同一操作正在执行，请查看运行记录")
             meta_pid = (metadata or {}).get("project_id")
-            if kind in {"generate", "daily"}:
+            if kind in _PROJECT_MUTEX_KINDS:
                 if not meta_pid and kind == "daily":
                     # 审计 P2-14：daily 通常只带 --job-id，必须从调度任务解析项目，
                     # 否则项目互斥会被空 project_id 静默跳过。
@@ -294,7 +299,7 @@ class Operations:
                     if meta_pid:
                         metadata = {**(metadata or {}), "project_id": meta_pid}
                 if meta_pid and any(
-                    x.get("project_id") == meta_pid and x.get("kind") in {"generate", "daily"}
+                    x.get("project_id") == meta_pid and x.get("kind") in _PROJECT_MUTEX_KINDS
                     and x.get("status") in {"queued", "running", "awaiting_login", "waiting"}
                     for x in active
                 ):
@@ -380,7 +385,7 @@ class Operations:
                     if payload.get('project_id')!=project_key:
                         payload['project_id']=project_key
                     # 在唤醒前复检项目互斥：另一个同项目操作可能已排队/运行/等待。
-                    if any(x['id']!=payload['id'] and x.get('kind') in {'generate','daily'}
+                    if any(x['id']!=payload['id'] and x.get('kind') in _PROJECT_MUTEX_KINDS
                            and x.get('project_id')==project_key
                            and x.get('status') in {'queued','running','awaiting_login','waiting'}
                            for x in records):

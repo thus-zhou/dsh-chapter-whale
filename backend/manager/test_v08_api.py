@@ -161,15 +161,17 @@ class V08ApiTests(unittest.TestCase):
 
     def test_backup_and_export_legacy(self):
         self.create()
-        backup_dir = self.root / "backup-target"
+        # 审计 C3-02：自定义目标也必须在管理器自己的 backups/exports 目录树内。
+        backup_dir = self.root / "backups" / "backup-target"
         backed = self.client.post(f"/api/projects/{self.identity}/backup",
                                   json={"destination": str(backup_dir)}, headers=self.headers)
         self.assertEqual(backed.status_code, 200, backed.text)
         self.assertTrue((backup_dir / "backup_manifest.json").is_file())
+        legacy_dir = self.root / "exports" / "legacy"
         exported = self.client.post(f"/api/projects/{self.identity}/rollback/export-legacy",
-                                    json={"destination": str(self.root / "legacy")}, headers=self.headers)
+                                    json={"destination": str(legacy_dir)}, headers=self.headers)
         self.assertEqual(exported.status_code, 200, exported.text)
-        self.assertTrue((self.root / "legacy" / "正文").is_dir())
+        self.assertTrue((legacy_dir / "正文").is_dir())
 
     def test_search_is_local_and_finds_two_char_name(self):
         self.create(content="林溪拿着旧地图走进档案馆。\n")

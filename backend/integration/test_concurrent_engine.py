@@ -85,7 +85,8 @@ class SchedulingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             book = project(folder)
             task = ce.submit(book, {}, priority="P1")
-            claimed = ce.claim(book, "w", lease_seconds=0.05)
+            # C3-11 起 begin_commit 会拒绝已过期租约，夹具必须留足提交前的余量。
+            claimed = ce.claim(book, "w", lease_seconds=30)
             self.assertEqual(claimed["task_id"], task["task_id"])
             committed = ce.begin_commit(book, task["task_id"], "w")
             self.assertTrue(committed["committing"])

@@ -215,7 +215,12 @@ def _published_state(project, chapter: int) -> Dict[str, Any]:
         receipts = {}
     published_sha = receipts.get("published_sha256") or (receipts.get("publish") or {}).get("sha256")
     status = "published" if published_sha else ("staged" if receipts.get("staged_at") else "unpublished")
-    disk = versions.file_sha256(versions.chapter_path(project, chapter))
+    try:
+        disk = versions.file_sha256(versions.chapter_path(project, chapter))
+    except versions.VersionConflict:
+        # Duplicate chapter files must not turn a committed save into a 500;
+        # the reconciliation result already reports the title conflict.
+        disk = None
     return {
         "status": status,
         "published_sha256": published_sha,
@@ -467,18 +472,47 @@ def _recover_completed_save(project, chapter: int, op_id: str, content: str,
         return None
     if versions.normalize_title(str(record.get("title") or "")) != versions.normalize_title(title):
         return None
-    if versions.file_sha256(versions.chapter_path(project, chapter)) != sha:
+    try:
+        disk_sha = versions.file_sha256(versions.chapter_path(project, chapter))
+    except versions.VersionConflict:
+        disk_sha = None
+        duplicate_files = True
+    else:
+        duplicate_files = False
+    if not duplicate_files and disk_sha != sha:
         return None
     entry = versions.load_index(project)["chapters"].get(str(int(chapter))) or {}
     if entry.get("current") != sha:
         return None
+    # Finish a rename/receipt that an earlier failed attempt left behind; the
+    # commit marker is the durable source of truth (A-R-03/A-R-06).
+    if duplicate_files:
+        outcome = {"status": "partial", "title_conflict": True, "renamed": False,
+                   "title_renamed": False,
+                   "error": "VersionConflict: duplicate_chapter_files"}
+    else:
+        outcome = versions.reconcile_title(project, chapter, title=title, op_id=op_id)
+    draft = wb.get_draft(project, chapter)
     response = {
         "status": "saved", "state": "committed", "chapter_id": int(chapter),
         "title": title, "sha256": sha, "content_sha256": sha,
         "version_id": record.get("version_id") or entry.get("current_version_id"),
-        "unchanged": False, "recovered": True, "draft_cleared": False,
-        "draft_preserved": False, "current_draft_revision": 0,
+        "unchanged": False, "recovered": True, "draft_cleared": draft is None,
+        "draft_preserved": False, "current_draft_revision": (draft or {}).get("draft_revision", 0),
+        "renamed": bool(outcome.get("renamed")),
+        "title_renamed": bool(outcome.get("title_renamed")),
+        "receipt_synced": bool(outcome.get("receipt_synced")),
     }
+    if outcome.get("status") == "partial":
+        # Do not cache a partial result: the retry must be able to finish the
+        # rename/receipt once the conflicting file is removed.
+        response["status"] = "partial"
+        response["title_conflict"] = bool(outcome.get("title_conflict"))
+        if outcome.get("error"):
+            response["title_error"] = outcome["error"]
+        if outcome.get("receipt_error"):
+            response["receipt_error"] = outcome["receipt_error"]
+        return response
     _finish(project, "chapter_save", op_id, response)
     return {**response, "reused": True}
 
@@ -568,10 +602,25 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
                                             source=str(data.get("source") or "author_edit"),
                                             note=str(data.get("note") or "")[:400],
                                             allow_new=current_sha is None)
-            if current_sha is not None and path and title != current_title:
-                result["renamed"] = _rename_chapter_file(project, chapter, path, title)
             result["status"] = "saved"
             result["unchanged"] = False
+            if current_sha is not None:
+                # One idempotent reconciliation owns filename + receipt +
+                # commit path, so a rename that loses a race is reported as a
+                # partial result instead of a bare 409 after the body changed
+                # (A-R-03/A-R-06).
+                outcome = versions.reconcile_title(project, chapter, title=title,
+                                                   op_id=result.get("op_id"))
+                result["renamed"] = bool(outcome.get("renamed"))
+                result["title_renamed"] = bool(outcome.get("title_renamed"))
+                result["receipt_synced"] = bool(outcome.get("receipt_synced"))
+                if outcome.get("status") == "partial":
+                    result["status"] = "partial"
+                    result["title_conflict"] = bool(outcome.get("title_conflict"))
+                    if outcome.get("error"):
+                        result["title_error"] = outcome["error"]
+                    if outcome.get("receipt_error"):
+                        result["receipt_error"] = outcome["receipt_error"]
 
     # 已离开 OS 单章锁：草稿清理与 FTS 更新各自短事务（铁律 A：锁层不嵌套）。
     draft_result = {"cleared": False, "draft_preserved": False}
@@ -612,26 +661,18 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     return response
 
 
-def _rename_chapter_file(project, chapter: int, source: Path, title: str) -> bool:
-    """Rename ``第N章-旧标题.md`` to the new title with Windows retry protection."""
-    target = source.with_name(f"第{int(chapter)}章" + (f"-{title}" if title else "") + ".md")
-    if target == source:
-        return False
-    if target.exists() and target.resolve() != source.resolve():
+def _rename_chapter_file(project, chapter: int, source: Path, title: str,
+                         *, op_id: Optional[str] = None) -> bool:
+    """Rename a chapter file through the shared idempotent reconciler.
+
+    Kept as a thin compatibility wrapper: filename, receipt destination and
+    the commit record must move together, or an interrupted rename becomes
+    permanently invisible to every later retry (A-R-03/A-R-06).
+    """
+    outcome = versions.reconcile_title(project, chapter, title=title, op_id=op_id)
+    if outcome.get("title_conflict"):
         raise ChapterError("chapter_filename_conflict", status=409)
-    try:
-        from integration import transaction_journal as journal
-        journal.rename_with_retry(source, target)
-    except Exception as exc:
-        if exc.__class__.__name__ == "FileInUse":
-            raise ChapterError("file_in_use_retry", status=409) from None
-        raise
-    receipts = _read_receipts(project)
-    entry = receipts.get(str(int(chapter)))
-    if isinstance(entry, dict):
-        entry["destination"] = str(target.resolve())
-        _write_receipts(project, {str(int(chapter)): entry})
-    return True
+    return bool(outcome.get("renamed"))
 
 
 def new_chapter(project, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -979,16 +1020,17 @@ def _restore_trash_annotations(project, chapter: int, uid: str,
         return 0
 
 
-def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
+def restore_trash(project, entry: str, *, op_id: str = "", force: bool = False) -> Dict[str, Any]:
     safe_entry = str(entry or "")
     if safe_entry in {".", ".."} or not re.fullmatch(r"[0-9A-Za-z._-]+", safe_entry):
         raise ChapterError("trash_entry_invalid")
     op_id = _validate_op_id(op_id)
-    cached = _idempotent_soft(project, "trash_restore", op_id, {"entry": safe_entry})
+    cached = _idempotent_soft(project, "trash_restore", op_id,
+                              {"entry": safe_entry, "force": bool(force)})
     if cached is not None:
         return {**cached, "reused": True}
     try:
-        result = _restore_trash_impl(project, safe_entry, op_id=op_id)
+        result = _restore_trash_impl(project, safe_entry, op_id=op_id, force=bool(force))
     except Exception:
         _fail_soft(project, "trash_restore", op_id)
         raise
@@ -996,7 +1038,8 @@ def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
     return result
 
 
-def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "") -> Dict[str, Any]:
+def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "",
+                        force: bool = False) -> Dict[str, Any]:
     archive = Path(project) / ".webnovel" / _TRASH / safe_entry
     manifest_path = archive / "manifest.json"
     if not manifest_path.is_file():
@@ -1007,6 +1050,41 @@ def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "") -> Dict[st
         raise ChapterError("trash_entry_corrupt") from exc
     if not isinstance(manifest, dict):
         raise ChapterError("trash_entry_corrupt")
+    payload_sha = str(manifest.get("payload_sha256") or manifest.get("content_sha256") or "")
+    if not force:
+        restored_at = manifest.get("restored_at")
+        if restored_at:
+            raise ChapterError("already_restored", status=409, detail={
+                "entry": safe_entry, "restored_at": restored_at,
+                "chapter_id": manifest.get("restored_chapter_id"),
+                "message": "该回收站条目已还原；如需再复制一份，请显式 force",
+            })
+        try:
+            started_chapter = int(manifest.get("restore_target_chapter") or 0)
+        except (TypeError, ValueError):
+            started_chapter = 0
+        if manifest.get("restore_started_at") and started_chapter > 0 and payload_sha:
+            started_path = versions.chapter_path(project, started_chapter)
+            entry_state = (versions.load_index(project)["chapters"].get(str(started_chapter)) or {})
+            if (versions.file_sha256(started_path) == payload_sha
+                    and entry_state.get("current") == payload_sha):
+                # The previous attempt landed body+index but died before the
+                # manifest write; finish the bookkeeping instead of creating a
+                # second copy (A-P2-05).
+                manifest.update({"restored_at": _now(),
+                                 "restored_chapter_id": started_chapter,
+                                 "restored_renumbered": bool(
+                                     started_chapter != int(manifest.get("chapter_id") or 0))})
+                manifest.pop("restore_started_at", None)
+                manifest.pop("restore_target_chapter", None)
+                try:
+                    safety.atomic_json(manifest_path, manifest)
+                except Exception:
+                    pass
+                raise ChapterError("already_restored", status=409, detail={
+                    "entry": safe_entry, "chapter_id": started_chapter,
+                    "restored_at": manifest["restored_at"], "recovered": True,
+                })
     mapping = versions.chapter_map(project)
     chapter = int(manifest.get("chapter_id") or 0)
     if chapter <= 0:
@@ -1038,6 +1116,12 @@ def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "") -> Dict[st
     uid = "" if renumbered else str(manifest.get("chapter_uid") or "")
     if renumbered:
         uid = wb.chapter_uid(project, chapter)
+    manifest["restore_started_at"] = _now()
+    manifest["restore_target_chapter"] = chapter
+    try:
+        safety.atomic_json(manifest_path, manifest)
+    except (OSError, RuntimeError) as exc:
+        raise ChapterError("trash_manifest_write_failed") from exc
     result = versions.commit_raw_bytes(project, chapter, data, title=title,
                                        op_id=op_id or f"restore-trash-{uuid.uuid4().hex[:8]}",
                                        source="trash-restored", allow_new=True,
@@ -1071,11 +1155,23 @@ def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "") -> Dict[st
                                                       manifest.get("annotations"))
     draft_restored = _restore_trash_draft(project, chapter, restored_uid,
                                           manifest.get("draft"))
+    manifest.update({"restored_at": _now(), "restored_chapter_id": chapter,
+                     "restored_renumbered": bool(renumbered)})
+    manifest.pop("restore_started_at", None)
+    manifest.pop("restore_target_chapter", None)
+    try:
+        safety.atomic_json(manifest_path, manifest)
+        manifest_updated = True
+    except Exception:
+        # Body/index already landed; the ``restore_started_at`` marker plus the
+        # payload sha make a later retry report already_restored instead of
+        # copying the chapter a second time.
+        manifest_updated = False
     return {"status": "restored", "entry": safe_entry, "chapter_id": chapter,
             "chapter_uid": uid, "renumbered": renumbered,
             "title": title, "content_sha256": result.get("content_sha256"),
             "annotations_restored": annotations_restored,
-            "draft_restored": draft_restored}
+            "draft_restored": draft_restored, "manifest_updated": manifest_updated}
 
 
 def _require_tail_unpublished(project, chapter: int) -> Path:
@@ -1089,13 +1185,27 @@ def _require_tail_unpublished(project, chapter: int) -> Path:
     return mapping[chapter]
 
 
+def _split_entry_is_ours(entry: Dict[str, Any], second_sha: str, op_b: str) -> bool:
+    """True only when the index entry is still the version this split wrote."""
+    if not isinstance(entry, dict) or not entry:
+        return False
+    if entry.get("current") != second_sha:
+        return False
+    versions_list = entry.get("versions") if isinstance(entry.get("versions"), list) else []
+    return any(isinstance(meta, dict) and meta.get("op_id") == op_b
+               and meta.get("sha256") == second_sha for meta in versions_list)
+
+
 def _rollback_split(project, chapter: int, raw: bytes, first_sha: str, second_sha: str,
                     chapter_entry: Dict[str, Any], next_entry: Dict[str, Any],
-                    op_a: str, op_b: str, base_title: str) -> Optional[str]:
+                    op_a: str, op_b: str, base_title: str) -> Dict[str, Any]:
     """Undo only this split's effects; never overwrite a concurrent save.
 
-    Returns the current body sha when it differs from both bytes this split
-    could have produced (external/concurrent modification).
+    The second half is removed only while its on-disk bytes and index entry
+    still carry this split's ``second_sha``/``op_b``.  A page that saved
+    ``chapter+1`` after the first commit keeps its body, index entry and
+    receipt; the caller reports ``split_rollback_skipped_concurrent`` instead
+    of silently deleting another writer's version (A-P1-03).
     """
     path = versions.chapter_path(project, chapter)
     current_sha = versions.file_sha256(path)
@@ -1108,13 +1218,12 @@ def _rollback_split(project, chapter: int, raw: bytes, first_sha: str, second_sh
         except OSError:
             pass
     second_path = versions.chapter_path(project, chapter + 1)
-    if second_path is not None and versions.file_sha256(second_path) == second_sha:
-        try:
-            second_path.unlink()
-        except OSError:
-            pass
+    second_disk_sha = versions.file_sha256(second_path)
+    concurrent = False
     with safety.file_lock(versions._paths(project)["lock"]):
         index = versions.load_index(project)
+        current_next = index["chapters"].get(str(chapter + 1)) or {}
+        ours = _split_entry_is_ours(current_next, second_sha, op_b)
         changed = False
         if restore_body:
             if isinstance(chapter_entry, dict) and chapter_entry:
@@ -1122,12 +1231,30 @@ def _rollback_split(project, chapter: int, raw: bytes, first_sha: str, second_sh
             else:
                 index["chapters"].pop(str(chapter), None)
             changed = True
-        if isinstance(next_entry, dict) and next_entry:
-            index["chapters"][str(chapter + 1)] = next_entry
+        if ours:
+            if second_path is not None and second_disk_sha == second_sha:
+                try:
+                    second_path.unlink()
+                except OSError:
+                    pass
+            if isinstance(next_entry, dict) and next_entry:
+                index["chapters"][str(chapter + 1)] = next_entry
+            else:
+                index["chapters"].pop(str(chapter + 1), None)
             changed = True
-        elif str(chapter + 1) in index["chapters"]:
-            index["chapters"].pop(str(chapter + 1), None)
-            changed = True
+        else:
+            # Do not touch an entry/receipt we cannot prove we created.
+            if current_next and current_next != next_entry:
+                concurrent = True
+            elif second_disk_sha not in {None, second_sha}:
+                concurrent = True
+            elif second_disk_sha == second_sha and not current_next and second_path is not None:
+                # Index write failed after the body landed: remove our own
+                # orphan half instead of leaving a duplicate chapter file.
+                try:
+                    second_path.unlink()
+                except OSError:
+                    pass
         if changed:
             versions._save_index(project, index)
     for op in (op_a, op_b):
@@ -1135,11 +1262,9 @@ def _rollback_split(project, chapter: int, raw: bytes, first_sha: str, second_sh
             versions.discard_commit(project, op)
         except versions.VersionError:
             pass
-    try:
-        _drop_receipt(project, chapter + 1)
-    except Exception:
-        pass
-    return current_sha if external else None
+    # Never drop the chapter+1 receipt here: split does not create receipts,
+    # so any receipt belongs to a concurrent save (A-P1-03).
+    return {"external_sha": current_sha if external else None, "concurrent": concurrent}
 
 
 def split_chapter(project, chapter: int, *, offset: int, title: str = "",
@@ -1202,11 +1327,15 @@ def _split_chapter_locked(project, chapter: int, *, offset: int, title: str,
                                   op_id=op_a, source="split",
                                   expected_sha256=_raw_sha(raw), note="尾章拆分（上）")
     except Exception as exc:
-        external_sha = _rollback_split(project, chapter, raw, first_sha, second_sha,
-                                       chapter_entry, next_entry, op_a, op_b, base_title)
-        if external_sha is not None:
+        rollback = _rollback_split(project, chapter, raw, first_sha, second_sha,
+                                   chapter_entry, next_entry, op_a, op_b, base_title)
+        if rollback.get("external_sha") is not None:
             raise ChapterError("split_aborted_concurrent_modification", status=409,
-                               detail={"current_content_sha256": external_sha}) from exc
+                               detail={"current_content_sha256": rollback["external_sha"]}) from exc
+        if rollback.get("concurrent"):
+            raise ChapterError("split_rollback_skipped_concurrent", status=409,
+                               detail={"new_chapter_id": chapter + 1,
+                                       "message": "后半章在拆分期间被并发保存，已保留其正文与版本"}) from exc
         raise
     wb.chapter_uid(project, chapter + 1)
     return {"status": "split", "chapter_id": chapter, "new_chapter_id": chapter + 1,

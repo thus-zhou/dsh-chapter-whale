@@ -79,39 +79,125 @@ class RoomTest(unittest.TestCase):
         self.assertTrue(all("新话题" in item["summary"] for item in new))
 
     def test_approval_five_checks_and_replay(self):
-        approval = room.create_approval(self.db, session_id="s", project_id="p1", directive_id="d1",
-                                        directive_revision=3, task_id="t1", kind="book_scope_confirm",
+        directive = room.create_directive(self.db, session_id="s", project_id="p1",
+                                          title="范围确认", raw_instruction="改全书")
+        approval = room.create_approval(self.db, session_id="s", project_id="p1",
+                                        directive_id=directive["id"],
+                                        directive_revision=1, task_id="t1", kind="book_scope_confirm",
                                         title="范围确认", artifact_fingerprint="fp1",
                                         approved_scope_hash="scope1", detail={"chapters": [6, 7]})
+        capability = approval["capability"]
         # 指纹变化
         with self.assertRaises(room.RoomError) as caught:
             room.resolve_approval(self.db, approval["id"], approved=True,
                                   artifact_fingerprint="fp2", approved_scope_hash="scope1",
-                                  directive_revision=3)
+                                  directive_revision=1, capability=capability)
         self.assertEqual(caught.exception.code, "approval_artifact_changed")
-        # 改令推进
+        # 调用方 revision 与卡片不一致
         with self.assertRaises(room.RoomError) as caught:
             room.resolve_approval(self.db, approval["id"], approved=True,
                                   artifact_fingerprint="fp1", approved_scope_hash="scope1",
-                                  directive_revision=4)
+                                  directive_revision=2, capability=capability)
         self.assertEqual(caught.exception.code, "approval_directive_revision_stale")
         # Agent 自批
         with self.assertRaises(room.RoomError) as caught:
             room.resolve_approval(self.db, approval["id"], approved=True,
                                   artifact_fingerprint="fp1", approved_scope_hash="scope1",
-                                  directive_revision=3, resolved_by="chief")
+                                  directive_revision=1, resolved_by="chief", capability=capability)
         self.assertEqual(caught.exception.code, "agents_cannot_approve")
         # 正常批准
         resolved = room.resolve_approval(self.db, approval["id"], approved=True,
                                          artifact_fingerprint="fp1", approved_scope_hash="scope1",
-                                         directive_revision=3, decision={"choice": "approve"})
+                                         directive_revision=1, decision={"choice": "approve"},
+                                         capability=capability)
         self.assertEqual(resolved["status"], "approved")
         # 双击重放
         with self.assertRaises(room.RoomError) as caught:
             room.resolve_approval(self.db, approval["id"], approved=True,
                                   artifact_fingerprint="fp1", approved_scope_hash="scope1",
-                                  directive_revision=3)
+                                  directive_revision=1, capability=capability)
         self.assertEqual(caught.exception.code, "approval_not_pending")
+
+    def test_approval_capability_is_required_one_time_and_not_listed(self):
+        approval = room.create_approval(self.db, session_id="s", project_id="p1", directive_id=None,
+                                        directive_revision=1, task_id=None, kind="publish",
+                                        title="发布", artifact_fingerprint="fp",
+                                        approved_scope_hash="scope", detail={})
+        self.assertTrue(approval["capability"])
+        self.assertIsNone(room.get_approval(self.db, approval["id"]).get("capability_hash"))
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, approval["id"], approved=True,
+                                  artifact_fingerprint="fp", approved_scope_hash="scope",
+                                  directive_revision=1)
+        self.assertEqual(caught.exception.code, "approval_capability_required")
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, approval["id"], approved=True,
+                                  capability="wrong")
+        self.assertEqual(caught.exception.code, "approval_capability_invalid")
+        resolved = room.resolve_approval(self.db, approval["id"], approved=True,
+                                         capability=approval["capability"])
+        self.assertEqual(resolved["status"], "approved")
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, approval["id"], approved=True,
+                                  capability=approval["capability"])
+        self.assertEqual(caught.exception.code, "approval_not_pending")
+
+    def test_pending_approvals_hides_expired_and_dead_cards(self):
+        directive = room.create_directive(self.db, session_id="s", project_id="p1",
+                                          title="书", raw_instruction="写")
+        live = room.create_approval(self.db, session_id="s", project_id="p1",
+                                    directive_id=directive["id"], directive_revision=1,
+                                    task_id=None, kind="publish", title="有效",
+                                    artifact_fingerprint="fp", approved_scope_hash="scope",
+                                    detail={})
+        room.create_approval(self.db, session_id="s", project_id="p1",
+                             directive_id=directive["id"], directive_revision=1,
+                             task_id=None, kind="publish", title="过期",
+                             artifact_fingerprint="fp", approved_scope_hash="scope",
+                             detail={}, ttl_minutes=-1)
+        room.bump_directive_revision(self.db, directive["id"])
+        self.assertEqual([item["id"] for item in
+                          room.pending_approvals(self.db, project_id="p1")], [])
+        # A live card at the current revision is still listed, without
+        # replayable binding fields.
+        current = room.create_approval(self.db, session_id="s", project_id="p1",
+                                       directive_id=directive["id"], directive_revision=2,
+                                       task_id=None, kind="publish", title="当前",
+                                       artifact_fingerprint="fp", approved_scope_hash="scope",
+                                       detail={})
+        listed = room.pending_approvals(self.db, project_id="p1")
+        self.assertEqual([item["id"] for item in listed], [current["id"]])
+        for field in ("artifact_fingerprint", "approved_scope_hash", "directive_revision",
+                      "capability_hash"):
+            self.assertNotIn(field, listed[0])
+        self.assertEqual(room.get_approval(self.db, live["id"])["status"], "pending")
+
+    def test_resolve_rejects_cancelled_or_amended_live_directive(self):
+        directive = room.create_directive(self.db, session_id="s", project_id="p1",
+                                          title="书", raw_instruction="写")
+        amended = room.create_approval(self.db, session_id="s", project_id="p1",
+                                       directive_id=directive["id"], directive_revision=1,
+                                       task_id=None, kind="publish", title="改令前",
+                                       artifact_fingerprint="fp", approved_scope_hash="scope",
+                                       detail={})
+        room.bump_directive_revision(self.db, directive["id"])
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, amended["id"], approved=True,
+                                  capability=amended["capability"])
+        self.assertEqual(caught.exception.code, "approval_directive_revision_stale")
+        # A cancelled directive cannot be approved even by a newly-created
+        # pending card.
+        agent_room_hub = __import__("integration.agent_hub", fromlist=["cancel_directive"])
+        agent_room_hub.cancel_directive(self.db, directive_id=directive["id"])
+        late = room.create_approval(self.db, session_id="s", project_id="p1",
+                                    directive_id=directive["id"], directive_revision=2,
+                                    task_id=None, kind="publish", title="取消后",
+                                    artifact_fingerprint="fp", approved_scope_hash="scope",
+                                    detail={})
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, late["id"], approved=True,
+                                  capability=late["capability"])
+        self.assertEqual(caught.exception.code, "approval_directive_cancelled")
 
     def test_expired_approval(self):
         approval = room.create_approval(self.db, session_id="s", project_id="p1", directive_id=None,
@@ -121,7 +207,7 @@ class RoomTest(unittest.TestCase):
         with self.assertRaises(room.RoomError) as caught:
             room.resolve_approval(self.db, approval["id"], approved=True,
                                   artifact_fingerprint="fp", approved_scope_hash="scope",
-                                  directive_revision=1)
+                                  directive_revision=1, capability=approval["capability"])
         self.assertEqual(caught.exception.code, "approval_expired")
         self.assertEqual(room.get_approval(self.db, approval["id"])["status"], "expired")
 

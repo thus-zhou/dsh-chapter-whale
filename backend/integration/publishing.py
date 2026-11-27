@@ -18,7 +18,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from . import bridge
+from fanqie_auto_publish.publication_safety import body_digest
+
+from . import bridge, chapter_versions, publication_state
 
 SCHEMA = 1
 STATE_DIR = "publish"
@@ -540,9 +542,53 @@ def ledger_entry(project, *, platform: str, account: str, platform_book_id: str,
     return _read(path, {})
 
 
+def _submission_content(project, chapter: int, *, title: str, body: str) -> Dict[str, Any]:
+    """取服务器当前版本正文；请求体只能与之逐字相符，不能自带任意正文。
+
+    E-03：第三层提交的信任边界必须是“当前已审查版本”，不是客户端声明。
+    版本索引与磁盘不一致时拒绝（要求先重新保存），绝不把旧对象当当前稿提交。
+    """
+    try:
+        path = chapter_versions.chapter_path(project, int(chapter))
+    except chapter_versions.VersionError as error:
+        raise PublishError(f"章节版本不可用：{error}") from error
+    if path is None:
+        raise PublishError("章节不存在：先保存正文再提交")
+    try:
+        meta = chapter_versions.current_version(project, int(chapter))
+        disk_sha = chapter_versions.file_sha256(path)
+        if not disk_sha:
+            raise PublishError("章节正文不可读")
+        if isinstance(meta, dict):
+            indexed = meta.get("sha256") or meta.get("content_sha256")
+            if indexed and indexed != disk_sha:
+                raise PublishError("章节版本与磁盘正文不一致：先重新保存再提交")
+        resolved = chapter_versions.read_version(project, int(chapter))
+        if resolved.get("sha256") != disk_sha or not isinstance(resolved.get("text"), str):
+            raise PublishError("章节版本与磁盘正文不一致：先重新保存再提交")
+        parsed = chapter_versions.parse_chapter_name(path.name)
+        current_title = parsed[1] if parsed else ""
+    except chapter_versions.VersionError as error:
+        raise PublishError(f"章节版本不可用：{error}") from error
+    text = resolved["text"]
+    if body is None or not str(body).strip():
+        raise PublishError("正文为空：没有可提交的正文")
+    if body_digest(str(body)) != body_digest(text):
+        raise PublishError("请求正文不是服务器当前版本：请先保存并重新审查当前稿")
+    if str(title or "").strip():
+        wanted = str(title).strip()
+        parsed_title = chapter_versions.parse_chapter_name(wanted if wanted.endswith(".md") else wanted + ".md")
+        if not (wanted == current_title
+                or (parsed_title and parsed_title[0] == int(chapter)
+                    and parsed_title[1] == current_title)):
+            raise PublishError("请求标题与当前章节不一致：只能提交当前版本")
+    return {"text": text, "title": current_title, "content_sha256": disk_sha,
+            "version_id": (meta or {}).get("version_id")}
+
+
 def submit_chapter(project, *, platform: str, account: str, platform_book_id: str,
                    chapter: int, title: str, body: str) -> Dict[str, Any]:
-    """获准单章提交：能力 → 适配器 → 授权 → 意图 → 写入 → 回读。
+    """获准单章提交：能力 → 适配器 → 授权 → 当前版本/审查 → 意图 → 写入 → 回读。
 
     任何一步不满足就停在原地，不调用适配器；不做跨平台转投。
     已存在意图/结果未知/正文不符时一律返回 duplicate——只能先对账，不能强发。
@@ -565,7 +611,15 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
                              platform_book_id=platform_book_id, chapter=chapter):
         return {"platform": platform, "chapter": int(chapter), "status": "refused",
                 "writes": 0, "reason": "没有覆盖该章的授权记录：先在服务端登记授权"}
-    built = format_chapter(chapter, title, body, platform=platform)
+    content = _submission_content(project, chapter, title=title, body=body)
+    reviewed = publication_state.review_binding(
+        project, chapter, content_sha256=content["content_sha256"], text=content["text"])
+    if not reviewed.get("ok"):
+        return {"platform": platform, "chapter": int(chapter), "status": "refused",
+                "writes": 0, "version_id": content.get("version_id"),
+                "reason": f"正文未绑定当前版本的审查回执（{reviewed.get('reason')}）："
+                          "先审查当前稿再提交"}
+    built = format_chapter(chapter, content["title"], content["text"], platform=platform)
     path = _ledger_path(project, platform, account, platform_book_id, count := int(chapter),
                         built["sha256"])
     entry = _read(path, {})
@@ -583,6 +637,8 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
     intent = {"schema": SCHEMA, "platform": platform, "account": account,
               "platform_book_id": platform_book_id, "chapter": count,
               "body_sha256": built["sha256"], "bytes": built["bytes"],
+              "content_sha256": content["content_sha256"],
+              "version_id": content.get("version_id"),
               "state": "intent", "attempts": int(entry.get("attempts") or 0) + 1,
               "created_at": entry.get("created_at") or _now(), "updated_at": _now()}
     _write(path, intent)
@@ -622,10 +678,15 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
                    "remote_id": str(result.get("remote_id") or ""),
                    "echoed_sha256": echoed, "body_matches": True})
     _write(path, intent)
+    recorded = publication_state.record_published(
+        project, count, content_sha256=content["content_sha256"],
+        platform=platform, account=account, platform_book_id=platform_book_id,
+        remote_id=intent["remote_id"], source="publishing.submit_chapter",
+        evidence=str(path))
     return {"platform": platform, "chapter": count, "status": "accepted",
             "writes_attempted": 1, "writes_confirmed": 1,
             "body_matches": True, "remote_id": intent["remote_id"],
-            "ledger": str(path)}
+            "ledger": str(path), "publication_state": recorded}
 
 
 TRANSITIONS = {"intent": ("accepted", "abandoned"),
@@ -658,8 +719,16 @@ def reconcile(project, *, platform: str, account: str, platform_book_id: str,
                   "writes_confirmed": 1 if resolution == "accepted" else 0,
                   "updated_at": _now()})
     _write(path, entry)
-    return {"platform": platform, "chapter": int(chapter), "state": entry["state"],
-            "resolution": resolution, "ledger": str(path)}
+    result = {"platform": platform, "chapter": int(chapter), "state": entry["state"],
+              "resolution": resolution, "ledger": str(path)}
+    if resolution == "accepted":
+        # 人工对账确认平台已发布：也要成为章节只读状态的证据（E-01）。
+        result["publication_state"] = publication_state.record_published(
+            project, chapter, content_sha256=str(entry.get("content_sha256") or ""),
+            platform=platform, account=account, platform_book_id=platform_book_id,
+            remote_id=str(entry.get("remote_id") or ""), source="publishing.reconcile",
+            evidence=str(evidence).strip())
+    return result
 
 
 # --- 状态汇总（只读） ------------------------------------------------------

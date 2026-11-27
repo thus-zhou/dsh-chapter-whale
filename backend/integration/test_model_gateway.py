@@ -4,9 +4,12 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from integration import costs
+from integration import free_pool
 from integration import model_gateway as mg
+from integration.provider_client import ProviderClient
 
 
 class FakeService:
@@ -99,6 +102,100 @@ class GatewayTest(unittest.TestCase):
                                   service_factory=lambda role, c: FakeService(RuntimeError("boom")))
         with self.assertRaises(RuntimeError):
             gateway.invoke_sync("C", [{"role": "user", "content": "x"}], op_id="op-fail")
+
+
+class ProbeAuthorizationTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.book_a = self.root / "book-a"
+        self.book_b = self.root / "book-b"
+        self.book_a.mkdir()
+        self.book_b.mkdir()
+        self.dsh_home = self.root / "dsh-home"
+        (self.dsh_home / "our-free-model").mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def dsh_config(self):
+        return {
+            "multi_model": False,
+            "default_binding": {"provider_id": "dsh", "model_id": "m"},
+            "providers": {"dsh": {"id": "dsh", "name": "dsh", "protocol": "dsh_local",
+                                  "base_url": "http://127.0.0.1:1/v1",
+                                  "allowed_projects": [str(self.book_a.resolve())]}},
+            "roles": {},
+        }
+
+    def test_probe_stage_cannot_bypass_allowed_projects(self):
+        client = ProviderClient("B", self.dsh_config(), object(),
+                                lambda binding: object())
+        binding = {"provider_id": "dsh", "model_id": "m"}
+        messages = [{"role": "user", "content": "连接检测：请仅回复连接成功"}]
+        with mock.patch("integration.providers.verify_dsh_gateway"), \
+                mock.patch("integration.free_channels.home", return_value=self.dsh_home), \
+                mock.patch("integration.free_channels.token_saver_enabled",
+                           return_value=False):
+            for stage in ("probe", "draft"):
+                with costs.scope(project=str(self.book_b.resolve()), stage=stage):
+                    with self.assertRaises(ValueError):
+                        with client._scope(binding, False, messages, 1024):
+                            pass
+            with costs.scope(project=str(self.book_a.resolve()), stage="probe"):
+                with client._scope(binding, False, messages, 1024):
+                    pass
+            # A project-less connection probe remains allowed; a project-less
+            # non-probe still fails closed.
+            with costs.scope(stage="probe"):
+                with client._scope(binding, False, messages, 1024):
+                    pass
+            with costs.scope(stage="draft"):
+                with self.assertRaises(ValueError):
+                    with client._scope(binding, False, messages, 1024):
+                        pass
+
+    def test_free_pool_probe_cannot_bypass_allowed_projects(self):
+        config = {
+            "providers": {
+                "free-pool": {"base_url": "http://127.0.0.1:18900/v1",
+                              "allowed_projects": [str(self.book_a.resolve())],
+                              "pool_members": [{"model_id": "first/free", "roles": ["B"]}]},
+                "ofm-standalone": {"base_url": "http://127.0.0.1:18900/v1"},
+            },
+            "multi_model": False,
+        }
+        client = free_pool.FreePoolClient("B", config, lambda binding: None)
+        with mock.patch("integration.ofm_runtime.ensure_started",
+                        return_value={"url": "http://127.0.0.1:9"}), \
+                mock.patch("integration.ofm_runtime.persist_service_url"), \
+                mock.patch("integration.ofm_runtime.HOME", self.dsh_home), \
+                mock.patch("integration.free_channels.ofm_token_saver_enabled",
+                           return_value=False):
+            for stage in ("probe", "draft"):
+                with costs.scope(project=str(self.book_b.resolve()), stage=stage):
+                    with self.assertRaises(ValueError):
+                        client._choices()
+            with costs.scope(project=str(self.book_a.resolve()), stage="probe"):
+                project, rows = client._choices()
+                self.assertEqual(project, str(self.book_a.resolve()))
+                self.assertTrue(rows)
+            with costs.scope(stage="probe"):
+                client._choices()
+            with costs.scope(stage="draft"):
+                with self.assertRaises(ValueError):
+                    client._choices()
+
+    def test_gateway_guard_without_directive_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            gateway = mg.ModelGateway(config=config(),
+                                      service_factory=lambda role, c: FakeService(),
+                                      db_path=Path(folder) / "costs.sqlite3")
+            with self.assertRaises(mg.GatewayError) as caught:
+                gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                    op_id="guard-no-directive",
+                                    directive_guard={"max_calls": 1})
+            self.assertEqual(caught.exception.code, "directive_id_required")
 
 
 class AuditBGatewayTest(unittest.TestCase):

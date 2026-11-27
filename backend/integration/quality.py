@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -37,6 +38,32 @@ class QualityError(RuntimeError):
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _db_exists(project) -> bool:
+    return wb.db_path(project).exists()
+
+
+def _ensure_readable(project) -> bool:
+    """Read paths must not create ``workbench.sqlite3`` (audit C3-04)."""
+    if not _db_exists(project):
+        return False
+    from integration import maintenance
+    try:
+        maintenance.ensure_schema(project)
+        wb.initialize(project)
+    except sqlite3.Error:
+        return False
+    return True
+
+
+def _ensure_writable(project) -> None:
+    if not _db_exists(project):
+        wb.initialize(project)
+        return
+    from integration import maintenance
+    maintenance.ensure_schema(project)
+    wb.initialize(project)
 
 
 def _chapter_text(project, chapter: int) -> str:
@@ -115,7 +142,8 @@ def _review_key(version_id: str, text: str) -> str:
 
 
 def _auto_count(project, chapter: int, review_key: str) -> int:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return 0
     with wb.connect(project) as db:
         row = db.execute("SELECT COUNT(*) FROM quality_reviews WHERE chapter_id=? AND "
                          "reviewer NOT IN ('author','A-local') AND version_id=?",
@@ -141,7 +169,7 @@ def review(project, chapter: int, *, judgments: Optional[Iterable[Dict[str, Any]
         {"scores": local_scores(text), "reviewer": "A-local"},
     ]
     fused = fuse(rows)
-    wb.initialize(project)
+    _ensure_writable(project)
     stored_reviewer = reviewer if judgment_list is not None else "A-local"
     # 审计 C-25：传了 judgments 就是 B 轨，与 reviewer 名字无关。
     track = "B" if judgment_list is not None else "A"
@@ -163,7 +191,8 @@ def review(project, chapter: int, *, judgments: Optional[Iterable[Dict[str, Any]
 
 
 def history(project, chapter: int) -> List[Dict[str, Any]]:
-    wb.initialize(project)
+    if not _ensure_readable(project):
+        return []
     with wb.connect(project) as db:
         rows = db.execute("SELECT * FROM quality_reviews WHERE chapter_id=? ORDER BY id DESC",
                           (int(chapter),)).fetchall()
@@ -179,12 +208,13 @@ def history(project, chapter: int) -> List[Dict[str, Any]]:
 
 
 def dashboard(project, *, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
-    wb.initialize(project)
     mapping = versions.chapter_map(project)
-    with wb.connect(project) as db:
-        latest = {}
-        for row in db.execute("SELECT * FROM quality_reviews ORDER BY id"):
-            latest[int(row["chapter_id"])] = dict(row)
+    latest = {}
+    # 审计 C3-04：只读项目/未初始化作品只返回纯文件计算结果，绝不建库。
+    if _ensure_readable(project):
+        with wb.connect(project) as db:
+            for row in db.execute("SELECT * FROM quality_reviews ORDER BY id"):
+                latest[int(row["chapter_id"])] = dict(row)
     order = sorted(mapping)
     total_chapters = len(order)
     offset = max(0, int(offset))

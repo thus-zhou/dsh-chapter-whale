@@ -188,6 +188,12 @@ class ModelGateway:
             raise GatewayError("invalid_role")
         if not str(op_id or "").strip():
             raise GatewayError("op_id_required")
+        if directive_guard is not None and not directive_id:
+            # A guard without its directive is silently dropped by the cost
+            # layer; refuse instead of pretending max_calls/cap are enforced
+            # (B3-25).
+            raise GatewayError("directive_id_required",
+                               detail={"message": "directive_guard 必须同时提供 directive_id"})
         if self.pause_check and self.pause_check():
             raise GatewayError("ai_paused", detail={"message": "全局 AI 已急停"})
         binding = self.check_binding(role, override_binding)
@@ -212,7 +218,8 @@ class ModelGateway:
             dispatched = costs.mark_dispatched(self.db_path, token)
         try:
             with costs.scope(stage=stage, project=self.project, chapter=chapter, role=role,
-                             directive=directive_id):
+                             directive=directive_id,
+                             db=str(self.db_path) if self.db_path is not None else None):
                 reply = await service.chat(list(messages), max_tokens=max_tokens,
                                            temperature=temperature, **kwargs)
         except BaseException:
