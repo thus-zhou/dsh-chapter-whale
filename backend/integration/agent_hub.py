@@ -330,7 +330,7 @@ def _latest_amendment_id(db, directive_id: str) -> Optional[str]:
     return str(row[0]) if row else None
 
 
-HOLDABLE_STATUSES = {"running", "waiting", "pending", "awaiting_approval", "paused_budget"}
+HOLDABLE_STATUSES = {"running", "waiting", "pending", "paused_budget"}
 
 
 def start_amendment(db_path, *, directive_id: str, amendment_text: str,
@@ -383,7 +383,21 @@ def start_amendment(db_path, *, directive_id: str, amendment_text: str,
                            detail={"message": "已取消的指令不能改令；请新建指令"})
         revision = int(db.execute("SELECT directive_revision FROM agent_directives WHERE id=?",
                                   (directive_id,)).fetchone()[0])
-        _supersede_pending_approvals(db, directive_id, stamp)
+        # Preserve cards for tasks waiting on approval: holding/requeueing
+        # them without a card is an approval bypass (B4-01/R-02).
+        awaiting = {str(row[0]) for row in db.execute(
+            "SELECT id FROM agent_tasks WHERE directive_id=? AND status='awaiting_approval'",
+            (directive_id,))}
+        if awaiting:
+            # Keep the approval card actionable against the new directive
+            # revision; superseding it would deadlock the task, while leaving
+            # the old revision would make resolve reject it as stale.
+            placeholders = ",".join("?" for _ in awaiting)
+            db.execute(
+                f"UPDATE agent_approvals SET directive_revision=? "
+                f"WHERE directive_id=? AND status='pending' AND task_id IN ({placeholders})",
+                (revision, directive_id, *awaiting))
+        _supersede_pending_approvals(db, directive_id, stamp, keep_task_ids=awaiting)
         db.execute(
             "INSERT INTO agent_amendments(id, directive_id, directive_revision, raw_text, fallback, "
             "status, held_task_ids_json, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",

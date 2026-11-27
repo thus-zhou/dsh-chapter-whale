@@ -1131,20 +1131,43 @@ def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "",
             db.execute("UPDATE chapter_meta SET chapter_uid=?, updated_at=? WHERE chapter_id=?",
                        (uid, wb.now_iso(), chapter))
     entry_data = manifest.get("index_entry") or {}
+    concurrent_restore = False
     if isinstance(entry_data, dict) and entry_data.get("versions"):
         with safety.file_lock(versions._paths(project)["lock"]):
             index = versions.load_index(project)
             target = versions._chapter_entry(index, chapter)
-            existing = {v.get("sha256") for v in target.get("versions", [])}
-            target["versions"] = [v for v in entry_data["versions"] if v.get("sha256") not in existing] + target.get("versions", [])
-            target["current"] = result.get("content_sha256")
-            target["current_version_id"] = result.get("version_id")
+            # Do not overwrite a version committed by another window between
+            # commit_raw_bytes and this index update.  The body sha and the
+            # index current must both still be this restore's result (A P1-05).
+            current_ok = (target.get("current") == result.get("content_sha256")
+                          and versions.file_sha256(versions.chapter_path(project, chapter))
+                          == result.get("content_sha256"))
+            if not current_ok:
+                concurrent_restore = True
+            else:
+                existing = {v.get("sha256") for v in target.get("versions", [])}
+                target["versions"] = [v for v in entry_data["versions"]
+                                      if v.get("sha256") not in existing] + target.get("versions", [])
+                target["current"] = result.get("content_sha256")
+                target["current_version_id"] = result.get("version_id")
             versions._save_index(project, index)
     receipt = manifest.get("receipt") or {}
     if isinstance(receipt, dict) and receipt:
         receipt = dict(receipt)
         receipt["destination"] = str(versions.chapter_path(project, chapter) or "")
-        _write_receipts(project, {str(chapter): receipt})
+        def merge_receipt(latest):
+            key = str(chapter)
+            existing = latest.get(key)
+            existing = existing if isinstance(existing, dict) else {}
+            merged = dict(receipt)
+            # Preserve publication/author facts written while the restore was
+            # copying; only the archived review/destination fields are ours.
+            for field in ("published_sha256", "published_at", "publish",
+                          "staged_at", "stage", "author_confirm"):
+                if field in existing:
+                    merged[field] = existing[field]
+            latest[key] = merged
+        _update_receipts(project, merge_receipt)
     try:
         wb.index_document(project, doc_key=f"正文:{chapter}", kind="chapter", chapter_id=chapter,
                           title=title, content=_decode(data))
@@ -1169,6 +1192,7 @@ def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "",
         manifest_updated = False
     return {"status": "restored", "entry": safe_entry, "chapter_id": chapter,
             "chapter_uid": uid, "renumbered": renumbered,
+            "concurrent_save": concurrent_restore,
             "title": title, "content_sha256": result.get("content_sha256"),
             "annotations_restored": annotations_restored,
             "draft_restored": draft_restored, "manifest_updated": manifest_updated}

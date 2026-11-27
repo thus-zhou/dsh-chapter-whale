@@ -258,6 +258,24 @@ class ApprovalLifecycleHubTest(unittest.TestCase):
         self.assertEqual(room.get_task(self.db, paused["id"])["status"], "pending")
         self.assertEqual(room.get_approval(self.db, card["id"])["status"], "superseded")
 
+    def test_amendment_keeps_awaiting_approval_task_and_card_resolvable(self):
+        # B4-01: amendment/evaluate must not turn an approval-gated task into
+        # pending or supersede the only card.
+        waiting = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",
+                                   project_id="p", role="writer", title="等审批",
+                                   tool_name="publish", status="awaiting_approval")
+        card = room.create_approval(self.db, session_id="s", project_id="p",
+                                    directive_id=self.directive["id"], directive_revision=1,
+                                    task_id=waiting["id"], kind="publish", title="发布",
+                                    artifact_fingerprint="fp", approved_scope_hash="scope", detail={})
+        amendment = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                        amendment_text="改一句话", task_ids=[waiting["id"]])
+        self.assertEqual(room.get_task(self.db, waiting["id"])["status"], "awaiting_approval")
+        self.assertEqual(room.get_approval(self.db, card["id"])["status"], "pending")
+        hub.evaluate_amendment(self.db, directive_id=self.directive["id"],
+                               amendment_id=amendment["amendment_id"])
+        self.assertEqual(room.get_task(self.db, waiting["id"])["status"], "awaiting_approval")
+
     def test_resume_keeps_awaiting_approval_task_and_card(self):
         # R-02: resuming must not turn an approval-gated task into pending.
         waiting = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",

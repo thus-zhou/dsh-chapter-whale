@@ -523,12 +523,26 @@ def stage_project(
         if not _select_ids(chapter_id, selected_ids, start, end):
             continue
         if chapter_id in archived and not include_published:
+            valid = valid_receipt(archived[chapter_id], display_name, chapter_id)
             item = {
                 "chapter_id": chapter_id,
                 "source": str(source),
-                "status": "published" if valid_receipt(archived[chapter_id], display_name, chapter_id) else "archive_unverified",
+                "status": "published" if valid else "archive_unverified",
                 "uploaded_path": str(archived[chapter_id]),
             }
+            if valid:
+                # Upgrade/backfill: 0.7.5 published chapters only have an
+                # uploaded archive, not writer_receipts publication fields.
+                # Record the verified archive before skipping it so delete/
+                # split/merge stay protected after upgrade (E-01B).
+                try:
+                    item["publication_state"] = publication_state.record_published(
+                        project_root, chapter_id, content_sha256=digest_file(source),
+                        platform="fanqie", account=str(record.get("account") or ""),
+                        source="archive_backfill", evidence=str(archived[chapter_id]))
+                except Exception as exc:  # noqa: BLE001 - diagnostics only
+                    item["publication_state"] = {"recorded": False,
+                                                 "reason": type(exc).__name__}
             record["chapters"][str(chapter_id)] = {
                 **record["chapters"].get(str(chapter_id), {}),
                 **item,

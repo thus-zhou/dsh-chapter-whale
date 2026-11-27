@@ -6,7 +6,7 @@ import re
 import uuid
 from pathlib import Path
 from . import writer_runner as writer, bridge, model_roles as roles, memory_library
-from . import chapter_versions as versions
+from . import chapter_versions as versions, publication_state
 from . import costs
 from . import style_profile, style_stats
 
@@ -548,8 +548,10 @@ def polish_existing(project,chapter,min_words=0,preview=False):
             # 非预览润色到达两次审查上限：正文保留为交接稿，候选只存 pending，
             # 人工 approve-review 时再提交，避免未审定内容进入记忆。
             receipt["candidates"]=writer._commit_review_candidates(project,chapter,rewritten,review,_writer_locked=True)
-        receipts[str(chapter)]=receipt
-        writer.atomic_json(receipts_path,receipts)
+        # Preserve published_sha256/publish/staged_at fields written by the
+        # publication layer; polishing only changes the review snapshot.
+        publication_state._update(project, chapter, lambda entry: entry.update(receipt))
+        receipts=writer.strict_json(receipts_path,{})
         post=asyncio.run(writer._sync_committed_artifacts(executor,chapter,rewritten,receipt,receipts,receipts_path))
         return {"status":"polished","chapter_id":chapter,
                 "post_save":post,"backup_saved":True,

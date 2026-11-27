@@ -33,6 +33,7 @@ try:
 except ImportError:
     from bridge import creative_contract_hash, now_iso, parse_chapter_name, safe_dir_name, review_eligible, body_digest
 from integration import costs
+from . import publication_state
 
 
 def _load_webnovel_services():
@@ -1373,11 +1374,16 @@ async def review_existing_chapter_async(
         previous_receipt=receipts.get(str(chapter_id),{})
         if isinstance(previous_receipt,dict) and previous_receipt.get('sha256')==receipt['sha256']:
             receipt['post_save']=previous_receipt.get('post_save',{})
-        # A failed fresh review must revoke an earlier pass for the same body.
-        receipts[str(chapter_id)] = receipt
-        atomic_json(receipts_path, receipts)
+        # A failed fresh review must revoke an earlier pass for the same body,
+        # but it must not erase publication facts (published_sha256/staged_at)
+        # written by stage/publish (E-01R).  Update only this chapter's review
+        # fields under receipts.lock.
+        publication_state._update(project, chapter_id, lambda entry: entry.update(receipt))
+        receipts = strict_json(receipts_path, {})
+        receipt = receipts.get(str(chapter_id), receipt)
         receipt["candidates"] = _commit_review_candidates(project, chapter_id, content, review, _writer_locked=True)
-        atomic_json(receipts_path, receipts)
+        publication_state._update(project, chapter_id,
+                                  lambda entry: entry.update({"candidates": receipt["candidates"]}))
         result = {"project": str(project), "chapter_id": chapter_id, "destination": str(source),
                   "review": receipt["review"], "review_decision": receipt["review"].get("review_decision"),
                   "revision_rounds": 0, "status": "review_failed"}
