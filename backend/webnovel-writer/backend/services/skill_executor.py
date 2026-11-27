@@ -86,6 +86,30 @@ class SkillExecutor:
         # Snapshot once: write/review/repair must use the same confirmed contract.
         self.creative_guidance = load_guidance(self.project_root)
         self._shared_memory_snapshot = None
+        # C3-01: set by writer_runner before generation; empty means the
+        # combined layer is absent (standalone upstream install).
+        self.world_state_context = ""
+        self.world_state_manifest = {}
+
+    def _world_state_prompt_block(self) -> str:
+        """把服务端世界状态上下文渲染成 prompt 片段（C3-01）。
+
+        ``build_context`` 已把材料包在 ``<UNTRUSTED_MATERIAL>`` 中；这里只加
+        标题和优先级说明，不再把事实改写成指令。无上下文时返回空串，保持
+        独立上游安装的既有 prompt 不变。
+        """
+        text = str(getattr(self, "world_state_context", "") or "").strip()
+        if not text:
+            return ""
+        limit = 12000
+        if len(text) > limit:
+            text = text[:limit] + "\n…（世界状态上下文过长，已截断）"
+        return (
+            "【世界状态事实（服务端整理，必须保持前后一致）】\n"
+            "以下是本书已确认的人物、地点、时间线与伏笔事实。写作时不得与之矛盾；"
+            "若与本章大纲冲突，以本章大纲为准，并避免引入新的矛盾。\n"
+            + text
+        )
 
     def _shared_memory(self, role: str, chapter: int, query: str = "") -> str:
         # Optional for standalone upstream installs, real and strict in combined mode.
@@ -1258,7 +1282,10 @@ class SkillExecutor:
         return clipped, {"original": raw_len, "final": final_len, "trimmed": int(final_len < raw_len)}
 
     def _build_polish_prompt(self, chapter_id: int, content: str, suggestions: str, mode: str = "rewrite") -> str:
-        return self.creative_guidance + self._shared_memory("C",chapter_id,content[:4000]) + "\n" + self._build_polish_prompt_body(chapter_id, content, suggestions, mode)
+        world_state_block = self._world_state_prompt_block()
+        return (self.creative_guidance + self._shared_memory("C",chapter_id,content[:4000]) + "\n"
+                + (world_state_block + "\n" if world_state_block else "")
+                + self._build_polish_prompt_body(chapter_id, content, suggestions, mode))
 
     def _candidate_prompt_text(self, text: str, max_chars: int) -> str:
         # Current manuscripts and current editing instructions are not memory
@@ -5944,6 +5971,10 @@ class SkillExecutor:
 
         prompt_layers.append(hard_constraints_prompt)
         system_prompt = "\n\n".join(part for part in prompt_layers if part) + "\n" + self.creative_guidance + "\n" + self._shared_memory("B",chapter,chapter_outline)
+        # C3-01：世界状态在真实生成 prompt 中生效，而不是只存在于 v0.9 仪表盘。
+        world_state_block = self._world_state_prompt_block()
+        if world_state_block:
+            system_prompt += "\n\n" + world_state_block
 
         # 添加金手指/系统设计（动态约束，避免设定污染）
         gold_finger = context_pack.get("core", {}).get("gold_finger", "")

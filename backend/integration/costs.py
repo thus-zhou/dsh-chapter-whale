@@ -27,6 +27,10 @@ STAGES = {"planning":"剧情规划", "draft":"正文初稿", "polish":"润色与
 META = ContextVar("novel_cost_context", default={})
 # 成本事件写入失败次数（仅本进程）。用于 /api/costs 暴露“可能漏记”的告警。
 MISSED_EVENTS = 0
+# Gap persistence failures are money-safety signals.  They cannot be written
+# to disk, so keep them in-process (per project) and make the fallback gate and
+# report fail closed until the process restarts (R-03).
+UNRECORDED_GAPS = {}
 _INITIALIZED_DBS = set()
 _INIT_GUARD = None
 
@@ -109,6 +113,11 @@ def connection(db_path):
               state TEXT NOT NULL, tokens INTEGER NOT NULL DEFAULT 0, cost_cny TEXT,
               unknown_cost INTEGER NOT NULL DEFAULT 0, operation TEXT);
             CREATE INDEX IF NOT EXISTS budget_project_day ON request_budget(project,day);
+            CREATE TABLE IF NOT EXISTS directive_budget_links(
+              request_id TEXT PRIMARY KEY, directive_id TEXT NOT NULL, op_id TEXT,
+              agent_role TEXT, created_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS directive_links_directive
+              ON directive_budget_links(directive_id);
                 """)
                 _INITIALIZED_DBS.add(key)
     except BaseException:
@@ -117,20 +126,123 @@ def connection(db_path):
     return db
 
 
-def record_gap(db_path, kind):
-    """Independent of the possibly broken ledger; contains no prompt or credential."""
+def _project_key(value):
+    try:
+        return str(Path(str(value)).resolve()).casefold() if value else ""
+    except (OSError, ValueError):
+        return str(value or "").casefold()
+
+
+def record_gap(db_path, kind, project=None):
+    """Independent of the possibly broken ledger; contains no prompt or credential.
+
+    A gap records the project and can be resolved; the fallback gate only
+    consults this project's recent unresolved gaps (B3-05).
+    """
     global MISSED_EVENTS
     MISSED_EVENTS += 1
     try:
         from fanqie_auto_publish.publication_safety import atomic_json
         folder = Path(str(db_path) + '.gaps')
-        atomic_json(folder / (uuid.uuid4().hex + '.json'), {'at': datetime.now(timezone.utc).isoformat(), 'kind': kind})
+        atomic_json(folder / (uuid.uuid4().hex + '.json'),
+                    {'at': datetime.now(timezone.utc).isoformat(), 'kind': kind,
+                     'project': str(project) if project else None, 'resolved_at': None})
     except Exception:
+        key = _project_key(project) if project else "*"
+        UNRECORDED_GAPS[key] = int(UNRECORDED_GAPS.get(key, 0)) + 1
         print('[费用记录] 严重：独立告警也无法写入，禁止自动付费回退', flush=True)
 
 
-def ledger_gaps(db_path):
-    return len(list(Path(str(db_path) + '.gaps').glob('*.json')))
+def _gap_document(path):
+    try:
+        value = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def ledger_gaps(db_path, *, within_hours=None, project=None, unresolved_only=True):
+    """Count gap markers, optionally only recent/unresolved/for one project.
+
+    A single transient write failure used to mark the whole report incomplete
+    forever (B-25).  ``within_hours`` lets the report judge completeness by a
+    rolling window while still exposing the historical total.  A gap without a
+    project (legacy row or a genuinely global ledger failure) still applies to
+    every project.
+    """
+    folder = Path(str(db_path) + '.gaps')
+    files = list(folder.glob('*.json'))
+    cutoff = time.time() - float(within_hours) * 3600 if within_hours is not None else None
+    wanted = _project_key(project) if project else None
+    count = 0
+    for path in files:
+        try:
+            if cutoff is not None and path.stat().st_mtime < cutoff:
+                continue
+        except OSError:
+            continue
+        document = _gap_document(path)
+        if unresolved_only and document.get('resolved_at'):
+            continue
+        recorded = document.get('project')
+        if wanted and recorded and _project_key(recorded) != wanted:
+            continue
+        count += 1
+    return count
+
+
+def unrecorded_gap_count(project=None):
+    """Process-local count of gaps whose file could not be written.
+
+    A global (project-less) failed write applies to every project; otherwise
+    only the affected project is gated.  Deliberately conservative: this is a
+    money-safety backstop, not a durable ledger (R-03).
+    """
+    if not UNRECORDED_GAPS:
+        return 0
+    if project:
+        key = _project_key(project)
+        return int(UNRECORDED_GAPS.get(key, 0)) + int(UNRECORDED_GAPS.get("*", 0))
+    return sum(int(value) for value in UNRECORDED_GAPS.values())
+
+
+def gap_records(db_path, *, project=None, unresolved_only=True):
+    """Return gap metadata for maintenance/UI (never contains prompts)."""
+    folder = Path(str(db_path) + '.gaps')
+    wanted = _project_key(project) if project else None
+    result = []
+    for path in folder.glob('*.json'):
+        document = _gap_document(path)
+        if unresolved_only and document.get('resolved_at'):
+            continue
+        recorded = document.get('project')
+        if wanted and recorded and _project_key(recorded) != wanted:
+            continue
+        result.append({'path': str(path), 'kind': document.get('kind'),
+                       'at': document.get('at'), 'project': recorded,
+                       'resolved_at': document.get('resolved_at')})
+    return result
+
+
+def resolve_gaps(db_path, *, kind=None, project=None):
+    """Mark matching gap markers resolved instead of requiring file deletion."""
+    from fanqie_auto_publish.publication_safety import atomic_json
+    folder = Path(str(db_path) + '.gaps')
+    wanted = _project_key(project) if project else None
+    resolved = 0
+    for path in folder.glob('*.json'):
+        document = _gap_document(path)
+        if document.get('resolved_at'):
+            continue
+        if kind is not None and document.get('kind') != kind:
+            continue
+        recorded = document.get('project')
+        if wanted and recorded and _project_key(recorded) != wanted:
+            continue
+        document['resolved_at'] = datetime.now(timezone.utc).isoformat()
+        atomic_json(path, document)
+        resolved += 1
+    return resolved
 
 
 def empty_prices(): return {"revision":0,"usd_to_cny":None,"rates":[]}
@@ -183,22 +295,49 @@ def budget_limits(config=None):
 
 
 def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None,
-                    operation=None, config=None, limits=None):
+                    operation=None, config=None, limits=None,
+                    directive_id=None, guard=None, agent_role=None,
+                    count_only=False, guard_tokens=None, reserve_cost=None):
     """发请求前预留一次网络尝试。超限抛 BudgetExceeded，且不写入任何占位。
 
-    未配置任何上限时返回 None（不改动既有行为）。金额未知时记
+    未配置任何上限且没有指令级护栏时返回 None（不改动既有行为）。金额未知时记
     ``unknown_cost=1`` 并按 ``unknown_reserve_cny`` 保守占用，不当作 0。
+    2B 起只要带 ``directive_id + guard``，即使全局未设上限也强制原子预留。
+
+    ``count_only=True`` 用于只做调用次数/Token 护栏、拿不到真实金额的网关。
+    当指令同时设置了 ``budget_cap_cny`` 时，每次调用按 ``reserve_cost``（缺省
+    用 ``unknown_reserve_cny``）保守占用，否则正数上限永远不可达（B3-09）。
     """
     policy = limits if limits is not None else budget_limits(config)
+    if guard and not directive_id:
+        # A guard without its directive used to be dropped silently, leaving
+        # the caller believing max_calls/budget_cap_cny were enforced (B3-25).
+        raise ValueError('directive_id_required')
     if not db_path:
+        if guard:
+            # A guard cannot be enforced without a ledger; refusing is safer
+            # than silently accepting the call (B4-07).
+            raise ValueError('budget_db_required')
         return None
     capped = any(policy[key] is not None for key in ('requests_per_day', 'request_tokens', 'chapter_tokens',
                                                      'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))
-    if not capped:
+    guard = dict(guard or {}) if directive_id else {}
+    if not capped and not guard:
         return None
+    _maybe_recover(db_path)
     tokens = int(tokens or 0)
     amount = None if cost_cny is None else Decimal(str(cost_cny))
-    reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
+    if count_only and amount is None:
+        if guard.get('budget_cap_cny') is not None:
+            conservative = reserve_cost if reserve_cost is not None else policy['unknown_reserve_cny']
+            reserve_amount = Decimal(str(conservative))
+            unknown_cost = 1 if reserve_amount > 0 else 0
+        else:
+            reserve_amount = Decimal(0)
+            unknown_cost = 0
+    else:
+        reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
+        unknown_cost = 1 if amount is None else 0
     day = _today()
     project = str(Path(project).resolve()) if project else ''
     db = None
@@ -207,7 +346,7 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         db.execute('BEGIN IMMEDIATE')
         rows = db.execute("SELECT chapter,day,state,tokens,cost_cny,unknown_cost FROM request_budget WHERE project=?",
                           (project,)).fetchall()
-        today_rows = [row for row in rows if row['day'] == day]
+        today_rows = [row for row in rows if row['day'] == day and row['state'] != 'released']
         chapter_rows = [row for row in rows if int(row['chapter']) == int(chapter or 0)]
         def cost_of(group):
             return sum((Decimal(row['cost_cny']) for row in group if row['cost_cny'] is not None), Decimal(0))
@@ -226,11 +365,41 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
             if Decimal(used) + Decimal(delta) > Decimal(limit):
                 raise BudgetExceeded(message, {'limit': key, 'limit_value': str(limit),
                                                'used': str(used), 'requested': str(delta)})
+        usage = None
+        if guard:
+            usage = _directive_usage_db(db, directive_id)
+            max_calls = guard.get('max_calls')
+            if max_calls is not None and usage['attempts'] + 1 > int(max_calls):
+                raise BudgetExceeded('该指令的模型调用次数已到上限',
+                                     {'limit': 'max_calls', 'limit_value': str(max_calls),
+                                      'used': str(usage['attempts'])})
+            max_chapters = guard.get('max_chapters')
+            if max_chapters is not None and int(chapter or 0) not in usage['chapters'] \
+                    and len(usage['chapters']) + 1 > int(max_chapters):
+                raise BudgetExceeded('该指令的自动连续生章数已到上限',
+                                     {'limit': 'max_chapters', 'limit_value': str(max_chapters),
+                                      'used': str(len(usage['chapters']))})
+            max_tokens = guard.get('max_tokens')
+            if max_tokens is not None and usage['tokens'] + (tokens if guard_tokens is None
+                                                              else int(guard_tokens or 0)) > int(max_tokens):
+                raise BudgetExceeded('该指令 Token 已到上限',
+                                     {'limit': 'max_tokens', 'limit_value': str(max_tokens),
+                                      'used': str(usage['tokens'])})
+            cap = guard.get('budget_cap_cny')
+            if cap is not None and usage['cost_cny'] + reserve_amount > Decimal(str(cap)):
+                raise BudgetExceeded('该指令费用已到上限',
+                                     {'limit': 'budget_cap_cny', 'limit_value': str(cap),
+                                      'used': str(usage['cost_cny'])})
         identity = uuid.uuid4().hex
         db.execute('INSERT INTO request_budget VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                    (identity, datetime.now(timezone.utc).isoformat(), project, int(chapter or 0), str(stage or 'other'),
-                    day, 'reserved', tokens, str(reserve_amount), 1 if amount is None else 0,
+                    day, 'reserved', tokens, str(reserve_amount), unknown_cost,
                     str(operation or '')))
+        if directive_id:
+            db.execute('INSERT INTO directive_budget_links(request_id, directive_id, op_id, agent_role, created_at) '
+                       'VALUES(?,?,?,?,?)',
+                       (identity, str(directive_id), str(operation or ''),
+                        str(agent_role or ''), datetime.now(timezone.utc).isoformat()))
         db.commit()
         return identity
     except BudgetExceeded:
@@ -241,14 +410,182 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         # 预算已开启但预留写不进去：不能假装限额仍然有效，必须挡住这次请求。
         if db is not None:
             db.rollback()
-        record_gap(db_path, 'budget_reserve_failed')
+        record_gap(db_path, 'budget_reserve_failed', project)
         raise BudgetExceeded('预算无法预留，已停止新请求', {'error_type': type(exc).__name__}) from exc
     finally:
         if db is not None:
             db.close()
 
 
-def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled'):
+def _directive_usage_db(db, directive_id: str) -> Dict[str, Any]:
+    rows = db.execute(
+        "SELECT b.state, b.chapter, b.tokens, b.cost_cny, b.unknown_cost "
+        "FROM request_budget b JOIN directive_budget_links l ON l.request_id=b.id "
+        "WHERE l.directive_id=?", (str(directive_id),)).fetchall()
+    states = {'reserved': 0, 'dispatched': 0, 'settled': 0, 'unknown_charge': 0, 'released': 0}
+    chapters = set()
+    cost = Decimal(0)
+    tokens = 0
+    for row in rows:
+        state = str(row['state'])
+        states[state] = states.get(state, 0) + 1
+        if state == 'released':
+            continue
+        chapters.add(int(row['chapter'] or 0))
+        tokens += int(row['tokens'] or 0)
+        if row['cost_cny'] is not None:
+            try:
+                cost += Decimal(str(row['cost_cny']))
+            except InvalidOperation:
+                pass
+    # Every attempt counts toward the directive call cap, including a failed
+    # call that was released without a fee; otherwise a failure storm can
+    # bypass max_calls indefinitely (B-02R-2).
+    return {'calls': sum(1 for row in rows if row['state'] != 'released'),
+            'attempts': len(rows),
+            'chapters': chapters, 'tokens': tokens, 'cost_cny': cost, 'states': states}
+
+
+def directive_usage(db_path, directive_id: str) -> Dict[str, Any]:
+    db = connection(db_path)
+    try:
+        usage = _directive_usage_db(db, directive_id)
+    finally:
+        db.close()
+    usage['cost_cny'] = str(usage['cost_cny'])
+    usage['chapters'] = sorted(usage['chapters'])
+    return usage
+
+
+def bind_directive(db_path, request_id: str, directive_id: str, *, op_id: str = "",
+                   agent_role: str = "") -> None:
+    db = connection(db_path)
+    try:
+        db.execute('INSERT OR REPLACE INTO directive_budget_links(request_id, directive_id, op_id, agent_role, created_at) '
+                   'VALUES(?,?,?,?,?)',
+                   (request_id, directive_id, op_id, agent_role, datetime.now(timezone.utc).isoformat()))
+        db.commit()
+    finally:
+        db.close()
+
+
+def mark_dispatched(db_path, identity: str) -> bool:
+    """reserved → dispatched, exactly once."""
+    if not db_path or not identity:
+        return False
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        cur = db.execute("UPDATE request_budget SET state='dispatched' WHERE id=? AND state='reserved'",
+                         (identity,))
+        db.commit()
+        return bool(cur.rowcount)
+    finally:
+        db.close()
+
+
+def release_request(db_path, identity: str) -> bool:
+    """reserved → released, zeroing tokens/cost for v0.7.5 rollback compatibility."""
+    if not db_path or not identity:
+        return False
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        cur = db.execute("UPDATE request_budget SET state='released', tokens=0, cost_cny='0', "
+                         "unknown_cost=0 WHERE id=? AND state IN ('reserved','dispatched')",
+                         (identity,))
+        db.commit()
+        return bool(cur.rowcount)
+    finally:
+        db.close()
+
+
+
+def recover_stale_reservations(db_path, *, older_than_minutes: int = 120, project=None) -> Dict[str, int]:
+    """Release crash-orphaned reservations.
+
+    ``reserved`` rows never reached dispatch, so they can be released;
+    ``dispatched`` rows may have been billed upstream and become
+    ``unknown_charge`` instead (B3-11).
+    """
+    if not db_path:
+        return {'released': 0, 'unknown_charge': 0}
+    minutes = max(1, int(older_than_minutes))
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+    clause = " AND project=?" if project else ""
+    args = (cutoff, str(Path(project).resolve())) if project else (cutoff,)
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        released = db.execute(
+            "UPDATE request_budget SET state='released', tokens=0, cost_cny='0', unknown_cost=0 "
+            "WHERE state='reserved' AND created_at<?" + clause, args)
+        unknown = db.execute(
+            "UPDATE request_budget SET state='unknown_charge', unknown_cost=1 "
+            "WHERE state='dispatched' AND created_at<?" + clause, args)
+        db.commit()
+        return {'released': int(released.rowcount or 0),
+                'unknown_charge': int(unknown.rowcount or 0)}
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+_RECOVERY_STATE = {}
+
+
+def _maybe_recover(db_path) -> None:
+    """Run stale-reservation recovery at most once per ten minutes per ledger."""
+    try:
+        key = str(Path(db_path).resolve())
+        stamp = time.time()
+        if stamp - float(_RECOVERY_STATE.get(key, 0)) < 600:
+            return
+        _RECOVERY_STATE[key] = stamp
+        recover_stale_reservations(db_path, older_than_minutes=120)
+    except Exception:
+        # Recovery is best-effort; it must never block a legitimate request.
+        return
+
+
+def adopt_reservation(db_path, identity: str, *, tokens=None, cost_cny=None) -> bool:
+    """Attach an existing gateway reservation row to a service attempt.
+
+    ``ModelGateway`` reserves one row for the whole logical call (including a
+    directive guard); ``AIService`` then constructs an ``Attempt``.  Reusing
+    that row avoids double-accounting one logical call as two request_budget
+    rows (B3-10) while keeping the real cost on the same row.
+    """
+    if not db_path or not identity:
+        return False
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute("SELECT state FROM request_budget WHERE id=?", (identity,)).fetchone()
+        if not row or str(row['state']) not in {'reserved', 'dispatched'}:
+            db.rollback()
+            return False
+        updates, params = [], []
+        if tokens is not None:
+            updates.append('tokens=?'); params.append(int(tokens))
+        if cost_cny is not None:
+            updates.append('cost_cny=?'); params.append(str(Decimal(str(cost_cny))))
+            updates.append('unknown_cost=0')
+        if updates:
+            db.execute("UPDATE request_budget SET " + ", ".join(updates) + " WHERE id=?",
+                       (*params, identity))
+        db.commit()
+        return True
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled', project=None):
     """请求结束后结算这次预留；未知金额保持未知并带 unknown_cost 标记。"""
     if not db_path or not identity:
         return None
@@ -258,17 +595,51 @@ def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='sett
         row = db.execute('SELECT * FROM request_budget WHERE id=?', (identity,)).fetchone()
         if row is None:
             db.rollback()
-            record_gap(db_path, 'budget_settlement_missing')
+            if project:
+                # Never write a project-less gap: that used to block every
+                # book's paid fallback for 24h (R-03).
+                record_gap(db_path, 'budget_settlement_missing', project)
+            else:
+                # The caller gave no project; keep the money-safety signal
+                # in-process instead of poisoning a global ledger.
+                UNRECORDED_GAPS['*'] = int(UNRECORDED_GAPS.get('*', 0)) + 1
+                print('[费用记录] 严重：结算找不到预留行且缺少作品归属，已按全局阻断付费回退', flush=True)
             return None
         amount = row['cost_cny']
+        if state in {'failed', 'cancelled'}:
+            # A failed request that reported no usage can release the
+            # reservation.  If the provider already reported cost/tokens, the
+            # failure is still billable and must not be erased; an interrupted
+            # request may likewise have been billed upstream.
+            if state == 'failed' and cost_cny is None and not tokens:
+                state = 'released'
+            elif cost_cny is not None:
+                state = 'settled'
+            else:
+                state = 'unknown_charge'
+        if state not in {'settled', 'unknown_charge', 'released'}:
+            db.rollback()
+            raise ValueError('budget_state_invalid')
+        if state == 'released':
+            # 已安全释放的预留不得被 v0.7.5 旧版 costs.py 误计为已花费。
+            cur = db.execute("UPDATE request_budget SET state='released', tokens=0, cost_cny='0', "
+                             "unknown_cost=0 WHERE id=? AND state IN ('reserved','dispatched')",
+                             (identity,))
+            db.commit()
+            return identity if cur.rowcount else None
+        if row['state'] in {'settled', 'unknown_charge', 'released'}:
+            # 终态幂等：迟到的重试不能覆盖已发生的费用，也不能把释放的预留复活。
+            db.rollback()
+            return identity if row['state'] == state else None
         if cost_cny is not None:
             amount = str(Decimal(str(cost_cny)))
         elif row['unknown_cost']:
             amount = row['cost_cny']
-        db.execute('UPDATE request_budget SET state=?, tokens=COALESCE(?,tokens), cost_cny=? WHERE id=?',
-                   (state, None if tokens is None else int(tokens), amount, identity))
+        cur = db.execute('UPDATE request_budget SET state=?, tokens=COALESCE(?,tokens), cost_cny=? '
+                         'WHERE id=? AND state IN (\'reserved\',\'dispatched\')',
+                         (state, None if tokens is None else int(tokens), amount, identity))
         db.commit()
-        return identity
+        return identity if cur.rowcount else None
     except BaseException:
         db.rollback()
         raise
@@ -297,14 +668,20 @@ def budget_status(db_path, project=None, config=None, limits=None):
     finally:
         db.close()
     today = [row for row in rows if row['day'] == day]
+    active = [row for row in rows if row['state'] != 'released']
+    today_active = [row for row in active if row['day'] == day]
     result.update({
-        'requests_today': len(today),
-        'tokens_today': sum(int(row['tokens']) for row in today),
-        'cost_today_cny': str(sum((Decimal(row['cost_cny']) for row in today if row['cost_cny'] is not None), Decimal(0))),
-        'tokens_project': sum(int(row['tokens']) for row in rows),
-        'cost_project_cny': str(sum((Decimal(row['cost_cny']) for row in rows if row['cost_cny'] is not None), Decimal(0))),
-        'unknown_cost_requests': sum(1 for row in rows if row['unknown_cost']),
+        'requests_today': len(today_active),
+        'tokens_today': sum(int(row['tokens']) for row in today_active),
+        'cost_today_cny': str(sum((Decimal(row['cost_cny']) for row in today_active if row['cost_cny'] is not None), Decimal(0))),
+        'tokens_project': sum(int(row['tokens']) for row in active),
+        'cost_project_cny': str(sum((Decimal(row['cost_cny']) for row in active if row['cost_cny'] is not None), Decimal(0))),
+        'unknown_cost_requests': sum(1 for row in active if row['unknown_cost']),
+        'unknown_charge_requests': sum(1 for row in active if row['state'] == 'unknown_charge'),
         'pending': sum(1 for row in rows if row['state'] == 'reserved'),
+        'dispatched': sum(1 for row in rows if row['state'] == 'dispatched'),
+        'released': sum(1 for row in rows if row['state'] == 'released'),
+        'settled': sum(1 for row in rows if row['state'] == 'settled'),
     })
     return result
 
@@ -414,8 +791,11 @@ def tokens(value):
         if value.is_integer() and 0 <= value <= 10**12:
             return int(value)
         return None
-    if isinstance(value, str) and re.fullmatch(r"\d{1,13}", value.strip()):
-        return int(value.strip())
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r"\d{1,13}", text):
+            parsed = int(text)
+            return parsed if 0 <= parsed <= 10**12 else None
     return None
 
 
@@ -552,25 +932,45 @@ class Attempt:
                 self.event['price'] = dict(selected_price) if isinstance(selected_price,dict) else None
             # 预留必须发生在发请求之前：超限时这里直接抛 BudgetExceeded，不产生费用。
             try:
-                self.reservation = reserve_request(
-                    self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
-                    tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
-                    cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
-                    operation=self.event["operation"], limits=policy)
+                owner = str(meta.get('budget_owner') or '')
+                adopted = False
+                if owner:
+                    # The gateway already reserved (and dispatched) one row for
+                    # this logical call.  Adopt it instead of reserving a
+                    # second row (B3-10).
+                    adopted = adopt_reservation(
+                        self.db_path, owner,
+                        tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
+                        cost_cny=_reserve_cost(self.event["price"], self.input_estimate,
+                                               (inputs or {}).get("max_tokens")))
+                if adopted:
+                    self.reservation = owner
+                else:
+                    self.reservation = reserve_request(
+                        self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
+                        tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
+                        cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
+                        operation=self.event["operation"], limits=policy)
             except BudgetExceeded:
                 raise
             except Exception as exc:
                 # 限额已开启时，预留失败就等于没有限额：这次请求不能发出去。
-                record_gap(self.db_path, 'budget_reserve_failed')
+                record_gap(self.db_path, 'budget_reserve_failed', project)
                 raise BudgetExceeded('预算无法预留，已停止新请求',
                                      {'error_type': type(exc).__name__}) from exc
             self.persist()
+            if self.reservation:
+                # ``Attempt`` is constructed immediately before the network
+                # call in AIService; marking it dispatched lets a crash between
+                # reserve and finish be recovered as unknown_charge instead of
+                # occupying the cap forever (B3-11).
+                mark_dispatched(self.db_path, self.reservation)
         except BudgetExceeded:
             self.event=None
             raise
         except Exception as exc:
             self.event=None
-            record_gap(self.db_path, 'initial_record_failed')
+            record_gap(self.db_path, 'initial_record_failed', locals().get('project'))
             if capped:
                 raise BudgetExceeded('预算初始化失败，已停止新请求',
                                      {'error_type': type(exc).__name__}) from exc
@@ -631,9 +1031,15 @@ class Attempt:
             if self.reservation is not None:
                 settle_request(self.db_path, self.reservation, tokens=int(self.event.get("input_tokens") or 0)+int(self.event.get("output_tokens") or 0),
                                cost_cny=self.event.get("cost_cny"),
+                               project=self.event.get("project"),
                                state={"success":"settled","interrupted":"cancelled"}.get(self.event["status"],"failed"))
         except Exception:
-            record_gap(self.db_path, 'finalization_failed')
+            project = self.event.get("project") if self.event else None
+            if project:
+                record_gap(self.db_path, 'finalization_failed', project)
+            else:
+                UNRECORDED_GAPS['*'] = int(UNRECORDED_GAPS.get('*', 0)) + 1
+                print('[费用记录] 严重：结算失败且缺少作品归属，已按全局阻断付费回退', flush=True)
             print("[费用记录] 无法完成记录；保留待核对状态",flush=True)
 
 
@@ -687,8 +1093,12 @@ def report(db_path, project=None, chapter=None, days=0):
         for event in events:grouped.setdefault(key(event),[]).append(event)
         return [{"key":value,"label":label(items[0]),**aggregate(items)} for value,items in sorted(grouped.items())]
     summary = aggregate(events)
-    gaps = ledger_gaps(db_path)
-    summary.update(ledger_gaps=gaps, complete=summary['complete'] and not gaps)
+    gaps = ledger_gaps(db_path, project=project)
+    gaps_recent = ledger_gaps(db_path, within_hours=24, project=project)
+    unrecorded = unrecorded_gap_count(project)
+    summary.update(ledger_gaps=gaps, gaps_recent=gaps_recent,
+                   unrecorded_gaps=unrecorded,
+                   complete=summary['complete'] and not gaps_recent and not unrecorded)
     return {"summary":summary,"stages":groups(lambda e:e["stage"],lambda e:STAGES.get(e["stage"],e["stage"])),
             'providers':groups(lambda e:e.get('provider_id') or e['base_url'],lambda e:e.get('provider_name') or e['base_url']),
             'fallback':aggregate([e for e in events if e.get('fallback_from')]),
@@ -699,7 +1109,7 @@ def report(db_path, project=None, chapter=None, days=0):
             "daily":groups(lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat(),
                            lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()),
             "recent":list(reversed(events[-100:])),"total_records":len(events),
-            "missed_events":max(gaps, MISSED_EVENTS)}
+            "missed_events":gaps_recent,"unrecorded_gaps":unrecorded}
 
 
 def export_csv(db_path, **filters):

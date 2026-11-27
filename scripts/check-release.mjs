@@ -23,6 +23,148 @@ const errors = [];
 const notes = [];
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const manifestText = readFileSync(join(root, 'runtime-manifest.json'), 'utf8');
+
+/* Every root entry the package itself promises must exist.  `files` is the
+   npm publish allow-list; `main`/`exports`/`dsh.bundle.patch` are the load
+   points the host uses.  Missing any of them yields an unloadable package,
+   so absence is an error even with --local (D-RG1). */
+function declaredRootEntries(definition) {
+  const names = new Set(['package.json', 'runtime-manifest.json']);
+  const add = (value) => {
+    if (typeof value !== 'string') return;
+    const entry = value.trim();
+    if (!entry.startsWith('./')) return;
+    const name = entry.slice(2);
+    if (!name || name.includes('*') || name.endsWith('/')) return;
+    names.add(name);
+  };
+  const walk = (value) => {
+    if (typeof value === 'string') { add(value); return; }
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  add(definition.main);
+  walk(definition.exports);
+  if (definition.dsh && typeof definition.dsh === 'object') {
+    add(definition.dsh.bundle && definition.dsh.bundle.patch);
+  }
+  for (const entry of Array.isArray(definition.files) ? definition.files : []) {
+    if (typeof entry !== 'string') continue;
+    const name = entry.trim().replace(/^\.\//, '');
+    if (!name || name.includes('*') || name.endsWith('/')) continue;
+    names.add(name);
+  }
+  return names;
+}
+/* `files` is only the publish allow-list; `main`/`exports`/`dsh.patch` are
+   the load points the host actually imports.  A file can exist in the source
+   tree and still be absent from the tarball when `files` omits it
+   (D-R4-02).  Relative imports of those entries are load-bearing too:
+   index.js imports ./managed-runtime.mjs and ./dsh-model-bridge.mjs. */
+function loadPointEntries(definition) {
+  const names = new Set();
+  const add = (value) => {
+    if (typeof value !== 'string') return;
+    const entry = value.trim();
+    if (!entry.startsWith('./')) return;
+    const name = entry.slice(2);
+    if (!name || name.includes('*') || name.endsWith('/')) return;
+    names.add(name);
+  };
+  const walk = (value) => {
+    if (typeof value === 'string') { add(value); return; }
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  add(definition.main);
+  walk(definition.exports);
+  if (definition.dsh && typeof definition.dsh === 'object') {
+    add(definition.dsh.bundle && definition.dsh.bundle.patch);
+  }
+  const queue = Array.from(names);
+  const seen = new Set();
+  while (queue.length && seen.size < 8) {
+    const name = queue.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (!/\.(m?js|cjs)$/i.test(name)) continue;
+    const path = join(root, name);
+    if (!existsSync(path) || !statSync(path).isFile()) continue;
+    let text = '';
+    try { text = readFileSync(path, 'utf8'); } catch (error) { continue; }
+    const pattern = /(?:from\s*|import\s*\(?\s*)(['"])(\.\/[^'"]+)\1/g;
+    for (const match of text.matchAll(pattern)) {
+      const target = match[2].slice(2);
+      if (!target || target.includes('*') || names.has(target)) continue;
+      if (!/\.(m?js|cjs)$/i.test(target)) continue;
+      const targetPath = join(root, target);
+      if (!existsSync(targetPath) || !statSync(targetPath).isFile()) continue;
+      names.add(target);
+      queue.push(target);
+    }
+  }
+  return names;
+}
+
+function normalizePackEntry(value) {
+  return String(value || '').trim().replace(/^\.\//, '');
+}
+
+/* npm's `files` entries are minimatch patterns.  The gate only needs the
+   common shapes (exact file, directory, `*.ext`), so implement those
+   deterministically instead of adding a dependency to a prepublish check. */
+function globMatch(pattern, name) {
+  let source = '^';
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === '*') {
+      if (pattern[index + 1] === '*') {
+        source += '.*';
+        index += 1;
+        if (pattern[index + 1] === '/') index += 1;
+      } else {
+        source += '[^/]*';
+      }
+    } else if (char === '?') {
+      source += '[^/]';
+    } else if ('\\^$+?.()|{}[]'.includes(char)) {
+      source += '\\' + char;
+    } else {
+      source += char;
+    }
+  }
+  return new RegExp(source + '$').test(name);
+}
+
+function packEntryMatches(name, entry) {
+  const rule = normalizePackEntry(entry);
+  if (!rule || rule.startsWith('!')) return false;
+  if (rule === name) return true;
+  if (!/[?*]/.test(rule) && name.startsWith(rule.replace(/\/$/, '') + '/')) return true;
+  return /[?*]/.test(rule) && globMatch(rule, name);
+}
+
+function packedByAllowList(name, files) {
+  // No `files` means npm publishes everything that is not ignored.
+  if (!Array.isArray(files)) return true;
+  return files.some((entry) => packEntryMatches(name, entry));
+}
+
+const loadEntries = loadPointEntries(pkg);
+const rootEntries = declaredRootEntries(pkg);
+for (const name of loadEntries) rootEntries.add(name);
+for (const name of rootEntries) {
+  const path = join(root, name);
+  if (!existsSync(path) || !statSync(path).isFile()) {
+    errors.push(`缺少根入口：${name}（package.json 声明为发布包入口，缺失的包无法加载或安装）。`);
+  }
+}
+for (const name of loadEntries) {
+  if (name === 'package.json') continue; // npm always packs package.json
+  if (!packedByAllowList(name, pkg.files)) {
+    errors.push(`根入口未包含在 package.json files 中：${name}（源码里存在，但 npm pack 的发布 allow-list 不会收录它，安装后的宿主无法加载）。`);
+  }
+}
 if (manifestText.includes('\r\n')) {
   errors.push("runtime-manifest.json 必须是 LF 换行（Windows 生成时需 newline='\\n'）。");
 }
@@ -113,6 +255,40 @@ for (const [name, hash] of Object.entries(manifest.files || {})) {
       && buffer.includes(0x0d) && buffer.includes(0x0a)
       && buffer.toString('utf8').includes('\r\n')) {
     errors.push(`文本文件含 CRLF，分发字节必须是 LF：${name}`);
+  }
+}
+
+// D-RG2 / D-15：发布记录与包体必须在门禁输出里可见。版本号、manifest 与
+// RELEASE_STATUS 的最终同步属于发布步骤；这里先证明门禁能发现漂移，
+// 并把 client.js / 字体双份的实际字节数报出来，避免“同版本多包体”静默通过。
+const clientPath = join(root, 'client.js');
+const clientBytes = existsSync(clientPath) && statSync(clientPath).isFile() ? statSync(clientPath).size : 0;
+const MAX_CLIENT_BYTES = 6 * 1024 * 1024;
+if (clientBytes > MAX_CLIENT_BYTES) {
+  errors.push(`client.js 超过包体上限：${clientBytes} B > ${MAX_CLIENT_BYTES} B（D-15）。`);
+}
+let fontBytes = 0;
+for (const file of ['manrope.woff2', 'notosanssc.woff2', 'notoserifsc.woff2']) {
+  const fontPath = join(root, 'assets', 'fonts', file);
+  if (existsSync(fontPath) && statSync(fontPath).isFile()) fontBytes += statSync(fontPath).size;
+}
+if (clientBytes && fontBytes) {
+  notes.push(`包体：client.js ${clientBytes} B；字体同时内嵌与随包分发 ${fontBytes} B（D-15，建议子集化/外链并评估 assets/fonts 是否必须随包）。`);
+}
+const releaseStatusPath = join(root, 'RELEASE_STATUS.md');
+if (existsSync(releaseStatusPath)) {
+  try {
+    const releaseText = readFileSync(releaseStatusPath, 'utf8');
+    const hashes = [...releaseText.matchAll(/\b[a-f0-9]{64}\b/g)].map((match) => match[0]);
+    if (hashes.length && !hashes.includes(String(manifest.buildId))) {
+      notes.push(`RELEASE_STATUS.md 的 buildId ${hashes[0].slice(0, 8)}… 与当前清单 ${String(manifest.buildId).slice(0, 8)}… 不一致；发布前必须同步发布记录（D-RG2）。`);
+    }
+    const counts = [...releaseText.matchAll(/(\d{3,6})\s*(?:个文件|files)(?![0-9A-Za-z])/g)].map((match) => Number(match[1]));
+    if (counts.length && !counts.includes(checked)) {
+      notes.push(`RELEASE_STATUS.md 的文件数记录（${counts.slice(0, 4).join('/')}）与本次检查的 ${checked} 个文件不一致；发布前必须同步（D-RG2）。`);
+    }
+  } catch (error) {
+    notes.push('RELEASE_STATUS.md 无法读取：' + error.message);
   }
 }
 
@@ -263,10 +439,98 @@ if (existsSync(catalogPath)) {
   }
 }
 
+// D-08：client.js 里内嵌的 ATELIER CSS 与 workbench 内核必须能从源文件逐字节
+// 复算。assets/*.css 或 scripts/shared/workbench-core.js 改动后忘了重新构建时，
+// 测试与发布校验都必须失败，而不是静默发出旧面板。
+function readTextFile(path) {
+  return readFileSync(path, 'utf8');
+}
+function blockBetween(text, begin, end) {
+  const start = text.indexOf(begin);
+  if (start < 0) throw new Error('缺少生成块起点：' + begin.trim());
+  const stop = text.indexOf(end, start + begin.length);
+  if (stop < 0) throw new Error('缺少生成块终点：' + end.trim());
+  return text.slice(start + begin.length, stop);
+}
+function embeddedAtelierCss(client) {
+  const block = blockBetween(client,
+    '        // BEGIN GENERATED ATELIER CSS\n',
+    '        // END GENERATED ATELIER CSS\n');
+  const chunks = [];
+  for (const line of block.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const literal = trimmed.endsWith(',') ? trimmed.slice(0, -1) : trimmed;
+    if (!/^".*"$/.test(literal)) continue;
+    chunks.push(JSON.parse(literal));
+  }
+  return chunks.join('');
+}
+function expectedAtelierCssFromSources() {
+  const fonts = [
+    ['manrope', 'Whale Geometric', '200 800'],
+    ['notosanssc', 'Whale Text', '100 900'],
+    ['notoserifsc', 'Whale Editorial', '400'],
+  ].map(([file, family, weight]) => {
+    const path = join(root, 'assets', 'fonts', file + '.woff2');
+    if (!existsSync(path)) throw new Error('缺少字体源文件：' + path);
+    const data = readFileSync(path).toString('base64');
+    return `@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${data}) format("woff2");font-weight:${weight};font-display:swap}`;
+  });
+  const base = readTextFile(join(root, 'assets', 'atelier-base.css'));
+  const native = readTextFile(join(root, 'assets', 'atelier-native.css'));
+  return fonts.join('\n') + '\n' + base + '\n' + native;
+}
+function embeddedWorkbenchCore(client) {
+  return blockBetween(client,
+    '        // BEGIN GENERATED WORKBENCH CORE\n',
+    '        // END GENERATED WORKBENCH CORE\n');
+}
+try {
+  const clientPath = join(root, 'client.js');
+  const uiSources = [
+    join(root, 'assets', 'atelier-base.css'),
+    join(root, 'assets', 'atelier-native.css'),
+    join(root, 'assets', 'fonts', 'manrope.woff2'),
+    join(root, 'assets', 'fonts', 'notosanssc.woff2'),
+    join(root, 'assets', 'fonts', 'notoserifsc.woff2'),
+  ];
+  if (!existsSync(clientPath)) {
+    // A declared client entry is already a hard error above; only an
+    // undeclared/optional client.js may be skipped (D-RG1).
+    if (!rootEntries.has('client.js')) notes.push('未包含 client.js，跳过生成产物一致性校验。');
+  } else if (!uiSources.every((path) => existsSync(path))) {
+    errors.push('发行包缺少生成用前端源文件（assets/*.css 或字体），无法校验 client.js 内嵌样式。');
+  } else {
+    const clientText = readTextFile(clientPath);
+    if (embeddedAtelierCss(clientText) !== expectedAtelierCssFromSources()) {
+      errors.push('client.js 内嵌 ATELIER CSS 与 assets/atelier-base.css + atelier-native.css + 字体不一致：请运行 python3 -X utf8 scripts/build-client-ui.py。');
+    }
+    const staticCorePath = join(root, 'backend', 'manager', 'static', 'workbench-core.js');
+    const sharedCorePath = join(root, 'scripts', 'shared', 'workbench-core.js');
+    const corePath = existsSync(sharedCorePath) ? sharedCorePath : (existsSync(staticCorePath) ? staticCorePath : null);
+    if (!corePath) {
+      errors.push('缺少 workbench-core 源文件，无法校验内嵌内核。');
+    } else {
+      const source = readTextFile(corePath);
+      const normalized = source.endsWith('\n') ? source : source + '\n';
+      if (embeddedWorkbenchCore(clientText) !== normalized) {
+        errors.push('client.js 内嵌 WORKBENCH CORE 与 scripts/shared/workbench-core.js 不一致：请运行 python3 -X utf8 scripts/build-client-ui.py。');
+      }
+      if (existsSync(staticCorePath) && readTextFile(staticCorePath) !== normalized) {
+        errors.push('backend/manager/static/workbench-core.js 与 scripts/shared/workbench-core.js 不一致：请运行 python3 -X utf8 scripts/build-client-ui.py。');
+      }
+    }
+  }
+} catch (error) {
+  errors.push('前端产物一致性校验失败：' + error.message);
+}
+
 const summary = {
   root, version: pkg.version, packageVersion: manifest.packageVersion,
   buildId: manifest.buildId, recomputedBuildId, files: Object.keys(manifest.files || {}).length,
-  checked, skippedRuntime, errors: errors.length, notes,
+  checked, skippedRuntime, clientBytes, fontBytes,
+  loadEntries: Array.from(loadEntries), errors: errors.length, notes,
 };
 if (jsonAt) {
   const { writeFileSync } = await import('node:fs');

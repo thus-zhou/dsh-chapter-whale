@@ -137,6 +137,9 @@ def _candidates(project, chapter, doc=None):
     rows, stale = [], 0
     cache = {}
     for item in doc.get("items", []):
+        if item.get("status") == "needs_review":
+            stale += 1
+            continue
         if item.get("status") != "active":
             continue
         source = item.get("source") or {}

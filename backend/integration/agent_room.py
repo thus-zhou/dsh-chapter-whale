@@ -1,0 +1,1073 @@
+"""主编室持久化事件总线、SQLite 四表与有界 SSE 广播器。
+
+Tables live in the global ``manager.sqlite3`` (never in the per-book
+``workbench.sqlite3``) and are completely additive: v0.7.5 ignores them.
+
+* ``agent_directives`` — one author macro instruction (revision for amendments)
+* ``agent_tasks`` — DAG nodes with checkpoints and artifact refs
+* ``agent_events`` — durable chat/task/approval events, ``seq`` is the SSE id
+* ``agent_approvals`` — high-risk cards with fingerprint/scope/expiry binding
+"""
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import sqlite3
+import threading
+import uuid
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+SCHEMA_VERSION = 1
+CHANNELS = {"chief_chat", "team_room", "task_signal", "workspace_signal"}
+TRANSIENT_KINDS = {"progress_signal", "live_preview_delta", "draft_updated"}
+DEFAULT_DB = Path(os.getenv("NOVEL_HELPER_MANAGER_DB",
+                            str(Path(__file__).resolve().parents[2] / "integration_data" / "manager.sqlite3")))
+
+
+class RoomError(RuntimeError):
+    def __init__(self, code: str, *, status: int = 400, detail: Optional[Dict[str, Any]] = None):
+        super().__init__(code)
+        self.code = code
+        self.status = status
+        self.detail = detail or {}
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+
+
+def _db_path(db_path=None) -> Path:
+    return Path(db_path) if db_path else DEFAULT_DB
+
+
+@contextmanager
+def connect(db_path=None):
+    path = _db_path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(str(path), timeout=15.0, isolation_level=None)
+    db.row_factory = sqlite3.Row
+    try:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA busy_timeout=15000")
+        db.execute("PRAGMA synchronous=NORMAL")
+        db.execute("PRAGMA foreign_keys=ON")
+        yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def write_tx(db_path=None):
+    with connect(db_path) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            yield db
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        else:
+            db.execute("COMMIT")
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_directives (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    project_id TEXT,
+    directive_revision INTEGER NOT NULL DEFAULT 1,
+    title TEXT NOT NULL,
+    raw_instruction TEXT NOT NULL,
+    autonomy TEXT NOT NULL,
+    constraints_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL,
+    budget_cap_cny TEXT,
+    max_calls INTEGER NOT NULL DEFAULT 20,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_directives_project ON agent_directives(project_id, created_at);
+
+CREATE TABLE IF NOT EXISTS agent_tasks (
+    id TEXT PRIMARY KEY,
+    directive_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    project_id TEXT,
+    role TEXT NOT NULL,
+    title TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    params_json TEXT NOT NULL,
+    depends_on_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL,
+    wait_reason TEXT DEFAULT '',
+    operation_id TEXT,
+    checkpoint_json TEXT,
+    artifact_ref_json TEXT,
+    error TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_directive ON agent_tasks(directive_id, status);
+
+CREATE TABLE IF NOT EXISTS agent_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT UNIQUE NOT NULL,
+    session_id TEXT NOT NULL,
+    topic_id TEXT NOT NULL DEFAULT 'default',
+    project_id TEXT,
+    directive_id TEXT,
+    task_id TEXT,
+    channel TEXT NOT NULL,
+    sender_role TEXT NOT NULL,
+    mentions_json TEXT DEFAULT '[]',
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_events_proj_seq ON agent_events(project_id, seq);
+CREATE INDEX IF NOT EXISTS idx_agent_events_sess_seq ON agent_events(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_agent_events_topic ON agent_events(project_id, topic_id, seq);
+
+CREATE TABLE IF NOT EXISTS agent_approvals (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    project_id TEXT,
+    directive_id TEXT,
+    directive_revision INTEGER NOT NULL DEFAULT 1,
+    task_id TEXT,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    artifact_fingerprint TEXT,
+    approved_scope_hash TEXT,
+    expires_at TEXT,
+    detail_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    resolved_by TEXT,
+    decision_json TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    capability_hash TEXT,
+    created_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(project_id, status);
+
+CREATE TABLE IF NOT EXISTS agent_amendments (
+    id TEXT PRIMARY KEY,
+    directive_id TEXT NOT NULL,
+    directive_revision INTEGER NOT NULL,
+    raw_text TEXT NOT NULL,
+    fallback TEXT NOT NULL,
+    status TEXT NOT NULL,
+    held_task_ids_json TEXT NOT NULL DEFAULT '[]',
+    evaluation_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_amendments_directive
+  ON agent_amendments(directive_id, directive_revision);
+"""
+
+
+def initialize(db_path=None) -> Path:
+    path = _db_path(db_path)
+    with connect(db_path) as db:
+        db.executescript(SCHEMA)
+        db.execute("CREATE TABLE IF NOT EXISTS agent_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        db.execute("INSERT OR IGNORE INTO agent_meta(key, value) VALUES('schema_version', '1')")
+        columns = {row[1] for row in db.execute("PRAGMA table_info(agent_approvals)")}
+        if "capability_hash" not in columns:
+            # Additive migration for databases created before one-time
+            # approval capabilities (B3-01).
+            db.execute("ALTER TABLE agent_approvals ADD COLUMN capability_hash TEXT")
+        if "created_by" not in columns:
+            # Who produced the card.  Agent-created cards are issued without a
+            # plaintext capability; only the author channel can claim one
+            # (B4-02).
+            db.execute("ALTER TABLE agent_approvals ADD COLUMN created_by TEXT")
+        # R-04: a pre-capability pending card can never be resolved through the
+        # public API (GET no longer returns the binding values, and a legacy
+        # row ignores any caller-supplied capability).  Leaving those rows
+        # pending makes them permanently un-actionable, so expire them once and
+        # let the author recreate a fresh card.
+        legacy = db.execute(
+            "SELECT id FROM agent_approvals WHERE status='pending' AND capability_hash IS NULL"
+        ).fetchall()
+        if legacy:
+            stamp = now_iso()
+            db.execute(
+                "UPDATE agent_approvals SET status='expired', resolved_at=?, decision_json=? "
+                "WHERE status='pending' AND capability_hash IS NULL",
+                (stamp, json.dumps({"migrated": "legacy_card_expired",
+                                    "message": "升级前的审批卡无法携带一次性 capability，已失效；请重建"},
+                                   ensure_ascii=False)))
+    return path
+
+
+def _json(value, default):
+    try:
+        return json.loads(value) if value is not None else default
+    except ValueError:
+        return default
+
+
+def _capability_hash(value: str) -> str:
+    """Store only a hash; the plaintext capability is returned once, never read back."""
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+
+def create_directive(db_path=None, *, session_id: str, project_id: Optional[str], title: str,
+                     raw_instruction: str, autonomy: str = "step_confirm",
+                     constraints: Optional[Sequence[str]] = None, status: str = "planning",
+                     budget_cap_cny: Optional[str] = None, max_calls: int = 20) -> Dict[str, Any]:
+    if autonomy not in {"propose", "step_confirm", "auto_chain", "dry_run_first"}:
+        raise RoomError("invalid_autonomy")
+    if type(max_calls) is not int or isinstance(max_calls, bool) or not 1 <= max_calls <= 10**6:
+        raise RoomError("invalid_max_calls", detail={"field": "max_calls"})
+    if budget_cap_cny is not None:
+        if isinstance(budget_cap_cny, bool):
+            raise RoomError("invalid_budget_cap_cny", detail={"field": "budget_cap_cny"})
+        try:
+            from . import costs as cost_ledger
+            budget_cap_cny = cost_ledger.number(budget_cap_cny)
+        except (TypeError, ValueError):
+            raise RoomError("invalid_budget_cap_cny",
+                            detail={"field": "budget_cap_cny"}) from None
+    directive_id = new_id("dir")
+    stamp = now_iso()
+    initialize(db_path)
+    with write_tx(db_path) as db:
+        db.execute(
+            "INSERT INTO agent_directives(id, session_id, project_id, directive_revision, title, "
+            "raw_instruction, autonomy, constraints_json, status, budget_cap_cny, max_calls, "
+            "created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (directive_id, session_id, project_id, 1, str(title)[:200], str(raw_instruction),
+             autonomy, json.dumps(list(constraints or []), ensure_ascii=False), status,
+             budget_cap_cny, int(max_calls), stamp, stamp),
+        )
+    append_event(
+        db_path, session_id=session_id, topic_id="default", project_id=project_id,
+        directive_id=directive_id, channel="chief_chat", sender_role="system",
+        kind="directive_created", summary=str(title)[:200] or "新指令",
+        payload={"autonomy": autonomy, "status": status,
+                 "budget_cap_cny": budget_cap_cny, "max_calls": int(max_calls)})
+    return get_directive(db_path, directive_id)
+
+
+def get_directive(db_path=None, directive_id: str = "") -> Dict[str, Any]:
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_directives WHERE id=?", (directive_id,)).fetchone()
+    if not row:
+        raise RoomError("directive_missing", status=404)
+    item = dict(row)
+    item["constraints"] = _json(item.pop("constraints_json"), [])
+    return item
+
+
+def update_directive(db_path=None, directive_id: str = "", **fields) -> Dict[str, Any]:
+    allowed = {"title", "status", "budget_cap_cny", "max_calls", "project_id", "autonomy"}
+    updates = {key: value for key, value in fields.items() if key in allowed}
+    if not updates:
+        return get_directive(db_path, directive_id)
+    updates["updated_at"] = now_iso()
+    assignments = ", ".join(f"{key}=?" for key in updates)
+    with write_tx(db_path) as db:
+        db.execute(f"UPDATE agent_directives SET {assignments} WHERE id=?",
+                   (*updates.values(), directive_id))
+    return get_directive(db_path, directive_id)
+
+
+def bump_directive_revision(db_path=None, directive_id: str = "") -> Dict[str, Any]:
+    """Atomic amendment increment; returns the new revision and id."""
+    with write_tx(db_path) as db:
+        cur = db.execute("UPDATE agent_directives SET directive_revision=directive_revision+1, "
+                         "status='amended', updated_at=? WHERE id=?",
+                         (now_iso(), directive_id))
+        if not cur.rowcount:
+            raise RoomError("directive_missing", status=404)
+        row = db.execute("SELECT directive_revision FROM agent_directives WHERE id=?",
+                         (directive_id,)).fetchone()
+    return {"directive_id": directive_id, "directive_revision": int(row[0])}
+
+
+def get_amendment(db_path=None, amendment_id: str = "") -> Dict[str, Any]:
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_amendments WHERE id=?", (amendment_id,)).fetchone()
+    if not row:
+        raise RoomError("amendment_missing", status=404)
+    item = dict(row)
+    item["held_task_ids"] = _json(item.pop("held_task_ids_json"), [])
+    item["evaluation"] = _json(item.pop("evaluation_json"), None)
+    return item
+
+
+def update_amendment(db_path=None, amendment_id: str = "", **fields) -> Dict[str, Any]:
+    allowed = {"status", "evaluation"}
+    updates = {}
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        column = "evaluation_json" if key == "evaluation" else key
+        updates[column] = json.dumps(value, ensure_ascii=False) if column.endswith("_json") else value
+    if not updates:
+        return get_amendment(db_path, amendment_id)
+    updates["updated_at"] = now_iso()
+    assignments = ", ".join(f"{key}=?" for key in updates)
+    with write_tx(db_path) as db:
+        cur = db.execute(f"UPDATE agent_amendments SET {assignments} WHERE id=?",
+                         (*updates.values(), amendment_id))
+        if not cur.rowcount:
+            raise RoomError("amendment_missing", status=404)
+    return get_amendment(db_path, amendment_id)
+
+
+def bind_session_to_project(db_path=None, session_id: str = "", project_id: str = "") -> Dict[str, Any]:
+    """Single transaction: every table's pre-book rows adopt the new project id."""
+    if not session_id or not project_id:
+        raise RoomError("session_and_project_required")
+    stamp = now_iso()
+    counts = {}
+    with write_tx(db_path) as db:
+        for table in ("agent_directives", "agent_tasks", "agent_events", "agent_approvals"):
+            cur = db.execute(f"UPDATE {table} SET project_id=? WHERE session_id=? AND project_id IS NULL",
+                             (project_id, session_id))
+            counts[table] = int(cur.rowcount or 0)
+        event = None
+        if any(counts.values()):
+            event = _append_event_db(db, session_id=session_id, topic_id="default",
+                                     project_id=project_id, directive_id=None, task_id=None,
+                                     channel="chief_chat", sender_role="system", mentions=[],
+                                     kind="project_bound", summary="已建书并绑定原开书对话",
+                                     payload={"project_id": project_id}, created_at=stamp)
+    if event is not None:
+        # Live streams must see the bind immediately, not only on reconnect
+        # (B3-21).
+        broadcaster.publish(event)
+    return {"status": "bound", "session_id": session_id, "project_id": project_id,
+            "updated": counts, "event": event}
+
+
+def create_task(db_path=None, *, directive_id: str, session_id: str, project_id: Optional[str],
+                role: str, title: str, tool_name: str, params: Optional[Dict[str, Any]] = None,
+                depends_on: Optional[Sequence[str]] = None, status: str = "pending",
+                wait_reason: str = "") -> Dict[str, Any]:
+    task_id = new_id("tsk")
+    stamp = now_iso()
+    initialize(db_path)
+    with write_tx(db_path) as db:
+        db.execute(
+            "INSERT INTO agent_tasks(id, directive_id, session_id, project_id, role, title, tool_name, "
+            "params_json, depends_on_json, status, wait_reason, created_at, updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (task_id, directive_id, session_id, project_id, role, title, tool_name,
+             json.dumps(params or {}, ensure_ascii=False),
+             json.dumps(list(depends_on or []), ensure_ascii=False), status, wait_reason,
+             stamp, stamp),
+        )
+    append_event(
+        db_path, session_id=session_id, topic_id="default", project_id=project_id,
+        directive_id=directive_id, task_id=task_id, channel="task_signal",
+        sender_role="system", kind="task_created", summary=str(title)[:200] or "新任务",
+        payload={"role": role, "tool_name": tool_name, "status": status})
+    return get_task(db_path, task_id)
+
+
+def get_task(db_path=None, task_id: str = "") -> Dict[str, Any]:
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_tasks WHERE id=?", (task_id,)).fetchone()
+    if not row:
+        raise RoomError("task_missing", status=404)
+    item = dict(row)
+    item["params"] = _json(item.pop("params_json"), {})
+    item["depends_on"] = _json(item.pop("depends_on_json"), [])
+    item["checkpoint"] = _json(item.pop("checkpoint_json"), None)
+    item["artifact_ref"] = _json(item.pop("artifact_ref_json"), None)
+    return item
+
+
+def update_task(db_path=None, task_id: str = "", **fields) -> Dict[str, Any]:
+    mapping = {"status": "status", "wait_reason": "wait_reason", "operation_id": "operation_id",
+               "error": "error", "checkpoint": "checkpoint_json", "artifact_ref": "artifact_ref_json",
+               "params": "params_json", "depends_on": "depends_on_json", "title": "title"}
+    updates = {}
+    for key, value in fields.items():
+        column = mapping.get(key)
+        if not column:
+            continue
+        updates[column] = json.dumps(value, ensure_ascii=False) if column.endswith("_json") and value is not None else value
+    if not updates:
+        return get_task(db_path, task_id)
+    initialize(db_path)
+    with connect(db_path) as db:
+        previous = db.execute("SELECT status, session_id, project_id, directive_id, title "
+                              "FROM agent_tasks WHERE id=?", (task_id,)).fetchone()
+    updates["updated_at"] = now_iso()
+    assignments = ", ".join(f"{key}=?" for key in updates)
+    with write_tx(db_path) as db:
+        db.execute(f"UPDATE agent_tasks SET {assignments} WHERE id=?", (*updates.values(), task_id))
+    item = get_task(db_path, task_id)
+    if previous is not None and "status" in updates and str(previous["status"]) != str(item["status"]):
+        # Status changes are durable lifecycle facts; transient progress is
+        # broadcast-only (B3-06).
+        append_event(
+            db_path, session_id=str(previous["session_id"]), topic_id="default",
+            project_id=previous["project_id"], directive_id=previous["directive_id"],
+            task_id=task_id, channel="task_signal", sender_role="system",
+            kind="task_status", summary=f"{previous['title']}：{previous['status']} → {item['status']}",
+            payload={"from": str(previous["status"]), "to": str(item["status"])})
+    return item
+
+
+def list_tasks(db_path=None, *, project_id: Optional[str] = None,
+               directive_id: Optional[str] = None, session_id: Optional[str] = None,
+               active_only: bool = False, unbound_only: bool = False) -> List[Dict[str, Any]]:
+    initialize(db_path)
+    query = "SELECT * FROM agent_tasks"
+    clauses, params = [], []
+    if project_id:
+        clauses.append("project_id=?"); params.append(project_id)
+    elif unbound_only or session_id:
+        # A session id is shared by every book; a session-only read must never
+        # aggregate another book's tasks (B3-22).
+        clauses.append("project_id IS NULL")
+    if directive_id:
+        clauses.append("directive_id=?"); params.append(directive_id)
+    if session_id:
+        clauses.append("session_id=?"); params.append(session_id)
+    if active_only:
+        clauses.append("status IN ('pending','waiting','running','held','awaiting_approval','paused_budget')")
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY created_at"
+    with connect(db_path) as db:
+        rows = [dict(row) for row in db.execute(query, tuple(params))]
+    result = []
+    for item in rows:
+        item["params"] = _json(item.pop("params_json"), {})
+        item["depends_on"] = _json(item.pop("depends_on_json"), [])
+        item["checkpoint"] = _json(item.pop("checkpoint_json"), None)
+        item["artifact_ref"] = _json(item.pop("artifact_ref_json"), None)
+        result.append(item)
+    return result
+
+
+def _append_event_db(db, *, session_id: str, topic_id: str, project_id: Optional[str],
+                     directive_id: Optional[str], task_id: Optional[str], channel: str,
+                     sender_role: str, mentions: Sequence[str], kind: str, summary: str,
+                     payload: Dict[str, Any], created_at: str) -> Dict[str, Any]:
+    event_id = new_id("evt")
+    cur = db.execute(
+        "INSERT INTO agent_events(event_id, session_id, topic_id, project_id, directive_id, task_id, "
+        "channel, sender_role, mentions_json, kind, summary, payload_json, created_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (event_id, session_id, topic_id or "default", project_id, directive_id, task_id,
+         channel, sender_role, json.dumps(list(mentions or []), ensure_ascii=False), kind,
+         str(summary)[:4000], json.dumps(payload or {}, ensure_ascii=False), created_at),
+    )
+    seq = int(cur.lastrowid)
+    return {"seq": seq, "event_id": event_id, "session_id": session_id, "topic_id": topic_id or "default",
+            "project_id": project_id, "directive_id": directive_id, "task_id": task_id,
+            "channel": channel, "sender_role": sender_role, "mentions": list(mentions or []),
+            "kind": kind, "summary": summary, "payload": payload, "created_at": created_at}
+
+
+def publish_transient(db_path=None, *, session_id: str, topic_id: str = "default",
+                      project_id: Optional[str] = None, directive_id: Optional[str] = None,
+                      task_id: Optional[str] = None, channel: str = "task_signal",
+                      sender_role: str = "system", mentions: Optional[Sequence[str]] = None,
+                      kind: str = "progress_signal", summary: str = "",
+                      payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Broadcast a live-only frame (progress/preview) without persisting it.
+
+    Transient signals used to be inserted into ``agent_events`` forever, where
+    they crowded the 100/200 replay window and polluted chat context (B3-06).
+    """
+    if channel not in CHANNELS:
+        raise RoomError("invalid_channel")
+    if kind not in TRANSIENT_KINDS:
+        raise RoomError("not_transient_kind", detail={"kind": kind})
+    event = {"seq": None, "event_id": new_id("evt"), "session_id": session_id,
+             "topic_id": topic_id or "default", "project_id": project_id,
+             "directive_id": directive_id, "task_id": task_id, "channel": channel,
+             "sender_role": sender_role, "mentions": list(mentions or []),
+             "kind": kind, "summary": str(summary)[:4000], "payload": payload or {},
+             "created_at": now_iso(), "transient": True}
+    broadcaster.publish(event)
+    return event
+
+
+def append_event(db_path=None, *, session_id: str, topic_id: str = "default",
+                 project_id: Optional[str] = None, directive_id: Optional[str] = None,
+                 task_id: Optional[str] = None, channel: str = "chief_chat",
+                 sender_role: str = "system", mentions: Optional[Sequence[str]] = None,
+                 kind: str = "text", summary: str = "", payload: Optional[Dict[str, Any]] = None,
+                 created_at: Optional[str] = None) -> Dict[str, Any]:
+    if channel not in CHANNELS:
+        raise RoomError("invalid_channel")
+    if kind in TRANSIENT_KINDS:
+        # Durable storage is for lifecycle facts; progress frames are
+        # broadcast-only (B3-06).
+        raise RoomError("transient_kind_not_durable",
+                        detail={"kind": kind, "message": "瞬态信号请使用 publish_transient"})
+    initialize(db_path)
+    with write_tx(db_path) as db:
+        event = _append_event_db(db, session_id=session_id, topic_id=topic_id, project_id=project_id,
+                                 directive_id=directive_id, task_id=task_id, channel=channel,
+                                 sender_role=sender_role, mentions=list(mentions or []), kind=kind,
+                                 summary=summary, payload=payload or {},
+                                 created_at=created_at or now_iso())
+    broadcaster.publish(event)
+    return event
+
+
+def events_after(db_path=None, *, after_seq: int = 0, project_id: Optional[str] = None,
+                 session_id: Optional[str] = None, topic_id: Optional[str] = None,
+                 limit: int = 200) -> List[Dict[str, Any]]:
+    initialize(db_path)
+    clauses = ["seq > ?"]
+    params: List[Any] = [int(after_seq)]
+    if project_id:
+        clauses.append("project_id=?"); params.append(project_id)
+    elif session_id:
+        # Session-only readers see unbound pre-book rows only (B3-22).
+        clauses.append("project_id IS NULL")
+    if session_id:
+        clauses.append("session_id=?"); params.append(session_id)
+    if topic_id:
+        clauses.append("topic_id=?"); params.append(topic_id)
+    query = "SELECT * FROM agent_events WHERE " + " AND ".join(clauses) + " ORDER BY seq LIMIT ?"
+    params.append(max(1, min(int(limit), 1000)))
+    with connect(db_path) as db:
+        rows = [dict(row) for row in db.execute(query, tuple(params))]
+    for item in rows:
+        item["mentions"] = _json(item.pop("mentions_json"), [])
+        item["payload"] = _json(item.pop("payload_json"), {})
+    return rows
+
+
+def max_seq(db_path=None, *, project_id: Optional[str] = None, session_id: Optional[str] = None) -> int:
+    initialize(db_path)
+    clause, params = "", ()
+    if project_id:
+        clause, params = " WHERE project_id=?", (project_id,)
+    elif session_id:
+        clause, params = " WHERE session_id=? AND project_id IS NULL", (session_id,)
+    with connect(db_path) as db:
+        row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events" + clause, params).fetchone()
+    return int(row[0])
+
+
+def oldest_seq(db_path=None, *, project_id: Optional[str] = None,
+               session_id: Optional[str] = None) -> int:
+    """Oldest replayable seq for one scope (0 when the scope is empty).
+
+    A ``resync_required`` frame carries this so a client can page from the
+    beginning instead of guessing a cursor (B3-07).
+    """
+    initialize(db_path)
+    clause, params = "", ()
+    if project_id:
+        clause, params = " WHERE project_id=?", (project_id,)
+    elif session_id:
+        clause, params = " WHERE session_id=? AND project_id IS NULL", (session_id,)
+    with connect(db_path) as db:
+        row = db.execute("SELECT COALESCE(MIN(seq),0) FROM agent_events" + clause, params).fetchone()
+    return int(row[0])
+
+
+def recent_events(db_path=None, *, project_id: Optional[str] = None,
+                  session_id: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    """Newest N events for one project/session, returned oldest-first.
+
+    ``seq`` is a global AUTOINCREMENT shared by every book.  A fresh SSE
+    client must page from the end of *its own* event list, not from
+    ``global_latest - N``, otherwise a sparse book silently skips its oldest
+    history (B3-07).
+    """
+    initialize(db_path)
+    if not project_id and not session_id:
+        raise RoomError("project_or_session_required")
+    clauses, params = [], []
+    if project_id:
+        clauses.append("project_id=?"); params.append(project_id)
+    elif session_id:
+        clauses.append("session_id=?"); params.append(session_id)
+        clauses.append("project_id IS NULL")
+    query = "SELECT * FROM agent_events WHERE " + " AND ".join(clauses) + " ORDER BY seq DESC LIMIT ?"
+    params.append(max(1, min(int(limit), 1000)))
+    with connect(db_path) as db:
+        rows = [dict(row) for row in db.execute(query, tuple(params))]
+    rows.reverse()
+    for item in rows:
+        item["mentions"] = _json(item.pop("mentions_json"), [])
+        item["payload"] = _json(item.pop("payload_json"), {})
+    return rows
+
+
+def create_approval(db_path=None, *, session_id: str, project_id: Optional[str], directive_id: Optional[str],
+                    directive_revision: int, task_id: Optional[str], kind: str, title: str,
+                    artifact_fingerprint: str, approved_scope_hash: str, detail: Dict[str, Any],
+                    ttl_minutes: int = 120, requester: str = "author") -> Dict[str, Any]:
+    approval_id = new_id("apr")
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=int(ttl_minutes))).isoformat()
+    stamp = now_iso()
+    # B3-01/B4-02: the card creator receives a one-time capability.  Only its
+    # hash is stored; a GET or a database read can never reconstruct it.  A
+    # non-author producer (agent/worker) gets no plaintext capability: the
+    # author channel must claim it explicitly before the card can be resolved.
+    capability = secrets.token_urlsafe(32)
+    created_by = str(requester or "author")
+    initialize(db_path)
+    with write_tx(db_path) as db:
+        db.execute(
+            "INSERT INTO agent_approvals(id, session_id, project_id, directive_id, directive_revision, "
+            "task_id, kind, title, artifact_fingerprint, approved_scope_hash, expires_at, detail_json, "
+            "status, created_at, capability_hash, created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (approval_id, session_id, project_id, directive_id, int(directive_revision), task_id,
+             kind, title, artifact_fingerprint, approved_scope_hash, expires, json.dumps(detail, ensure_ascii=False),
+             "pending", stamp, _capability_hash(capability), created_by),
+        )
+    append_event(
+        db_path, session_id=session_id, topic_id="default", project_id=project_id,
+        directive_id=directive_id, task_id=task_id, channel="chief_chat",
+        sender_role="system", kind="approval_requested", summary=str(title)[:200] or "待审批",
+        payload={"approval_id": approval_id, "kind": kind, "created_by": created_by,
+                 "expires_at": expires})
+    result = get_approval(db_path, approval_id)
+    if created_by == "author":
+        result["capability"] = capability
+    else:
+        result["capability_delivery"] = "author_channel_required"
+    return result
+
+
+def get_approval(db_path=None, approval_id: str = "") -> Dict[str, Any]:
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_approvals WHERE id=?", (approval_id,)).fetchone()
+    if not row:
+        raise RoomError("approval_missing", status=404)
+    item = dict(row)
+    item["capability_ready"] = bool(item.get("capability_hash"))
+    item["created_by"] = item.get("created_by") or None
+    # Binding values are server-side only: a public GET must not hand back
+    # values that could be echoed into a resolution request (B3-01).
+    for field in ("capability_hash", "artifact_fingerprint", "approved_scope_hash",
+                  "directive_revision"):
+        item.pop(field, None)
+    item["detail"] = _json(item.pop("detail_json"), {})
+    item["decision"] = _json(item.pop("decision_json"), None)
+    return item
+
+
+def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
+                     artifact_fingerprint: str = "", approved_scope_hash: str = "",
+                     directive_revision: Optional[int] = None, resolved_by: str = "author",
+                     decision: Optional[Dict[str, Any]] = None, now: Optional[str] = None,
+                     capability: Optional[str] = None,
+                     artifact_checker: Optional[Any] = None) -> Dict[str, Any]:
+    """Validate capability, live directive revision and binding, then consume atomically.
+
+    New cards (``capability_hash`` set) require the one-time ``capability``
+    returned by :func:`create_approval`; echoing fields that a GET could leak
+    is no longer sufficient.  Legacy cards without a hash keep the old
+    binding-echo contract.  A card whose directive was cancelled or amended
+    after the card was created is rejected with 409.
+    """
+    stamp = now or now_iso()
+    if type(approved) is not bool:
+        # bool("false") is True; a library caller must not weak-cast an
+        # irreversible approval (B3-19).
+        raise RoomError("invalid_approved", status=400,
+                        detail={"field": "approved", "message": "approved 必须是布尔值"})
+    if resolved_by != "author":
+        raise RoomError("agents_cannot_approve", status=403)
+    capability = str(capability or "").strip()
+    if not capability and (not str(artifact_fingerprint or "").strip()
+                           or not str(approved_scope_hash or "").strip()):
+        # Legacy binding echo; new cards additionally require a capability.
+        raise RoomError("approval_binding_required", status=400)
+    initialize(db_path)
+    expired = False
+    with write_tx(db_path) as db:
+        row = db.execute("SELECT * FROM agent_approvals WHERE id=?", (approval_id,)).fetchone()
+        if not row:
+            raise RoomError("approval_missing", status=404)
+        item = dict(row)
+        if item["status"] != "pending":
+            raise RoomError("approval_not_pending", status=409)
+        if item.get("expires_at") and str(item["expires_at"]) < stamp:
+            db.execute("UPDATE agent_approvals SET status='expired', resolved_at=? WHERE id=?",
+                       (stamp, approval_id))
+            expired = True
+        if expired:
+            pass
+        else:
+            stored_capability = str(item.get("capability_hash") or "")
+            if stored_capability:
+                if not capability:
+                    raise RoomError(
+                        "approval_capability_required", status=403,
+                        detail={"message": "审批卡需要创建者提供的一次性 capability，不能只回传库内字段"})
+                if not hmac.compare_digest(stored_capability, _capability_hash(capability)):
+                    raise RoomError("approval_capability_invalid", status=403)
+            else:
+                # Legacy card without a capability: the binding echo is still
+                # mandatory.  A caller-supplied capability must not turn a
+                # legacy row into an unbound approval (R-04).
+                if (not str(artifact_fingerprint or "").strip()
+                        or not str(approved_scope_hash or "").strip()
+                        or directive_revision is None):
+                    raise RoomError(
+                        "approval_binding_required", status=400,
+                        detail={"message": "旧审批卡必须回传指纹、作用域和指令 revision"})
+            # Read the live directive inside the same write transaction: a
+            # cancel or revision bump that committed after the card was read
+            # must invalidate the card (B3-02).
+            if item.get("directive_id"):
+                live = db.execute("SELECT status, directive_revision FROM agent_directives WHERE id=?",
+                                  (item["directive_id"],)).fetchone()
+                if not live:
+                    raise RoomError("approval_directive_missing", status=409)
+                if str(live["status"]) == "cancelled":
+                    raise RoomError("approval_directive_cancelled", status=409)
+                if int(live["directive_revision"]) != int(item.get("directive_revision") or 0):
+                    raise RoomError("approval_directive_revision_stale", status=409)
+            if directive_revision is not None and int(directive_revision) != int(item.get("directive_revision") or 0):
+                raise RoomError("approval_directive_revision_stale", status=409)
+            if artifact_fingerprint and artifact_fingerprint != item.get("artifact_fingerprint"):
+                raise RoomError("approval_artifact_changed", status=409)
+            if approved_scope_hash and approved_scope_hash != item.get("approved_scope_hash"):
+                raise RoomError("approval_scope_mismatch", status=409)
+            if artifact_checker is not None:
+                card = dict(item)
+                card["detail"] = _json(item.get("detail_json"), {})
+                if not artifact_checker(card):
+                    raise RoomError("approval_artifact_missing", status=409)
+            db.execute("UPDATE agent_approvals SET status=?, resolved_by=?, decision_json=?, resolved_at=?, "
+                       "capability_hash=NULL WHERE id=? AND status='pending'",
+                       ("approved" if approved else "rejected", resolved_by,
+                        json.dumps(decision or {}, ensure_ascii=False), stamp, approval_id))
+    if expired:
+        raise RoomError("approval_expired", status=409)
+    result = get_approval(db_path, approval_id)
+    append_event(
+        db_path, session_id=str(item.get("session_id") or ""), topic_id="default",
+        project_id=item.get("project_id"), directive_id=item.get("directive_id"),
+        task_id=item.get("task_id"), channel="chief_chat", sender_role="system",
+        kind="approval_resolved", summary=f"{item.get('title') or '审批'}：{result['status']}",
+        payload={"approval_id": approval_id, "kind": item.get("kind"),
+                 "status": result["status"], "decision": decision or {}})
+    return result
+
+
+def issue_capability(db_path=None, approval_id: str = "") -> Dict[str, Any]:
+    """Author-channel delivery of a one-time capability for a pending card.
+
+    Cards produced by an agent/worker are inserted without exposing the
+    plaintext capability to their creator (B4-02).  The author UI claims it
+    here; the plaintext is returned once and only the hash is stored.
+    """
+    initialize(db_path)
+    capability = secrets.token_urlsafe(32)
+    stamp = now_iso()
+    with write_tx(db_path) as db:
+        row = db.execute("SELECT status, expires_at FROM agent_approvals WHERE id=?",
+                         (approval_id,)).fetchone()
+        if not row:
+            raise RoomError("approval_missing", status=404)
+        if str(row["status"]) != "pending":
+            raise RoomError("approval_not_pending", status=409)
+        if row["expires_at"] and str(row["expires_at"]) < stamp:
+            db.execute("UPDATE agent_approvals SET status='expired', resolved_at=? WHERE id=?",
+                       (stamp, approval_id))
+            raise RoomError("approval_expired", status=409)
+        db.execute("UPDATE agent_approvals SET capability_hash=? WHERE id=? AND status='pending'",
+                   (_capability_hash(capability), approval_id))
+    return {"approval_id": approval_id, "capability": capability,
+            "capability_delivery": "author_channel"}
+
+
+def recreate_approval(db_path=None, approval_id: str = "", *, ttl_minutes: int = 120) -> Dict[str, Any]:
+    """Replace an expired/superseded card with a fresh, resolvable revision.
+
+    Upgraded legacy cards are expired by :func:`initialize`; this is the
+    supported recovery path (R-04/B4-05).
+    """
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_approvals WHERE id=?", (approval_id,)).fetchone()
+    if not row:
+        raise RoomError("approval_missing", status=404)
+    if str(row["status"]) == "pending":
+        raise RoomError("approval_already_pending", status=409,
+                        detail={"message": "待审批卡无需重建；请直接审批或先作废"})
+    revision = int(row["directive_revision"] or 1)
+    directive_id = row["directive_id"]
+    if directive_id:
+        live = None
+        with connect(db_path) as db:
+            live = db.execute("SELECT status, directive_revision FROM agent_directives WHERE id=?",
+                              (directive_id,)).fetchone()
+        if not live:
+            raise RoomError("approval_directive_missing", status=409)
+        if str(live["status"]) == "cancelled":
+            raise RoomError("approval_directive_cancelled", status=409)
+        revision = int(live["directive_revision"])
+    return create_approval(
+        db_path, session_id=str(row["session_id"]), project_id=row["project_id"],
+        directive_id=directive_id, directive_revision=revision, task_id=row["task_id"],
+        kind=str(row["kind"]), title=str(row["title"]),
+        artifact_fingerprint=str(row["artifact_fingerprint"] or ""),
+        approved_scope_hash=str(row["approved_scope_hash"] or ""),
+        detail=_json(row["detail_json"], {}), ttl_minutes=ttl_minutes,
+        requester="author")
+
+
+def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
+                      session_id: Optional[str] = None,
+                      status: Optional[str] = "pending",
+                      unbound_only: bool = False) -> List[Dict[str, Any]]:
+    initialize(db_path)
+    wanted = str(status or "pending")
+    clauses = ["status=?"]
+    params: List[Any] = [wanted]
+    if project_id:
+        clauses.append("project_id=?"); params.append(project_id)
+    elif unbound_only or session_id:
+        clauses.append("project_id IS NULL")
+    if session_id:
+        clauses.append("session_id=?"); params.append(session_id)
+    if wanted == "pending":
+        # Expired cards and cards of cancelled/amended directives are not
+        # actionable; never show them as pending (B3-02/B3-30).
+        stamp = now_iso()
+        clauses.append("(expires_at IS NULL OR expires_at > ?)"); params.append(stamp)
+        clauses.append("(directive_id IS NULL OR EXISTS (SELECT 1 FROM agent_directives d "
+                       "WHERE d.id=agent_approvals.directive_id AND d.status!='cancelled' "
+                       "AND d.directive_revision=agent_approvals.directive_revision))")
+    with connect(db_path) as db:
+        rows = [dict(row) for row in db.execute(
+            "SELECT * FROM agent_approvals WHERE " + " AND ".join(clauses) + " ORDER BY created_at", tuple(params))]
+    for item in rows:
+        item["capability_ready"] = bool(item.get("capability_hash"))
+        item.pop("capability_hash", None)
+        # Public listings must not hand back replayable binding values.
+        item.pop("artifact_fingerprint", None)
+        item.pop("approved_scope_hash", None)
+        item.pop("directive_revision", None)
+        item["detail"] = _json(item.pop("detail_json"), {})
+        item["decision"] = _json(item.pop("decision_json"), None)
+    return rows
+
+
+def new_topic(db_path=None, *, project_id: str) -> Dict[str, Any]:
+    return {"topic_id": new_id("topic"), "project_id": project_id, "created_at": now_iso()}
+
+
+def chat_context(db_path=None, *, project_id: str, topic_id: str = "default",
+                 limit: int = 8, char_limit: int = 12000) -> List[Dict[str, Any]]:
+    """Sliding window: newest K rounds under this topic, bounded by chars."""
+    initialize(db_path)
+    with connect(db_path) as db:
+        rows = [dict(row) for row in db.execute(
+            "SELECT * FROM agent_events WHERE project_id=? AND topic_id=? AND channel='chief_chat' "
+            "AND kind NOT IN ('progress_signal','live_preview_delta','draft_updated') "
+            "ORDER BY seq DESC LIMIT ?", (project_id, topic_id, max(1, int(limit) * 2)))]
+    rows.reverse()
+    picked, size = [], 0
+    for item in reversed(rows):
+        text = str(item.get("summary") or "")
+        if size + len(text) > char_limit:
+            continue
+        picked.append({"seq": item["seq"], "role": item["sender_role"], "kind": item["kind"],
+                       "summary": text, "payload": _json(item.get("payload_json"), {})})
+        size += len(text)
+    picked.reverse()
+    return picked
+
+
+def snapshot(db_path=None, *, project_id: Optional[str] = None,
+             session_id: Optional[str] = None, topic_id: Optional[str] = None,
+             limit: int = 200) -> Dict[str, Any]:
+    """Room state scoped to one book, or to an unbound session before a book exists.
+
+    A session id is shared by every book ("author"), so a session-only snapshot
+    must never aggregate other books' events/directives/tasks/approvals (B-05).
+    """
+    initialize(db_path)
+    if not project_id and not session_id:
+        raise RoomError("project_or_session_required")
+    clauses, params = [], []
+    if project_id:
+        clauses.append("project_id=?"); params.append(project_id)
+        if session_id:
+            clauses.append("session_id=?"); params.append(session_id)
+    elif session_id:
+        clauses.append("session_id=?"); params.append(session_id)
+        clauses.append("project_id IS NULL")
+    if topic_id:
+        clauses.append("topic_id=?"); params.append(topic_id)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with connect(db_path) as db:
+        if project_id:
+            row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events WHERE project_id=?",
+                             (project_id,)).fetchone()
+        elif session_id:
+            row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events "
+                             "WHERE session_id=? AND project_id IS NULL", (session_id,)).fetchone()
+        else:
+            row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events").fetchone()
+        seq = int(row[0])
+        events = [dict(row) for row in db.execute(
+            "SELECT * FROM agent_events" + where + " ORDER BY seq DESC LIMIT ?",
+            (*params, max(1, min(int(limit), 500))))]
+    events.reverse()
+    for item in events:
+        item["mentions"] = _json(item.pop("mentions_json"), [])
+        item["payload"] = _json(item.pop("payload_json"), {})
+    directives, tasks = [], []
+    with connect(db_path) as db:
+        if project_id:
+            directives = [dict(row) for row in db.execute(
+                "SELECT * FROM agent_directives WHERE project_id=? ORDER BY created_at DESC LIMIT 20",
+                (project_id,))]
+        elif session_id:
+            directives = [dict(row) for row in db.execute(
+                "SELECT * FROM agent_directives WHERE session_id=? AND project_id IS NULL "
+                "ORDER BY created_at DESC LIMIT 20", (session_id,))]
+        for item in directives:
+            item["constraints"] = _json(item.pop("constraints_json"), [])
+    tasks = list_tasks(db_path, project_id=project_id, session_id=session_id, active_only=True,
+                       unbound_only=not bool(project_id))
+    return {"snapshot_seq": seq, "events": events, "directives": directives,
+            "tasks": tasks, "approvals": pending_approvals(
+                db_path, project_id=project_id, session_id=session_id,
+                unbound_only=not bool(project_id)),
+            "project_id": project_id, "session_id": session_id,
+            "topic_id": topic_id}
+
+
+# --------------------------------------------------------------- broadcaster
+
+class BoundedBroadcaster:
+    """In-memory fan-out for transient frames, with a hard 256-slot per client.
+
+    Persistent event types are durable in ``agent_events`` and can always be
+    replayed by ``seq``; when a slow client overflows, the broadcaster sends
+    one ``resync_required`` marker and unsubscribes it instead of buffering
+    unbounded memory.
+    """
+
+    def __init__(self, maxsize: int = 256):
+        self.maxsize = int(maxsize)
+        self._subscribers: Dict[str, Tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = {}
+        self._filters: Dict[str, Tuple[Optional[str], Optional[str]]] = {}
+        self._last_seq: Dict[str, int] = {}
+        self._closed: set = set()
+        self._lock = threading.RLock()
+
+    def subscribe(self, loop: Optional[asyncio.AbstractEventLoop] = None,
+                  *, project_id: Optional[str] = None,
+                  session_id: Optional[str] = None) -> Tuple[str, asyncio.Queue]:
+        loop = loop or asyncio.get_running_loop()
+        token = uuid.uuid4().hex
+        queue: asyncio.Queue = asyncio.Queue(maxsize=self.maxsize)
+        with self._lock:
+            self._closed.discard(token)
+            self._subscribers[token] = (loop, queue)
+            self._filters[token] = (project_id, session_id)
+            self._last_seq[token] = 0
+        return token, queue
+
+    def unsubscribe(self, token: str) -> None:
+        with self._lock:
+            self._closed.add(token)
+            self._subscribers.pop(token, None)
+            self._filters.pop(token, None)
+            self._last_seq.pop(token, None)
+
+    def ack(self, token: str, seq: int) -> None:
+        """Record a frame that the SSE generator actually yielded.
+
+        The queue can be drained before a slow consumer reads it; only an ack
+        from the generator proves delivery, so a resync marker must never use
+        the last enqueue seq (B-14R-1).
+        """
+        if not isinstance(seq, int) or seq <= 0:
+            return
+        with self._lock:
+            if token not in self._closed and token in self._subscribers:
+                self._last_seq[token] = max(self._last_seq.get(token, 0), int(seq))
+
+    def publish(self, event: Dict[str, Any]) -> int:
+        dropped = 0
+        with self._lock:
+            items = list(self._subscribers.items())
+        event_project = event.get("project_id")
+        event_session = str(event.get("session_id") or "")
+        for token, (loop, queue) in items:
+            with self._lock:
+                want_project, want_session = self._filters.get(token, (None, None))
+            if want_project:
+                # A book stream only sees that book; a NULL-project event is
+                # never broadcast into every book (B-05).
+                if event_project != want_project:
+                    continue
+            elif want_session:
+                # A pre-book session sees only its own unbound events.
+                if event_project is not None or event_session != want_session:
+                    continue
+            def put(event=event, queue=queue, token=token):
+                with self._lock:
+                    if token in self._closed:
+                        return
+                try:
+                    queue.put_nowait(event)
+                    # Do not advance the delivered cursor on enqueue: a later
+                    # overflow can drain queued frames before the generator
+                    # yields them.  Only ack() after a successful yield moves it.
+                    return
+                except asyncio.QueueFull:
+                    pass
+                if event.get("kind") not in TRANSIENT_KINDS:
+                    # Persistent frame overflow: force a clean resync from the
+                    # last frame actually delivered, never from the newest seq
+                    # that overflowed the client (B-14/C-42).
+                    with self._lock:
+                        last = self._last_seq.get(token, 0)
+                    try:
+                        while not queue.empty():
+                            queue.get_nowait()
+                        queue.put_nowait({"kind": "resync_required", "channel": "system",
+                                          "summary": "连接积压，需重新同步", "seq": last,
+                                          "full_reload": True, "resync_required": True})
+                    except Exception:
+                        pass
+                    self.unsubscribe(token)
+            try:
+                loop.call_soon_threadsafe(put)
+            except RuntimeError:
+                self.unsubscribe(token)
+                dropped += 1
+        return dropped
+
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._subscribers)
+
+
+broadcaster = BoundedBroadcaster()

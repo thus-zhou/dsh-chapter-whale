@@ -36,6 +36,7 @@ from fanqie_auto_publish.publication_safety import (
     PublicationBlocked, account_lock, atomic_json, creative_contract_hash, digest_file, file_lock, review_eligible, body_digest,
     journal_path, queue_lock, read_json_strict, valid_receipt,
 )
+from integration import publication_state
 
 
 def park_unsubmitted_queue_for_revision(project,book,account,chapter,source):
@@ -387,6 +388,76 @@ def _queue_serialized(function):
     return call
 
 
+def _record_staged_receipts(project_root: Path, book: str,
+                            items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把已真实写进发布队列的章节记为 staged（E-01）。
+
+    单项失败只记录原因：队列文件已经写成，不能因为回执写不进去就谎报入队失败。
+    """
+    recorded: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("status") != "queued":
+            continue
+        try:
+            chapter = int(item.get("chapter_id"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            outcome = publication_state.record_staged(
+                project_root, chapter,
+                content_sha256=str(item.get("source_sha256") or ""),
+                source_path=item.get("source"),
+                book=book,
+                queue_file=str(item.get("destination") or ""),
+                body_sha256=str(item.get("sha256") or ""))
+        except Exception as error:  # noqa: BLE001 - 回执失败不得回滚已完成的入队
+            outcome = {"recorded": False, "reason": type(error).__name__}
+        recorded.append({"chapter": chapter, **outcome})
+    return recorded
+
+
+def _record_published_receipts(plan: Dict[str, Any], report: Dict[str, Any],
+                               account: Optional[str]) -> List[Dict[str, Any]]:
+    """发布器明确确认并归档后，把 published_sha256 写回来源项目（E-01）。
+
+    只使用计划里已验证过的 source_sha256；平台侧成功已经发生，回执写失败只
+    记录原因，不改变发布结果。
+    """
+    project = str(plan.get("project") or "")
+    if not project:
+        return []
+    sources: Dict[int, Dict[str, Any]] = {}
+    for item in plan.get("chapters", []):
+        if isinstance(item, dict):
+            try:
+                sources[int(item.get("chapter_id"))] = item
+            except (TypeError, ValueError):
+                continue
+    recorded: List[Dict[str, Any]] = []
+    for item in report.get("chapters", []):
+        if (not isinstance(item, dict) or item.get("state") != "platform_confirmed"
+                or item.get("archived") is not True):
+            continue
+        try:
+            chapter = int(item.get("chapter_id"))
+        except (TypeError, ValueError):
+            continue
+        source = sources.get(chapter)
+        if source is None:
+            continue
+        try:
+            outcome = publication_state.record_published(
+                project, chapter,
+                content_sha256=str(source.get("source_sha256") or ""),
+                platform="fanqie", account=str(account or "legacy-root"),
+                source="legacy_publish",
+                evidence=str(item.get("archive_path") or ""))
+        except Exception as error:  # noqa: BLE001 - 平台已确认，回执失败不回滚
+            outcome = {"recorded": False, "reason": type(error).__name__}
+        recorded.append({"chapter": chapter, **outcome})
+    return recorded
+
+
 def _stage_serialized(function):
     @wraps(function)
     def call(project_path, *args, **kwargs):
@@ -407,6 +478,24 @@ def book_runtime(project: Path, book: str):
         manifest = load_manifest()
         _record_for_book(manifest, safe_dir_name(book), book, Path(project).resolve())
         yield
+
+
+def _queue_copy_is_ours(record: Dict[str, Any], chapter_id: int, source,
+                        existing_path: Path, existing_hash: str) -> bool:
+    """判断同名队列副本是否确由本来源上一次 stage 写入（E-01C）。
+
+    条件必须同时成立：manifest 记录同一来源、同一目标、同一队列内容摘要。
+    任一不成立就仍按冲突处理，绝不覆盖来源不明或已被别人改过的待发文件。
+    """
+    chapters = record.get("chapters") if isinstance(record, dict) else None
+    item = chapters.get(str(chapter_id)) if isinstance(chapters, dict) else None
+    if not isinstance(item, dict):
+        return False
+    if str(item.get("source") or "") != str(source):
+        return False
+    if str(item.get("destination") or "") != str(existing_path):
+        return False
+    return str(item.get("sha256") or "") == str(existing_hash)
 
 
 @_stage_serialized
@@ -452,12 +541,26 @@ def stage_project(
         if not _select_ids(chapter_id, selected_ids, start, end):
             continue
         if chapter_id in archived and not include_published:
+            valid = valid_receipt(archived[chapter_id], display_name, chapter_id)
             item = {
                 "chapter_id": chapter_id,
                 "source": str(source),
-                "status": "published" if valid_receipt(archived[chapter_id], display_name, chapter_id) else "archive_unverified",
+                "status": "published" if valid else "archive_unverified",
                 "uploaded_path": str(archived[chapter_id]),
             }
+            if valid:
+                # Upgrade/backfill: 0.7.5 published chapters only have an
+                # uploaded archive, not writer_receipts publication fields.
+                # Record the verified archive before skipping it so delete/
+                # split/merge stay protected after upgrade (E-01B).
+                try:
+                    item["publication_state"] = publication_state.record_published(
+                        project_root, chapter_id, content_sha256=digest_file(source),
+                        platform="fanqie", account=str(record.get("account") or ""),
+                        source="archive_backfill", evidence=str(archived[chapter_id]))
+                except Exception as exc:  # noqa: BLE001 - diagnostics only
+                    item["publication_state"] = {"recorded": False,
+                                                 "reason": type(exc).__name__}
             record["chapters"][str(chapter_id)] = {
                 **record["chapters"].get(str(chapter_id), {}),
                 **item,
@@ -507,6 +610,20 @@ def stage_project(
                 item["status"] = "queued"
                 item["destination"] = str(existing_path)
                 skipped.append(item)
+            elif (not force and existing_path == destination
+                  and _queue_copy_is_ours(record, chapter_id, source,
+                                          existing_path, existing_hash)):
+                # 作者先入队、后改稿：同名队列副本是本来源上一次 stage 写的，
+                # 且没有发布 journal。允许自动替换并刷新 staged 摘要，避免
+                # HTTP 没有 --force 时永远卡在 conflict（E-01C）。
+                if dry_run:
+                    item["status"] = "would_replace"
+                else:
+                    queue_dir.mkdir(parents=True, exist_ok=True)
+                    _write_text_atomic(destination, body)
+                    item["status"] = "queued"
+                    item["replaced_stale"] = True
+                staged.append(item)
             elif not force or existing_path != destination:
                 item["status"] = "conflict"
                 item["existing_path"] = str(existing_path)
@@ -534,10 +651,13 @@ def stage_project(
             "updated_at": now_iso(),
         }
 
+    staged_receipts: List[Dict[str, Any]] = []
     if not dry_run:
         save_manifest(manifest)
+        # 入队成功后才写 staged 回执；delete/split/merge 的只读保护依赖它（E-01）。
+        staged_receipts = _record_staged_receipts(project_root, display_name, staged + skipped)
 
-    return {
+    response = {
         "project": str(project_root),
         "book": display_name,
         "queue_dir": str(queue_dir),
@@ -548,6 +668,9 @@ def stage_project(
         "staged_count": len(staged),
         "queued_count": len(queued_chapters(queue_dir)),
     }
+    if not dry_run:
+        response["publication_receipts"] = staged_receipts
+    return response
 
 
 def _write_text_atomic(path: Path, content: str):
@@ -731,6 +854,10 @@ def validate_queue_origin(book: str, project: Optional[Path] = None,
         source, title, markdown = source_map[number]
         receipt = receipts.get(str(number), {})
         review = receipt.get("review", {}) if isinstance(receipt, dict) else {}
+        if not reconcile_only and isinstance(receipt, dict) and receipt.get("publish_pending"):
+            # 结果不明的平台写入必须先对账；否则 legacy 发布可能在同一平台
+            # 二次写入同一章（E-01D）。
+            raise ValueError("该章有结果不明的平台写入，请先对账再发布")
         if not (review_eligible(review,body_digest(markdown),origin,number) and
                 receipt.get("destination") == str(source.resolve()) and
                 receipt.get("sha256") == digest_file(source) and
@@ -766,15 +893,29 @@ def validate_queue_origin(book: str, project: Optional[Path] = None,
             # 队列章节没有任何 journal = 从未尝试提交，不是待核对对象。
             continue
         chapters.append({"chapter_id": number, "filename": queued.name, "source": str(source.resolve()),
-                         "source_sha256": digest_file(source), "file_sha256": digest_file(queued),"review_status":review.get("review_decision")})
+                         "source_sha256": digest_file(source), "file_sha256": digest_file(queued),"review_status":review.get("review_decision"),
+                         "quality": ({} if reconcile_only else publication_state.quality_advisory(
+                             origin, number, content_sha256=digest_file(source)))})
     if not chapters:
         raise ValueError("没有需要只读核对的提交记录" if reconcile_only else "没有待发章节")
     binding=read_json(origin/".webnovel"/"platform_binding.json",{})
     allow_typo=(isinstance(binding,dict) and binding.get("book")==display and
                 binding.get("account")==identity and binding.get("allow_typo_advisory") is True)
+    blocked_quality = sorted(
+        int(item["chapter_id"]) for item in chapters
+        if isinstance(item.get("quality"), dict) and item["quality"].get("gate") == "block")
+    quality_summary = {
+        "advisory_only": True,
+        "blocked": blocked_quality,
+        "counts": {verdict: sum(1 for item in chapters
+                                if isinstance(item.get("quality"), dict)
+                                and item["quality"].get("verdict") == verdict)
+                   for verdict in ("pass", "revise", "block")},
+        "source": "quality_reviews",
+    }
     return {"schema": 1, "book": display, "queue_book": folder, "project": str(origin),
             "account": identity, "chapters": chapters,"allow_typo_advisory":allow_typo,
-            'reconcile_only':reconcile_only}
+            'reconcile_only':reconcile_only, "quality_advisory": quality_summary}
 
 
 def _report_key(book: str, account: Optional[str]) -> str:
@@ -894,6 +1035,19 @@ def run_publish(
               "exit_code": 2, "confirmed_count": 0, "chapters": [], "started_at": now_iso(),
               'publisher_started':False,'invocation_id':invocation_id}
     publisher_started=False
+    plan: Optional[Dict[str, Any]] = None
+
+    def record_confirmed(source_report: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """把已确认并归档的章节写回回执；超时/异常分支也必须调用（E-01E）。"""
+        if plan is None or not isinstance(source_report, dict):
+            return []
+        try:
+            receipts = _record_published_receipts(plan, source_report, identity)
+        except Exception as error:  # noqa: BLE001 - 平台写入已发生，回执失败只记诊断
+            receipts = [{"recorded": False, "reason": type(error).__name__}]
+        source_report["publication_receipts"] = receipts
+        return receipts
+
     try:
         token = hashlib.sha256(safe_dir_name(book).casefold().encode("utf-8")).hexdigest()
         with runtime_lock("fanqie-publish"), file_lock(FANQIE_ROOT / ".publication" / f"book-{token}.lock"):
@@ -921,6 +1075,9 @@ def run_publish(
                 plan_path = reports / (report_path.stem + ".plan.json")
                 atomic_json(plan_path, plan)
             report['plan_chapters']=[{k:c[k] for k in ('chapter_id','file_sha256')} for c in plan['chapters']]
+            # E-01G：v0.9 质量结论随发布计划/报告留痕；旧发布路径按 advisory
+            # 处理（不改变既有 legacy 审查门禁），第三层 submit 才是硬门禁。
+            report["quality_advisory"] = plan.get("quality_advisory")
             atomic_json(report_path,report)
             from integration import model_roles
             from integration import costs
@@ -948,10 +1105,16 @@ def run_publish(
                 completed = _run_publish_process(command, publish_timeout)
             except subprocess.TimeoutExpired:
                 # 超时只代表“结果不明”，绝不能当作失败后自动重发。
-                child = read_json_strict(report_path)
+                try:
+                    child = read_json_strict(report_path)
+                except (ValueError, PublicationBlocked):
+                    child = dict(report)
                 child.update(requested_book=book, account=identity, subprocess_exit_code=2,
                              exit_code=2, reason='publish_subprocess_timeout',
                              executor_stage=gate, finished_at=now_iso(),invocation_id=invocation_id)
+                # 子进程可能在挂起前已经确认并归档了部分章节；超时也必须逐章
+                # 回写这些已确认事实（E-01E）。
+                record_confirmed(child)
                 atomic_json(report_path, child)
                 sync_manifest()
                 print(f"发布子进程超过 {publish_timeout:.0f}s 未结束，已终止并保留未确认记录；报告：{report_path}", file=sys.stderr)
@@ -966,17 +1129,29 @@ def run_publish(
                 child["exit_code"] = 2
             atomic_json(report_path, child)
             sync_manifest()
+            # Record every chapter the platform confirmed and archived, even
+            # when a later chapter in the same batch failed.  Waiting for a
+            # whole-batch verified_success left platform-confirmed chapters
+            # deletable and created a platform/local divergence (E-01).
+            # Do it before reading the evidence pointer: a corrupt/missing
+            # latest report must not discard confirmed facts (E-01E).
+            record_confirmed(child)
+            atomic_json(report_path, child)
             evidence = latest_publish_report(book, account)
             if not evidence["verified_success"]:
                 child["exit_code"] = 2
                 child.setdefault("reason", "publication_evidence_incomplete")
                 atomic_json(report_path, child)
                 return 2
+            atomic_json(report_path, child)
             return 0
     except Exception as exc:
         # No exception/page/credential payloads in machine reports.
         if report_path.exists():
-            saved = read_json_strict(report_path)
+            try:
+                saved = read_json_strict(report_path)
+            except (ValueError, PublicationBlocked):
+                saved = None
             if isinstance(saved, dict):
                 report = saved
         report.update(exit_code=2, requested_book=book, account=identity,
@@ -989,6 +1164,9 @@ def run_publish(
             for secret in model_roles.secrets(model_roles.load_config()):
                 detail=detail.replace(secret,"[redacted]")
             report["detail"]=detail[:1200]
+        # 即使 latest_publish_report/后续证据校验抛错，已读到的
+        # platform_confirmed+archived 章节仍必须写回执（E-01E）。
+        record_confirmed(report)
         atomic_json(report_path, report)
         # A busy invocation must not replace an active invocation's pointer.
         if not isinstance(exc, PublicationBlocked) or str(exc) != "resource_busy":

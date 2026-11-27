@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import math
@@ -33,7 +34,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
-from manager import ai_tools, device_access
+from integration import concurrent_engine
+from manager import ai_tools, device_access, api_v08, api_v085, api_v09
 from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer, workflow
 from integration import entity_state, evidence_usage, invalidation, retrieval_plan, style_rules
 from integration import observation, reader_metrics
@@ -42,6 +44,8 @@ from integration import publishing
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
+# 后台通知投递间隔；测试可改小以免等待 3 秒。
+NOTIFY_INTERVAL_SECONDS = 3.0
 # main() 在监听前写入实际端口；进程内 create_app() 测试时保持 None。
 _LISTEN_PORT = None
 # Serializes "find existing (project, publication_mode) + create/update" in this
@@ -78,6 +82,11 @@ PYTHON = Path(sys.executable) if sys.executable else (
     bridge.COMBINED_ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python3")
 )
 logger = logging.getLogger("chapter_whale.manager")
+
+# 审计 C3-17：`deferred` 是真实存在的等待态（daily/polish/其他 failure_kind），
+# 必须参与 active 过滤、项目互斥与 resume_due；旧实现把它当死记录。
+ACTIVE_OPERATION_STATUSES = ("queued", "running", "awaiting_login", "waiting", "deferred")
+_RESUMABLE_STATUSES = {"waiting", "deferred"}
 
 
 class Store:
@@ -119,8 +128,11 @@ class Store:
     def operations(self, active_only=False):
         with self.connect() as db:
             query = "SELECT payload FROM operations"
-            query += " WHERE json_extract(payload, '$.status') IN ('queued','running','awaiting_login','waiting') ORDER BY rowid DESC" if active_only else " ORDER BY rowid DESC LIMIT 100"
-            return [json.loads(row[0]) for row in db.execute(query)]
+            marks = ",".join("?" for _ in ACTIVE_OPERATION_STATUSES)
+            query += (f" WHERE json_extract(payload, '$.status') IN ({marks}) ORDER BY rowid DESC"
+                      if active_only else " ORDER BY rowid DESC LIMIT 100")
+            params = ACTIVE_OPERATION_STATUSES if active_only else ()
+            return [json.loads(row[0]) for row in db.execute(query, params)]
 
     def operation(self, identity):
         with self.connect() as db:
@@ -167,6 +179,14 @@ def redact(value: str) -> str:
     return value
 
 
+def redact_paths(value: str) -> str:
+    """Hide server absolute paths from remote error envelopes (audit C3-24)."""
+    text = str(value or "")
+    text = re.sub(r"(?<![:A-Za-z0-9/])/(?:[^\s'\"/]+/)+[^\s'\"/]*", "[path]", text)
+    text = re.sub(r"\b[A-Za-z]:\\[^\s'\"]+", "[path]", text)
+    return text
+
+
 def stop_process_tree(process: subprocess.Popen):
     """Stop only descendants of the worker launched by this manager."""
     if process.poll() is not None:
@@ -187,6 +207,11 @@ def stop_process_tree(process: subprocess.Popen):
                 process.terminate()
 
 
+# 审计 C3-18：所有会读写正文/回执/发布队列的操作共享同一把项目互斥；
+# 旧实现只拦 generate/daily，publish/stage/polish/review 可与日更同时启动。
+_PROJECT_MUTEX_KINDS = {"generate", "daily", "publish", "stage", "polish", "review"}
+
+
 class Operations:
     def __init__(self, store: Store):
         self.store = store
@@ -198,6 +223,18 @@ class Operations:
         for old in store.operations(active_only=True):
             if old.get("status") in {"queued", "running", "awaiting_login"}:
                 old.update(status="interrupted", finished_at=bridge.now_iso(), error="管理服务已重启；请核对队列后重新执行")
+                store.save_operation(old)
+            elif old.get("status") == "deferred":
+                # 审计 C3-17：deferred 跨重启曾永久保留。能恢复的批次转回
+                # waiting 交给 resume_due 复核；其余转 interrupted，避免僵尸
+                # 记录永久占用项目互斥却不被调度。
+                result = old.get("result") if isinstance(old.get("result"), dict) else {}
+                if (old.get("kind") == "generate" and old.get("batch_id")
+                        and result.get("next_retry_at")):
+                    old["status"] = "waiting"
+                else:
+                    old.update(status="interrupted", finished_at=bridge.now_iso(),
+                               error="等待结果无法自动恢复；请核对队列后重新执行")
                 store.save_operation(old)
 
     def start(self, *args, **kwargs):
@@ -248,13 +285,25 @@ class Operations:
                 existing = self.store.operation_by_key(operation_key)
                 if existing:
                     return reused(existing)
+            # 审计 C-09：「全站急停」必须拦住真正的自动化入口，而不只是
+            # 没有消费者的 v0.9 /tasks/claim。
+            if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                raise HTTPException(503, "全站急停中，已阻止新的操作；恢复后可重试")
+            pause_project = str((metadata or {}).get("project_path") or "")
+            if not pause_project:
+                try:
+                    pause_project = str(args[list(args).index("--project") + 1])
+                except (ValueError, IndexError):
+                    pause_project = ""
+            if pause_project and concurrent_engine.project_paused(pause_project):
+                raise HTTPException(409, "该作品已暂停自动化，请恢复后再执行")
             if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':
                 raise HTTPException(409,'正在维护升级，暂不派发新操作；完成后可继续原任务')
             active = self.store.operations(active_only=True)
             if any(x.get("identity") == identity for x in active):
                 raise HTTPException(409, "同一操作正在执行，请查看运行记录")
             meta_pid = (metadata or {}).get("project_id")
-            if kind in {"generate", "daily"}:
+            if kind in _PROJECT_MUTEX_KINDS:
                 if not meta_pid and kind == "daily":
                     # 审计 P2-14：daily 通常只带 --job-id，必须从调度任务解析项目，
                     # 否则项目互斥会被空 project_id 静默跳过。
@@ -278,8 +327,8 @@ class Operations:
                     if meta_pid:
                         metadata = {**(metadata or {}), "project_id": meta_pid}
                 if meta_pid and any(
-                    x.get("project_id") == meta_pid and x.get("kind") in {"generate", "daily"}
-                    and x.get("status") in {"queued", "running", "awaiting_login", "waiting"}
+                    x.get("project_id") == meta_pid and x.get("kind") in _PROJECT_MUTEX_KINDS
+                    and x.get("status") in ACTIVE_OPERATION_STATUSES
                     for x in active
                 ):
                     raise HTTPException(409, "该作品已有写作或日更任务正在执行，请等待完成后再试")
@@ -333,20 +382,39 @@ class Operations:
         return cur
 
     def resume_due(self, now=None):
-        """Wake only durable, explicitly deferred creation batches, never publish."""
+        """Wake durable waits, re-checking pause/maintenance/mutex before spawn.
+
+        审计 C3-17/C3-18/C3-23：旧实现只认 ``waiting``，``deferred`` 既
+        不参与项目互斥也永远不会被唤醒；且拿到锁后直接 spawn，绕过全站急停。
+        """
         from datetime import datetime, timezone
         now=now or datetime.now(timezone.utc)
         if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':return
         with self.lock:
             records=self.store.operations(active_only=True)
             for payload in records:
-                if payload.get('status')!='waiting':continue
-                result=payload.get('result') or {}
-                if result.get('failure_kind') not in {'recovery_cooldown','free_pool_wait'}:continue
+                status = payload.get('status')
+                if status not in _RESUMABLE_STATUSES:
+                    continue
+                result = payload.get('result') if isinstance(payload.get('result'), dict) else {}
+                if status == 'waiting' and result.get('failure_kind') not in {'recovery_cooldown','free_pool_wait'}:
+                    continue
+                retry_at = result.get('next_retry_at')
+                if not retry_at:
+                    payload.update(status='interrupted', finished_at=bridge.now_iso(),
+                                   error='等待记录缺少恢复检查点；请核对后重新执行')
+                    self.store.save_operation(payload)
+                    continue
                 try:
-                    target=datetime.fromisoformat(result['next_retry_at'])
+                    target=datetime.fromisoformat(str(retry_at))
                     if target.tzinfo is None:raise ValueError('等待时间缺少时区')
                     if target>now:continue
+                    # 审计 C3-23：全站急停/维护中不得 spawn；这里是拿锁后的
+                    # 复检，不只是 dispatch 循环入口的一次性检查。
+                    if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                        continue
+                    if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':
+                        continue
                     if any(x['id']!=payload['id'] and x.get('identity')==payload.get('identity') for x in records):continue
                     project=next((x for x in self.store.projects() if x['id']==payload.get('project_id')),None)
                     if project is None:
@@ -358,14 +426,24 @@ class Operations:
                                       if wanted is not None and Path(x['path']).expanduser().resolve()==wanted),None)
                     if project is None:
                         raise ValueError('等待批次的作品已不在登记表中')
+                    if concurrent_engine.project_paused(project['path']):
+                        continue
                     project_key=project['id']
                     if payload.get('project_id')!=project_key:
                         payload['project_id']=project_key
-                    # 在唤醒前复检项目互斥：另一个同项目操作可能已排队/运行/等待。
-                    if any(x['id']!=payload['id'] and x.get('kind') in {'generate','daily'}
+                    # 在唤醒前复检项目互斥：deferred 现在也是 active，僵尸
+                    # 记录会挡住新的同项目操作，而不是被互斥忽略。
+                    if any(x['id']!=payload['id'] and x.get('kind') in _PROJECT_MUTEX_KINDS
                            and x.get('project_id')==project_key
-                           and x.get('status') in {'queued','running','awaiting_login','waiting'}
+                           and x.get('status') in ACTIVE_OPERATION_STATUSES
                            for x in records):
+                        continue
+                    # 非 generate/batch 的 deferred 没有可复核的批次检查点，
+                    # 不能冒充“调度器会继续”；显式转人工，释放项目互斥。
+                    if status == 'deferred' and (payload.get('kind')!='generate' or not payload.get('batch_id')):
+                        payload.update(status='interrupted', finished_at=bridge.now_iso(),
+                                       error='该等待结果无法自动恢复；请核对后重新执行')
+                        self.store.save_operation(payload)
                         continue
                     if payload.get('kind')!='generate' or Path(project['path']).resolve()!=Path(result['project']).resolve():
                         raise ValueError('等待批次作品身份不一致')
@@ -374,6 +452,9 @@ class Operations:
                     batch=writer_runner.strict_json(path,{})
                     if not isinstance(batch,dict) or batch.get('id')!=payload['batch_id'] or batch.get('status')!='waiting' or batch.get('recovery',{}).get('next_retry_at')!=result['next_retry_at']:
                         raise ValueError('原批次等待检查点已变化')
+                    # 最后一次急停复检：检查与 spawn 之间不再有可绕过的窗口。
+                    if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                        continue
                     args=['batch','--project',project['path'],'--batch-id',payload['batch_id']]
                     payload.update(status='queued',resume_count=payload.get('resume_count',0)+1,last_resumed_at=bridge.now_iso())
                     payload.pop('finished_at',None);payload.pop('error',None)
@@ -387,6 +468,18 @@ class Operations:
         payload = self.store.operation(identity)
         process = None
         try:
+            # 审计 C3-23：派发后、真正 spawn 前再 fail-closed 一次；急停或
+            # 维护开始后不得再启动子进程。
+            if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                payload.update(status="interrupted", finished_at=bridge.now_iso(),
+                               error="全站急停中，本次操作未执行；恢复后请重试")
+                self.store.save_operation(payload)
+                return
+            if writer_runner.strict_json(DATA / 'maintenance.json', {}).get('state') == 'maintenance':
+                payload.update(status="interrupted", finished_at=bridge.now_iso(),
+                               error="正在维护升级，本次操作未执行；完成后请重试")
+                self.store.save_operation(payload)
+                return
             env = bridge.child_environment()
             env["PYTHONUTF8"] = "1"
             env["PYTHONUNBUFFERED"] = "1"
@@ -532,6 +625,10 @@ class Operations:
             payload = self.store.operation(identity)
             if payload.get('status')=='waiting':
                 payload.update(status='cancelled',finished_at=bridge.now_iso(),error='已取消等待；原稿与批次保留')
+                self.store.save_operation(payload)
+                return {'id':identity,'status':'cancelled'}
+            if payload.get('status')=='deferred':
+                payload.update(status='cancelled',finished_at=bridge.now_iso(),error='已取消无法自动恢复的等待记录；原稿与批次保留')
                 self.store.save_operation(payload)
                 return {'id':identity,'status':'cancelled'}
             if payload.get("status") not in {"queued", "running", "awaiting_login"}:
@@ -766,7 +863,9 @@ class PublishReconcileInput(BaseModel):
 
 
 class RestoreInput(BaseModel):
-    version_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    version_id: str = Field(pattern=r"^(?:[0-9a-f]{64}|ver_\d{4,}_[0-9a-f]{8})$")
+    restore_title: bool = True
+    op_id: str | None = None
 
 
 class StageInput(BaseModel):
@@ -1154,12 +1253,18 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         while True:
             await asyncio.sleep(20)
             try:
+                # 审计 C-09：急停期间连 resume_due / 定时任务派发一起停。
+                if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                    continue
                 await asyncio.to_thread(ops.resume_due)
                 for job in await asyncio.to_thread(scheduler.due_jobs):
+                    if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                        break
                     identity = job["id"]
                     meta = {
                         "job_id": identity,
                         "project_id": project_id_for_path(job.get("project", "")),
+                        "project_path": job.get("project", ""),
                         "book": job.get("book") or project_title(job.get("project", "")),
                     }
                     try:
@@ -1178,7 +1283,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             return
         owner = f"notify-{os.getpid()}"
         while True:
-            await asyncio.sleep(3)
+            await asyncio.sleep(NOTIFY_INTERVAL_SECONDS)
             try:
                 await asyncio.to_thread(_deliver_notifications_once, owner)
             except (ValueError, KeyError, RuntimeError, OSError, sqlite3.Error) as exc:
@@ -1186,8 +1291,10 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
     @asynccontextmanager
     async def lifespan(app):
+        # 审计 C-38：start_dispatcher=False（所有 API 测试）不得启动任何
+        # 后台任务；通知投递会写真实通知库并可能发邮件/webhook。
         task = asyncio.create_task(dispatch()) if start_dispatcher else None
-        notify_task = asyncio.create_task(deliver_notifications())
+        notify_task = asyncio.create_task(deliver_notifications()) if start_dispatcher else None
         if start_dispatcher:
             def _restore_ofm():
                 try:
@@ -1214,6 +1321,29 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     app.state.operations = ops
     from manager import provider_api
     provider_api.install(app, load_ai, AI_PATH, costs_db=DATA / "costs.sqlite3")
+    api_v08.install(app, project=project, ops=ops, load_ai=load_ai,
+                    project_title=project_title, data_dir=DATA)
+    api_v085.install(app, project=project, data_dir=DATA)
+    api_v09.install(app, project=project, data_dir=DATA, projects=store.projects)
+    # 审计 C-47：并发引擎的唤醒路径 /internal/events/notify 曾完全不存在。
+    fanout = concurrent_engine.EventFanout()
+    app.state.event_fanout = fanout
+
+    @app.post("/internal/events/notify")
+    async def internal_events_notify(request: Request):
+        expected = os.environ.get("CHAPTER_WHALE_INTERNAL_TOKEN", "")
+        actual = request.headers.get("x-internal-token", "")
+        if not expected or not hmac.compare_digest(str(actual), str(expected)):
+            return JSONResponse(status_code=403,
+                                content={"code": "forbidden", "message": "内部令牌无效"})
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {"value": payload}
+        dropped = fanout.publish({"kind": "wake", **payload})
+        return {"ok": True, "subscribers_dropped": len(dropped)}
     access = device_access.DeviceAccess(network_hosts, port, pairing_required=device_pairing_required)
     app.state.device_access = access
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver", *network_hosts])
@@ -1233,7 +1363,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if content_length > 32 * 1024 * 1024:
             return JSONResponse({"code": "payload_too_large", "message": "请求体超过32MB上限"},
                                 status_code=413)
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and \
+                request.url.path != "/internal/events/notify":
             if request.headers.get("X-Novel-Helper") != "1":
                 return JSONResponse({"code": "header_missing",
                                      "message": "需要管理界面的请求标识"},
@@ -1261,6 +1392,15 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                 # 发布/入队持锁属于“暂时不可用”，不是客户端请求错误。
                 return JSONResponse({"code": "resource_busy", "message": "系统正忙，请稍后重试"},
                                     status_code=503, headers={"Retry-After": "2"})
+            try:
+                from integration import lock_manager as _locks
+                if isinstance(exc, _locks.LockError):
+                    status = 503 if exc.code in {"lock_busy", "resource_busy"} else int(exc.status or 409)
+                    headers = {"Retry-After": "2"} if status == 503 else None
+                    return JSONResponse({"code": exc.code, "message": redact(str(exc))},
+                                        status_code=status, headers=headers)
+            except Exception:
+                pass
             code = 404 if isinstance(exc, (KeyError, FileNotFoundError)) else 409 if isinstance(exc, FileExistsError) else 400
             return JSONResponse({"code": "request_failed", "message": redact(str(exc))},
                                 status_code=code)
@@ -1284,7 +1424,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         detail = exc.detail if isinstance(exc.detail, str) else "请求未通过"
         code = {400: "invalid_request", 401: "unauthorized", 403: "forbidden",
                 404: "not_found", 405: "method_not_allowed", 409: "conflict",
-                413: "payload_too_large", 429: "too_many_requests"}.get(exc.status_code,
+                413: "payload_too_large", 422: "invalid_request",
+                429: "too_many_requests", 503: "service_unavailable"}.get(exc.status_code,
                                                                     "request_failed")
         return _JSON({"code": code, "message": detail}, status_code=exc.status_code,
                      headers=getattr(exc, "headers", None))
@@ -1293,12 +1434,14 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
     async def unhandled_handler(request, exc: Exception):
         # 兜底：未登记异常也要给同一个 {"code","message"} 形状，不能让框架返回纯文本 500。
+        error_id = uuid.uuid4().hex[:12]
+        detail = redact_paths(redact(str(exc)))
         try:
-            logger.exception("未处理的异常：%s %s", request.method, request.url.path)
+            logger.exception("未处理的异常[%s]：%s %s", error_id, request.method, request.url.path)
         except Exception:
             pass
-        return _JSON({"code": "internal_error",
-                      "message": f"服务内部错误：{redact(str(exc)) or exc.__class__.__name__}"},
+        return _JSON({"code": "internal_error", "error_id": error_id,
+                      "message": f"服务内部错误：{detail or exc.__class__.__name__}"},
                      status_code=500)
 
     app.add_exception_handler(Exception, unhandled_handler)
@@ -1979,20 +2122,19 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/chapters/{chapter}")
     def chapter(identity: str, chapter: int):
         path = Path(project(identity)["path"])
-        items = [x for x in bridge.iter_source_chapters(path) if x[1] == chapter]
-        if len(items) != 1:
-            raise HTTPException(409 if items else 404, "章节重复，请检查正文文件" if items else "未找到章节")
-        words = len([c for c in items[0][3] if not c.isspace()])
-        from integration import writer_runner
-        reviewed = writer_runner.reviewed_chapters(path)
-        committed = writer_runner.committed_chapters(path)
-        receipt = committed.get(chapter) or reviewed.get(chapter) or {}
-        review = receipt.get("review") or {}
-        return {"content": items[0][3], "title": items[0][2], "id": chapter, "words": words,
-                "reviewed": chapter in reviewed,
-                "human_review_required": chapter in committed and chapter not in reviewed,
-                "review_status": review.get("review_decision"),
-                "auto_review_count": review.get("auto_review_count")}
+        from integration import chapter_editor
+        try:
+            return chapter_editor.chapter_state(path, chapter)
+        except chapter_editor.ChapterError as exc:
+            raise HTTPException(exc.status, exc.code) from None
+        except Exception as exc:
+            # 保持 v0.7.5 的 409/404 语义：章节重复或未找到
+            from integration.chapter_versions import VersionConflict, VersionNotFound
+            if isinstance(exc, VersionConflict):
+                raise HTTPException(409, "章节重复，请检查正文文件") from None
+            if isinstance(exc, VersionNotFound):
+                raise HTTPException(404, "未找到章节") from None
+            raise
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/approve-review")
     def approve_chapter_review(identity: str, chapter: int, data: dict | None = None):
@@ -2054,7 +2196,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     @app.get("/api/projects/{identity}/chapters/{chapter}/versions/{version}")
     def chapter_version_body(identity: str, chapter: int, version: str):
         if chapter <= 0: raise ValueError("章节号无效")
-        if not re.fullmatch(r"[0-9a-f]{64}", version): raise ValueError("版本标识无效")
+        if not re.fullmatch(r"(?:[0-9a-f]{64}|ver_\d{4,}_[0-9a-f]{8})", version): raise ValueError("版本标识无效")
         from integration import version_history
         return version_history.read(Path(project(identity)["path"]), chapter, version)
 
@@ -2062,7 +2204,9 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     def restore_chapter(identity: str, chapter: int, data: RestoreInput):
         if chapter <= 0: raise ValueError("章节号无效")
         from integration import version_history
-        return version_history.restore(Path(project(identity)["path"]), chapter, data.version_id, config=load_ai())
+        return version_history.restore(Path(project(identity)["path"]), chapter, data.version_id,
+                                       op_id=data.op_id, restore_title=data.restore_title,
+                                       config=load_ai())
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/review")
     def review_existing(identity: str, chapter: int):
@@ -2509,6 +2653,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         meta = {
             "job_id": identity,
             "project_id": project_id_for_path(job.get("project", "")),
+            "project_path": job.get("project", ""),
             "book": job.get("book") or project_title(job.get("project", "")),
         }
         return ops.start("daily", ["run", "--job-id", identity, *extra], f"job:{identity}", meta)

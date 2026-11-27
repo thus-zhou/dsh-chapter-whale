@@ -8,7 +8,13 @@ from . import costs
 
 
 def reserve(db_path, project, price, messages, max_tokens):
-    if not db_path or not project or costs.ledger_gaps(db_path) or costs.MISSED_EVENTS:
+    if not db_path or not project:
+        raise ValueError('成本记录不完整，禁止自动付费回退')
+    # Only this project's recent unresolved gaps may close its fallback path.
+    # A gap from another book, an old gap, or a process-global counter used to
+    # disable paid fallback forever (B3-05).
+    if (costs.ledger_gaps(db_path, within_hours=24, project=project)
+            or costs.unrecorded_gap_count(project)):
         raise ValueError('成本记录不完整，禁止自动付费回退')
     price = dict(price or {})
     if any(k not in price for k in ('input','output','currency')):raise ValueError('备选模型缺少报价')
@@ -28,7 +34,7 @@ def reserve(db_path, project, price, messages, max_tokens):
     try:
         db.execute('CREATE TABLE IF NOT EXISTS fallback_reservations(id TEXT PRIMARY KEY,project TEXT,day TEXT,amount TEXT,state TEXT)')
         db.execute('BEGIN IMMEDIATE')
-        rows=db.execute('SELECT amount FROM fallback_reservations WHERE project=? AND day=?',(str(project),day)).fetchall()
+        rows=db.execute("SELECT amount FROM fallback_reservations WHERE project=? AND day=? AND state!='cancelled'",(str(project),day)).fetchall()
         if sum((Decimal(row[0]) for row in rows),Decimal(0))+amount > Decimal(20):raise ValueError('每日20元自动回退预算不足')
         identity=uuid.uuid4().hex
         db.execute('INSERT INTO fallback_reservations VALUES (?,?,?,?,?)',(identity,str(project),day,str(amount),'reserved'))
@@ -38,19 +44,33 @@ def reserve(db_path, project, price, messages, max_tokens):
 
 
 def settle(db_path, identity):
+    """Settle a paid-fallback reservation by what actually happened.
+
+    No usage event means the request never reached the ledger: mark it
+    ``cancelled`` (not billed) instead of writing a gap that poisons every
+    later fallback.  A pending/unreported event is ``unknown`` and keeps the
+    conservative reservation; neither state writes a gap (B3-05).
+    """
+    if not db_path or not identity:
+        return None
     db=costs.connection(db_path)
     try:
         db.execute('BEGIN IMMEDIATE')
+        reservation=db.execute('SELECT project,amount,state FROM fallback_reservations WHERE id=?',(identity,)).fetchone()
+        project=reservation['project'] if reservation else None
         events=[json.loads(r[0]) for r in db.execute('SELECT payload FROM usage_events')]
         selected=[e for e in events if e.get('fallback_reservation')==identity]
-        if not selected or any(e.get('cost_cny') is None or e.get('metering')!='reported' or e.get('status')=='pending' for e in selected):
-            costs.record_gap(db_path,'fallback_settlement_unknown')
-        else:
-            amount=sum((Decimal(e['cost_cny']) for e in selected),Decimal(0))
-            db.execute('UPDATE fallback_reservations SET amount=?,state=? WHERE id=?',(str(amount),'settled',identity))
-        db.commit()
+        if not selected:
+            db.execute("UPDATE fallback_reservations SET state='cancelled' WHERE id=? AND state='reserved'",(identity,))
+            db.commit();return 'cancelled'
+        if any(e.get('cost_cny') is None or e.get('metering')!='reported' or e.get('status')=='pending' for e in selected):
+            db.execute("UPDATE fallback_reservations SET state='unknown' WHERE id=? AND state='reserved'",(identity,))
+            db.commit();return 'unknown'
+        amount=sum((Decimal(e['cost_cny']) for e in selected),Decimal(0))
+        db.execute('UPDATE fallback_reservations SET amount=?,state=? WHERE id=?',(str(amount),'settled',identity))
+        db.commit();return 'settled'
     except BaseException:
-        db.rollback();costs.record_gap(db_path,'fallback_settlement_failed');raise
+        db.rollback();costs.record_gap(db_path,'fallback_settlement_failed',locals().get('project'));raise
     finally:db.close()
 
 

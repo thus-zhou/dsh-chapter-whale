@@ -501,8 +501,8 @@ def _recover_pending(base: Path) -> int:
             continue
         try:
             fixed += len(chapter_versions.recover_pending(Path(job["project"])))
-        except (ValueError, OSError, RuntimeError) as error:
-            sys.stderr.write(f"resident_service: 恢复提交失败（{job.get('project')}）：{error}\n")
+        except Exception as error:  # noqa: BLE001 - one bad project must not stop the service
+            sys.stderr.write(f"resident_service: 恢复提交失败（{job.get('project')}）：{type(error).__name__}: {error}\n")
     return fixed
 
 
@@ -519,6 +519,120 @@ def _sqlite_files(root: Path) -> Iterable[Path]:
             if skip == resolved or skip in resolved.parents:
                 continue
             yield path
+
+
+def _manifest_record(entries: List[Dict[str, Any]], relative: str, kind: str,
+                     data: bytes) -> None:
+    for row in entries:
+        if row.get("path") == relative:
+            row["kind"] = kind
+            row["sha256"] = _digest(data)
+            row["bytes"] = len(data)
+            return
+    entries.append({"path": relative, "kind": kind, "sha256": _digest(data),
+                    "bytes": len(data)})
+
+
+def _copy_into_backup(base: Path, source: Path, target: Path,
+                      entries: List[Dict[str, Any]]) -> str:
+    relative = source.relative_to(base)
+    out = target / relative
+    out.parent.mkdir(parents=True, exist_ok=True)
+    data = source.read_bytes()
+    out.write_bytes(data)
+    _manifest_record(entries, str(relative), "copy", data)
+    return str(relative)
+
+
+def _reconcile_resident_versions(base: Path, target: Path,
+                                 entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Re-copy index/body/object triples that a concurrent save split apart.
+
+    The generic tree walk can copy ``index.json`` before a save and the body
+    after it, leaving a backup whose index current-sha disagrees with the body
+    it just restored (A-P2-11).  Each book's version lock is held while the
+    index and the files it references are re-checked, reusing the same
+    primitives as :mod:`transaction_journal`.
+    """
+    from . import transaction_journal as journal
+
+    reports: List[Dict[str, Any]] = []
+    for index_path in sorted(target.rglob("index.json")):
+        if index_path.parent.name != "chapter_versions" or index_path.parent.parent.name != ".webnovel":
+            continue
+        try:
+            book_rel = index_path.relative_to(target).parts[:-3]
+        except ValueError:
+            continue
+        project = base.joinpath(*book_rel)
+        index_rel = Path(*book_rel) / ".webnovel" / "chapter_versions" / "index.json"
+        dest_root = target.joinpath(*book_rel)
+        problems: List[str] = []
+        chapters = 0
+        objects = 0
+        try:
+            with journal._versions_lock(project, 5.0):
+                source_index = project / ".webnovel" / "chapter_versions" / "index.json"
+                if not source_index.is_file():
+                    continue
+                _copy_into_backup(base, source_index, target, entries)
+                try:
+                    index_data = json.loads(
+                        (dest_root / ".webnovel" / "chapter_versions" / "index.json")
+                        .read_text(encoding="utf-8-sig"))
+                except (OSError, ValueError):
+                    reports.append({"book": str(Path(*book_rel)), "ok": False,
+                                    "problems": ["index_unreadable"]})
+                    continue
+                current = journal._index_current(index_data)
+                source_bodies = journal._body_sha_map(project / "正文")
+                for number, sha in sorted(current.items()):
+                    if source_bodies.get(number) != sha:
+                        problems.append(f"index_body_missing:{number}")
+                        continue
+                    body_path = None
+                    for path in (project / "正文").glob("*.md"):
+                        if (journal._body_chapter_number(path.name) == number
+                                and not journal._is_link_like(path)):
+                            body_path = path
+                            break
+                    if body_path is None:
+                        problems.append(f"index_body_missing:{number}")
+                        continue
+                    dest_body_dir = dest_root / "正文"
+                    if dest_body_dir.is_dir():
+                        for stale in sorted(dest_body_dir.glob("*.md")):
+                            if stale.name == body_path.name:
+                                continue
+                            if journal._body_chapter_number(stale.name) != number:
+                                continue
+                            try:
+                                stale.unlink()
+                            except OSError:
+                                continue
+                            stale_rel = str(stale.relative_to(target))
+                            entries[:] = [row for row in entries
+                                          if row.get("path") != stale_rel]
+                    target_body = dest_root / "正文" / body_path.name
+                    if not (target_body.is_file() and journal._file_sha(target_body) == sha):
+                        _copy_into_backup(base, body_path, target, entries)
+                    chapters += 1
+                for number, sha in journal._index_version_objects(index_data):
+                    objects += 1
+                    source_object = project / ".webnovel" / "chapter_versions" / "objects" / f"{sha}.txt"
+                    dest_object = dest_root / ".webnovel" / "chapter_versions" / "objects" / f"{sha}.txt"
+                    if not source_object.is_file() or journal._file_sha(source_object) != sha:
+                        problems.append(f"index_object_missing:{number}:{sha}")
+                        continue
+                    if journal._file_sha(dest_object) != sha:
+                        _copy_into_backup(base, source_object, target, entries)
+        except Exception as exc:  # noqa: BLE001 - one bad book must not abort backup
+            reports.append({"book": str(Path(*book_rel)), "ok": False,
+                            "problems": [f"reconcile_error:{type(exc).__name__}"]})
+            continue
+        reports.append({"book": str(Path(*book_rel)), "ok": not problems,
+                        "problems": problems, "chapters": chapters, "objects": objects})
+    return reports
 
 
 def _backup_tree(base: Path) -> Iterable[Path]:
@@ -573,8 +687,13 @@ def backup(root: Optional[Path] = None, dest: Optional[Path] = None, *, now: Opt
         out.write_bytes(data)
         manifest_files.append({"path": str(relative), "kind": "copy",
                                "sha256": _digest(data), "bytes": len(data)})
+    consistency = _reconcile_resident_versions(base, target, manifest_files)
+    problems = [f"{row.get('book')}:{item}" for row in consistency
+                for item in (row.get("problems") or [])]
     manifest = {"schema": SCHEMA, "created_at": bridge.now_iso(), "files": len(manifest_files),
-                "root": str(base), "dest": str(target), "contents": manifest_files}
+                "root": str(base), "dest": str(target), "contents": manifest_files,
+                "versions_consistency": consistency,
+                "ok": not problems, "problems": problems}
     bridge.write_json_atomic(target / "backup.json", manifest)
     return manifest
 
@@ -614,7 +733,7 @@ def restore(root: Optional[Path] = None, source: Optional[Path] = None, *,
     # 服务锁比 pid 可靠：持锁说明真有实例在工作（容器里 pid 1 在宿主看不见）。
     try:
         with writer.file_lock(service_paths(base)["lock"], blocking=False):
-            restored = _restore_into(base, source, force)
+            restored = _restore_into(base, source, force, manifest)
     except ValueError:
         raise
     except (RuntimeError, OSError) as error:
@@ -623,19 +742,60 @@ def restore(root: Optional[Path] = None, source: Optional[Path] = None, *,
             "created_at": manifest.get("created_at", ""), "forced": bool(force)}
 
 
-def _restore_into(base: Path, source: Path, force: bool) -> int:
-    restored = 0
-    for path in sorted(source.rglob("*")):
-        if not path.is_file() or path.name == "backup.json":
-            continue
-        relative = path.relative_to(source)
+def _restore_into(base: Path, source: Path, force: bool,
+                  manifest: Dict[str, Any]) -> int:
+    source_root = source.resolve()
+    items: List[tuple] = []
+    contents = manifest.get("contents")
+    if isinstance(contents, list) and contents:
+        # Validate the whole manifest *before* writing anything: a corrupted
+        # or tampered backup must be refused instead of quietly restored
+        # (A-P3-06).
+        for entry in contents:
+            if not isinstance(entry, dict):
+                raise ValueError("备份清单条目无效")
+            relative = str(entry.get("path") or "")
+            candidate = Path(relative)
+            if (not relative or candidate.is_absolute() or ".." in candidate.parts
+                    or relative == "backup.json"):
+                raise ValueError(f"备份清单路径不安全：{relative}")
+            if entry.get("sha256") is None or entry.get("bytes") is None:
+                raise ValueError(f"备份清单缺少校验信息：{relative}")
+            path = source / relative
+            try:
+                path.resolve().relative_to(source_root)
+            except (OSError, ValueError):
+                raise ValueError(f"备份清单路径越界：{relative}") from None
+            if not path.is_file():
+                raise ValueError(f"备份文件缺失：{relative}")
+            data = path.read_bytes()
+            if len(data) != int(entry.get("bytes")) or _digest(data) != str(entry.get("sha256")):
+                raise ValueError(f"备份已损坏（哈希不符）：{relative}")
+            items.append((Path(relative), data))
+    else:
+        for path in sorted(source.rglob("*")):
+            if not path.is_file() or path.name == "backup.json":
+                continue
+            relative = path.relative_to(source)
+            items.append((relative, path.read_bytes()))
+    # Refuse before touching any target so a half-restore cannot happen.
+    for relative, _data in items:
         out = base / relative
         if out.exists() and not force:
             raise ValueError(f"目标已有同名文件，拒绝覆盖：{relative}")
+    restored = 0
+    for relative, data in items:
+        out = base / relative
         out.parent.mkdir(parents=True, exist_ok=True)
         temp = out.with_name(out.name + ".restore.tmp")
-        temp.write_bytes(path.read_bytes())
-        os.replace(temp, out)
+        try:
+            temp.write_bytes(data)
+            os.replace(temp, out)
+        finally:
+            try:
+                temp.unlink()
+            except OSError:
+                pass
         if out.suffix in {".sqlite3", ".sqlite"}:
             for suffix in ("-wal", "-shm"):
                 sidecar = out.with_name(out.name + suffix)

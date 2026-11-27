@@ -1,4 +1,5 @@
 """Immutable role routing with explicit, budgeted fallback connections."""
+import json
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -38,11 +39,45 @@ class ProviderClient:
         return value if value.get('provider_id') else self._config['default_binding']
     def _options(self):
         binding=self._binding()
-        return [binding,*binding.get('fallbacks',[])]
+        options=[binding,*binding.get('fallbacks',[])]
+        # Privacy is a hard boundary: a fallback may only move to an equal or
+        # stricter domain.  Filtering here covers every retry/fallback path,
+        # not only explicit override_binding calls.
+        try:
+            from .model_gateway import privacy_of, privacy_allowed
+            source=privacy_of(self._config,binding)
+            options=[item for item in options if privacy_allowed(source,privacy_of(self._config,item))]
+        except Exception:
+            pass
+        return options
     def _project(self):
         from pathlib import Path
         value=costs.META.get().get('project')
         return str(Path(value).resolve()).casefold() if value else None
+    PROBE_MAX_PAYLOAD_CHARS = 1024
+    def _probe_payload_bounded(self, messages):
+        try:
+            return len(json.dumps(messages, ensure_ascii=False, default=str)) <= self.PROBE_MAX_PAYLOAD_CHARS
+        except (TypeError, ValueError):
+            return False
+    def _authorize_project(self, item, messages, message):
+        """A project-bearing call is always checked, whatever ``stage`` says.
+
+        ``stage='probe'`` only permits a project-less, small connection probe;
+        it is never an authorization bypass for a book's prose (B3-03).
+        """
+        from pathlib import Path
+        meta=costs.META.get()
+        project=meta.get('project')
+        if project:
+            permitted={str(Path(x).resolve()).casefold() for x in item.get('allowed_projects',[])}
+            if str(Path(project).resolve()).casefold() not in permitted:
+                raise ValueError(message)
+            return
+        if str(meta.get('stage') or '')!='probe':
+            raise ValueError(message)
+        if not self._probe_payload_bounded(messages):
+            raise ValueError('连接测试仅允许无作品的小型探测请求，已停止发送')
     def _remember(self,index,client):
         object.__setattr__(self,'_client',client)
         object.__setattr__(self,'_pinned',index if index>0 else None)
@@ -103,8 +138,7 @@ class ProviderClient:
             if ofm_token_saver_enabled(ofm_runtime.HOME/'settings.json'):
                 raise ValueError('独立服务提示词压缩已开启，已停止发送原始创作材料')
             project=costs.META.get().get('project')
-            permitted={str(Path(x).resolve()).casefold() for x in item.get('allowed_projects',[])}
-            if costs.META.get().get('stage')!='probe' and (not project or str(Path(project).resolve()).casefold() not in permitted):raise ValueError('此作品未授权独立免费渠道处理正文与记忆')
+            self._authorize_project(item,messages,'此作品未授权独立免费渠道处理正文与记忆')
         if item.get('protocol') in {'dsh_local','dsh_channel'}:
             if item.get('protocol')=='dsh_channel':
                 from .free_channels import verify_endpoint
@@ -114,10 +148,7 @@ class ProviderClient:
                 verify_dsh_gateway(item['base_url'])
             from pathlib import Path
             from .free_channels import home as dsh_home, token_saver_enabled
-            meta=costs.META.get()
-            permitted={str(Path(x).resolve()).casefold() for x in item.get('allowed_projects',[])}
-            if meta.get('stage')!='probe' and (not meta.get('project') or str(Path(meta['project']).resolve()).casefold() not in permitted):
-                raise ValueError('此作品尚未授权免费渠道处理正文与记忆')
+            self._authorize_project(item,messages,'此作品尚未授权免费渠道处理正文与记忆')
             from .writer_runner import strict_json
             settings=strict_json(dsh_home()/'our-free-model/settings.json',{})
             if token_saver_enabled(settings):
@@ -200,6 +231,7 @@ class ProviderClient:
                 self._failed(index,binding,detail)
                 if detail.get('failure_kind')=='recovery_cooldown' or index>0 and detail.get('failure_kind')=='free_pool_wait':raise
                 if index==len(self._options())-1 or not (detail.get('retryable') is True or detail.get('failure_kind') in {'authentication','configuration_or_access'}):raise
+        raise RuntimeError('no_model_candidate')
     async def chat_stream(self,messages,temperature=0.7,max_tokens=16000):
         from .failure_info import details
         for index,binding in self._candidates():
@@ -221,3 +253,4 @@ class ProviderClient:
                 self._failed(index,binding,detail)
                 if detail.get('failure_kind')=='recovery_cooldown' or index>0 and detail.get('failure_kind')=='free_pool_wait':raise
                 if emitted or index==len(self._options())-1 or not (detail.get('retryable') is True or detail.get('failure_kind') in {'authentication','configuration_or_access'}):raise
+        raise RuntimeError('no_model_candidate')

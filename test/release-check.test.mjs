@@ -184,3 +184,108 @@ test('P02 插件补丁版复用上一版 runtime-manifest 时通过校验', asyn
     assert.equal(result.code, 0, result.out);
   });
 });
+
+test('P02 package.json 声明的根入口缺失时 check-release/prepublishOnly 必须非零 (D-RG1)', async () => {
+  const real = JSON.parse(await readFile(join(REPO, 'package.json'), 'utf8'));
+  for (const name of ['client.js', 'index.js', 'managed-runtime.mjs']) {
+    assert.ok(Array.isArray(real.files) && real.files.includes(name),
+      `package.json files 必须发布根入口 ${name}，否则发布门禁无从校验`);
+  }
+  assert.equal(real.exports['./client'], './client.js');
+  assert.equal(real.scripts.prepublishOnly, 'node scripts/check-release.mjs --local');
+  await withPackage(async (root) => {
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    // index.js and managed-runtime.mjs have no generated-asset dependency, so
+    // this fixture can also prove the unchanged baseline is green.
+    pkg.files = ['index.js', 'managed-runtime.mjs'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    for (const name of pkg.files) await writeFile(join(root, name), '// entry\n');
+    assert.equal(run(root, ['--local']).code, 0);
+    for (const name of pkg.files.slice()) {
+      const path = join(root, name);
+      const body = await readFile(path);
+      await rm(path, { force: true });
+      const result = run(root, ['--local']);
+      assert.equal(result.code, 1, `${name} 缺失时不得返回 0：${result.out}`);
+      assert.match(result.out, new RegExp(`缺少根入口：${name.replace(/\./g, '\\.')}`));
+      await writeFile(path, body);
+    }
+    // client.js is declared but absent: the entry check must fire before the
+    // generated-asset check that needs a shipped assets/ tree.
+    pkg.files = ['index.js', 'managed-runtime.mjs', 'client.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const missingClient = run(root, ['--local']);
+    assert.equal(missingClient.code, 1, missingClient.out);
+    assert.match(missingClient.out, /缺少根入口：client\.js/);
+  });
+});
+
+test('D-R4-02 根入口存在但被 package.json files 排除时必须非零', async () => {
+  await withPackage(async (root) => {
+    await writeFile(join(root, 'index.js'), '// index\n');
+    await writeFile(join(root, 'entry.js'), '// entry\n');
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.exports = { '.': './index.js', './entry': './entry.js' };
+    pkg.files = ['index.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const blocked = run(root, ['--local']);
+    assert.equal(blocked.code, 1, blocked.out);
+    assert.match(blocked.out, /files 中：entry\.js/);
+
+    pkg.files = ['index.js', 'entry.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const packed = run(root, ['--local']);
+    assert.equal(packed.code, 0, packed.out);
+  });
+});
+
+test('D-R4-02 files 的目录与 glob 规则都算作已打包', async () => {
+  await withPackage(async (root) => {
+    await mkdir(join(root, 'modules'), { recursive: true });
+    await writeFile(join(root, 'modules', 'index.js'), '// module entry\n');
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.exports = { '.': './modules/index.js' };
+    pkg.files = ['modules/'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    assert.equal(run(root, ['--local']).code, 0);
+
+    pkg.files = ['modules/*.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    assert.equal(run(root, ['--local']).code, 0);
+
+    pkg.files = ['modules/other.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const blocked = run(root, ['--local']);
+    assert.equal(blocked.code, 1);
+    assert.match(blocked.out, /files 中：modules\/index\.js/);
+  });
+});
+
+test('D-R4-02 根入口的相对 import 也算发布包入口', async () => {
+  await withPackage(async (root) => {
+    await writeFile(join(root, 'index.js'), "import './helper.mjs';\n");
+    await writeFile(join(root, 'helper.mjs'), 'export {};\n');
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.exports = { '.': './index.js' };
+    pkg.files = ['index.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const blocked = run(root, ['--local']);
+    assert.equal(blocked.code, 1, blocked.out);
+    assert.match(blocked.out, /files 中：helper\.mjs/);
+
+    pkg.files = ['index.js', 'helper.mjs'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    assert.equal(run(root, ['--local']).code, 0);
+  });
+});
+
+test('D-RG2 RELEASE_STATUS 的 buildId/文件数漂移必须在门禁输出中可见', async () => {
+  await withPackage(async (root) => {
+    await writeFile(join(root, 'RELEASE_STATUS.md'),
+      '# 0.6.0\n\n- buildId `' + 'd'.repeat(64) + '`\n- 1000 个文件通过\n');
+    const result = run(root, ['--local']);
+    assert.equal(result.code, 0, result.out);
+    assert.match(result.out, /RELEASE_STATUS\.md 的 buildId/);
+    assert.match(result.out, /RELEASE_STATUS\.md 的文件数记录/);
+  });
+});

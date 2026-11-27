@@ -73,7 +73,12 @@ def _attach(meta: Dict[str, Any], receipts: List[Dict[str, Any]], reports: List[
         }
     return {
         "version_id": sha,
+        "version_uid": meta.get("version_id"),
+        "content_sha256": meta.get("content_sha256") or sha,
+        "title_digest": meta.get("title_digest"),
+        "version_fingerprint": meta.get("version_fingerprint"),
         "seq": meta.get("seq"),
+        "version_seq": meta.get("version_seq") or meta.get("seq"),
         "sha256": sha,
         "body_digest": digest,
         "bytes": meta.get("bytes"),
@@ -119,6 +124,7 @@ def history(project, chapter: int, *, limit: int = _MAX_VERSIONS, config=None) -
         "schema_version": SCHEMA_VERSION,
         "chapter_id": int(chapter),
         "current_version_id": current_id,
+        "current_version_uid": (current or {}).get("version_id"),
         "versions": rows,
         "pending_preview": preview,
         "count": len(rows),
@@ -126,11 +132,13 @@ def history(project, chapter: int, *, limit: int = _MAX_VERSIONS, config=None) -
 
 
 def read(project, chapter: int, version_id: str) -> Dict[str, Any]:
-    """按需读取某一版正文（大文本不随列表返回）。"""
+    """按需读取某一版正文（大文本不随列表返回）。接受 ver_* 或 64 位 sha256。"""
     result = chapter_versions.read_version(project, chapter, version_id)
+    meta = result.get("meta") or {}
     return {
         "chapter_id": int(chapter),
         "version_id": result.get("sha256"),
+        "version_uid": meta.get("version_id"),
         "sha256": result.get("sha256"),
         "body": result.get("text") or "",
         "bytes": len((result.get("text") or "").encode("utf-8")),
@@ -194,30 +202,40 @@ def best(project, chapter: int, *, config=None) -> Dict[str, Any]:
     }
 
 
-def restore(project, chapter: int, version_id: str, *, op_id: Optional[str] = None, config=None) -> Dict[str, Any]:
-    """恢复旧版本：备份当前稿、登记新版本、重算报告有效性。"""
+def restore(project, chapter: int, version_id: str, *, op_id: Optional[str] = None,
+            config=None, restore_title: bool = True) -> Dict[str, Any]:
+    """恢复旧版本：备份当前稿、登记新版本、重算报告有效性。
+
+    失效只由 ``chapter_versions`` 提交层触发一次（方案 01 §2.2 第 6 条），
+    这里不再重复调用 ``invalidation.invalidate()``。
+    """
     before = chapter_versions.current_version(project, chapter)
     snapshot = chapter_versions.snapshot(project, chapter, source="backup", note=f"恢复前备份（来自 {version_id[:12]}）")
     identifier = op_id or f"restore-{uuid.uuid4().hex}"
     result = chapter_versions.restore_version(project, chapter, version_id, op_id=identifier,
-                                              note=f"恢复 {version_id[:12]}")
+                                              note=f"恢复 {version_id[:12]}",
+                                              restore_title=restore_title)
     from . import quality_gate
 
     after = chapter_versions.current_version(project, chapter)
     report = quality_gate.status(project, chapter, config=config)
-    from . import invalidation
-    impact = invalidation.invalidate(project, chapters=[chapter], reason="version_restored",
-                                     source=f"version:{str(version_id)[:12]}", actor="author", op_id=identifier)
+    impact = result.get("invalidation") or {}
+    partial = (result.get("status") == "partial"
+               or result.get("title_renamed") is False)
     return {
-        "status": "restored",
+        "status": "partial" if partial else "restored",
         "chapter_id": int(chapter),
         "op_id": identifier,
         "version_id": (after or {}).get("sha256"),
         "sha256": (after or {}).get("sha256"),
+        "version_uid": (after or {}).get("version_id"),
         "backup_version_id": (snapshot or before or {}).get("sha256"),
         "report_status": report,
         "invalidated": impact.get("marked", []),
         "index_rebuilt": bool(impact.get("rebuilt")),
+        "title_renamed": result.get("title_renamed"),
+        "title_conflict": result.get("title_conflict"),
+        "receipt_synced": result.get("receipt_synced"),
         "commit": result,
     }
 

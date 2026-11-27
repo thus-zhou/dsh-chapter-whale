@@ -51,7 +51,9 @@ const DEFAULT_PORT = 18765;
 const PROBE_TIMEOUT_MS = 1800;
 const DEFAULT_START_TIMEOUT_MS = 75_000;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 180_000;
-const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
+// 审计 C-40：manager 的全局上限是 32MB；插件端保持同一数值，避免
+// 32–64MB 的上传先被代理接收、再被 manager 413。
+const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 export const name = PLUGIN_ID;
 export const inject = ['tools'];
@@ -181,6 +183,17 @@ export function isLoopbackAuthority(authority) {
 }
 
 /**
+ * 审计 C-44：Host 头可以被 LAN 客户端伪造成 127.0.0.1；真正的回环判定
+ * 必须看套接字的对端地址。测试用的假 request 没有 socket，按本机处理。
+ */
+export function isLoopbackRemote(request) {
+  const address = request?.socket?.remoteAddress;
+  if (address === undefined || address === null) return true;
+  const normalized = String(address).replace(/^::ffff:/i, '');
+  return normalized === '127.0.0.1' || normalized === '::1';
+}
+
+/**
  * Gate 2: browser-originated requests must be same-origin with the Host header.
  * Non-browser clients (no Origin, no Sec-Fetch-Site) pass; they are local
  * processes that could reach the manager port directly anyway.
@@ -214,6 +227,76 @@ export function originProblem(headers, authority) {
 const WRITE_ROUTES = [
   'POST /api/projects',
   'POST /api/projects/create',
+  'POST /api/projects/:identity/chapters',
+  'DELETE /api/projects/:identity/chapters/:chapter',
+  'PUT /api/projects/:identity/chapters/:chapter',
+  'PUT /api/projects/:identity/chapters/:chapter/draft',
+  'DELETE /api/projects/:identity/chapters/:chapter/draft',
+  'POST /api/projects/:identity/chapters/:chapter/quick-check',
+  'POST /api/projects/:identity/chapters/:chapter/split',
+  'POST /api/projects/:identity/chapters/merge-tail',
+  'POST /api/projects/:identity/import-chapters',
+  'POST /api/projects/:identity/trash/:entry/restore',
+  'POST /api/projects/:identity/chapters/:chapter/author-confirm',
+  'DELETE /api/projects/:identity/chapters/:chapter/author-confirm',
+  'POST /api/projects/:identity/chapters/:chapter/sync-memory',
+  'PUT /api/projects/:identity/outline/files/:filename',
+  'POST /api/projects/:identity/outline/files',
+  'PUT /api/projects/:identity/outline/meta',
+  'PUT /api/projects/:identity/lore/files/:filename',
+  'POST /api/projects/:identity/backup',
+  'POST /api/projects/:identity/rollback/export-legacy',
+  'POST /api/projects/:identity/chapters/:chapter/annotations',
+  'PATCH /api/projects/:identity/chapters/:chapter/annotations/:annotation',
+  'DELETE /api/projects/:identity/chapters/:chapter/annotations/:annotation',
+  'POST /api/projects/:identity/chapters/:chapter/annotations/run',
+  'POST /api/projects/:identity/chapters/:chapter/annotations/:annotation/followup',
+  'POST /api/projects/:identity/chapters/:chapter/revision/apply-hunks',
+  'POST /api/projects/:identity/chapters/:chapter/revision/reject-hunks',
+  'POST /api/projects/:identity/chapters/:chapter/revision/undo-apply',
+  'POST /api/chief/messages',
+  'POST /api/projects/:identity/chief/messages',
+  'POST /api/projects/:identity/chief/topics',
+  'POST /api/projects/:identity/chief/directives',
+  'POST /api/projects/:identity/chief/route',
+  'POST /api/projects/:identity/chief/commands',
+  'POST /api/projects/:identity/approvals/:approval/resolve',
+  'POST /api/projects/:identity/approvals/:approval/capability',
+  'POST /api/projects/:identity/approvals/:approval/recreate',
+  'POST /api/projects/:identity/costs/resolve-gaps',
+  'POST /api/projects/:identity/directives/:directive/amend',
+  'POST /api/projects/:identity/directives/:directive/amendments/:amendment/evaluate',
+  'POST /api/projects/:identity/directives/:directive/amendments/:amendment/release',
+  'POST /api/projects/:identity/directives/:directive/cancel',
+  'POST /api/projects/:identity/tasks/:task/retry',
+  'POST /api/projects/:identity/automation/pause',
+  'POST /api/system/ai/pause',
+  'POST /api/projects/:identity/world-state/facts',
+  'POST /api/projects/:identity/book-directives/scan',
+  'POST /api/projects/:identity/book-directives/:directive/execute',
+  'POST /api/projects/:identity/directives/:directive/resume',
+  'POST /api/projects/:identity/world/facts',
+  'POST /api/projects/:identity/world/facts/:fact/ignore',
+  'POST /api/projects/:identity/world/facts/:fact/confirm',
+  'POST /api/projects/:identity/world/facts/:fact/reject',
+  'POST /api/projects/:identity/world/cards',
+  'POST /api/projects/:identity/world/extract',
+  'POST /api/projects/:identity/world/causal-scan',
+  'POST /api/projects/:identity/world/exemptions',
+  'POST /api/projects/:identity/tasks',
+  'POST /api/projects/:identity/tasks/claim',
+  'POST /api/projects/:identity/tasks/pause',
+  'POST /api/projects/:identity/tasks/resume',
+  'POST /api/projects/:identity/tasks/recover',
+  'POST /api/projects/:identity/tasks/:task/renew',
+  'POST /api/projects/:identity/tasks/:task/commit',
+  'POST /api/projects/:identity/tasks/:task/complete',
+  'POST /api/projects/:identity/tasks/:task/fail',
+  'POST /api/projects/:identity/quality/:chapter/review',
+  'POST /api/projects/:identity/diagnostics/gc',
+  'POST /api/projects/:identity/diagnostics/export',
+  'POST /api/projects/:identity/diagnostics/heal',
+  'POST /api/system/diagnostics/recover',
   'POST /api/projects/:identity/creative/chat',
   'POST /api/projects/:identity/creative/expand',
   'PUT /api/projects/:identity/creative',
@@ -774,17 +857,36 @@ function readBody(request, limit) {
   return new Promise((done, fail) => {
     const chunks = [];
     let size = 0;
+    let tooLarge = false;
+    let failed = false;
     request.on('data', (chunk) => {
+      if (failed) return;
       size += chunk.length;
       if (size > limit) {
-        fail(new Error(`请求体超过 ${Math.round(limit / 1024 / 1024)}MB`));
-        request.destroy();
+        // C-40 on Windows: rejecting and destroying while the client is still
+        // writing produces ECONNRESET before the 413 reaches it.  Keep
+        // consuming (without retaining bytes) and decide after 'end'; the
+        // caller then writes 413 with connection: close.
+        tooLarge = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(chunk);
     });
-    request.on('end', () => done(Buffer.concat(chunks)));
-    request.on('error', fail);
+    request.on('end', () => {
+      if (failed) return;
+      if (tooLarge) {
+        failed = true;
+        fail(new Error(`请求体超过 ${Math.round(limit / 1024 / 1024)}MB`));
+      } else {
+        done(Buffer.concat(chunks));
+      }
+    });
+    request.on('error', (error) => {
+      if (failed) return;
+      failed = true;
+      fail(error);
+    });
   });
 }
 
@@ -804,30 +906,44 @@ function sendJson(response, status, value, extraHeaders) {
 
 async function forward(request, response, config, context, targetPath, search) {
   const method = (request.method || 'GET').toUpperCase();
-  const headers = { accept: 'application/json, text/plain, */*' };
+  const headers = { accept: request.headers.accept || 'application/json, text/plain, */*' };
   const contentType = request.headers['content-type'];
   if (contentType) headers['content-type'] = contentType;
+  // SSE reconnects carry Last-Event-ID; the manager replays events after it.
+  const lastEventId = request.headers['last-event-id'];
+  if (typeof lastEventId === 'string' && lastEventId) headers['last-event-id'] = lastEventId;
   // The manager refuses writes without its own marker. The marker is not a
   // credential: gate 4 already decided this exact method+path may mutate, and
   // gate 3 authenticated the caller. Only mutations carry it upstream.
   if (!SAFE_METHODS.has(method)) headers['x-novel-helper'] = '1';
 
-  let body;
-  if (!SAFE_METHODS.has(method)) {
-    try {
-      body = await readBody(request, config.maxBodyBytes);
-    } catch (error) {
-      const detail = String(error?.message || error || '读取请求体失败');
-      sendJson(response, detail.includes('超过') ? 413 : 400, { detail });
-      return;
-    }
-  }
-
+  // 审计 C-41：监听器必须在 await readBody 之前注册。Node 26 在请求体
+  // 读完时立即触发 request 'close'，旧实现注册太晚，客户端断开后上游仍跑。
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
-  const abortAll = () => controller.abort();
-  request.once('close', abortAll);
+  const abortAll = () => {
+    if (!response.writableEnded) controller.abort();
+  };
+  request.once?.('aborted', abortAll);
+  response.once?.('close', abortAll);
+  let body;
+  let timer = null;
   try {
+    if (!SAFE_METHODS.has(method)) {
+      try {
+        body = await readBody(request, config.maxBodyBytes);
+      } catch (error) {
+        const detail = String(error?.message || error || '读取请求体失败');
+        const tooLarge = detail.includes('超过');
+        // 审计 C-40：先写 413 并结束响应，再关闭请求，客户端才会收到 JSON。
+        sendJson(response, tooLarge ? 413 : 400, { detail },
+          tooLarge ? { connection: 'close' } : undefined);
+        // The body has already been drained to 'end' for chunked uploads;
+        // do not destroy the socket here or Windows turns the 413 into RST.
+        return;
+      }
+    }
+
+    timer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
     const upstream = await fetch(`${baseUrl(config)}${targetPath}${search}`, {
       method,
       headers,
@@ -835,6 +951,46 @@ async function forward(request, response, config, context, targetPath, search) {
       signal: controller.signal,
       redirect: 'manual',
     });
+    const upstreamType = String(upstream.headers.get('content-type') || '').toLowerCase();
+    // Event streams must never be buffered: a 40-second chapter preview would
+    // otherwise arrive as one blob after the upstream timeout.
+    if (upstream.status === 200 && upstreamType.includes('text/event-stream') && upstream.body) {
+      clearTimeout(timer);
+      response.writeHead(upstream.status, {
+        'content-type': upstream.headers.get('content-type') || 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'cross-origin-resource-policy': 'same-origin',
+        'x-accel-buffering': 'no',
+        connection: 'keep-alive',
+        vary: 'origin',
+      });
+      if (typeof response.flushHeaders === 'function') response.flushHeaders();
+      const reader = upstream.body.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value || !value.byteLength) continue;
+          const chunk = Buffer.from(value);
+          if (!response.write(chunk)) {
+            await new Promise((resolveDrain) => {
+              const doneDrain = () => { response.off?.('drain', doneDrain); resolveDrain(); };
+              response.once?.('drain', doneDrain) || resolveDrain();
+              setTimeout(resolveDrain, 1000);
+            });
+          }
+        }
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          try { response.write(`event: error\ndata: ${JSON.stringify({ detail: String(error?.message || error) })}\n\n`); } catch {}
+        }
+      } finally {
+        try { await reader.cancel(); } catch {}
+        response.end();
+      }
+      return;
+    }
     const buffer = Buffer.from(await upstream.arrayBuffer());
     response.writeHead(upstream.status, {
       'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
@@ -854,8 +1010,9 @@ async function forward(request, response, config, context, targetPath, search) {
       service_down: true,
     });
   } finally {
-    clearTimeout(timer);
-    request.off?.('close', abortAll);
+    if (timer) clearTimeout(timer);
+    request.off?.('aborted', abortAll);
+    response.off?.('close', abortAll);
   }
 }
 
@@ -882,6 +1039,10 @@ export function createHandler(config, token) {
       // No CORS is ever granted: a preflight fails, so a cross-origin page can
       // never attach the token header.
       sendJson(response, 403, { detail: '不允许跨站请求' });
+      return;
+    }
+    if (!isLoopbackRemote(request)) {
+      sendJson(response, 403, { detail: '只接受本机回环地址访问', code: 'loopback-remote-required' });
       return;
     }
     if (!isLoopbackAuthority(authority)) {
@@ -995,7 +1156,7 @@ export function createHandler(config, token) {
       try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
       catch { /* Manual providers remain accessible when the host catalog is unavailable. */ }
     } else if (method === 'POST' && config.hostModels && !config.hostModels.syncedProvider
-        && (/^\/api\/ai\/(test|roles\/)/.test(suffix) || /^\/api\/projects\/[^/]+\/(plan|generate|chapters\/\d+\/(polish|review|revision))/.test(suffix) || /^\/api\/jobs\/[^/]+\/run$/.test(suffix))) {
+        && (/^\/api\/ai\/(test|roles\/)/.test(suffix) || /^\/api\/projects\/[^/]+\/(plan|generate|chapters\/\d+\/(polish|review|revision|annotations\/run|annotations\/[^/]+\/followup|sync-memory)|chief\/messages|book-directives\/.*|tasks\/[^/]+\/retry|directives\/[^/]+\/amend|world-state\/facts)/.test(suffix) || /^\/api\/chief\/messages$/.test(suffix) || /^\/api\/jobs\/[^/]+\/run$/.test(suffix))) {
       try { await config.hostModels.sync((...args) => requestUpstream(config, ...args)); }
       catch { /* Keep explicit provider errors visible if host catalog is absent. */ }
     }
@@ -1312,6 +1473,7 @@ export const __internals = {
   parseTarget,
   originProblem,
   isLoopbackAuthority,
+  isLoopbackRemote,
   hostnameOf,
   redactService,
   ensureStarted,

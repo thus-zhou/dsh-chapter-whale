@@ -1,7 +1,6 @@
 """Build the self-contained native stylesheet. No remote fonts at runtime."""
 from pathlib import Path
 import argparse, base64, re
-import tinycss2
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPE = '.nh-root[data-ui="atelier"]'
@@ -36,8 +35,42 @@ def split_selectors(text):
         elif c==',' and depth==0:result.append(text[start:i]);start=i+1
     result.append(text[start:]);return result
 
+WORKBENCH_BEGIN = '        // BEGIN GENERATED WORKBENCH CORE\n'
+WORKBENCH_END = '        // END GENERATED WORKBENCH CORE\n'
+WORKBENCH_ANCHOR = '        const e = React.createElement;\n'
+
+
+def sync_workbench_core():
+    """Inject the shared editor kernel into client.js and the static Web UI."""
+    core_path = ROOT/'scripts/shared/workbench-core.js'
+    core_bytes = core_path.read_bytes()
+    core_text = core_bytes.decode('utf-8')
+    if '\r' in core_text:
+        raise SystemExit('workbench-core.js must be pure LF')
+    if not core_text.endswith('\n'):
+        core_text += '\n'
+    if WORKBENCH_BEGIN in core_text or WORKBENCH_END in core_text:
+        raise SystemExit('workbench-core.js must not contain the generated markers')
+    p = ROOT/'client.js'
+    s = p.read_text(encoding='utf-8')
+    block = WORKBENCH_BEGIN + core_text + WORKBENCH_END
+    if WORKBENCH_BEGIN in s:
+        a = s.index(WORKBENCH_BEGIN)
+        b = s.index(WORKBENCH_END, a) + len(WORKBENCH_END)
+        s = s[:a] + block + s[b:]
+    else:
+        if WORKBENCH_ANCHOR not in s:
+            raise SystemExit('client.js anchor "const e = React.createElement;" not found')
+        s = s.replace(WORKBENCH_ANCHOR, WORKBENCH_ANCHOR + block, 1)
+    p.write_text(s, encoding='utf-8', newline='\n')
+    (ROOT/'backend/manager/static/workbench-core.js').write_bytes(core_text.encode('utf-8'))
+    print('Workbench core bytes:', len(core_bytes))
+
+
 def main(source=None):
     if source:
+        global tinycss2
+        import tinycss2
         source=Path(source)
         css=scope_rules(tinycss2.parse_stylesheet(source.read_text(encoding='utf-8'),skip_comments=True,skip_whitespace=True))
         for name in re.findall(r'@keyframes\s+([\w-]+)',css):css=re.sub(r'(?<![\w-])'+re.escape(name)+r'(?![\w-])','cw-'+name,css)
@@ -57,6 +90,7 @@ def main(source=None):
     else:s=s.replace('        const CSS = `',block+'\n        const CSS = `',1)
     p.write_text(s,encoding='utf-8',newline='\n')
     print('Native stylesheet bytes:',len(css.encode()))
+    sync_workbench_core()
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--source');main(parser.parse_args().source)

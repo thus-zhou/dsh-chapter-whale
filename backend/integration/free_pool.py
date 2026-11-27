@@ -1,6 +1,7 @@
 """Explicit model pool, bounded free rotation and durable wait state."""
 import copy
 import hashlib
+import json
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from datetime import datetime,timedelta
@@ -144,7 +145,15 @@ class FreePoolClient:
         method = getattr(client, 'without_thinking', None)
         return method() if self._thinking_disabled.get() and callable(method) else nullcontext()
 
-    def _choices(self):
+    PROBE_MAX_PAYLOAD_CHARS = 1024
+
+    def _probe_payload_bounded(self, messages) -> bool:
+        try:
+            return len(json.dumps(messages, ensure_ascii=False, default=str)) <= self.PROBE_MAX_PAYLOAD_CHARS
+        except (TypeError, ValueError):
+            return False
+
+    def _choices(self, messages=None):
         from . import ofm_runtime
         from .free_channels import ofm_token_saver_enabled
         info=ofm_runtime.ensure_started()
@@ -162,8 +171,15 @@ class FreePoolClient:
         project = meta.get('project')
         if not project and not is_probe:
             raise ValueError('免费池请求缺少作品归属')
+        if not project and is_probe and not self._probe_payload_bounded(messages):
+            # A project-less probe is a fixed small handshake, never an
+            # arbitrary prose channel (B3-03/B4-03).
+            raise ValueError('连接测试仅允许无作品的小型探测请求，已停止发送')
         pool=self.config['providers']['free-pool']
-        if not is_probe:
+        if project:
+            # ``stage='probe'`` is caller-controlled and must never bypass the
+            # shared-channel whitelist for a book's prose (B3-03).  Only a
+            # project-less connection probe may skip the project check.
             permitted={str(Path(p).resolve()).casefold() for p in pool.get('allowed_projects',[])}
             if str(Path(project).resolve()).casefold() not in permitted:
                 raise ValueError('此作品未授权免费渠道处理正文与必要记忆')
@@ -189,7 +205,7 @@ class FreePoolClient:
 
     async def _run(self,method,messages,**kwargs):
         from .failure_info import details
-        project,rows=self._choices()
+        project,rows=self._choices(messages)
         for index,row in enumerate(rows):
             client=self._client(row,project,index);client.timeout=self.timeout
             try:
@@ -215,7 +231,7 @@ class FreePoolClient:
 
     async def chat_stream(self,messages,temperature=.7,max_tokens=16000):
         from .failure_info import details
-        project,rows=self._choices()
+        project,rows=self._choices(messages)
         for index,row in enumerate(rows):
             client=self._client(row,project,index);client.timeout=self.timeout;emitted=False
             try:

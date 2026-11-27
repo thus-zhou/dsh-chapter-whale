@@ -9,7 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -36,7 +36,7 @@ const fixture = makeFixture();
 const config = resolveConfig({ rootDir: fixture, port: 1 });
 const handle = createHandler(config, TOKEN);
 
-function call({ method = 'GET', url = '/', headers = {} } = {}) {
+function call({ method = 'GET', url = '/', headers = {}, socket = undefined } = {}) {
   // The bridge parses the *mounted* target (`/novel-helper/...`): the host does
   // not strip the prefix before handing the request over.
   if (!url.startsWith(__internals.ROUTE)) url = `${__internals.ROUTE}${url}`;
@@ -70,6 +70,7 @@ function call({ method = 'GET', url = '/', headers = {} } = {}) {
       method,
       url,
       headers: { host: '127.0.0.1:62100', ...headers },
+      socket,
       on() {},
       once() {},
       off() {},
@@ -431,4 +432,99 @@ test('工具：兼容后端统一 {"code","message"} 错误体', async (t) => {
     () => tool.execute({ action: 'post', path: '/api/jobs/j1/schedule/apply', body: {}, confirm: true }, {}),
     /409 平台排期能力未证实/,
   );
+});
+
+/* --------------------------------------------------- proxy hardening */
+
+function listen(server) {
+  return new Promise((resolve) => server.listen(0, '127.0.0.1',
+    () => resolve(server.address().port)));
+}
+
+function closeServer(server) {
+  return new Promise((resolve) => {
+    server.closeAllConnections?.();
+    server.close(() => resolve());
+  });
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitFor(predicate, timeout = 3000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    if (predicate()) return true;
+    await delay(25);
+  }
+  return false;
+}
+
+test('C-44 拒绝非回环 socket，即使 Host 伪造成 127.0.0.1', async () => {
+  const remote = await call({ url: '/_session', socket: { remoteAddress: '192.168.1.20' } });
+  assert.equal(remote.status, 403);
+  assert.equal(remote.data.token, undefined);
+  assert.match(remote.data.detail, /回环/);
+  const loopback = await call({ url: '/_session', socket: { remoteAddress: '::ffff:127.0.0.1' } });
+  assert.equal(loopback.status, 200);
+  assert.equal(loopback.data.token, TOKEN);
+});
+
+test('C-40 超限请求体先返回 413 而不是连接重置', async (t) => {
+  const upstream = createServer((req, res) => { req.resume(); });
+  const upstreamPort = await listen(upstream);
+  t.after(() => closeServer(upstream));
+  const cfg = resolveConfig({ rootDir: fixture, port: upstreamPort,
+    maxBodyBytes: 1024, autoStart: false });
+  const host = createServer(createHandler(cfg, TOKEN));
+  const hostPort = await listen(host);
+  t.after(() => closeServer(host));
+
+  const result = await new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+    const request = httpRequest({
+      host: '127.0.0.1', port: hostPort, path: `${__internals.ROUTE}/api/projects`,
+      method: 'POST',
+      headers: { host: `127.0.0.1:${hostPort}`, 'x-novel-helper-token': TOKEN,
+        'x-novel-helper': '1', 'content-type': 'application/json' },
+    }, (response) => {
+      let body = '';
+      response.on('data', (chunk) => { body += chunk; });
+      response.on('end', () => done({ status: response.statusCode, body }));
+    });
+    request.on('error', (error) => done({ error: String(error) }));
+    request.write('x'.repeat(64 * 1024));
+    request.end();
+  });
+  assert.equal(result.status, 413, JSON.stringify(result));
+  assert.match(result.body, /超过/);
+});
+
+test('C-41 客户端断开后中止上游 POST', async (t) => {
+  let seen = false;
+  let closed = false;
+  const upstream = createServer((req, res) => {
+    seen = true;
+    req.resume();
+    res.on('close', () => { if (!res.writableEnded) closed = true; });
+  });
+  const upstreamPort = await listen(upstream);
+  t.after(() => closeServer(upstream));
+  const cfg = resolveConfig({ rootDir: fixture, port: upstreamPort, autoStart: false });
+  const host = createServer(createHandler(cfg, TOKEN));
+  const hostPort = await listen(host);
+  t.after(() => closeServer(host));
+
+  const request = httpRequest({
+    host: '127.0.0.1', port: hostPort, path: `${__internals.ROUTE}/api/projects`,
+    method: 'POST',
+    headers: { host: `127.0.0.1:${hostPort}`, 'x-novel-helper-token': TOKEN,
+      'content-type': 'application/json' },
+  }, () => {});
+  request.on('error', () => {});
+  request.write('{"path":"x"}');
+  request.end();
+  assert.equal(await waitFor(() => seen), true, '上游没有收到请求');
+  request.destroy();
+  assert.equal(await waitFor(() => closed), true, '客户端断开后上游仍在运行');
 });

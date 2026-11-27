@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from . import bridge
+from . import bridge, publication_state
 
 SCHEMA = 1
 STATE_DIR = "browser"
@@ -721,6 +721,21 @@ def publish_once(adapter, project, *, book_id: str, chapter: int,
     append_journal(project, {"kind": "publish", "key": key, "book_id": book_id,
                              "chapter": int(chapter), "body_sha256": body,
                              "state": "intent"})
+    # E-01D：浏览器路径不经过 bridge.stage_project，没有 staged 兜底；先写
+    # 待核对回执，回执写不进去就不调用适配器。
+    pending = publication_state.record_pending(
+        project, int(chapter), content_sha256=body, platform=DEFAULT_PLATFORM,
+        platform_book_id=str(book_id), source="browser_target.publish_once",
+        evidence=str(_ledger_path(project, key)), reason="browser_result_pending")
+    if not pending.get("recorded"):
+        _ledger_write(project, key, {"state": "aborted", "book_id": book_id,
+                                     "chapter": int(chapter), "body_sha256": body,
+                                     "writes_attempted": 0, "writes_confirmed": 0,
+                                     "reason": f"发布回执不可写：{pending.get('reason')}"})
+        append_journal(project, {"kind": "publish", "key": key, "state": "aborted"})
+        return {"status": "refused", "writes": 0,
+                "reason": "发布回执不可写，未调用适配器（避免无回执的平台写入）",
+                "publication_state": pending}
     try:
         result = adapter.publish_chapter(book_id=book_id, chapter=int(chapter),
                                          body_sha256=body)
@@ -730,6 +745,8 @@ def publish_once(adapter, project, *, book_id: str, chapter: int,
                                      "writes_attempted": 0, "writes_confirmed": 0,
                                      "reason": str(error)})
         append_journal(project, {"kind": "publish", "key": key, "state": "needs_human"})
+        publication_state.clear_pending(project, int(chapter), reason="adapter_needs_human",
+                                        evidence=str(_ledger_path(project, key)))
         return {"status": "needs_human", "reason": str(error), "writes": 0}
     except AdapterUnavailable as error:
         _ledger_write(project, key, {"state": "aborted", "book_id": book_id,
@@ -737,6 +754,8 @@ def publish_once(adapter, project, *, book_id: str, chapter: int,
                                      "writes_attempted": 0, "writes_confirmed": 0,
                                      "reason": str(error)})
         append_journal(project, {"kind": "publish", "key": key, "state": "aborted"})
+        publication_state.clear_pending(project, int(chapter), reason="adapter_unavailable",
+                                        evidence=str(_ledger_path(project, key)))
         return {"status": "unavailable", "reason": str(error), "writes": 0}
     except Exception as error:
         _ledger_write(project, key, {"state": "unknown", "book_id": book_id,
@@ -746,7 +765,8 @@ def publish_once(adapter, project, *, book_id: str, chapter: int,
         append_journal(project, {"kind": "publish", "key": key, "state": "unknown",
                                  "error": str(error)})
         return {"status": "unknown", "reason": "提交结果未知：只对账，不重试",
-                "writes": writes, "writes_confirmed": 0}
+                "writes": writes, "writes_confirmed": 0,
+                "publication_state": pending}
     if not isinstance(result, dict) or not result.get("accepted"):
         _ledger_write(project, key, {"state": "unknown", "book_id": book_id,
                                      "chapter": int(chapter), "body_sha256": body,
@@ -755,7 +775,7 @@ def publish_once(adapter, project, *, book_id: str, chapter: int,
         append_journal(project, {"kind": "publish", "key": key, "state": "unknown",
                                  "result": result})
         return {"status": "unknown", "reason": "适配器未确认接收", "writes": writes,
-                "writes_confirmed": 0}
+                "writes_confirmed": 0, "publication_state": pending}
     echoed = str(result.get("content_sha256") or "").strip().lower()
     matches = bool(echoed) and echoed == body
     _ledger_write(project, key, {"state": "accepted", "book_id": book_id,
@@ -765,9 +785,20 @@ def publish_once(adapter, project, *, book_id: str, chapter: int,
                                  "result": result})
     append_journal(project, {"kind": "publish", "key": key, "state": "accepted",
                              "body_matches": matches})
+    if matches:
+        # 浏览器路径没有 queue/manifest 回执生产者；平台接收且正文一致时，
+        # 必须把 published_sha256 写回章节，否则 delete 仍会放行（E-01D）。
+        recorded = publication_state.record_published(
+            project, int(chapter), content_sha256=body, platform=DEFAULT_PLATFORM,
+            platform_book_id=str(book_id), remote_id=str(result.get("remote_id") or ""),
+            source="browser_target.publish_once", evidence=str(_ledger_path(project, key)))
+    else:
+        # 回执不符：保留 pending，等待人工对账，不冒充已发布。
+        recorded = {"recorded": False, "reason": "body_mismatch"}
     return {"status": "accepted", "reason": "", "writes": writes,
             "writes_confirmed": 1 if matches else 0,
-            "body_matches": matches, "result": result}
+            "body_matches": matches, "result": result,
+            "publication_state": recorded}
 
 
 def reconcile_publish(project, *, key: str = "", book_id: str = "", chapter: int = 0,
@@ -811,6 +842,7 @@ def reconcile_publish(project, *, key: str = "", book_id: str = "", chapter: int
                     continue
                 keys.append(path.stem)
     changed = 0
+    receipts: List[Dict[str, Any]] = []
     for item in keys:
         data = ledger_state(project, item)
         if not data:
@@ -824,9 +856,30 @@ def reconcile_publish(project, *, key: str = "", book_id: str = "", chapter: int
                                               reconciled_by="author", note=note))
         append_journal(project, {"kind": "publish", "key": item,
                                  "state": f"reconciled_{resolution}"})
+        try:
+            chapter_number = int(data.get("chapter") or 0)
+        except (TypeError, ValueError):
+            chapter_number = 0
+        if chapter_number > 0:
+            if resolution == "accepted":
+                # 人工确认平台已写入：补 published 回执（E-01D）。
+                receipt = publication_state.record_published(
+                    project, chapter_number,
+                    content_sha256=str(data.get("body_sha256") or ""),
+                    platform=DEFAULT_PLATFORM,
+                    platform_book_id=str(data.get("book_id") or ""),
+                    remote_id=str((data.get("result") or {}).get("remote_id") or "")
+                    if isinstance(data.get("result"), dict) else "",
+                    source="browser_target.reconcile", evidence=note)
+            else:
+                receipt = publication_state.clear_pending(
+                    project, chapter_number, reason="browser_reconcile_abandoned",
+                    evidence=str(_ledger_path(project, item)))
+            receipts.append({"key": item, "chapter": chapter_number, **receipt})
         changed += 1
     return {"changed": changed, "resolution": resolution, "keys": keys,
-            "skipped": skipped, "corrupt": corrupt}
+            "skipped": skipped, "corrupt": corrupt,
+            "publication_receipts": receipts}
 
 
 def _last_readonly(project) -> Dict[str, Any]:

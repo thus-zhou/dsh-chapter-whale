@@ -31,7 +31,7 @@
 .nh-root[data-ui="atelier"] button{transition:background var(--duration) var(--ease),box-shadow var(--duration) var(--ease),color var(--duration) var(--ease),transform 240ms var(--spring),border-color var(--duration) var(--ease)}
 .nh-root[data-ui="atelier"] button:hover{color:var(--ink)}
 .nh-root[data-ui="atelier"] button:active{transform:scale(.97)}
-.nh-root[data-ui="atelier"] button:focus-visible,.nh-root[data-ui="atelier"] a:focus-visible,.nh-root[data-ui="atelier"] input:focus-visible,.nh-root[data-ui="atelier"] select:focus-visible{outline:2px solid var(--a);outline-offset:4px}
+.nh-root[data-ui="atelier"] button:focus-visible,.nh-root[data-ui="atelier"] a:focus-visible,.nh-root[data-ui="atelier"] input:focus-visible,.nh-root[data-ui="atelier"] select:focus-visible,.nh-root[data-ui="atelier"] textarea:focus-visible,.nh-root[data-ui="atelier"] summary:focus-visible{outline:2px solid var(--a);outline-offset:4px}
 .nh-root[data-ui="atelier"] a{color:inherit;text-decoration:none}
 .nh-root[data-ui="atelier"] h1,.nh-root[data-ui="atelier"] h2,.nh-root[data-ui="atelier"] h3,.nh-root[data-ui="atelier"] h4,.nh-root[data-ui="atelier"] p{margin:0}
 .nh-root[data-ui="atelier"] strong,.nh-root[data-ui="atelier"] b{font-weight:500}

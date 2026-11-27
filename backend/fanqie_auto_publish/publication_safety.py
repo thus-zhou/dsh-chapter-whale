@@ -112,34 +112,105 @@ def digest_file(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def creative_contract_hash(project):
-    """Chat history is advisory; only confirmed requirements bind a review."""
+def _contract_values(project, chapter=None):
+    """Shared collection for the global and per-chapter contract hashes."""
     path = Path(project) / ".webnovel" / "creative_brief.json"
-    document = read_json_strict(path) if path.exists() else {"brief":{}}
+    document = read_json_strict(path) if path.exists() else {"brief": {}}
     brief = document.get("brief") if isinstance(document, dict) else None
     if not isinstance(brief, dict) or any(not isinstance(v, str) for v in brief.values()):
         raise PublicationBlocked("invalid_creative_contract")
-    values = {k:v.strip() for k,v in brief.items() if v.strip()}
-    learning=document.get("learning",{})
-    if not isinstance(learning,dict) or not isinstance(learning.get("guide",""),str):
+    values = {k: v.strip() for k, v in brief.items() if v.strip()}
+    learning = document.get("learning", {})
+    if not isinstance(learning, dict) or not isinstance(learning.get("guide", ""), str):
         raise PublicationBlocked("invalid_creative_contract")
-    if learning.get("guide","").strip():values["__learned_guide__"]=learning["guide"].strip()
-    style_path=Path(project)/".webnovel"/"style_profile.json"
+    if learning.get("guide", "").strip():
+        values["__learned_guide__"] = learning["guide"].strip()
+    style_path = Path(project) / ".webnovel" / "style_profile.json"
     if style_path.exists():
         import sys
-        root=str(Path(__file__).resolve().parents[1])
-        if root not in sys.path:sys.path.insert(0,root)
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
         from integration import style_profile
-        style=style_profile.digest(project=project)
-        if style:values["__style_profile__"]=style
-    memory_path=Path(project)/".webnovel"/"shared_memory.json"
+        style = style_profile.digest(project=project)
+        if style:
+            values["__style_profile__"] = style
+    memory_path = Path(project) / ".webnovel" / "shared_memory.json"
     if memory_path.exists() or memory_path.is_symlink():
         import sys
-        root=str(Path(__file__).resolve().parents[1])
-        if root not in sys.path:sys.path.insert(0,root)
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
         from integration import memory_library
-        decisions=memory_library.contract(project)
-        if decisions:values["__author_memory__"]=decisions
+        decisions = memory_library.contract(project)
+        if chapter is not None:
+            decisions = _scoped_decisions(project, chapter, decisions)
+        if decisions:
+            values["__author_memory__"] = decisions
+    return values
+
+
+def _scoped_decisions(project, chapter, decisions):
+    """Drop future-only rules and author-verified clean exemptions for this chapter.
+
+    ``effective_from_chapter`` is an additive manual-memory field; older items
+    without it stay globally binding.  An exemption is honoured only while the
+    chapter bytes, the rule text and the rule id still match what was scanned.
+    """
+    chapter = int(chapter)
+    scoped = []
+    for item in decisions:
+        if not isinstance(item, dict):
+            scoped.append(item)
+            continue
+        effective = item.get("effective_from_chapter")
+        if isinstance(effective, int) and effective > chapter:
+            continue
+        scoped.append(item)
+    rows = []
+    disk_sha = None
+    try:
+        import sys
+        if str(Path(__file__).resolve().parents[1]) not in sys.path:
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from integration import chapter_versions, workbench_db
+        if workbench_db.db_path(project).exists():
+            disk_path = chapter_versions.chapter_path(project, chapter)
+            disk_sha = chapter_versions.file_sha256(disk_path) if disk_path else None
+            with workbench_db.connect(project) as db:
+                rows = [dict(r) for r in db.execute(
+                    "SELECT * FROM directive_exemptions WHERE chapter_id=?", (chapter,))]
+    except Exception:
+        rows = []
+    if not rows:
+        return scoped
+    kept = []
+    for item in scoped:
+        if not isinstance(item, dict):
+            kept.append(item)
+            continue
+        exempt = next((r for r in rows if r.get("rule_id") == item.get("id")), None)
+        if exempt:
+            rule_text = str(item.get("content") or "")
+            rule_sha = hashlib.sha256(rule_text.encode("utf-8")).hexdigest()
+            if (disk_sha and exempt.get("content_sha256") == disk_sha
+                    and exempt.get("rule_content_sha256") == rule_sha):
+                continue
+        kept.append(item)
+    return kept
+
+
+def creative_contract_hash(project):
+    """Chat history is advisory; only confirmed requirements bind a review."""
+    values = _contract_values(project)
+    if not values:
+        return ""
+    return hashlib.sha256(json.dumps(values, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def creative_contract_hash_for_chapter(project, chapter):
+    """Contract hash scoped to one chapter (future rules do not revoke old chapters)."""
+    values = _contract_values(project, int(chapter))
     if not values:
         return ""
     return hashlib.sha256(json.dumps(values, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
@@ -201,10 +272,47 @@ def _quality_pass_ok(review,body_sha256=None,project=None,chapter=None):
         return False
 
 
+def _author_confirmed_ok(review, body_sha256, project, chapter):
+    """作者显式定稿的 5 项联合校验（与 human_approved 正交并存）。"""
+    if review.get("author_confirmed") is not True:
+        return False
+    if review.get("body_sha256") != body_sha256:
+        return False
+    version_id = review.get("confirmed_version_id")
+    content_sha = review.get("confirmed_content_sha256")
+    if not (isinstance(version_id, str) and version_id.startswith("ver_")
+            and isinstance(content_sha, str) and len(content_sha) == 64):
+        return False
+    if project is None or chapter is None:
+        return False
+    try:
+        import sys
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from integration import chapter_versions
+        disk_path = chapter_versions.chapter_path(project, chapter)
+        disk_sha = chapter_versions.file_sha256(disk_path)
+        if not disk_sha or disk_sha != content_sha:
+            return False
+        current = chapter_versions.current_version(project, chapter)
+        if (not current or current.get("version_id") != version_id
+                or (current.get("content_sha256") or current.get("sha256")) != disk_sha):
+            return False
+        current_title = chapter_versions.parse_chapter_name(disk_path.name)[1] if disk_path else ""
+        if str(review.get("confirmed_title") or "") != str(current_title or ""):
+            return False
+        return True
+    except (OSError, ValueError, RuntimeError, TypeError):
+        return False
+
+
 def review_eligible(review,body_sha256,project=None,chapter=None):
     if not isinstance(review,dict):return False
     if review.get("success") is True and review.get("review_decision")=="pass" and review.get("needs_revision",False) is False:
         return _quality_pass_ok(review,body_sha256,project,chapter)
+    if review.get('review_decision')=='author_confirmed':
+        return _author_confirmed_ok(review, body_sha256, project, chapter)
     if review.get('review_decision')=='waived_by_author_rule':
         from integration.editorial_release import valid
         auth=review.get('author_rule_authorization',{})

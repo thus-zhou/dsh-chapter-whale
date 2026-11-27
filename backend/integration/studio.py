@@ -6,6 +6,7 @@ import re
 import uuid
 from pathlib import Path
 from . import writer_runner as writer, bridge, model_roles as roles, memory_library
+from . import chapter_versions as versions, publication_state
 from . import costs
 from . import style_profile, style_stats
 
@@ -233,6 +234,16 @@ def plan(project,count=5):return asyncio.run(plan_async(project,count))
 
 def recover_plan(project,persist=True):
     project=Path(project);path=project/".webnovel"/"story_plan.json"
+    # 新版 meta 存在时，以全部 AI规划 + 墓碑重建，旧“只补缺失章”逻辑不再适用。
+    try:
+        from . import outline_editor as _outline
+        if _outline._meta_path(project).exists():
+            rebuilt = _outline.recover_plan(project, persist=persist)
+            return {key: rebuilt.get(key) for key in
+                    ("master_outline", "volumes", "character_arcs", "foreshadowing",
+                     "chapters", "conflicts", "meta_revision")}
+    except (ValueError, OSError, RuntimeError):
+        pass
     doc=writer.strict_json(path,{})
     if not isinstance(doc,dict):
         raise ValueError("规划索引损坏")
@@ -521,19 +532,26 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         bridge._write_text_atomic(backup,content)
         payload=rewritten.encode("utf-8");receipts_path=project/".webnovel"/"writer_receipts.json"
         receipts=writer.strict_json(receipts_path,{})
-        receipt={"destination":str(source.resolve()),"sha256":hashlib.sha256(payload).hexdigest(),"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
+        prepared_sha = hashlib.sha256(payload).hexdigest()
+        versions.commit_raw_bytes(project, chapter, payload,
+                                  op_id=f"polish-{uuid.uuid4().hex[:16]}",
+                                  expected_sha256=base_sha,
+                                  source="studio_polish", note="润色回写",
+                                  allow_new=False)
+        receipt={"destination":str(source.resolve()),"sha256":prepared_sha,"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}
         handoff=isinstance(review,dict) and review.get("review_decision")=="needs_human_review" and review.get("human_review_required") is True
         # P2-6: write the new body before saving candidates. save_candidates
         # re-reads the body file and rejects a digest that does not match, so
         # saving the receipt first would leave both modules "failed" until the
         # next approve. Body first, candidates second, receipt last.
-        bridge._write_text_atomic(source,rewritten)
         if handoff:
             # 非预览润色到达两次审查上限：正文保留为交接稿，候选只存 pending，
             # 人工 approve-review 时再提交，避免未审定内容进入记忆。
             receipt["candidates"]=writer._commit_review_candidates(project,chapter,rewritten,review,_writer_locked=True)
-        receipts[str(chapter)]=receipt
-        writer.atomic_json(receipts_path,receipts)
+        # Preserve published_sha256/publish/staged_at fields written by the
+        # publication layer; polishing only changes the review snapshot.
+        publication_state._update(project, chapter, lambda entry: entry.update(receipt))
+        receipts=writer.strict_json(receipts_path,{})
         post=asyncio.run(writer._sync_committed_artifacts(executor,chapter,rewritten,receipt,receipts,receipts_path))
         return {"status":"polished","chapter_id":chapter,
                 "post_save":post,"backup_saved":True,

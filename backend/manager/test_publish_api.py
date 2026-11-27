@@ -3,12 +3,13 @@
 import json
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from integration import bridge, publishing as pub, scheduler
+from integration import bridge, chapter_editor as ce, publishing as pub, scheduler
 from manager import app as module
 
 TITLE = "潮声"
@@ -84,6 +85,18 @@ class PublishApiTests(unittest.TestCase):
                                 "platform_book_id": book, "chapters": [1],
                                 "note": "作者本人在 09:00 授权"})
 
+    def publishable(self, chapter=1, text=BODY, title=TITLE):
+        """真实正文 + 作者定稿回执：由服务端版本层提供发布正文（E-03）。"""
+        created = ce.new_chapter(self.project, {
+            "chapter": chapter, "title": title, "content": text,
+            "op_id": f"api-new-{chapter}-{uuid.uuid4().hex[:8]}"})
+        ce.author_confirm(self.project, chapter, {
+            "expected_version_id": created["version_id"],
+            "expected_content_sha256": created["sha256"],
+            "op_id": f"api-confirm-{chapter}-{uuid.uuid4().hex[:8]}",
+            "note": "测试定稿"})
+        return created
+
     def test_platforms_expose_two_and_publishable_only_for_fanqie(self):
         response = self.client.get(f"/api/projects/{self.identity}/publish/platforms",
                                      headers=self.headers)
@@ -138,6 +151,7 @@ class PublishApiTests(unittest.TestCase):
 
     def test_fanqie_submit_needs_adapter_then_accepts_once(self):
         self.ready()
+        self.publishable()
         missing = self.post("submit", {"platform": "fanqie", "account": "acc",
                                        "platform_book_id": "b-1", "chapter": 1,
                                        "title": TITLE, "body": BODY})
@@ -156,10 +170,24 @@ class PublishApiTests(unittest.TestCase):
         self.assertEqual(again.json()["status"], "duplicate")
         self.assertEqual(len(adapter.calls), 1)
 
+    def test_forged_body_is_rejected_before_adapter(self):
+        self.ready()
+        self.publishable()
+        adapter = Adapter()
+        pub.register_adapter("fanqie", adapter)
+        response = self.post("submit", {"platform": "fanqie", "account": "acc",
+                                        "platform_book_id": "b-1", "chapter": 1,
+                                        "title": TITLE,
+                                        "body": "一段从未进入版本层、也从未被审查的正文。\n"})
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["code"], "invalid_submit")
+        self.assertEqual(adapter.calls, [])
+
     def test_unknown_result_then_reconcile(self):
+        self.ready()
+        self.publishable()
         adapter = Adapter(raises=TimeoutError("网关超时"))
         pub.register_adapter("fanqie", adapter)
-        self.ready()
         unknown = self.post("submit", {"platform": "fanqie", "account": "acc",
                                        "platform_book_id": "b-1", "chapter": 1,
                                        "title": TITLE, "body": BODY})

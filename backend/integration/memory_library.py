@@ -280,7 +280,9 @@ def archive(project, identity, revision):
 
 def contract(project):
     """Only active author decisions invalidate earlier draft qualification."""
-    items = [{**{k: x.get(k) for k in ("id", "category", "title", "content", "pinned", "due_chapter", "clue_state")},
+    keys = ("id", "category", "title", "content", "pinned", "due_chapter", "clue_state",
+            "effective_from_chapter", "exceptions")
+    items = [{**{k: x.get(k) for k in keys if k in x},
               "source_chapter": x["source"].get("chapter", 0), "updated_revision": x.get("updated_revision", 0)}
              for x in read(project)["items"] if x["source"]["kind"] == "manual" and x["status"] == "active"]
     return items
