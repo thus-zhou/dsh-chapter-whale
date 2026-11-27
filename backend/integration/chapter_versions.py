@@ -48,6 +48,8 @@ SCHEMA_VERSION = 1
 _LOCK_NAME = ".lock"
 _WINDOWS_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+_FS_NAME_LIMIT = 255
+_TEMP_NAME_EXTRA = 1 + 32 + 4  # ".<32 hex>.tmp"
 
 
 def _require_id(value: str, code: str = "invalid_operation_id") -> str:
@@ -99,7 +101,35 @@ def new_version_id(seq: int) -> str:
     return f"ver_{int(seq):04d}_{uuid.uuid4().hex[:8]}"
 
 
+def _assert_version_store(project) -> None:
+    """Reject ``.webnovel`` / ``chapter_versions`` symlinks before any write.
+
+    A project directory may arrive through a sync tool or a hostile archive;
+    writing objects/index through a directory symlink would silently place
+    version data outside the project (A-P2-12).
+    """
+    root = Path(project).resolve()
+    current = Path(project)
+    for part in (".webnovel", "chapter_versions"):
+        current = current / part
+        try:
+            linked = current.is_symlink()
+        except OSError:
+            linked = True
+        if linked:
+            raise VersionConflict("unsafe_version_store")
+    store = Path(project) / ".webnovel" / "chapter_versions"
+    if store.exists():
+        try:
+            resolved = store.resolve()
+        except OSError as exc:
+            raise VersionConflict("unsafe_version_store") from exc
+        if resolved != root and root not in resolved.parents:
+            raise VersionConflict("unsafe_version_store")
+
+
 def store_root(project) -> Path:
+    _assert_version_store(project)
     return Path(project) / ".webnovel" / "chapter_versions"
 
 
@@ -269,11 +299,31 @@ def _chapter_title(project, chapter: int, path: Optional[Path] = None) -> str:
     return parsed[1] if parsed else ""
 
 
+def validate_chapter_filename(chapter: int, title: str, *, with_temporary: bool = False) -> str:
+    """Return the on-disk name, refusing titles whose UTF-8 name exceeds 255 bytes.
+
+    ``MAX_TITLE_CHARS`` counts characters, but ext4/APFS/NTFS limit a *name*
+    to 255 bytes; 120 CJK characters are 360 bytes.  The temporary suffix used
+    by every atomic write must be included in the budget (A-P2-6).
+    """
+    safe = unicodedata.normalize("NFC", title or "").strip()
+    name = f"第{int(chapter)}章" + (f"-{safe}" if safe else "") + ".md"
+    budget = _FS_NAME_LIMIT
+    if with_temporary:
+        # ".<uuid hex>.tmp" is added by every atomic writer.
+        if len(name.encode("utf-8")) + _TEMP_NAME_EXTRA > budget:
+            raise VersionConflict("title_too_long_for_filesystem")
+        return name
+    if len(name.encode("utf-8")) > budget:
+        raise VersionConflict("title_too_long_for_filesystem")
+    return name
+
+
 def _new_chapter_path(project, chapter: int, title: str) -> Path:
     safe = unicodedata.normalize("NFC", title or "").strip()
     if safe and (_WINDOWS_BAD.search(safe) or safe.endswith((" ", "."))):
         raise VersionConflict("invalid_chapter_title")
-    name = f"第{int(chapter)}章" + (f"-{safe}" if safe else "") + ".md"
+    name = validate_chapter_filename(chapter, safe, with_temporary=True)
     return body_dir(project) / name
 
 
@@ -454,6 +504,9 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
 
     with file_lock(paths["lock"]):
         existing = _load_commit(project, op)
+        if existing is not None and existing.get("state") == "abandoned":
+            _commit_path(project, op).unlink(missing_ok=True)
+            existing = None
         if existing is not None:
             if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
                 index = load_index(project)
@@ -475,12 +528,17 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
         index = load_index(project)
         entry = _chapter_entry(index, chapter)
         index_reconciled = entry.get("current") not in (None, current_sha)
+        final_title = title if title is not None else (candidate.get("title") or _chapter_title(project, chapter))
+        if current_path is None:
+            # Refuse an impossible filesystem name before leaving a prepared
+            # commit record behind (A-P2-6).
+            validate_chapter_filename(chapter, final_title or "", with_temporary=True)
 
         record = {
             "schema_version": SCHEMA_VERSION, "op_id": op, "project_id": project_id(project),
             "chapter_id": int(chapter), "candidate_id": candidate_id, "content_sha256": sha,
             "previous_sha256": current_sha, "state": "prepared", "done": [],
-            "title": title if title is not None else (candidate.get("title") or _chapter_title(project, chapter)),
+            "title": final_title,
             "index_reconciled": index_reconciled,
             "created_at": _now(), "updated_at": _now(),
         }
@@ -489,8 +547,7 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
         record["done"].append("object")
         atomic_json(_commit_path(project, op), record)
 
-        final_title = title if title is not None else (candidate.get("title") or _chapter_title(project, chapter))
-        path = _write_chapter_bytes(project, chapter, data, final_title)
+        path = _write_chapter_bytes(project, chapter, data, final_title or "")
         record["chapter_path"] = str(path)
         record["done"].append("chapter")
         record["state"] = "chapter_written"
@@ -538,72 +595,275 @@ def write_chapter(project, chapter: int, content: str, *, op_id: Optional[str] =
     return result
 
 
+def _material_for_commit(project, record: Dict[str, Any], current_sha: Optional[str]) -> bytes:
+    """Return the bytes a pending commit should land, never fabricating content.
+
+    Raw commits (``candidate_id=None``) have no candidate fallback: if the
+    object is missing and the body is not already the committed bytes, the
+    only safe outcome is a terminal ``conflict(source_missing)`` (A-P1-1).
+    """
+    sha = str(record.get("content_sha256") or "")
+    try:
+        return read_object(project, sha)
+    except VersionError:
+        pass
+    chapter = int(record.get("chapter_id") or 0)
+    if current_sha == sha and chapter > 0:
+        path = chapter_path(project, chapter)
+        if path is not None:
+            data = path.read_bytes()
+            if raw_sha256(data) == sha:
+                _store_object(project, data)
+                return data
+    candidate_id = record.get("candidate_id")
+    if candidate_id:
+        try:
+            candidate = read_candidate(project, candidate_id)
+        except VersionError:
+            candidate = {}
+        content = candidate.get("content") if isinstance(candidate, dict) else None
+        if isinstance(content, str):
+            data = _encode(content)
+            if raw_sha256(data) == sha:
+                _store_object(project, data)
+                return data
+    raise VersionNotFound("source_missing")
+
+
+def _candidate_meta(project, record: Dict[str, Any]) -> Dict[str, Any]:
+    candidate_id = record.get("candidate_id")
+    if not candidate_id:
+        return {}
+    try:
+        value = read_candidate(project, str(candidate_id))
+    except VersionError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _digest_or_empty(data: bytes) -> str:
+    try:
+        return body_digest(_decode(data))
+    except (UnicodeDecodeError, ValueError):
+        return body_digest("")
+
+
+def _mark_recovery_failure(path: Path, record: Dict[str, Any], exc: BaseException,
+                           state: str, reason: str) -> None:
+    record["state"] = state
+    record["conflict_reason"] = reason
+    record["recovery_error"] = f"{type(exc).__name__}: {str(exc)[:160]}"
+    record["updated_at"] = _now()
+    try:
+        atomic_json(path, record)
+    except Exception:
+        pass
+
+
 def recover_pending(project) -> List[Dict[str, Any]]:
-    """补齐被中断的提交；无法判定的标记 conflict 并保留现场。"""
+    """补齐被中断的提交；逐条隔离，无法判定的标记终态并保留现场。
+
+    ``committed``/``conflict``/``abandoned`` 都是终态，绝不在下一次恢复时
+    重新评估——否则作者明确回退或删除的正文会被旧候选静默覆盖 (A-P1-3)。
+    """
     paths = _ensure(project)
     results: List[Dict[str, Any]] = []
     for path in sorted(paths["commits"].glob("*.json")):
-        record = read_json_strict(path)
-        if not isinstance(record, dict) or record.get("state") == "committed":
+        try:
+            record = read_json_strict(path)
+        except Exception as exc:  # noqa: BLE001 - one corrupt record must not stop the rest
+            results.append({"op_id": path.stem, "chapter_id": 0,
+                            "state": "recovery_error", "error": str(exc)[:200]})
             continue
-        chapter = int(record.get("chapter_id", 0))
-        sha = record.get("content_sha256")
-        if not sha:
+        if not isinstance(record, dict) or record.get("state") in {"committed", "conflict", "abandoned"}:
             continue
-        with file_lock(paths["lock"]):
-            candidate = read_candidate(project, record["candidate_id"]) if record.get("candidate_id") else {}
-            try:
-                data = read_object(project, sha)
-            except VersionError:
-                _store_object(project, _encode(candidate["content"]))
-                data = read_object(project, sha)
-            current_path = chapter_path(project, chapter)
-            current_sha = file_sha256(current_path)
-            index = load_index(project)
-            entry = _chapter_entry(index, chapter)
-            if entry.get("current") == sha:
-                record.setdefault("done", []).append("index")
-                record["state"] = "committed"
-                record["version_id"] = entry.get("current_version_id")
-            elif current_sha == sha:
-                # 正文已写、索引未写：向前补索引，不能把现场判成冲突。
-                entry.setdefault("versions", [])
-                meta = next((v for v in entry["versions"]
-                             if v.get("op_id") == record.get("op_id")), None)
-                if meta is None:
-                    meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)),
-                                             size=len(data), source=candidate.get("source", "recovered"),
-                                             op_id=record.get("op_id"), run_id=None, attempt_id=None,
-                                             parent=record.get("previous_sha256"),
-                                             title=record.get("title") or _chapter_title(project, chapter),
-                                             note="recovered after interrupted commit")
-                record["version_id"] = meta.get("version_id")
-                entry["current"] = sha
-                entry["current_version_id"] = record["version_id"] or entry.get("current_version_id")
-                _save_index(project, index)
-                record.setdefault("done", []).append("index")
-                record["state"] = "committed"
-            elif current_sha in (record.get("previous_sha256"), None):
-                _write_chapter_bytes(project, chapter, data, record.get("title") or _chapter_title(project, chapter))
-                entry.setdefault("versions", [])
-                if not any(v.get("op_id") == record.get("op_id") for v in entry["versions"]):
-                    meta = _register_version(entry, sha256=sha, digest=body_digest(_decode(data)),
-                                      size=len(data), source=candidate.get("source", "recovered"), op_id=record.get("op_id"),
-                                      run_id=None, attempt_id=None, parent=record.get("previous_sha256"),
-                                      title=record.get("title") or _chapter_title(project, chapter),
-                                      note="recovered after interrupted commit")
+        try:
+            chapter = int(record.get("chapter_id") or 0)
+        except (TypeError, ValueError):
+            results.append({"op_id": record.get("op_id") or path.stem, "chapter_id": 0,
+                            "state": "recovery_error", "error": "chapter_id_invalid"})
+            continue
+        sha = str(record.get("content_sha256") or "")
+        if not sha or chapter <= 0:
+            continue
+        try:
+            with file_lock(paths["lock"]):
+                current_path = chapter_path(project, chapter)
+                current_sha = file_sha256(current_path)
+                try:
+                    data = _material_for_commit(project, record, current_sha)
+                except VersionNotFound:
+                    record["conflict_current"] = current_sha
+                    _mark_recovery_failure(path, record, VersionNotFound("source_missing"),
+                                           "conflict", "source_missing")
+                    results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                                    "state": "conflict", "reason": "source_missing"})
+                    continue
+                index = load_index(project)
+                entry = _chapter_entry(index, chapter)
+                digest = _digest_or_empty(data)
+                candidate = _candidate_meta(project, record)
+                if entry.get("current") == sha:
+                    record.setdefault("done", []).append("index")
+                    record["state"] = "committed"
+                    record["version_id"] = entry.get("current_version_id")
+                elif current_sha == sha:
+                    # 正文已写、索引未写：向前补索引，不能把现场判成冲突。
+                    entry.setdefault("versions", [])
+                    meta = next((v for v in entry["versions"]
+                                 if v.get("op_id") == record.get("op_id")), None)
+                    if meta is None:
+                        meta = _register_version(entry, sha256=sha, digest=digest,
+                                                 size=len(data), source=candidate.get("source", "recovered"),
+                                                 op_id=record.get("op_id"), run_id=candidate.get("run_id"),
+                                                 attempt_id=candidate.get("attempt_id"),
+                                                 parent=record.get("previous_sha256"),
+                                                 title=record.get("title") or _chapter_title(project, chapter),
+                                                 note="recovered after interrupted commit")
                     record["version_id"] = meta.get("version_id")
-                entry["current"] = sha
-                entry["current_version_id"] = record.get("version_id") or entry.get("current_version_id")
-                _save_index(project, index)
-                record["state"] = "committed"
-            else:
-                record["state"] = "conflict"
-                record["conflict_current"] = current_sha
-            record["updated_at"] = _now()
-            atomic_json(path, record)
-            results.append({"op_id": record.get("op_id"), "chapter_id": chapter, "state": record["state"]})
+                    entry["current"] = sha
+                    entry["current_version_id"] = record["version_id"] or entry.get("current_version_id")
+                    _save_index(project, index)
+                    record.setdefault("done", []).append("index")
+                    record["state"] = "committed"
+                elif current_sha in (record.get("previous_sha256"), None):
+                    done = record.get("done") if isinstance(record.get("done"), list) else []
+                    previous_sha = record.get("previous_sha256")
+                    # Only a commit whose body was never written may move
+                    # forward.  If the body was written and the author has
+                    # since restored the previous version, or deleted the
+                    # chapter, replaying the candidate would silently undo the
+                    # author's action (A-R-01/A-R-02).
+                    if current_sha == previous_sha and "chapter" in done:
+                        record["state"] = "conflict"
+                        record["conflict_current"] = current_sha
+                        record["conflict_reason"] = "author_reverted"
+                        record["updated_at"] = _now()
+                        atomic_json(path, record)
+                        results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                                        "state": "conflict", "reason": "author_reverted"})
+                        continue
+                    if current_sha is None and not (previous_sha is None and "chapter" not in done):
+                        record["state"] = "conflict"
+                        record["conflict_current"] = current_sha
+                        record["conflict_reason"] = "author_deleted"
+                        record["updated_at"] = _now()
+                        atomic_json(path, record)
+                        results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                                        "state": "conflict", "reason": "author_deleted"})
+                        continue
+                    _write_chapter_bytes(project, chapter, data,
+                                         record.get("title") or _chapter_title(project, chapter))
+                    entry.setdefault("versions", [])
+                    if not any(v.get("op_id") == record.get("op_id") for v in entry["versions"]):
+                        meta = _register_version(entry, sha256=sha, digest=digest,
+                                                 size=len(data), source=candidate.get("source", "recovered"),
+                                                 op_id=record.get("op_id"), run_id=candidate.get("run_id"),
+                                                 attempt_id=candidate.get("attempt_id"),
+                                                 parent=record.get("previous_sha256"),
+                                                 title=record.get("title") or _chapter_title(project, chapter),
+                                                 note="recovered after interrupted commit")
+                        record["version_id"] = meta.get("version_id")
+                    entry["current"] = sha
+                    entry["current_version_id"] = record.get("version_id") or entry.get("current_version_id")
+                    _save_index(project, index)
+                    record["state"] = "committed"
+                else:
+                    record["state"] = "conflict"
+                    record["conflict_current"] = current_sha
+                record["updated_at"] = _now()
+                atomic_json(path, record)
+                results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                                "state": record["state"]})
+        except OSError as exc:
+            # 文件名过长 / 磁盘错误：单条记录标 conflict，后续记录继续恢复。
+            _mark_recovery_failure(path, record, exc, "conflict",
+                                   f"recovery_failed:{type(exc).__name__}")
+            results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                            "state": "conflict", "reason": f"recovery_failed:{type(exc).__name__}"})
+        except Exception as exc:  # noqa: BLE001 - isolate every commit record
+            _mark_recovery_failure(path, record, exc, "recovery_error",
+                                   f"recovery_failed:{type(exc).__name__}")
+            results.append({"op_id": record.get("op_id"), "chapter_id": chapter,
+                            "state": "recovery_error", "error": str(exc)[:200]})
     return results
+
+
+def resolve_conflict(project, op_id: str, action: str) -> Dict[str, Any]:
+    """Resolve one terminal ``conflict`` commit under explicit author control.
+
+    ``replay`` re-applies the candidate/object bytes (only when the author
+    explicitly asks); ``discard`` marks the record abandoned and leaves the
+    current body untouched.  Recovery never performs either action on its own.
+    """
+    op = _require_id(op_id)
+    paths = _ensure(project)
+    resolution = str(action or "").strip().lower()
+    if resolution not in {"replay", "discard"}:
+        raise VersionConflict("invalid_conflict_action")
+    with file_lock(paths["lock"]):
+        record = _load_commit(project, op)
+        if record is None:
+            raise VersionNotFound("commit_missing")
+        if record.get("state") != "conflict":
+            raise VersionConflict("not_in_conflict")
+        chapter = int(record.get("chapter_id") or 0)
+        sha = str(record.get("content_sha256") or "")
+        if resolution == "discard":
+            record["state"] = "abandoned"
+            record["resolution"] = "author_discard"
+            record["resolved_at"] = _now()
+            record["updated_at"] = record["resolved_at"]
+            atomic_json(_commit_path(project, op), record)
+            return {"status": "discarded", "op_id": op, "chapter_id": chapter,
+                    "state": "abandoned"}
+        if not sha or chapter <= 0:
+            raise VersionConflict("source_missing")
+        current_path = chapter_path(project, chapter)
+        current_sha = file_sha256(current_path)
+        try:
+            data = _material_for_commit(project, record, current_sha)
+        except VersionNotFound as exc:
+            raise VersionConflict("source_missing") from exc
+        index = load_index(project)
+        entry = _chapter_entry(index, chapter)
+        title = record.get("title") or _chapter_title(project, chapter)
+        _write_chapter_bytes(project, chapter, data, title)
+        meta = next((v for v in entry.get("versions", [])
+                     if v.get("op_id") == record.get("op_id")), None)
+        if meta is None:
+            meta = _register_version(entry, sha256=sha, digest=_digest_or_empty(data),
+                                     size=len(data), source="recovered",
+                                     op_id=record.get("op_id"), run_id=None, attempt_id=None,
+                                     parent=current_sha, title=title,
+                                     note="author replayed conflict")
+        entry["current"] = sha
+        entry["current_version_id"] = meta.get("version_id")
+        _save_index(project, index)
+        record["version_id"] = meta.get("version_id")
+        record["state"] = "committed"
+        record["resolution"] = "author_replay"
+        record["resolved_at"] = _now()
+        record["updated_at"] = record["resolved_at"]
+        atomic_json(_commit_path(project, op), record)
+        return {"status": "replayed", "op_id": op, "chapter_id": chapter,
+                "state": "committed", "version_id": meta.get("version_id"),
+                "sha256": sha}
+
+
+def discard_commit(project, op_id: str) -> bool:
+    """Remove a commit marker created by a rolled-back composite operation.
+
+    Used by split/merge rollback so an identical retry is not permanently
+    rejected with ``operation_incomplete`` (A-P2-5).
+    """
+    op = _require_id(op_id)
+    paths = _ensure(project)
+    with file_lock(paths["lock"]):
+        path = _commit_path(project, op)
+        existed = path.is_file()
+        path.unlink(missing_ok=True)
+        return existed
 
 
 # ----------------------------------------------------------------------- 读取
@@ -765,6 +1025,9 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
     op = op_id or uuid.uuid4().hex
     with file_lock(paths["lock"]):
         existing = _load_commit(project, op)
+        if existing is not None and existing.get("state") == "abandoned":
+            _commit_path(project, op).unlink(missing_ok=True)
+            existing = None
         if existing is not None:
             if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
                 index = load_index(project)
@@ -786,6 +1049,10 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
         index = load_index(project)
         entry = _chapter_entry(index, chapter)
         final_title = title if title is not None else _chapter_title(project, chapter)
+        if current_path is None:
+            # Refuse an impossible filesystem name before leaving a prepared
+            # commit record behind (A-P2-6).
+            validate_chapter_filename(chapter, final_title or "", with_temporary=True)
         record = {
             "schema_version": SCHEMA_VERSION, "op_id": op, "project_id": project_id(project),
             "chapter_id": int(chapter), "candidate_id": None, "content_sha256": sha,
@@ -825,6 +1092,41 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
     return record
 
 
+def _update_receipt_destination(project, chapter: int, destination: str) -> bool:
+    """Keep ``writer_receipts.json`` pointing at the renamed chapter file."""
+    path = Path(project) / ".webnovel" / "writer_receipts.json"
+    if not path.is_file():
+        return False
+    lock = path.parent / "receipts.lock"
+    with file_lock(lock):
+        try:
+            receipts = read_json_strict(path)
+        except (OSError, ValueError):
+            return False
+        if not isinstance(receipts, dict):
+            return False
+        entry = receipts.get(str(int(chapter)))
+        if not isinstance(entry, dict):
+            return False
+        entry["destination"] = destination
+        atomic_json(path, receipts)
+        return True
+
+
+def _update_commit_chapter_path(project, op_id: Optional[str], chapter_path_value: str) -> bool:
+    if not op_id:
+        return False
+    paths = _paths(project)
+    with file_lock(paths["lock"]):
+        record = _load_commit(project, str(op_id))
+        if record is None:
+            return False
+        record["chapter_path"] = chapter_path_value
+        record["updated_at"] = _now()
+        atomic_json(_commit_path(project, str(op_id)), record)
+        return True
+
+
 def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[str] = None,
                     note: str = "", restore_title: bool = True) -> Dict[str, Any]:
     """Restore a historical version byte-exactly (BOM/CRLF preserved).
@@ -832,6 +1134,11 @@ def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[s
     ``version_id`` accepts both the new ``ver_...`` identity and a legacy
     64-hex content sha.  When ``restore_title`` is false the current on-disk
     title is kept and only the body bytes are restored.
+
+    The target filename is checked *before* the body commit so a title
+    collision cannot report failure after silently changing the body
+    (A-P2-2); a race that still loses the rename returns a structured
+    partial result instead of a misleading 409.
     """
     meta, sha = _resolve_version(project, chapter, version_id)
     if not sha:
@@ -844,17 +1151,37 @@ def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[s
         title = str(meta.get("title") or "")
     elif not restore_title:
         title = current_title
+    target: Optional[Path] = None
+    needs_rename = False
+    if path is not None and restore_title and title is not None:
+        validate_chapter_filename(chapter, title, with_temporary=True)
+        target = path.with_name(f"第{int(chapter)}章" + (f"-{title}" if title else "") + ".md")
+        needs_rename = target.resolve() != path.resolve()
+        if needs_rename and target.exists():
+            raise VersionConflict("restore_title_conflict")
+    elif path is None and title is not None:
+        validate_chapter_filename(chapter, title, with_temporary=True)
     result = commit_raw_bytes(project, chapter, data, title=title, op_id=op_id,
                               expected_sha256=file_sha256(path),
                               source="restored", note=note or f"restore {sha[:12]}",
                               allow_new=path is None,
                               invalidation_reason="version_restored")
-    if path is not None and restore_title and title is not None:
-        target = path.with_name(f"第{int(chapter)}章" + (f"-{title}" if title else "") + ".md")
-        if target.resolve() != path.resolve():
+    result["title_renamed"] = not needs_rename
+    if needs_rename and path is not None and target is not None:
+        try:
             if target.exists():
-                raise VersionConflict("restore_title_conflict")
+                raise FileExistsError(str(target))
             replace_with_retry(path, target)
+        except OSError as exc:
+            # Body is restored; only the title rename lost a race.  Never
+            # report the whole operation as failed after changing the body.
+            result["title_renamed"] = False
+            result["title_conflict"] = True
+            result["title_error"] = str(exc)[:160]
+        else:
+            result["title_renamed"] = True
+            _update_receipt_destination(project, chapter, str(target.resolve()))
+            _update_commit_chapter_path(project, result.get("op_id"), str(target))
     result["restored_version_id"] = (meta or {}).get("version_id") or sha
     return result
 

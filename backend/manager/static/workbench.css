@@ -313,7 +313,8 @@
 .wb-filters button {
   border: 1px solid transparent;
   border-radius: 20px;
-  padding: 3px 8px;
+  min-height: 24px;
+  padding: 4px 9px;
   background: transparent;
   color: var(--muted);
   font-size: 9px;
@@ -330,7 +331,14 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  margin: 0;
   padding: 2px 8px 12px;
+  list-style: none;
+}
+
+.wb-chapter-item {
+  margin: 0;
+  list-style: none;
 }
 
 .wb-chapter {
@@ -1580,7 +1588,7 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 760px) {
   .wb-page {
     padding-bottom: 76px;
   }
@@ -1700,6 +1708,7 @@
   .wb-right {
     position: fixed;
     z-index: 70;
+    visibility: hidden;
     background: var(--paper);
     transition: transform 0.22s var(--ease-editorial, ease);
     box-shadow: 0 24px 70px #14261d55;
@@ -1715,7 +1724,13 @@
   }
 
   .wb-left.is-open {
+    visibility: visible;
     transform: translateX(0);
+  }
+
+  .wb-left:not(.is-open),
+  .wb-right:not(.is-open) {
+    transition: transform 0.22s var(--ease-editorial, ease), visibility 0s linear 0.22s;
   }
 
   .wb-right {
@@ -1730,6 +1745,7 @@
   }
 
   .wb-right.is-open {
+    visibility: visible;
     transform: translateY(0);
   }
 
@@ -1841,11 +1857,24 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 760px) {
   .wb-filters button {
     min-height: 28px;
     padding: 6px 10px;
     font-size: 10.5px;
+  }
+}
+
+/* D-16: liquid-glass switches to the desktop dock at 761px while
+   editorial.css still shows the mobile dock through 767px. Keep that 7px
+   overlap on the desktop dock only, and make the workbench follow the same
+   desktop boundary as the rest of the app. */
+@media (min-width: 761px) and (max-width: 767px) {
+  .mobile-dock {
+    display: none;
+  }
+  main:not(.pair-shell) {
+    padding-bottom: 42px;
   }
 }
 

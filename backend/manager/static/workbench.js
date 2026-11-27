@@ -94,6 +94,11 @@
     annotationSeq: 0,
     annotationsReady: false,
     annotationProbed: false,
+    remoteAnnotations: [],
+    pendingChapter: null,
+    eventStream: null,
+    eventBuffer: null,
+    roomRefreshTimer: null,
     quickCheck: null,
     versions: [],
     versionsFor: 0,
@@ -196,8 +201,45 @@
       exists: Boolean(source.exists !== undefined ? source.exists : id),
       baseVersionId: source.base_version_id || null,
       baseSha: source.base_content_sha256 || source.base_sha256 || null,
+      baseContent: source.base_content === undefined ? null : source.base_content,
       updatedAt: source.updated_at || null,
     };
+  }
+
+  /* A restored draft belongs to the version the author actually edited. Using
+     the newest file version as the baseline would let that stale draft pass
+     the server's optimistic check and silently overwrite a background save. */
+  function resolveDraftBaseline(draft, data) {
+    const source = data || {};
+    if (draft && draft.exists) {
+      // A draft without its own recorded base is not safe to save against the
+      // newest version: block it instead of silently treating v-latest as the
+      // base (D-01-N).  The server supplies base_content for three-way merge.
+      if (!draft.baseVersionId || !draft.baseSha) {
+        return { baseVersionId: "", baseSha: "", baseContent: "", blocked: true };
+      }
+      return {
+        baseVersionId: String(draft.baseVersionId),
+        baseSha: String(draft.baseSha),
+        baseContent: draft.baseContent === null || draft.baseContent === undefined
+          ? "" : String(draft.baseContent),
+        blocked: false,
+      };
+    }
+    return {
+      baseVersionId: String(source.version_id || ""),
+      baseSha: String(source.sha256 || source.content_sha256 || ""),
+      baseContent: String(source.content || ""),
+      blocked: false,
+    };
+  }
+
+  function isEditorBusyComposing() {
+    return chapterApplyDeferred(state.composing, state.adapter && state.adapter.composing);
+  }
+
+  function chapterApplyDeferred(composing, adapterComposing) {
+    return Boolean(composing || adapterComposing);
   }
 
   function newOpId(prefix) {
@@ -322,6 +364,7 @@
     }
     els.page = document.getElementById("page-workbench");
     els.center = document.querySelector("#wb-shell .wb-center");
+    els.mobileBar = document.querySelector(".wb-mobile-bar");
   }
 
   function init() {
@@ -329,6 +372,7 @@
     if (!els.page || !els.editor) return;
     syncPortals();
     portSelectionSurfaces();
+    syncDrawerMode();
     bindEvents();
     syncRoute();
   }
@@ -337,7 +381,7 @@
     /* Same stacking-context problem as the selection toolbar: mobile drawers
        inside .workspace (z-index:5) paint below the app dock (z-index:40).
        On phones they live on body; on desktop they return to the grid. */
-    const mobile = window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
+    const mobile = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
     if (mobile === state.portaled) return;
     state.portaled = mobile;
     if (mobile) {
@@ -375,16 +419,20 @@
       state.composing = false;
       if (state.adapter) state.adapter.endComposition();
       handleEditorInput();
+      commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
     });
     on(els.editor, "blur", () => {
-      if (!state.composing) return;
+      if (!state.composing && !state.pendingChapter) return;
       state.composing = false;
       if (state.adapter) state.adapter.endComposition();
+      commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
     });
     on(document, "visibilitychange", () => {
       if (document.visibilityState !== "hidden" || !state.composing) return;
       state.composing = false;
       if (state.adapter) state.adapter.endComposition();
+      // visibility reset must not leave a pending chapter without an exit.
+      commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
     });
     on(els.editor, "input", handleEditorInput);
     on(els.editor, "select", () => captureSelection(false));
@@ -427,6 +475,8 @@
     document.querySelectorAll("[data-wb-tab]").forEach((button) => {
       on(button, "click", () => setRightTab(button.dataset.wbTab));
     });
+    bindTablist(els.tabs);
+    bindTablist(els.viewWrite.closest('[role="tablist"]'));
     document.querySelectorAll("[data-wb-sel]").forEach((button) => {
       on(button, "click", () => doSelectionAction(button.dataset.wbSel));
     });
@@ -501,15 +551,19 @@
     on(window, "resize", () => {
       if (!els.bubble.hidden) hideSelectionUI();
       syncPortals();
-      const mobile = window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
+      const mobile = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
       if (!mobile) {
         els.left.classList.remove("is-open");
         els.right.classList.remove("is-open");
         setHidden(els.backdrop, true);
+        document.body.classList.remove("modal-open");
+        if (els.mobileLeft) els.mobileLeft.setAttribute("aria-expanded", "false");
+        if (els.mobileRight) els.mobileRight.setAttribute("aria-expanded", "false");
       } else {
         els.page.classList.remove("is-left-collapsed");
         els.leftClose.textContent = "×";
       }
+      syncDrawerMode();
     });
     on(window, "beforeunload", (event) => {
       if (!state.dirty) return undefined;
@@ -519,8 +573,15 @@
     });
     on(document, "visibilitychange", () => {
       if (document.visibilityState === "hidden" && state.dirty && !state.draftBlocked) {
+        // A normal save can adopt the returned draft revision.  keepalive is
+        // reserved for pagehide, where the page is going away anyway
+        // (D-14-K).
         flushDraftNow().catch(() => {});
       }
+    });
+    on(window, "pagehide", () => {
+      if (!state.dirty || state.draftBlocked) return;
+      flushDraftKeepalive();
     });
     on(document, "pointerdown", (event) => {
       if (els.bubble.contains(event.target) || els.selbar.contains(event.target)) return;
@@ -530,6 +591,23 @@
     on(document, "keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && String(event.key || "").toLowerCase() === "s") {
         if (event.defaultPrevented) return;
+        const intent = ctrlSIntentFor(document.activeElement);
+        if (intent === "save-outline") {
+          event.preventDefault();
+          saveOutlineFile();
+          return;
+        }
+        if (intent === "save-lore") {
+          event.preventDefault();
+          saveLoreFile();
+          return;
+        }
+        if (intent === "save-meta") {
+          event.preventDefault();
+          saveOutlineMeta();
+          return;
+        }
+        if (intent !== "save-version") return;
         event.preventDefault();
         saveVersion().catch(() => {});
         return;
@@ -676,6 +754,7 @@
     hideConflict();
     setView("write");
     await loadChapters(projectId);
+    startRoomStream();
     if (!state.chapters.length) {
       setEditorEmpty(true);
       if (!els.banner.hidden) return;
@@ -697,6 +776,7 @@
   }
 
   function resetChapterState() {
+    stopRoomStream();
     state.projectToken += 1;
     state.chapterToken += 1;
     state.hydrationToken += 1;
@@ -731,6 +811,8 @@
     state.annotations = [];
     state.annotationsReady = false;
     state.annotationProbed = false;
+    state.remoteAnnotations = [];
+    state.pendingChapter = null;
     state.quickCheck = null;
     state.versions = [];
     state.versionsFor = 0;
@@ -835,6 +917,63 @@
     if (token === state.hydrationToken) applyChapterFilter();
   }
 
+  /* ------------------------------------------------------------ room stream */
+
+  function stopRoomStream() {
+    if (state.eventStream) {
+      try { state.eventStream.close(); } catch (ignored) { /* already closed */ }
+      state.eventStream = null;
+    }
+    if (state.roomRefreshTimer) {
+      clearTimeout(state.roomRefreshTimer);
+      state.roomRefreshTimer = null;
+    }
+  }
+
+  function startRoomStream() {
+    stopRoomStream();
+    if (!state.projectId || !Core.connectEventStream || !Core.OrderedEventBuffer) return;
+    const projectId = state.projectId;
+    state.eventBuffer = new Core.OrderedEventBuffer();
+    state.eventStream = Core.connectEventStream({
+      url: "/api/projects/" + enc(projectId) + "/room/stream",
+      retryDelayMs: 2000,
+      maxRetryDelayMs: 20000,
+      retryOnError: true,
+      onEvent: (event) => handleRoomEvent(projectId, event),
+      onError: () => {},
+    });
+  }
+
+  function handleRoomEvent(projectId, event) {
+    if (projectId !== state.projectId) return;
+    let payload = null;
+    try {
+      payload = JSON.parse(String((event && event.data) || "{}"));
+    } catch (ignored) {
+      return;
+    }
+    if (!payload || typeof payload !== "object") return;
+    state.eventBuffer.push(payload);
+    scheduleRoomRefresh(state.eventBuffer.drain());
+  }
+
+  function scheduleRoomRefresh(events) {
+    if (!events || !events.length) return;
+    const relevant = events.some((item) => {
+      const kind = String(item.kind || item.type || "");
+      return kind === "resync_required" || kind.indexOf("chapter") >= 0 || kind.indexOf("draft") >= 0;
+    });
+    if (!relevant) return;
+    clearTimeout(state.roomRefreshTimer);
+    state.roomRefreshTimer = setTimeout(() => {
+      state.roomRefreshTimer = null;
+      if (!state.projectId) return;
+      loadChapters(state.projectId).catch(() => {});
+      if (state.currentId) refreshChapterMeta(state.currentId);
+    }, 600);
+  }
+
   function renderChapterList() {
     if (!els.chapterList) return;
     clear(els.chapterList);
@@ -845,6 +984,7 @@
       return;
     }
     state.chapters.forEach((chapter) => {
+      const row = node("li", "wb-chapter-item");
       const button = node("button", "wb-chapter");
       button.type = "button";
       button.dataset.chapter = String(chapter.id);
@@ -858,8 +998,9 @@
       button.addEventListener("click", () => {
         openChapter(chapter.id).catch((error) => banner("打开章节失败：" + describeError(error), "error"));
       });
-      state.chapterNodes.set(chapter.id, { button: button, badge: badge, title: title, meta: meta });
-      els.chapterList.append(button);
+      row.append(button);
+      state.chapterNodes.set(chapter.id, { button: button, badge: badge, title: title, meta: meta, item: row });
+      els.chapterList.append(row);
     });
     updateChapterCount();
     applyChapterFilter();
@@ -896,7 +1037,7 @@
   function applyChapterFilter() {
     state.chapters.forEach((chapter) => {
       const refs = state.chapterNodes.get(chapter.id);
-      if (refs) refs.button.hidden = !chapterMatchesFilter(chapter);
+      if (refs) (refs.item || refs.button).hidden = !chapterMatchesFilter(chapter);
     });
     updateChapterCount();
   }
@@ -978,6 +1119,7 @@
     try {
       const data = await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(chapterId), "GET", undefined, 25000);
       if (token !== state.chapterToken) return;
+      if (settings.skipDraft) data.draft = { exists: false };
       applyChapter(data);
       try {
         localStorage.setItem("novel-helper-workbench-chapter:" + state.projectId, String(chapterId));
@@ -992,6 +1134,12 @@
   }
 
   function applyChapter(data) {
+    if (isEditorBusyComposing()) {
+      state.pendingChapter = data;
+      banner("输入法仍在组合文字，已推迟载入第 " + Number(data.id) + " 章。", "error");
+      return;
+    }
+    state.pendingChapter = null;
     const draftInfo = data.draft || {};
     const hasDraft = Boolean(draftInfo.exists && typeof draftInfo.content === "string");
     const content = hasDraft ? String(draftInfo.content) : String(data.content || "");
@@ -999,16 +1147,18 @@
     state.chapter = data;
     state.currentId = Number(data.id);
     state.chapterStates.set(state.currentId, data);
-    state.baseContent = String(data.content || "");
-    state.baseVersionId = String(data.version_id || "");
-    state.baseSha = String(data.sha256 || data.content_sha256 || "");
     state.draft = draftIdentityFrom(draftInfo);
+    const baseline = resolveDraftBaseline(state.draft, data);
+    state.baseContent = baseline.baseContent || String(data.content || "");
+    state.baseVersionId = baseline.baseVersionId;
+    state.baseSha = baseline.baseSha;
+    state.draftBlocked = Boolean(baseline.blocked);
     if (state.draft.exists) rememberDraftEpoch(state.draft.epoch);
     else {
       const remembered = recallDraftEpoch();
       if (remembered !== null) state.draft.epoch = remembered;
     }
-    state.draftBlocked = false;
+    if (state.draftBlocked) banner("草稿缺少基线版本，已禁止保存；请先载入最新正文或另存草稿。", "error");
     state.adapter = new Core.EditorAdapter({ text: content, title: title });
     state.undo = new Core.UndoStack(20);
     state.draftQueue = new Core.DraftQueue();
@@ -1025,6 +1175,7 @@
     state.versionsFor = 0;
     state.annotationsReady = false;
     state.annotationProbed = false;
+    state.remoteAnnotations = [];
     state.view = "write";
     hideConflict();
     banner("");
@@ -1048,6 +1199,22 @@
     if (state.rightTab === "reference") loadReference().catch(() => {});
   }
 
+  async function commitPendingChapter() {
+    const data = state.pendingChapter;
+    if (!data || isEditorBusyComposing()) return;
+    if (state.dirty && !state.draftBlocked) {
+      try {
+        await flushDraftNow();
+      } catch (error) {
+        banner("切换章节前草稿保存失败，已留在当前章节：" + describeError(error), "error");
+        return;
+      }
+    }
+    if (state.pendingChapter !== data || isEditorBusyComposing()) return;
+    state.pendingChapter = null;
+    applyChapter(data);
+  }
+
   function setEditorEmpty(empty) {
     setHidden(els.editorEmpty, !empty);
     els.editor.disabled = Boolean(empty);
@@ -1058,11 +1225,15 @@
 
   function setEditorValue(text, title, force) {
     if (!els.editor) return false;
-    if (!force && (state.composing || (state.adapter && state.adapter.composing))) return false;
+    if (editorWriteBlocked(force, state.composing, state.adapter && state.adapter.composing)) return false;
     els.editor.value = text;
     els.title.value = title;
     if (state.adapter) state.adapter.setValue(text, true);
     return true;
+  }
+
+  function editorWriteBlocked(force, composing, adapterComposing) {
+    return !force && Boolean(composing || adapterComposing);
   }
 
   /* ---------------------------------------------------------------- editor */
@@ -1226,14 +1397,71 @@
     if (state.dirty && !state.draftBlocked) scheduleDraftSave();
   }
 
+  function tabButtonsFor(tablist) {
+    return tablist ? Array.from(tablist.querySelectorAll('[role="tab"]')) : [];
+  }
+
+  function moveTabFocus(tablist, current, offset) {
+    const buttons = tabButtonsFor(tablist);
+    if (!buttons.length) return;
+    const index = Math.max(0, buttons.indexOf(current));
+    const next = buttons[(index + offset + buttons.length) % buttons.length];
+    if (!next) return;
+    next.focus();
+    next.click();
+  }
+
+  function bindTablist(tablist) {
+    if (!tablist) return;
+    on(tablist, "keydown", (event) => {
+      const buttons = tabButtonsFor(tablist);
+      const current = document.activeElement;
+      if (buttons.indexOf(current) < 0) return;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        event.preventDefault();
+        moveTabFocus(tablist, current, 1);
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveTabFocus(tablist, current, -1);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        moveTabFocus(tablist, buttons[0], 0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        moveTabFocus(tablist, buttons[buttons.length - 1], 0);
+      }
+    });
+    const initial = tablist.querySelector('[role="tab"][aria-selected="true"]') || tablist.querySelector('[role="tab"]');
+    tabButtonsFor(tablist).forEach((button) => {
+      button.setAttribute("tabindex", button === initial ? "0" : "-1");
+    });
+  }
+
   function toggleMore(force) {
     state.moreOpen = typeof force === "boolean" ? force : !state.moreOpen;
     setHidden(els.moreMenu, !state.moreOpen);
     els.moreToggle.setAttribute("aria-expanded", String(state.moreOpen));
   }
 
+  function ctrlSIntentFor(element) {
+    const active = element || null;
+    if (!active) return "save-version";
+    const id = String(active.id || "");
+    if (active === els.outlineText || id === "wb-outline-text") return "save-outline";
+    if (active === els.loreText || id === "wb-lore-text") return "save-lore";
+    if (active === els.metaMaster || active === els.metaVolumes ||
+        active === els.metaArcs || active === els.metaForeshadow ||
+        id.indexOf("wb-meta-") === 0) return "save-meta";
+    if (active.closest && active.closest("#wb-outline-view")) return "none";
+    if (active.closest && active.closest("dialog")) return "none";
+    if (active === els.editor || active === els.title || id === "wb-editor" || id === "wb-title") return "save-version";
+    const tag = String(active.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return "none";
+    return "save-version";
+  }
+
   function toggleLeftPane() {
-    const mobile = window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
+    const mobile = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
     if (mobile) {
       els.page.classList.remove("is-left-collapsed");
       toggleDrawer("left", false);
@@ -1245,29 +1473,104 @@
     els.leftClose.setAttribute("aria-label", collapsed ? "展开章节目录" : "收起章节目录");
   }
 
+  function isMobileLayout() {
+    return Boolean(window.matchMedia && window.matchMedia("(max-width: 760px)").matches);
+  }
+
+  function setDrawerInteractive(drawer, interactive) {
+    if (!drawer) return;
+    if (isMobileLayout()) {
+      drawer.setAttribute("role", "dialog");
+      drawer.setAttribute("aria-modal", "true");
+    } else {
+      drawer.removeAttribute("role");
+      drawer.removeAttribute("aria-modal");
+    }
+    if (interactive) {
+      drawer.inert = false;
+      drawer.removeAttribute("aria-hidden");
+      return;
+    }
+    drawer.inert = true;
+    drawer.setAttribute("aria-hidden", "true");
+  }
+
+
+  function setBackgroundInert(active) {
+    // aria-modal is only honest when the rest of the app is actually inert.
+    [".sidebar", ".topbar", ".skip-link"].forEach((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return;
+      element.inert = Boolean(active);
+      if (active) element.setAttribute("aria-hidden", "true");
+      else element.removeAttribute("aria-hidden");
+    });
+  }
+
+  function syncDrawerMode() {
+    const mobile = isMobileLayout();
+    [els.left, els.right].forEach((drawer) => {
+      if (!drawer) return;
+      const open = drawer.classList.contains("is-open");
+      setDrawerInteractive(drawer, mobile ? open : true);
+    });
+    const anyOpen = els.left.classList.contains("is-open") || els.right.classList.contains("is-open");
+    if (els.center) els.center.inert = mobile && anyOpen;
+    if (els.mobileBar) els.mobileBar.inert = false;
+    setBackgroundInert(mobile && anyOpen);
+  }
+
+  function focusDrawer(side) {
+    const target = side === "left" ? els.left : els.right;
+    if (!target) return;
+    const preferred = side === "left"
+      ? els.leftClose
+      : (target.querySelector('[role="tab"][aria-selected="true"]') || target.querySelector('[role="tab"]') || els.rightClose);
+    if (preferred && typeof preferred.focus === "function") preferred.focus();
+  }
+
   function toggleDrawer(side, force) {
     if (side !== "left" && side !== "right") return;
     const target = side === "left" ? els.left : els.right;
-    const mobile = window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
+    const otherSide = side === "left" ? "right" : "left";
+    const other = otherSide === "left" ? els.left : els.right;
+    const mobile = isMobileLayout();
     if (!mobile) {
       target.classList.remove("is-open");
+      if (other) other.classList.remove("is-open");
+      setDrawerInteractive(target, true);
+      if (other) setDrawerInteractive(other, true);
       setHidden(els.backdrop, true);
       document.body.classList.remove("modal-open");
+      if (els.center) els.center.inert = false;
+      if (els.mobileBar) els.mobileBar.inert = false;
+      setBackgroundInert(false);
       if (els.mobileLeft) els.mobileLeft.setAttribute("aria-expanded", "false");
       if (els.mobileRight) els.mobileRight.setAttribute("aria-expanded", "false");
       return;
     }
     const open = typeof force === "boolean" ? force : !target.classList.contains("is-open");
+    const hadFocus = Boolean(document.activeElement && target.contains(document.activeElement));
     target.classList.toggle("is-open", open);
-    if (open) {
-      const other = side === "left" ? els.right : els.left;
-      if (other) other.classList.remove("is-open");
-    }
+    if (open && other) other.classList.remove("is-open");
+    setDrawerInteractive(target, open);
+    if (open && other) setDrawerInteractive(other, false);
     const anyOpen = els.left.classList.contains("is-open") || els.right.classList.contains("is-open");
     setHidden(els.backdrop, !anyOpen);
     document.body.classList.toggle("modal-open", anyOpen);
+    if (els.center) els.center.inert = anyOpen;
+    if (els.mobileBar) els.mobileBar.inert = false;
+    setBackgroundInert(anyOpen);
     if (els.mobileLeft) els.mobileLeft.setAttribute("aria-expanded", String(els.left.classList.contains("is-open")));
     if (els.mobileRight) els.mobileRight.setAttribute("aria-expanded", String(els.right.classList.contains("is-open")));
+    if (open) {
+      window.setTimeout(() => {
+        if (target.classList.contains("is-open") && !target.inert) focusDrawer(side);
+      }, 0);
+    } else if (hadFocus) {
+      const trigger = side === "left" ? els.mobileLeft : els.mobileRight;
+      if (trigger && typeof trigger.focus === "function") trigger.focus();
+    }
   }
 
   function setView(view, options) {
@@ -1277,6 +1580,8 @@
     setHidden(els.outlineView, state.view !== "outline");
     els.viewWrite.setAttribute("aria-selected", String(state.view === "write"));
     els.viewOutline.setAttribute("aria-selected", String(state.view === "outline"));
+    els.viewWrite.setAttribute("tabindex", state.view === "write" ? "0" : "-1");
+    els.viewOutline.setAttribute("tabindex", state.view === "outline" ? "0" : "-1");
     if (state.view === "outline") {
       loadOutlineIndex().then(() => {
         if (!settings.skipAutoOpen && !state.outline.name && state.outline.files.length) {
@@ -1365,6 +1670,7 @@
         if (state.adapter) state.adapter.markRevision(state.draft.id, state.draft.epoch, state.draft.revision);
         if (signature(els.title.value, els.editor.value) === submitted) {
           state.persistedSignature = submitted;
+          state.dirty = false;
         }
         updateEditorMeta();
         updateChapterBadge(state.currentId);
@@ -1438,6 +1744,26 @@
     }
     await saveDraftNow();
     if (state.draftQueue) await state.draftQueue.whenIdle();
+  }
+
+  /* Mobile browsers often skip beforeunload; a normal fetch is cancelled with
+     the page. keepalive lets the last ≤1.5s of typing reach the server. */
+  function flushDraftKeepalive() {
+    if (!state.currentId || !state.projectId || !state.dirty || state.draftBlocked) return;
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    const payload = draftPayload(els.title.value, els.editor.value);
+    const path = "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(state.currentId) + "/draft";
+    try {
+      fetch(path, {
+        method: "PUT",
+        keepalive: true,
+        headers: { "X-Novel-Helper": "1", "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    } catch (ignored) {
+      /* a page being torn down cannot surface errors */
+    }
   }
 
   function handleDraftError(error) {
@@ -1715,7 +2041,10 @@
           baseSha: current.base_content_sha256 || state.baseSha,
           updatedAt: current.updated_at || null,
         };
-        if (!setEditorValue(String(current.content || ""), String(current.title || ""), true)) return;
+        if (!setEditorValue(String(current.content || ""), String(current.title || ""), false)) {
+          toast("输入法仍在组合文字，请完成后再载入对方版本", true);
+          return;
+        }
         state.persistedSignature = signature(els.title.value, els.editor.value);
         state.dirty = false;
         state.draftBlocked = false;
@@ -1726,7 +2055,10 @@
         state.baseVersionId = String(payload.current_version_id || "");
         state.baseSha = String(payload.current_content_sha256 || "");
         state.baseContent = String(payload.current_content || "");
-        if (!setEditorValue(String(payload.current_content || ""), String(payload.current_title || ""), true)) return;
+        if (!setEditorValue(String(payload.current_content || ""), String(payload.current_title || ""), false)) {
+          toast("输入法仍在组合文字，请完成后再载入最新正文", true);
+          return;
+        }
         state.persistedSignature = signature(els.title.value, els.editor.value);
         state.dirty = false;
         state.checkpointBase = els.editor.value;
@@ -1737,6 +2069,10 @@
       return;
     }
     if (action === "merge") {
+      if (state.draftBlocked || !state.baseContent) {
+        toast("草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。", true);
+        return;
+      }
       const server = conflict.kind === "draft"
         ? String((conflict.current && conflict.current.content) || "")
         : String((conflict.current && conflict.current.current_content) || "");
@@ -1767,7 +2103,10 @@
         state.baseSha = String(payload.current_content_sha256 || "");
         state.baseContent = server;
       }
-      if (!setEditorValue(merged.text, els.title.value, true)) return;
+      if (!setEditorValue(merged.text, els.title.value, false)) {
+        toast("输入法仍在组合文字，请完成后再合并正文", true);
+        return;
+      }
       state.dirty = true;
       state.checkpointBase = merged.text;
       if (state.adapter) state.adapter.markRevision(state.draft.id, state.draft.epoch, state.draft.revision);
@@ -1969,10 +2308,13 @@
   async function probeAnnotationEndpoint() {
     if (state.annotationsReady || state.annotationProbed || !state.currentId || !state.projectId) return;
     state.annotationProbed = true;
+    const chapter = state.currentId;
     try {
-      await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(state.currentId) + "/annotations", "GET", undefined, 8000);
+      const data = await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(chapter) + "/annotations", "GET", undefined, 8000);
+      if (chapter !== state.currentId) return;
       state.annotationsReady = true;
-      setText(els.annotationHint, "批注接口已返回 200，可以提交到后端。");
+      applyRemoteAnnotations(data);
+      setText(els.annotationHint, "批注接口已连接 · 本章 " + state.remoteAnnotations.length + " 条批注。");
       els.annotationSubmit.disabled = false;
       els.annotationSubmit.removeAttribute("title");
     } catch (ignored) {
@@ -1981,6 +2323,37 @@
       els.annotationSubmit.setAttribute("title", "批注后端暂不可用");
       setText(els.annotationHint, "批注后端暂不可用；当前批注只保存在本页内存，刷新后清空。");
     }
+  }
+
+  function applyRemoteAnnotations(data) {
+    const rows = Array.isArray(data && data.annotations) ? data.annotations : [];
+    state.remoteAnnotations = rows.map((row) => {
+      const anchor = row && row.anchor ? row.anchor : {};
+      const range = row && row.range ? row.range : {};
+      const start = Number(range.start);
+      const end = Number(range.end);
+      return {
+        id: String((row && row.id) || ""),
+        chapterId: state.currentId,
+        startCp: Number.isFinite(start) ? start : Number(anchor.char_start || 0),
+        endCp: Number.isFinite(end) ? end : Number(anchor.char_end || 0),
+        quote: String(anchor.quote || ""),
+        note: String((row && row.instruction) || ""),
+        status: String((row && row.status) || "open"),
+        createdAt: (row && row.created_at) || null,
+        remote: true,
+      };
+    });
+    renderAnnotations();
+  }
+
+  async function refreshAnnotations() {
+    if (!state.currentId || !state.projectId) return;
+    const chapter = state.currentId;
+    const data = await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(chapter) + "/annotations", "GET", undefined, 10000);
+    if (chapter !== state.currentId) return;
+    state.annotationsReady = true;
+    applyRemoteAnnotations(data);
   }
 
   function addLocalAnnotation(note) {
@@ -2009,6 +2382,22 @@
     toast("已暂存本地批注（刷新页面后清空）");
   }
 
+  function annotationPayload(selection, note, draft, baseVersionId, baseSha) {
+    const range = selection || {};
+    const identity = draft || {};
+    return {
+      instruction: String(note || ""),
+      scope: "selection",
+      anchor: {
+        char_start: Number(range.startCp || 0),
+        char_end: Number(range.endCp || 0),
+        quote: String(range.text || ""),
+      },
+      base_version_id: identity.baseVersionId || baseVersionId || null,
+      base_content_sha256: identity.baseSha || baseSha || null,
+    };
+  }
+
   async function submitAnnotation() {
     if (!state.annotationsReady) {
       toast("批注后端暂不可用，当前只能本地暂存", true);
@@ -2026,18 +2415,18 @@
     }
     els.annotationSubmit.disabled = true;
     try {
+      if (state.dirty && !state.draftBlocked) {
+        await flushDraftNow();
+      }
+      if (state.draftBlocked || state.dirty) {
+        toast("草稿尚未保存，批注未提交", true);
+        return;
+      }
       await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(state.currentId) + "/annotations",
-        "POST", {
-          start: state.selection.startCp,
-          end: state.selection.endCp,
-          quote: state.selection.text,
-          note: note,
-          note_text: note,
-          draft_id: state.draft.id,
-        }, 20000);
+        "POST", annotationPayload(state.selection, note, state.draft, state.baseVersionId, state.baseSha), 20000);
       toast("批注已提交");
       els.annotationInput.value = "";
-      renderAnnotations();
+      await refreshAnnotations();
     } catch (error) {
       toast(describeError(error), true);
     } finally {
@@ -2045,11 +2434,24 @@
     }
   }
 
+  function deleteRemoteAnnotation(item) {
+    if (!state.currentId || !state.projectId) return;
+    api(
+      "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(state.currentId) + "/annotations/" + enc(item.id),
+      "DELETE", undefined, 15000,
+    ).then(() => {
+      state.remoteAnnotations = state.remoteAnnotations.filter((row) => row.id !== item.id);
+      renderAnnotations();
+    }).catch((error) => toast("删除批注失败：" + describeError(error), true));
+  }
+
   function renderAnnotations() {
     if (!els.annotationList) return;
     clear(els.annotationList);
-    const rows = currentAnnotations();
-    setText(els.annotationStatus, "本地暂存 " + rows.length + " 条");
+    const localRows = currentAnnotations();
+    const remoteRows = state.remoteAnnotations || [];
+    setText(els.annotationStatus, "服务端 " + remoteRows.length + " 条 · 本地暂存 " + localRows.length + " 条");
+    const rows = remoteRows.concat(localRows);
     if (!rows.length) {
       els.annotationList.append(node("p", "wb-empty-text", "还没有批注。选中正文后写一条，或在左侧点“快速体检”找问题。"));
       renderAnchorStrip();
@@ -2060,7 +2462,7 @@
       const head = node("div", "wb-annotation-head");
       const paragraph = Core.paragraphIndexOf(els.editor.value, item.startCp) + 1;
       head.append(node("strong", "", "#" + (index + 1) + " · 第 " + paragraph + " 段"));
-      head.append(node("span", "wb-local-tag", "本地"));
+      head.append(node("span", "wb-local-tag", item.remote ? (item.status || "open") : "本地"));
       const quote = node("blockquote", "wb-quote", item.quote || "");
       const note = node("p", "wb-annotation-note", item.note);
       const foot = node("div", "wb-annotation-foot");
@@ -2071,6 +2473,10 @@
       const remove = node("button", "wb-link-btn is-danger", "删除");
       remove.type = "button";
       remove.addEventListener("click", () => {
+        if (item.remote) {
+          deleteRemoteAnnotation(item);
+          return;
+        }
         state.annotations = state.annotations.filter((row) => row.id !== item.id);
         renderAnnotations();
       });
@@ -2265,8 +2671,9 @@
   }
 
   function openRestore(row, uid) {
-    if (state.dirty) {
-      if (!window.confirm("当前章节还有未保存修改，恢复旧版本会丢弃它们。继续？")) return;
+    if (state.dirty || state.draft.exists) {
+      if (!window.confirm("当前章节还有" + (state.draft.exists ? "未提交草稿" : "未保存修改") +
+        "，恢复旧版本会丢弃它们。继续？")) return;
     }
     state.pendingRestore = { row: row, uid: uid, chapter: state.currentId };
     setText(els.restoreLabel, "恢复 " + shortId(uid) + (row && row.title ? " · " + row.title : "") +
@@ -2290,7 +2697,9 @@
     closeDialog();
     state.pendingRestore = null;
     toast("已恢复旧版本");
-    await openChapter(state.currentId, { force: true });
+    const oldDraftId = state.draft.exists ? state.draft.id : null;
+    const cleaned = await discardChapterDraft(state.currentId, oldDraftId);
+    await openChapter(state.currentId, { force: true, skipDraft: cleaned });
     await loadVersions();
     await refreshChapterMeta(state.currentId);
   }
@@ -2749,8 +3158,9 @@
       toast("请先在左侧选择一章", true);
       return;
     }
-    if (state.dirty && ["delete", "split", "merge"].includes(kind)) {
-      if (!window.confirm("当前章节还有未保存修改。这个操作以已保存的正式版本为准，本地修改可能丢失。继续？")) return;
+    if ((state.dirty || state.draft.exists) && ["delete", "split", "merge"].includes(kind)) {
+      if (!window.confirm("当前章节还有" + (state.draft.exists ? "未提交草稿" : "未保存修改") +
+        "。这个操作以已保存的正式版本为准，草稿会被删除且无法从界面恢复。继续？")) return;
     }
     if (kind === "delete") {
       setText(els.deleteLabel, "第 " + state.currentId + " 章 · " + (els.title.value || "无标题") +
@@ -2760,6 +3170,10 @@
       return;
     }
     if (kind === "split") {
+      if (state.draft.exists) {
+        toast("当前章节还有未提交草稿；请先保存为正式版本，再按正式正文拆分。", true);
+        return;
+      }
       const max = Math.max.apply(null, state.chapters.map((item) => item.id));
       if (state.currentId !== max) {
         toast("只支持拆分最后一章", true);
@@ -2827,6 +3241,23 @@
     else resetChapterState();
   }
 
+  async function discardChapterDraft(chapterId, draftId) {
+    const target = Number(chapterId);
+    if (!target || !state.projectId) return false;
+    if (!draftId) return true; // do not let a null id delete a newer draft
+    try {
+      await api(
+        "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(target) + "/draft",
+        "DELETE", { draft_id: String(draftId) }, 15000,
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 404 || error.code === "chapter_missing")) return true;
+      toast("第 " + target + " 章旧草稿清理失败：" + describeError(error), true);
+      return false;
+    }
+  }
+
   async function submitSplitChapter() {
     const chapter = requireCurrentChapter();
     const offset = Number(els.splitOffset.value || 0);
@@ -2843,7 +3274,11 @@
     closeDialog();
     toast("已拆分为第 " + result.chapter_id + " 章与第 " + result.new_chapter_id + " 章");
     await loadChapters(state.projectId);
-    await openChapter(result.chapter_id, { force: true });
+    const oldDraftId = state.draft.exists ? state.draft.id : null;
+    const cleaned = await discardChapterDraft(result.chapter_id, oldDraftId);
+    // If the draft could not be removed, do not hide it behind skipDraft:
+    // reloading with the draft visible is safer than silently discarding it.
+    await openChapter(result.chapter_id, { force: true, skipDraft: cleaned });
   }
 
   async function submitMergeTail() {
@@ -2854,7 +3289,9 @@
     closeDialog();
     toast("已合并为第 " + result.chapter_id + " 章");
     await loadChapters(state.projectId);
-    await openChapter(result.chapter_id, { force: true });
+    const oldDraftId = state.draft.exists ? state.draft.id : null;
+    const cleaned = await discardChapterDraft(result.chapter_id, oldDraftId);
+    await openChapter(result.chapter_id, { force: true, skipDraft: cleaned });
   }
 
   async function readImportFile() {
@@ -2969,7 +3406,9 @@
   function setRightTab(tab) {
     state.rightTab = tab;
     document.querySelectorAll("[data-wb-tab]").forEach((button) => {
-      button.setAttribute("aria-selected", String(button.dataset.wbTab === tab));
+      const selected = button.dataset.wbTab === tab;
+      button.setAttribute("aria-selected", String(selected));
+      button.setAttribute("tabindex", selected ? "0" : "-1");
     });
     const panels = {
       annotations: els.panelAnnotations,
@@ -3048,6 +3487,18 @@
   }
 
   /* ------------------------------------------------------------------- boot */
+
+  /* Pure decisions are exposed for the behaviour tests: deleting the real
+     guard must fail a test, not just a source-string match. */
+  if (typeof globalThis !== "undefined") {
+    globalThis.__workbenchTestHooks = Object.freeze({
+      resolveDraftBaseline: resolveDraftBaseline,
+      ctrlSIntentFor: ctrlSIntentFor,
+      editorWriteBlocked: editorWriteBlocked,
+      chapterApplyDeferred: chapterApplyDeferred,
+      annotationPayload: annotationPayload,
+    });
+  }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });

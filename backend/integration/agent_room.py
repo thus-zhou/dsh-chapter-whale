@@ -157,6 +157,21 @@ CREATE TABLE IF NOT EXISTS agent_approvals (
     resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(project_id, status);
+
+CREATE TABLE IF NOT EXISTS agent_amendments (
+    id TEXT PRIMARY KEY,
+    directive_id TEXT NOT NULL,
+    directive_revision INTEGER NOT NULL,
+    raw_text TEXT NOT NULL,
+    fallback TEXT NOT NULL,
+    status TEXT NOT NULL,
+    held_task_ids_json TEXT NOT NULL DEFAULT '[]',
+    evaluation_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_amendments_directive
+  ON agent_amendments(directive_id, directive_revision);
 """
 
 
@@ -231,6 +246,38 @@ def bump_directive_revision(db_path=None, directive_id: str = "") -> Dict[str, A
         row = db.execute("SELECT directive_revision FROM agent_directives WHERE id=?",
                          (directive_id,)).fetchone()
     return {"directive_id": directive_id, "directive_revision": int(row[0])}
+
+
+def get_amendment(db_path=None, amendment_id: str = "") -> Dict[str, Any]:
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_amendments WHERE id=?", (amendment_id,)).fetchone()
+    if not row:
+        raise RoomError("amendment_missing", status=404)
+    item = dict(row)
+    item["held_task_ids"] = _json(item.pop("held_task_ids_json"), [])
+    item["evaluation"] = _json(item.pop("evaluation_json"), None)
+    return item
+
+
+def update_amendment(db_path=None, amendment_id: str = "", **fields) -> Dict[str, Any]:
+    allowed = {"status", "evaluation"}
+    updates = {}
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        column = "evaluation_json" if key == "evaluation" else key
+        updates[column] = json.dumps(value, ensure_ascii=False) if column.endswith("_json") else value
+    if not updates:
+        return get_amendment(db_path, amendment_id)
+    updates["updated_at"] = now_iso()
+    assignments = ", ".join(f"{key}=?" for key in updates)
+    with write_tx(db_path) as db:
+        cur = db.execute(f"UPDATE agent_amendments SET {assignments} WHERE id=?",
+                         (*updates.values(), amendment_id))
+        if not cur.rowcount:
+            raise RoomError("amendment_missing", status=404)
+    return get_amendment(db_path, amendment_id)
 
 
 def bind_session_to_project(db_path=None, session_id: str = "", project_id: str = "") -> Dict[str, Any]:
@@ -309,12 +356,14 @@ def update_task(db_path=None, task_id: str = "", **fields) -> Dict[str, Any]:
 
 def list_tasks(db_path=None, *, project_id: Optional[str] = None,
                directive_id: Optional[str] = None, session_id: Optional[str] = None,
-               active_only: bool = False) -> List[Dict[str, Any]]:
+               active_only: bool = False, unbound_only: bool = False) -> List[Dict[str, Any]]:
     initialize(db_path)
     query = "SELECT * FROM agent_tasks"
     clauses, params = [], []
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
+    elif unbound_only:
+        clauses.append("project_id IS NULL")
     if directive_id:
         clauses.append("directive_id=?"); params.append(directive_id)
     if session_id:
@@ -448,6 +497,10 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
     stamp = now or now_iso()
     if resolved_by != "author":
         raise RoomError("agents_cannot_approve", status=403)
+    if not str(artifact_fingerprint or "").strip() or not str(approved_scope_hash or "").strip():
+        # The caller must echo the card's binding fields; server defaults made
+        # the three binding checks compare stored==stored (B-03).
+        raise RoomError("approval_binding_required", status=400)
     expired = False
     with write_tx(db_path) as db:
         row = db.execute("SELECT * FROM agent_approvals WHERE id=?", (approval_id,)).fetchone()
@@ -480,12 +533,15 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
 
 def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
                       session_id: Optional[str] = None,
-                      status: Optional[str] = "pending") -> List[Dict[str, Any]]:
+                      status: Optional[str] = "pending",
+                      unbound_only: bool = False) -> List[Dict[str, Any]]:
     initialize(db_path)
     clauses = ["status=?"]
     params: List[Any] = [str(status or "pending")]
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
+    elif unbound_only:
+        clauses.append("project_id IS NULL")
     if session_id:
         clauses.append("session_id=?"); params.append(session_id)
     with connect(db_path) as db:
@@ -525,18 +581,35 @@ def chat_context(db_path=None, *, project_id: str, topic_id: str = "default",
 def snapshot(db_path=None, *, project_id: Optional[str] = None,
              session_id: Optional[str] = None, topic_id: Optional[str] = None,
              limit: int = 100) -> Dict[str, Any]:
-    """Room state with a mandatory ``snapshot_seq`` for race-free subscribe."""
+    """Room state scoped to one book, or to an unbound session before a book exists.
+
+    A session id is shared by every book ("author"), so a session-only snapshot
+    must never aggregate other books' events/directives/tasks/approvals (B-05).
+    """
     initialize(db_path)
-    seq = max_seq(db_path, project_id=project_id, session_id=session_id)
+    if not project_id and not session_id:
+        raise RoomError("project_or_session_required")
     clauses, params = [], []
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
-    if session_id:
+        if session_id:
+            clauses.append("session_id=?"); params.append(session_id)
+    elif session_id:
         clauses.append("session_id=?"); params.append(session_id)
+        clauses.append("project_id IS NULL")
     if topic_id:
         clauses.append("topic_id=?"); params.append(topic_id)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with connect(db_path) as db:
+        if project_id:
+            row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events WHERE project_id=?",
+                             (project_id,)).fetchone()
+        elif session_id:
+            row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events "
+                             "WHERE session_id=? AND project_id IS NULL", (session_id,)).fetchone()
+        else:
+            row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events").fetchone()
+        seq = int(row[0])
         events = [dict(row) for row in db.execute(
             "SELECT * FROM agent_events" + where + " ORDER BY seq DESC LIMIT ?",
             (*params, max(1, min(int(limit), 500))))]
@@ -552,14 +625,16 @@ def snapshot(db_path=None, *, project_id: Optional[str] = None,
                 (project_id,))]
         elif session_id:
             directives = [dict(row) for row in db.execute(
-                "SELECT * FROM agent_directives WHERE session_id=? ORDER BY created_at DESC LIMIT 20",
-                (session_id,))]
+                "SELECT * FROM agent_directives WHERE session_id=? AND project_id IS NULL "
+                "ORDER BY created_at DESC LIMIT 20", (session_id,))]
         for item in directives:
             item["constraints"] = _json(item.pop("constraints_json"), [])
-    tasks = list_tasks(db_path, project_id=project_id, session_id=session_id, active_only=True)
+    tasks = list_tasks(db_path, project_id=project_id, session_id=session_id, active_only=True,
+                       unbound_only=not bool(project_id))
     return {"snapshot_seq": seq, "events": events, "directives": directives,
-            "tasks": tasks, "approvals": pending_approvals(db_path, project_id=project_id,
-                                                           session_id=session_id),
+            "tasks": tasks, "approvals": pending_approvals(
+                db_path, project_id=project_id, session_id=session_id,
+                unbound_only=not bool(project_id)),
             "project_id": project_id, "session_id": session_id,
             "topic_id": topic_id}
 
@@ -578,19 +653,22 @@ class BoundedBroadcaster:
     def __init__(self, maxsize: int = 256):
         self.maxsize = int(maxsize)
         self._subscribers: Dict[str, Tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = {}
-        self._filters: Dict[str, Optional[str]] = {}
+        self._filters: Dict[str, Tuple[Optional[str], Optional[str]]] = {}
+        self._last_seq: Dict[str, int] = {}
         self._closed: set = set()
         self._lock = threading.RLock()
 
     def subscribe(self, loop: Optional[asyncio.AbstractEventLoop] = None,
-                  *, project_id: Optional[str] = None) -> Tuple[str, asyncio.Queue]:
+                  *, project_id: Optional[str] = None,
+                  session_id: Optional[str] = None) -> Tuple[str, asyncio.Queue]:
         loop = loop or asyncio.get_running_loop()
         token = uuid.uuid4().hex
         queue: asyncio.Queue = asyncio.Queue(maxsize=self.maxsize)
         with self._lock:
             self._closed.discard(token)
             self._subscribers[token] = (loop, queue)
-            self._filters[token] = project_id
+            self._filters[token] = (project_id, session_id)
+            self._last_seq[token] = 0
         return token, queue
 
     def unsubscribe(self, token: str) -> None:
@@ -598,32 +676,63 @@ class BoundedBroadcaster:
             self._closed.add(token)
             self._subscribers.pop(token, None)
             self._filters.pop(token, None)
+            self._last_seq.pop(token, None)
+
+    def ack(self, token: str, seq: int) -> None:
+        """Record a frame that the SSE generator actually yielded.
+
+        The queue can be drained before a slow consumer reads it; only an ack
+        from the generator proves delivery, so a resync marker must never use
+        the last enqueue seq (B-14R-1).
+        """
+        if not isinstance(seq, int) or seq <= 0:
+            return
+        with self._lock:
+            if token not in self._closed and token in self._subscribers:
+                self._last_seq[token] = max(self._last_seq.get(token, 0), int(seq))
 
     def publish(self, event: Dict[str, Any]) -> int:
         dropped = 0
         with self._lock:
             items = list(self._subscribers.items())
+        event_project = event.get("project_id")
+        event_session = str(event.get("session_id") or "")
         for token, (loop, queue) in items:
             with self._lock:
-                wanted = self._filters.get(token)
-            if wanted and event.get("project_id") not in {None, wanted}:
-                continue
+                want_project, want_session = self._filters.get(token, (None, None))
+            if want_project:
+                # A book stream only sees that book; a NULL-project event is
+                # never broadcast into every book (B-05).
+                if event_project != want_project:
+                    continue
+            elif want_session:
+                # A pre-book session sees only its own unbound events.
+                if event_project is not None or event_session != want_session:
+                    continue
             def put(event=event, queue=queue, token=token):
                 with self._lock:
                     if token in self._closed:
                         return
                 try:
                     queue.put_nowait(event)
+                    # Do not advance the delivered cursor on enqueue: a later
+                    # overflow can drain queued frames before the generator
+                    # yields them.  Only ack() after a successful yield moves it.
                     return
                 except asyncio.QueueFull:
                     pass
                 if event.get("kind") not in TRANSIENT_KINDS:
-                    # Persistent frame overflow: force a clean resync.
+                    # Persistent frame overflow: force a clean resync from the
+                    # last frame actually delivered, never from the newest seq
+                    # that overflowed the client (B-14/C-42).
+                    with self._lock:
+                        last = self._last_seq.get(token, 0)
                     try:
                         while not queue.empty():
                             queue.get_nowait()
                         queue.put_nowait({"kind": "resync_required", "channel": "system",
-                                          "summary": "连接积压，需重新同步", "seq": event.get("seq")})
+                                          "summary": "连接积压，需重新同步", "seq": last,
+                                          "full_reload": True, "resync_required": True})
                     except Exception:
                         pass
                     self.unsubscribe(token)

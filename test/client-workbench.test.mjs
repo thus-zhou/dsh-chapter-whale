@@ -214,3 +214,65 @@ test('字数与段落统计按码点/非空行计算', () => {
   assert.equal(internals.wbParagraphCount('一\n\n二\n  \n三'), 3);
   assert.equal(internals.wbParagraphCount(''), 0);
 });
+
+test('无草稿 409 会按 epoch 回退重试，不会卡死自动保存 (D-11)', async () => {
+  const attempts = [];
+  const put = async (body) => {
+    attempts.push(body.expected_draft_epoch);
+    if (body.expected_draft_epoch !== 4) {
+      const error = new Error('draft_conflict');
+      error.code = 'draft_conflict';
+      error.data = { current_draft: { draft_id: null } };
+      throw error;
+    }
+    assert.equal(body.expected_draft_id, null);
+    assert.equal(body.expected_draft_revision, 0);
+    return { draft: { draft_id: 'drf_new', draft_epoch: 4, draft_revision: 1 } };
+  };
+  const result = await internals.wbRetryDraftWithoutActive(
+    put,
+    { expected_draft_id: 'drf_old', expected_draft_epoch: 2, expected_draft_revision: 7 },
+    { rememberedEpoch: 4 },
+  );
+  assert.deepEqual(attempts, [4], 'remembered epoch is retried first');
+  assert.equal(result.draft.draft_id, 'drf_new');
+});
+
+test('存在另一份草稿时拒绝 epoch 回退，绝不覆盖 (D-11)', async () => {
+  let attempts = 0;
+  const put = async () => {
+    attempts += 1;
+    const error = new Error('draft_conflict');
+    error.code = 'draft_conflict';
+    error.data = { current_draft: { draft_id: 'drf_live', draft_epoch: 5 } };
+    throw error;
+  };
+  await assert.rejects(
+    () => internals.wbRetryDraftWithoutActive(put, { expected_draft_epoch: 1 }, {}),
+    (error) => error.code === 'draft_conflict',
+  );
+  assert.equal(attempts, 1, 'a live draft must surface as a conflict immediately');
+});
+
+test('epoch 候选只包含有限的安全回退值 (D-11)', () => {
+  assert.equal(internals.wbDraftEpochCandidates(2, null).join(','), '0,1,3,4');
+  assert.equal(internals.wbDraftEpochCandidates(0, 3).join(','), '3,1,2');
+  assert.equal(internals.wbDraftEpochCandidates('bad', null).join(','), '1,2');
+  assert.equal(internals.wbDraftEpochCandidates(64, 70).length <= 5, true);
+});
+
+test('输入法兜底复位会清 composingRef 并结束 adapter 组合 (D-06)', () => {
+  const ref = { current: true };
+  let ended = 0;
+  internals.wbResetComposition(ref, { endComposition: () => { ended += 1; } });
+  assert.equal(ref.current, false);
+  assert.equal(ended, 1);
+  internals.wbResetComposition(ref, null);
+  assert.equal(ref.current, false);
+});
+
+test('草稿飞行中继续输入会在保存成功后重排 (D-11)', () => {
+  assert.equal(internals.wbDraftFollowUp(3, 3), 'clear');
+  assert.equal(internals.wbDraftFollowUp(4, 3), 'reschedule');
+  assert.equal(internals.wbDraftFollowUp('5', 3), 'reschedule');
+});

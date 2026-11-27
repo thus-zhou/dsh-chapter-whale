@@ -305,36 +305,102 @@ def route(message: str, *, extractor: Optional[Callable[[str], Dict[str, Any]]] 
 
 def start_amendment(db_path, *, directive_id: str, amendment_text: str,
                     task_ids: Sequence[str], fallback: str = "wait") -> Dict[str, Any]:
-    """Freeze affected running tasks before any model evaluation starts."""
-    revision = room.bump_directive_revision(db_path, directive_id)
-    amendment_id = room.new_id("amd")
-    stamp = room.now_iso()
+    """Freeze affected running tasks, persist the amendment, then bump revision.
+
+    Validation happens before any write: a rejected request must not advance
+    ``directive_revision`` and invalidate every pending approval card (B-11).
+    """
     if fallback not in {"wait", "continue"}:
         raise HubError("invalid_amendment_fallback")
-    if fallback == "wait":
-        with room.write_tx(db_path) as db:
-            for task_id in task_ids:
-                db.execute("UPDATE agent_tasks SET status='held', wait_reason=? WHERE id=? "
-                           "AND status IN ('running','waiting','held')",
-                           (f"已收到改令 {amendment_id}，等待影响评估", task_id))
+    text = str(amendment_text or "").strip()
+    if not text:
+        raise HubError("amendment_text_required")
+    if not isinstance(task_ids, (list, tuple)):
+        raise HubError("invalid_request", detail={"field": "task_ids"})
+    requested = [str(value) for value in task_ids]
+    directive = room.get_directive(db_path, directive_id)
+    if str(directive.get("status") or "") == "cancelled":
+        raise HubError("directive_cancelled", status=409,
+                       detail={"message": "已取消的指令不能改令；请新建指令"})
+    if requested:
+        with room.connect(db_path) as db:
+            placeholders = ",".join("?" for _ in requested)
+            rows = {row[0]: (row[1], row[2]) for row in db.execute(
+                f"SELECT id, directive_id, status FROM agent_tasks WHERE id IN ({placeholders})",
+                tuple(requested))}
+        missing = [value for value in requested if value not in rows]
+        foreign = [value for value in requested
+                   if value in rows and str(rows[value][0]) != str(directive_id)]
+        if missing or foreign:
+            raise HubError("amendment_task_mismatch", status=409,
+                           detail={"missing": missing, "foreign": foreign})
+    amendment_id = room.new_id("amd")
+    stamp = room.now_iso()
+    held: List[str] = []
+    with room.write_tx(db_path) as db:
+        cur = db.execute(
+            "UPDATE agent_directives SET directive_revision=directive_revision+1, "
+            "status='amended', updated_at=? WHERE id=?", (stamp, directive_id))
+        if not cur.rowcount:
+            raise room.RoomError("directive_missing", status=404)
+        revision = int(db.execute("SELECT directive_revision FROM agent_directives WHERE id=?",
+                                  (directive_id,)).fetchone()[0])
+        db.execute(
+            "INSERT INTO agent_amendments(id, directive_id, directive_revision, raw_text, fallback, "
+            "status, held_task_ids_json, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (amendment_id, directive_id, revision, text, fallback, "pending", "[]", stamp, stamp))
+        if fallback == "wait":
+            for task_id in requested:
+                previous = str((rows.get(task_id) or ("", "held"))[1] or "held")
+                changed = db.execute(
+                    "UPDATE agent_tasks SET status='held', wait_reason=? WHERE id=? "
+                    "AND directive_id=? AND status IN ('running','waiting','held')",
+                    (f"{previous}|已收到改令 {amendment_id}，等待影响评估", task_id, directive_id))
+                if changed.rowcount:
+                    held.append(task_id)
+            db.execute("UPDATE agent_amendments SET held_task_ids_json=?, updated_at=? WHERE id=?",
+                       (json.dumps(held, ensure_ascii=False), stamp, amendment_id))
     return {"amendment_id": amendment_id, "directive_id": directive_id,
-            "directive_revision": revision["directive_revision"],
-            "hold_amendment_id": amendment_id if fallback == "wait" else None,
-            "held_task_ids": list(task_ids) if fallback == "wait" else [],
-            "fallback": fallback, "created_at": stamp}
+            "directive_revision": revision, "raw_text": text,
+            "hold_amendment_id": amendment_id if held else None,
+            "held_task_ids": held, "fallback": fallback, "created_at": stamp}
 
 
 def evaluate_amendment(db_path, *, amendment_id: str, directive_id: str,
                        evaluator: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
                        context: Optional[Dict[str, Any]] = None,
                        artifact_fingerprint: str = "") -> Dict[str, Any]:
-    """Role-E impact analysis with a deterministic fallback card on failure."""
+    """Role-E impact analysis with a deterministic fallback card on failure.
+
+    ``keep`` completes, ``update``/``wait_and_redo`` return the task to the
+    queue, and any still-held task is explicitly released instead of freezing
+    forever (B-11).
+    """
     directive = room.get_directive(db_path, directive_id)
-    tasks = room.list_tasks(db_path, directive_id=directive_id, active_only=True)
+    try:
+        amendment = room.get_amendment(db_path, amendment_id)
+    except room.RoomError:
+        raise HubError("amendment_missing", status=404)
+    if str(amendment.get("directive_id")) != str(directive_id):
+        raise HubError("amendment_directive_mismatch", status=409)
+    held_ids = {str(value) for value in (amendment.get("held_task_ids") or [])}
+    # Only tasks held by THIS amendment are in scope.  A later amendment may
+    # hold a disjoint set; evaluating the older one must not release the newer
+    # amendment's tasks (B-11R-1).
+    if not held_ids:
+        with room.connect(db_path) as db:
+            held_ids = {row[0] for row in db.execute(
+                "SELECT id FROM agent_tasks WHERE directive_id=? AND status='held' "
+                "AND wait_reason LIKE ?", (directive_id, f"%{amendment_id}%"))}
+    tasks = [task for task in room.list_tasks(db_path, directive_id=directive_id, active_only=True)
+             if str(task.get("id")) in held_ids]
     try:
         if evaluator is not None:
             result = evaluator({"directive": directive, "tasks": tasks,
-                                "context": context or {}, "amendment_id": amendment_id})
+                                "context": {**(context or {}),
+                                            "amendment_text": amendment.get("raw_text", "")},
+                                "amendment_id": amendment_id,
+                                "amendment": amendment})
             if not isinstance(result, dict) or not isinstance(result.get("keep"), list):
                 raise ValueError("bad_evaluation")
         else:
@@ -351,28 +417,91 @@ def evaluate_amendment(db_path, *, amendment_id: str, directive_id: str,
             approved_scope_hash=room.new_id("scope"),
             detail={"amendment_id": amendment_id, "error": str(exc)[:200],
                     "choices": ["放行已暂停结果", "作废暂存并按新方向重试评估", "取消本次改令恢复原计划"]})
+        room.update_amendment(db_path, amendment_id, status="fallback",
+                              evaluation={"error": str(exc)[:200]})
         return {"status": "fallback", "amendment_id": amendment_id, "approval": fallback}
     stamp = room.now_iso()
     with room.write_tx(db_path) as db:
+        scope_sql = " AND wait_reason LIKE ?"
+        scope_arg = f"%{amendment_id}%"
         for task_id in result.get("keep", []):
             # 仅当仍持有本次改令时放行；连续第二次改令不会误释放。
             db.execute("UPDATE agent_tasks SET status='completed', wait_reason='' "
-                       "WHERE id=? AND status='held'", (task_id,))
+                       "WHERE id=? AND directive_id=? AND status='held'" + scope_sql,
+                       (task_id, directive_id, scope_arg))
+        for task_id in result.get("update", []):
+            db.execute("UPDATE agent_tasks SET status='pending', wait_reason=? "
+                       "WHERE id=? AND directive_id=? AND status='held'" + scope_sql,
+                       ("按改令更新任务后重跑", task_id, directive_id, scope_arg))
         for task_id in result.get("wait_and_redo", []):
-            db.execute("UPDATE agent_tasks SET status='pending', wait_reason=? WHERE id=? AND status='held'",
-                       ("按改令重跑", task_id))
+            db.execute("UPDATE agent_tasks SET status='pending', wait_reason=? WHERE id=? "
+                       "AND directive_id=? AND status='held'" + scope_sql,
+                       ("按改令重跑", task_id, directive_id, scope_arg))
+        # Any held task the evaluator did not classify is released explicitly,
+        # but only tasks belonging to this amendment.
+        db.execute("UPDATE agent_tasks SET status='pending', wait_reason=? "
+                   "WHERE directive_id=? AND status='held'" + scope_sql,
+                   ("改令评估未分类，已释放待确认", directive_id, scope_arg))
         db.execute("UPDATE agent_directives SET updated_at=? WHERE id=?", (stamp, directive_id))
-    return {"status": "evaluated", "amendment_id": amendment_id, **result}
+    room.update_amendment(db_path, amendment_id, status="evaluated", evaluation=result)
+    return {"amendment_id": amendment_id, **result, "status": "evaluated"}
 
 
 def release_holds_for_current(db_path, *, directive_id: str, amendment_id: str) -> int:
     """Only the latest amendment id may release a held task."""
-    directive = room.get_directive(db_path, directive_id)
+    amendment = room.get_amendment(db_path, amendment_id)
+    if str(amendment.get("directive_id")) != str(directive_id):
+        raise HubError("amendment_directive_mismatch", status=409)
     with room.write_tx(db_path) as db:
-        cur = db.execute("UPDATE agent_tasks SET status='running', wait_reason='' "
-                         "WHERE directive_id=? AND status='held' AND wait_reason LIKE ?",
-                         (directive_id, f"%{amendment_id}%"))
-        return int(cur.rowcount or 0)
+        rows = list(db.execute(
+            "SELECT id, wait_reason FROM agent_tasks WHERE directive_id=? AND status='held' "
+            "AND wait_reason LIKE ?", (directive_id, f"%{amendment_id}%")))
+        for task_id, reason in rows:
+            original = str(reason or "").split("|", 1)[0]
+            status = original if original in {"running", "waiting"} else "pending"
+            db.execute("UPDATE agent_tasks SET status=?, wait_reason='' WHERE id=?",
+                       (status, task_id))
+        db.execute("UPDATE agent_amendments SET status='released', updated_at=? WHERE id=?",
+                   (room.now_iso(), amendment_id))
+        return len(rows)
+
+
+def cancel_directive(db_path, *, directive_id: str) -> Dict[str, Any]:
+    """Cancel a directive and every task/amendment it owns atomically."""
+    directive = room.get_directive(db_path, directive_id)
+    if str(directive.get("status") or "") == "cancelled":
+        return directive
+    stamp = room.now_iso()
+    with room.write_tx(db_path) as db:
+        db.execute("UPDATE agent_directives SET status='cancelled', updated_at=? WHERE id=?",
+                   (stamp, directive_id))
+        db.execute("UPDATE agent_tasks SET status='cancelled', wait_reason='', updated_at=? "
+                   "WHERE directive_id=? AND status IN ('running','waiting','held','pending')",
+                   (stamp, directive_id))
+        db.execute("UPDATE agent_amendments SET status='cancelled', updated_at=? "
+                   "WHERE directive_id=? AND status IN ('pending','fallback')", (stamp, directive_id))
+    return room.get_directive(db_path, directive_id)
+
+
+def resume_directive(db_path, *, directive_id: str) -> Dict[str, Any]:
+    """Explicit author resume: running directive + release every held task."""
+    directive = room.get_directive(db_path, directive_id)
+    if str(directive.get("status") or "") == "cancelled":
+        raise HubError("directive_cancelled", status=409,
+                       detail={"message": "已取消的指令不能直接恢复；请新建指令"})
+    stamp = room.now_iso()
+    with room.write_tx(db_path) as db:
+        db.execute("UPDATE agent_directives SET status='running', updated_at=? WHERE id=?",
+                   (stamp, directive_id))
+        released = db.execute(
+            "UPDATE agent_tasks SET status='pending', wait_reason=? "
+            "WHERE directive_id=? AND status='held'",
+            ("作者已恢复指令，重新排队", directive_id))
+        db.execute("UPDATE agent_amendments SET status='released', updated_at=? "
+                   "WHERE directive_id=? AND status='pending'", (stamp, directive_id))
+    counts = int(released.rowcount or 0)
+    return {"status": "running", "directive_id": directive_id, "released_tasks": counts,
+            **room.get_directive(db_path, directive_id)}
 
 
 # --------------------------------------------------------------- qa lookup

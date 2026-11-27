@@ -197,6 +197,11 @@ def relocate_anchor(base_text: str, current_text: str, anchor: Dict[str, Any]) -
 
 
 def locate_hunk(base_text: str, current_text: str, hunk: Dict[str, Any]) -> Dict[str, Any]:
+    """Public compatibility wrapper: relocate one hunk as a selection anchor.
+
+    Kept for callers that store hunks outside :func:`apply_hunks`; production
+    annotation paths call :func:`apply_hunks` directly.
+    """
     anchor = hunk.get("anchor") if isinstance(hunk.get("anchor"), dict) else {
         "quote": hunk.get("before_text") or "",
         "char_start": hunk.get("char_start"),
@@ -227,40 +232,122 @@ def diff_hunks(before: str, after: str, *, prefix: str = "hk") -> List[Dict[str,
 
 
 def _overlaps(start: int, end: int, ranges: Iterable[Tuple[int, int]]) -> bool:
+    """Conservative overlap test that also treats zero-length deletions as points.
+
+    A pure deletion records ``(start, start)``.  Treating that as an empty
+    interval let a later replacement at the same offsets apply on top of the
+    already-deleted text (and silently eat following prose).  Here a point
+    conflicts with any range that contains it (left-inclusive, right-exclusive)
+    and with another point at the same offset.  Adjacent, non-touching ranges
+    stay legal: ``[0,4)`` and ``[4,6)`` do not overlap.
+    """
     for left, right in ranges:
-        if left == right and start == end:
-            if left == start:
+        if left == right:
+            # Range-for-range: identical points conflict.
+            if start == end:
+                if start == left:
+                    return True
+                continue
+            if left <= start < max(right, left + 1):
+                return True
+            continue
+        if start == end:
+            if left <= start < right:
                 return True
             continue
         if start < right and left < end:
             return True
-        # A pure insertion strictly inside a replaced range is a conflict too.
-        if start == end and left < start < right:
-            return True
     return False
 
 
+def _unique_quote_range(text: str, quote: str) -> Optional[Tuple[int, int]]:
+    """Return the range of ``quote`` only when it occurs exactly once."""
+    if not quote:
+        return None
+    first = text.find(quote)
+    if first < 0:
+        return None
+    if text.find(quote, first + max(1, len(quote))) >= 0:
+        return None
+    return first, first + len(quote)
+
+
 def build_intermediate_base(base_text: str, applied: Sequence[Dict[str, Any]],
-                            *, ledger: Sequence[Dict[str, Any]] = ()) -> str:
+                            *, ledger: Sequence[Dict[str, Any]] = (),
+                            base_snapshot_id: Optional[str] = None) -> str:
     """Apply already-adopted hunks (and their custom text) to the original base.
 
     This is the ``B'`` baseline that prevents two adjacent hunks from the same
     preview being mistaken for independent author edits on the second apply.
+
+    Ledger offsets are only meaningful inside the snapshot they were recorded
+    against.  When ``base_snapshot_id`` is supplied, entries from another
+    snapshot are *not* replayed by offset: an entry whose ``applied_text`` is
+    already present in the new base is skipped (already incorporated), and an
+    entry still present as a unique ``before_quote`` is relocated by quote.
+    Ambiguous/absent entries are skipped instead of corrupting the baseline.
     """
     text = normalize_lf(base_text)
     # Apply from the end so earlier offsets remain valid; ledger entries carry
     # the actual text that landed on disk (custom_text included).
+    applied_signatures = set()
+    applied_text_quotes = set()
+    for hunk in applied:
+        a_start = hunk.get("char_start", hunk.get("start"))
+        a_end = hunk.get("char_end", hunk.get("end"))
+        a_repl = hunk.get("custom_text", hunk.get("after_text"))
+        if a_start is not None and a_end is not None and a_repl is not None:
+            applied_signatures.add((int(a_start), int(a_end), str(a_repl)))
+        if a_repl is not None:
+            applied_text_quotes.add((str(a_repl), str(hunk.get("before_text") or "")))
     entries = []
+    seen: set = set()
     for row in ledger:
         if not isinstance(row, dict):
             continue
+        ledger_key = (str(row.get("preview_id") or ""), str(row.get("hunk_id") or ""))
+        if any(ledger_key) and ledger_key in seen:
+            continue
+        if any(ledger_key):
+            seen.add(ledger_key)
         applied_text = row.get("applied_text")
+        raw_start = row.get("char_start", row.get("applied_start"))
+        raw_end = row.get("char_end", row.get("applied_end"))
+        if (raw_start is not None and raw_end is not None and applied_text is not None
+                and (int(raw_start), int(raw_end), str(applied_text)) in applied_signatures):
+            continue
+        if (str(applied_text or ""), str(row.get("before_quote") or "")) in applied_text_quotes:
+            continue
         start = row.get("char_start", row.get("applied_start"))
         end = row.get("char_end", row.get("applied_end"))
         if applied_text is None or start is None or end is None:
             continue
+        entry_snapshot = str(row.get("base_snapshot_id") or "")
+        if base_snapshot_id and entry_snapshot and entry_snapshot != str(base_snapshot_id):
+            applied_value = str(applied_text)
+            before_quote = str(row.get("before_quote") or "")
+            if applied_value and applied_value in text:
+                # The new base already contains the adopted text: replaying the
+                # old offsets would delete unrelated prose and duplicate it.
+                continue
+            located = _unique_quote_range(text, before_quote)
+            if located is None:
+                # Cannot prove where this entry belongs in the new snapshot.
+                continue
+            entries.append((located[0], located[1], applied_value))
+            continue
+        if base_snapshot_id and not entry_snapshot:
+            # Legacy rows have no coordinate space; only replay when the
+            # recorded range still holds the original quote.
+            before_quote = str(row.get("before_quote") or "")
+            start, end = clamp_range(text, int(start), int(end))
+            if before_quote and slice_codepoints(text, start, end) != before_quote:
+                continue
         entries.append((int(start), int(end), str(applied_text)))
     for hunk in applied:
+        applied_key = (str(hunk.get("preview_id") or ""), str(hunk.get("id") or hunk.get("hunk_id") or ""))
+        if any(applied_key) and applied_key in seen:
+            continue
         start = hunk.get("char_start", hunk.get("start"))
         end = hunk.get("char_end", hunk.get("end"))
         replacement = hunk.get("custom_text", hunk.get("after_text"))
@@ -310,6 +397,7 @@ def _prepare_hunk(base: str, intermediate: str, current: str,
 def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any]], *,
                 already_applied: Sequence[Dict[str, Any]] = (),
                 ledger: Sequence[Dict[str, Any]] = (),
+                base_snapshot_id: Optional[str] = None,
                 author_windows: Optional[Sequence[Tuple[int, int]]] = None) -> Dict[str, Any]:
     """Apply selected AI hunks to the author's current text.
 
@@ -320,7 +408,8 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
     """
     base = normalize_lf(base_text)
     current = normalize_lf(current_text)
-    intermediate = build_intermediate_base(base, already_applied, ledger=ledger)
+    intermediate = build_intermediate_base(base, already_applied, ledger=ledger,
+                                           base_snapshot_id=base_snapshot_id)
     # Author-independent change ΔU = diff(B' → U), expressed as base coordinates.
     delta_ranges = []
     for tag, i1, i2, _j1, _j2 in difflib.SequenceMatcher(
@@ -338,7 +427,8 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
         located = _prepare_hunk(base, intermediate, current, hunk)
         prepared.append((hunk, located))
     prepared.sort(key=lambda item: (item[1].get("start") is None,
-                                    -(item[1].get("start") or 0)))
+                                    -(item[1].get("start") or 0),
+                                    str(item[0].get("id") or item[0].get("hunk_id") or "")))
     text_points = to_codepoints(current)
     applied_ranges = []
     for hunk, located in prepared:
@@ -358,9 +448,7 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
             results.append({"hunk_id": hunk_id, "status": "overlap_conflict"})
             continue
         start, end = int(located["start"]), int(located["end"])
-        if any(_overlaps(start, end, [other]) or
-               (start == end and other[0] <= start < max(other[1], other[0] + 1))
-               for other in applied_ranges):
+        if _overlaps(start, end, applied_ranges):
             conflicts.append({"hunk_id": hunk_id, "status": "overlap_conflict",
                               "reason": "hunk_overlap", "start": start, "end": end,
                               "current_text": "".join(text_points[start:end]),
@@ -380,9 +468,14 @@ def apply_hunks(base_text: str, current_text: str, hunks: Sequence[Dict[str, Any
             results.append({"hunk_id": hunk_id, "status": "overlap_conflict"})
             continue
         text_points[start:end] = to_codepoints(replacement)
-        applied_ranges.append((start, start + codepoint_length(replacement)))
+        # Record the range in the *original current* coordinate space.  A
+        # replacement shortens the text, and a pure deletion has no result
+        # range at all; using the post-edit length makes a later hunk that
+        # partially overlaps this edit look disjoint (B-09R-1).
+        applied_ranges.append((start, end))
         results.append({"hunk_id": hunk_id, "status": "applied", "start": start,
-                        "end": start + codepoint_length(replacement),
+                        "end": end, "base_start": int(hunk.get("char_start", start) or 0),
+                        "base_end": int(hunk.get("char_end", end) or 0),
                         "applied_text": replacement, "before_text": before})
     return {"text": "".join(text_points), "results": results, "conflicts": conflicts,
             "clean": not conflicts and all(row["status"] in {"applied", "already_applied"}
@@ -406,9 +499,37 @@ def reverse_patch(current_text: str, entry: Dict[str, Any]) -> Dict[str, Any]:
         if not before:
             return {"text": current, "status": "noop", "reason": "empty_applied_text"}
         # 删除型补丁：applied_text 为空，但 before_quote 仍保存被删原文。
+        # 旧 offset 只是删除当下的坐标；作者在区间前打字后不能再盲插。
         points = to_codepoints(current)
+        prefix = str(entry.get("prefix_ctx") or "")
+        suffix = str(entry.get("suffix_ctx") or "")
         position = int(start) if start is not None else 0
         position = max(0, min(position, len(points)))
+        if prefix or suffix:
+            candidates = []
+            if suffix:
+                begin = 0
+                while True:
+                    found = current.find(suffix, begin)
+                    if found < 0:
+                        break
+                    if current[max(0, found - len(prefix)):found] == prefix:
+                        candidates.append(found)
+                    begin = found + 1
+            else:
+                begin = 0
+                while True:
+                    found = current.find(prefix, begin)
+                    if found < 0:
+                        break
+                    candidates.append(found + len(prefix))
+                    begin = found + max(1, len(prefix))
+            candidates = sorted(set(candidates))
+            if len(candidates) != 1:
+                return {"text": current, "status": "relocated_needed",
+                        "reason": "deletion_anchor_ambiguous" if candidates
+                        else "deletion_anchor_missing"}
+            position = candidates[0]
         points[position:position] = to_codepoints(before)
         return {"text": "".join(points), "status": "reversed", "start": position,
                 "end": position + codepoint_length(before)}
@@ -437,7 +558,11 @@ def reverse_patch(current_text: str, entry: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def merge_preview(base_text: str, current_text: str, candidate_text: str) -> Dict[str, Any]:
-    """Three-way merge of a whole-chapter preview against in-flight edits."""
+    """Public compatibility wrapper over :func:`diff_hunks` + :func:`apply_hunks`.
+
+    Kept as the documented whole-chapter three-way merge entry point; the
+    annotation pipeline uses the finer-grained hunk APIs directly.
+    """
     base = normalize_lf(base_text)
     current = normalize_lf(current_text)
     candidate = normalize_lf(candidate_text)

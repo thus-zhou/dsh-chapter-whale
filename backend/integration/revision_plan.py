@@ -392,20 +392,42 @@ def accept(project, chapter: int, preview_id: str, *, expected_sha256: Optional[
            op_id: Optional[str] = None) -> Dict[str, Any]:
     """Commit the candidate, refusing if the body moved since the preview."""
     record = load_preview(project, chapter, preview_id)
-    if record.get("state") != "pending":
-        raise chapter_versions.VersionConflict("preview_already_closed")
-    base = expected_sha256 if expected_sha256 is not None else record.get("base_sha256")
+    from . import invalidation
+    state = record.get("state")
+    commit_op = op_id or f"preview-{preview_id}"
+    invalidate_op = op_id or f"accept-{preview_id}"
     current = chapter_versions.file_sha256(chapter_versions.chapter_path(project, chapter))
+    if state != "pending":
+        raise chapter_versions.VersionConflict("preview_already_closed")
+    if record.get("mode") == "annotation":
+        raise chapter_versions.VersionConflict("annotation_preview_requires_hunk_apply")
+    candidate_sha = record.get("candidate_sha256")
+    if candidate_sha and current == candidate_sha:
+        # The commit landed but the preview marker or invalidation did not;
+        # finish the state machine instead of failing with source_changed
+        # (A-P2-9).
+        commit = chapter_versions._load_commit(project, commit_op) or {
+            "state": "committed", "content_sha256": current,
+            "version_id": (chapter_versions.current_version(project, chapter) or {}).get("version_id")}
+        _mark(project, chapter, preview_id, "accepted", accepted_at=chapter_versions._now())
+        impact = invalidation.invalidate(project, chapters=[chapter], reason="revision_accepted",
+                                         source=f"preview:{preview_id}", actor="author",
+                                         op_id=invalidate_op)
+        return {"status": "accepted", "chapter_id": int(chapter), "preview_id": preview_id,
+                "sha256": commit.get("content_sha256") or current, "commit": commit,
+                "invalidated": impact.get("marked", []), "index_rebuilt": bool(impact.get("rebuilt")),
+                "reused": True}
+    base = expected_sha256 if expected_sha256 is not None else record.get("base_sha256")
     if base is not None and current != base:
         raise chapter_versions.VersionConflict("source_changed")
     commit = chapter_versions.commit_candidate(
-        project, chapter, record["candidate_id"], op_id=op_id or f"preview-{preview_id}",
+        project, chapter, record["candidate_id"], op_id=commit_op,
         expected_sha256=current, allow_new=current is None)
     _mark(project, chapter, preview_id, "accepted", accepted_at=chapter_versions._now())
     from . import invalidation
     impact = invalidation.invalidate(project, chapters=[chapter], reason="revision_accepted",
                                      source=f"preview:{preview_id}", actor="author",
-                                     op_id=op_id or f"accept-{preview_id}")
+                                     op_id=invalidate_op)
     return {"status": "accepted", "chapter_id": int(chapter), "preview_id": preview_id,
             "sha256": commit.get("content_sha256") or commit.get("sha256"), "commit": commit,
             "invalidated": impact.get("marked", []), "index_rebuilt": bool(impact.get("rebuilt"))}
@@ -415,5 +437,9 @@ def reject(project, chapter: int, preview_id: str, reason: str = "") -> Dict[str
     record = load_preview(project, chapter, preview_id)
     if record.get("state") != "pending":
         raise chapter_versions.VersionConflict("preview_already_closed")
+    current = chapter_versions.file_sha256(chapter_versions.chapter_path(project, chapter))
+    if record.get("candidate_sha256") and current == record.get("candidate_sha256"):
+        # The body already carries this candidate: never relabel it rejected.
+        raise chapter_versions.VersionConflict("preview_already_committed")
     _mark(project, chapter, preview_id, "rejected", reject_reason=str(reason or "")[:200])
     return {"status": "rejected", "chapter_id": int(chapter), "preview_id": preview_id}

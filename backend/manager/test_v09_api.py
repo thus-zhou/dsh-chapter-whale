@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from manager import app as module
+from integration import concurrent_engine
 
 
 class V09ApiTests(unittest.TestCase):
@@ -58,6 +59,26 @@ class V09ApiTests(unittest.TestCase):
         self.assertEqual(context.status_code, 200, context.text)
         self.assertEqual(context.json()["manifest"]["chapter_id"], 1)
 
+    def test_confirm_endpoint_raises_authority(self):
+        """审计 C-01：确认接口必须 200 且把 ai_inferred 提升为 confirmed_prose。"""
+        base = f"/api/projects/{self.identity}/world"
+        created = self.client.post(base + "/facts", json={
+            "fact_id": "pending_1", "entity_id": "ent_2", "domain": "character",
+            "subject": "老周", "predicate": "死亡", "object": "死亡",
+            "authority_level": "ai_inferred", "confidence": 0.9,
+            "status": "pending_confirm"}, headers=self.headers)
+        self.assertEqual(created.status_code, 200, created.text)
+        confirmed = self.client.post(base + "/facts/pending_1/confirm",
+                                     json={"authority_level": "confirmed_prose"},
+                                     headers=self.headers)
+        self.assertEqual(confirmed.status_code, 200, confirmed.text)
+        self.assertEqual(confirmed.json()["status"], "active")
+        self.assertEqual(confirmed.json()["authority_level"], "confirmed_prose")
+        again = self.client.post(base + "/facts/pending_1/confirm", json={},
+                                 headers=self.headers)
+        self.assertEqual(again.status_code, 409, again.text)
+        self.assertEqual(again.json()["code"], "fact_not_pending")
+
     def test_task_queue_roundtrip_and_pause(self):
         base = f"/api/projects/{self.identity}/tasks"
         task = self.client.post(base, json={"priority": "P1", "payload": {"kind": "daily"}},
@@ -99,11 +120,106 @@ class V09ApiTests(unittest.TestCase):
         self.assertIn("settled", ledger.json()["states"])
         gc = self.client.post(base + "/gc", json={"dry_run": True}, headers=self.headers)
         self.assertEqual(gc.json()["status"], "dry_run")
-        destination = self.root / "diagnostics" / "bundle.zip"
+        # 审计 C-14：客户端 destination 被忽略，导出只能落在 data_dir/diagnostics。
+        outside = self.root / "outside" / "evil.zip"
         exported = self.client.post(base + "/export",
-                                    json={"destination": str(destination)}, headers=self.headers)
+                                    json={"destination": str(outside)}, headers=self.headers)
         self.assertEqual(exported.status_code, 200, exported.text)
-        self.assertTrue(destination.is_file())
+        written = Path(exported.json()["path"])
+        self.assertFalse(outside.exists())
+        self.assertTrue(written.is_file())
+        self.assertEqual(written.parent.resolve(), (self.root / "diagnostics").resolve())
+
+    def test_unknown_owner_and_blocked_by_are_rejected(self):
+        base = f"/api/projects/{self.identity}/tasks"
+        # 审计 C-35：claim/complete 都必须显式 owner，不能靠不一致的缺省值。
+        claim = self.client.post(base + "/claim", json={}, headers=self.headers)
+        self.assertEqual(claim.status_code, 422, claim.text)
+        self.assertEqual(claim.json()["code"], "owner_required")
+        task = self.client.post(base, json={"task_id": "t_blocked",
+                                            "blocked_by": "abc"}, headers=self.headers)
+        self.assertEqual(task.status_code, 422, task.text)
+        self.assertEqual(task.json()["code"], "invalid_blocked_by")
+        bad_payload = self.client.post(base, json={"payload": "text"}, headers=self.headers)
+        self.assertEqual(bad_payload.status_code, 422, bad_payload.text)
+        self.client.post(base, json={"task_id": "t_owner", "priority": "P1"}, headers=self.headers)
+        claimed = self.client.post(base + "/claim", json={"owner": "w"}, headers=self.headers)
+        self.assertEqual(claimed.json()["task"]["task_id"], "t_owner")
+        missing = self.client.post(base + "/t_owner/complete", json={}, headers=self.headers)
+        self.assertEqual(missing.status_code, 422, missing.text)
+        self.assertEqual(missing.json()["code"], "owner_required")
+
+    def test_unknown_recover_action_is_rejected(self):
+        # 审计 C-31：未知 action 不能静默返回 200 ok。
+        response = self.client.post("/api/system/diagnostics/recover",
+                                    json={"identity": self.identity, "action": "whatever"},
+                                    headers=self.headers)
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["code"], "unsupported_action")
+
+    def test_global_pause_blocks_v09_claim(self):
+        # 审计 C-09/C-39：急停文件按应用实例传入 claim。
+        pause = self.client.post("/api/system/ai/pause", json={"paused": True},
+                                 headers=self.headers)
+        self.assertEqual(pause.status_code, 200, pause.text)
+        base = f"/api/projects/{self.identity}/tasks"
+        self.client.post(base, json={"task_id": "t_pause", "priority": "P1"}, headers=self.headers)
+        claimed = self.client.post(base + "/claim", json={"owner": "w"}, headers=self.headers)
+        self.assertEqual(claimed.status_code, 200, claimed.text)
+        self.assertIsNone(claimed.json()["task"])
+        self.client.post("/api/system/ai/pause", json={"paused": False}, headers=self.headers)
+        self.assertEqual(self.client.post(base + "/claim", json={"owner": "w"},
+                                          headers=self.headers).json()["task"]["task_id"],
+                         "t_pause")
+
+    def test_operations_start_is_blocked_by_global_pause(self):
+        # 审计 C-09：v0.8 ops 入口（日更/生成）也必须看全站急停。
+        (self.root / "global_pause.json").write_text(json.dumps({"paused": True}),
+                                                    encoding="utf-8")
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as caught:
+            self.client.app.state.operations.start(
+                "generate", ["run", "--project", str(self.project)], "op:pause")
+        self.assertEqual(caught.exception.status_code, 503)
+
+    def test_internal_events_notify_route(self):
+        # 审计 C-47：LoopbackNotifier 的 /internal/events/notify 曾不存在。
+        with patch.dict("os.environ", {"CHAPTER_WHALE_INTERNAL_TOKEN": "internal-token"}):
+            denied = self.client.post("/internal/events/notify", json={"kind": "wake"})
+            self.assertEqual(denied.status_code, 403, denied.text)
+            accepted = self.client.post("/internal/events/notify", json={"kind": "wake"},
+                                        headers={"X-Internal-Token": "internal-token"})
+            self.assertEqual(accepted.status_code, 200, accepted.text)
+            self.assertTrue(accepted.json()["ok"])
+
+
+class LifespanTests(unittest.TestCase):
+    """审计 C-38：start_dispatcher=False 时不得启动通知投递。"""
+
+    def test_install_does_not_overwrite_a_process_global_pause_file(self):
+        """审计 C-39：多次 create_app 不能把暂停路径写成模块级全局。"""
+        previous = concurrent_engine._GLOBAL_PAUSE_PATH
+        with tempfile.TemporaryDirectory(prefix="novel-v09-pause-a-") as first, \
+                tempfile.TemporaryDirectory(prefix="novel-v09-pause-b-") as second:
+            for folder in (first, second):
+                root = Path(folder)
+                with patch.object(module, "DATA", root), \
+                        patch.object(module, "AI_PATH", root / "ai.json"):
+                    module.create_app(root / "manager.db", start_dispatcher=False)
+        self.assertIs(concurrent_engine._GLOBAL_PAUSE_PATH, previous)
+
+    def test_disabled_dispatcher_starts_no_background_tasks(self):
+        import time as time_module
+        with tempfile.TemporaryDirectory(prefix="novel-v09-lifespan-") as folder:
+            root = Path(folder)
+            with patch.object(module, "DATA", root), \
+                    patch.object(module, "AI_PATH", root / "ai.json"), \
+                    patch.object(module, "NOTIFY_INTERVAL_SECONDS", 0.01), \
+                    patch.object(module, "_deliver_notifications_once") as deliver:
+                app = module.create_app(root / "manager.db", start_dispatcher=False)
+                with TestClient(app):
+                    time_module.sleep(0.15)
+                self.assertEqual(deliver.call_count, 0)
 
 
 if __name__ == "__main__":

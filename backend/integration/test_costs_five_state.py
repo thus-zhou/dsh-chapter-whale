@@ -1,11 +1,19 @@
 """五态预算、指令护栏与 v0.7.5 旧表零破坏。"""
+import os
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from integration import costs
+
+
+LIMITS = {"requests_per_day": 3, "request_tokens": None, "chapter_tokens": None,
+          "chapter_cost_cny": None, "project_tokens": None, "project_cost_cny": None,
+          "unknown_reserve_cny": "1"}
 
 
 class BudgetTest(unittest.TestCase):
@@ -126,6 +134,77 @@ class BudgetTest(unittest.TestCase):
         with self.assertRaises(costs.BudgetExceeded):
             costs.reserve_request(self.db, "/tmp/book", 1, "draft", operation="op-u2",
                                   directive_id="dir_6", guard=guard)
+
+
+    def test_failed_request_releases_daily_capacity(self):
+        first = costs.reserve_request(self.db, "/tmp/book", 1, "draft", cost_cny="1", limits=LIMITS)
+        costs.settle_request(self.db, first, state="failed")
+        second = costs.reserve_request(self.db, "/tmp/book", 1, "draft", cost_cny="1", limits=LIMITS)
+        third = costs.reserve_request(self.db, "/tmp/book", 1, "draft", cost_cny="1", limits=LIMITS)
+        self.assertTrue(second and third)
+        db = sqlite3.connect(self.db)
+        try:
+            states = [row[0] for row in db.execute(
+                "SELECT state FROM request_budget ORDER BY created_at")]
+        finally:
+            db.close()
+        self.assertEqual(states[0], "released")
+        # Two active reservations + the released row fit the 3/day cap; the
+        # fourth active reservation fills it and the fifth is blocked.
+        costs.reserve_request(self.db, "/tmp/book", 1, "draft", cost_cny="1", limits=LIMITS)
+        with self.assertRaises(costs.BudgetExceeded):
+            costs.reserve_request(self.db, "/tmp/book", 1, "draft", cost_cny="1", limits=LIMITS)
+
+    def test_interrupted_request_becomes_unknown_charge(self):
+        identity = costs.reserve_request(self.db, "/tmp/book", 1, "draft", cost_cny="1", limits=LIMITS)
+        costs.settle_request(self.db, identity, state="cancelled", tokens=5)
+        db = sqlite3.connect(self.db)
+        try:
+            state, tokens, amount = db.execute(
+                "SELECT state, tokens, cost_cny FROM request_budget WHERE id=?", (identity,)).fetchone()
+        finally:
+            db.close()
+        self.assertEqual((state, tokens, amount), ("unknown_charge", 5, "1"))
+
+    def test_count_only_guard_does_not_charge_unknown_reserve(self):
+        identity = costs.reserve_request(self.db, "/tmp/book", 1, "draft",
+                                         directive_id="dir_count", guard={"budget_cap_cny": "2"},
+                                         count_only=True, limits=LIMITS)
+        db = sqlite3.connect(self.db)
+        try:
+            amount, unknown = db.execute(
+                "SELECT cost_cny, unknown_cost FROM request_budget WHERE id=?", (identity,)).fetchone()
+        finally:
+            db.close()
+        self.assertEqual((amount, unknown), ("0", 0))
+        self.assertEqual(costs.directive_usage(self.db, "dir_count")["cost_cny"], "0")
+
+    def test_attempt_finish_settles_failed_and_interrupted_without_gap(self):
+        with mock.patch.object(costs, "budget_limits", return_value=LIMITS):
+            for expected in ("released", "unknown_charge"):
+                with costs.scope(db=str(self.db), project="/tmp/book", chapter=1, stage="draft"):
+                    meter = costs.Attempt("https://api.example.com/v1", "m1",
+                                          {"messages": [{"content": "x"}]})
+                    self.assertTrue(meter.reservation)
+                    if expected == "unknown_charge":
+                        meter.output("半截输出")
+                    meter.finish()
+                row = sqlite3.connect(self.db).execute(
+                    "SELECT state FROM request_budget WHERE id=?", (meter.reservation,)).fetchone()
+                self.assertEqual(row[0], expected)
+        self.assertEqual(costs.ledger_gaps(self.db), 0)
+
+    def test_old_gap_files_do_not_mark_report_incomplete_forever(self):
+        costs.connection(self.db).close()
+        gap_dir = Path(str(self.db) + ".gaps")
+        gap_dir.mkdir()
+        old = gap_dir / "old.json"
+        old.write_text("{}", encoding="utf-8")
+        os.utime(old, (time.time() - 48 * 3600, time.time() - 48 * 3600))
+        report = costs.report(self.db)
+        self.assertEqual(report["summary"]["ledger_gaps"], 1)
+        self.assertEqual(report["summary"]["gaps_recent"], 0)
+        self.assertTrue(report["summary"]["complete"])
 
 
 if __name__ == "__main__":

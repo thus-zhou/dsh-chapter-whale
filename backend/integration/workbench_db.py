@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DB_NAME = "workbench.sqlite3"
 
 _WRITE_RETRY_ATTEMPTS = 5
@@ -46,6 +46,50 @@ _WRITE_RETRY_BASE = 0.05
 _LOCK_ERRORS = ("database is locked", "database table is locked", "database is busy")
 
 _LOCAL = threading.local()
+
+_REQUIRED_TABLES = {"chapter_drafts", "chapter_meta", "annotations", "annotation_hunks",
+                    "patch_ledger", "world_facts", "quality_reviews", "task_queue",
+                    "artifact_refs"}
+
+
+def _tx_stack() -> List[Dict[str, Any]]:
+    stack = getattr(_LOCAL, "tx_stack", None)
+    if stack is None:
+        stack = _LOCAL.tx_stack = []
+    return stack
+
+
+def _tx_key(project) -> str:
+    path = db_path(project)
+    try:
+        return str(path.resolve())
+    except OSError:
+        return str(path)
+
+
+def _active_frame(project) -> Optional[Dict[str, Any]]:
+    """The current thread's open write transaction for this exact database."""
+    key = _tx_key(project)
+    for frame in reversed(_tx_stack()):
+        if frame["key"] == key:
+            return frame
+    return None
+
+
+def _note_sqlite_enter() -> None:
+    try:
+        from integration import lock_manager
+    except Exception:  # pragma: no cover - standalone import without package
+        return
+    lock_manager.note_sqlite_enter()
+
+
+def _note_sqlite_exit() -> None:
+    try:
+        from integration import lock_manager
+    except Exception:  # pragma: no cover
+        return
+    lock_manager.note_sqlite_exit()
 
 
 def now_iso() -> str:
@@ -100,9 +144,48 @@ def connect(project, *, readonly: bool = False) -> Iterator[sqlite3.Connection]:
 def write_tx(project) -> Iterator[sqlite3.Connection]:
     """``BEGIN IMMEDIATE`` transaction with bounded jitter retry.
 
+    Re-entrant for the same thread + database: a nested ``write_tx`` opens a
+    ``SAVEPOINT`` on the outer connection.  SQLite does not recognise two
+    connections from one thread as one transaction; opening a second
+    ``BEGIN IMMEDIATE`` here used to self-deadlock for the full busy timeout
+    (audit C-02: quality review / chapter annotations on imported books).
+
     Never call this while holding an OS file lock: the two lock layers are
-    strictly serial (plan ``03`` §1.2, iron rule A).
+    strictly serial (plan ``03`` §1.2, iron rule A).  ``lock_manager`` is
+    notified so an OS lock taken inside a write transaction is rejected
+    instead of silently violating the ordering (audit C-04).
     """
+    frame = _active_frame(project)
+    if frame is not None:
+        depth = int(frame["depth"]) + 1
+        frame["depth"] = depth
+        name = f"wb_nested_{depth}"
+        db = frame["db"]
+        _note_sqlite_enter()
+        db.execute(f"SAVEPOINT {name}")
+        try:
+            yield db
+        except BaseException:
+            try:
+                db.execute(f"ROLLBACK TO {name}")
+                db.execute(f"RELEASE {name}")
+            except sqlite3.Error:
+                pass
+            raise
+        else:
+            try:
+                db.execute(f"RELEASE {name}")
+            except sqlite3.Error:
+                try:
+                    db.execute(f"ROLLBACK TO {name}")
+                    db.execute(f"RELEASE {name}")
+                except sqlite3.Error:
+                    pass
+                raise
+        finally:
+            frame["depth"] = depth - 1
+            _note_sqlite_exit()
+        return
     with connect(project) as db:
         for attempt in range(_WRITE_RETRY_ATTEMPTS):
             try:
@@ -112,6 +195,9 @@ def write_tx(project) -> Iterator[sqlite3.Connection]:
                 if not _is_busy(exc) or attempt == _WRITE_RETRY_ATTEMPTS - 1:
                     raise
                 _backoff(attempt)
+        stack = _tx_stack()
+        stack.append({"key": _tx_key(project), "db": db, "depth": 0})
+        _note_sqlite_enter()
         try:
             yield db
         except BaseException:
@@ -133,6 +219,9 @@ def write_tx(project) -> Iterator[sqlite3.Connection]:
                             pass
                         raise
                     _backoff(attempt)
+        finally:
+            stack.pop()
+            _note_sqlite_exit()
 
 
 def retry_write(fn, *args, **kwargs):
@@ -401,6 +490,7 @@ CREATE TABLE IF NOT EXISTS task_queue (
     lease_owner TEXT,
     lease_expires REAL,
     committing INTEGER NOT NULL DEFAULT 0,
+    hold_requested INTEGER NOT NULL DEFAULT 0,
     attempts INTEGER NOT NULL DEFAULT 0,
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
@@ -444,34 +534,95 @@ CREATE TABLE IF NOT EXISTS artifact_refs (
 """
 
 
+def _schema_statements() -> List[str]:
+    return [part.strip() for part in SCHEMA.split(";") if part.strip()]
+
+
+def _table_names(db: sqlite3.Connection) -> set:
+    return {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def _schema_current(db: sqlite3.Connection) -> bool:
+    """True when the schema version and every required table are present."""
+    try:
+        row = db.execute("SELECT value FROM workbench_meta WHERE key='schema_version'").fetchone()
+    except sqlite3.Error:
+        return False
+    if not row or str(row[0]) != str(SCHEMA_VERSION):
+        return False
+    if not _REQUIRED_TABLES.issubset(_table_names(db)):
+        return False
+    # 列级检查：旧库即使版本号被手工改高，也必须在 _apply_schema 里补列。
+    columns = {item[1] for item in db.execute("PRAGMA table_info(task_queue)")}
+    return "hold_requested" in columns
+
+
+def _migrate_columns(db: sqlite3.Connection) -> None:
+    """Additive migrations for databases created by an earlier build."""
+    columns = {row[1] for row in db.execute("PRAGMA table_info(task_queue)")}
+    if "hold_requested" not in columns:
+        try:
+            db.execute("ALTER TABLE task_queue ADD COLUMN hold_requested INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError as exc:
+            # 两个进程同时升级旧库时，后到者会看到 duplicate column；视为已完成。
+            if "duplicate column" not in str(exc).lower():
+                raise
+
+
+def _apply_schema(db: sqlite3.Connection) -> None:
+    # ``executescript`` implicitly COMMITs an open transaction, which would
+    # silently commit the outer tx when initialize() runs in a nested call.
+    for statement in _schema_statements():
+        db.execute(statement)
+    db.execute(
+        "INSERT INTO workbench_meta(key, value) VALUES('schema_version', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (str(SCHEMA_VERSION),),
+    )
+    db.execute(
+        "INSERT OR IGNORE INTO workbench_meta(key, value) VALUES('commit_generation', '0')"
+    )
+    _migrate_columns(db)
+
+
 def initialize(project) -> Path:
-    """Create the database and all tables; idempotent and safe on old books."""
+    """Create the database and all tables; idempotent and safe on old books.
+
+    A schema check runs first so read-heavy callers (``ws.state()`` opens six
+    connections per request) no longer take a write lock every time.  When the
+    thread already has a write transaction open, the schema statements run on
+    that connection instead of a second one.
+    """
     path = db_path(project)
+    frame = _active_frame(project)
+    if frame is not None:
+        _apply_schema(frame["db"])
+        return path
     with connect(project) as db:
-        db.executescript(SCHEMA)
-        db.execute(
-            "INSERT INTO workbench_meta(key, value) VALUES('schema_version', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (str(SCHEMA_VERSION),),
-        )
-        db.execute(
-            "INSERT OR IGNORE INTO workbench_meta(key, value) VALUES('commit_generation', '0')"
-        )
+        if _schema_current(db):
+            return path
+    # 升级旧库需要写锁；放进 BEGIN IMMEDIATE 里串行化，避免两个进程同时
+    # ALTER TABLE 造成 duplicate column。拿到锁后重新检查一次。
+    with write_tx(project) as db:
+        if _schema_current(db):
+            return path
+        _apply_schema(db)
     return path
 
 
 def _ensure(project) -> None:
+    frame = _active_frame(project)
+    if frame is not None:
+        if not _schema_current(frame["db"]):
+            initialize(project)
+        return
     if not db_path(project).exists():
         initialize(project)
         return
-    # Cheap integrity check: older DBs may miss a table added by a later phase.
+    # Cheap integrity check: older DBs may miss a table or a column added later.
     with connect(project) as db:
-        present = {row[0] for row in db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
-    required = {"chapter_drafts", "chapter_meta", "annotations", "annotation_hunks",
-                "patch_ledger", "world_facts", "quality_reviews", "task_queue",
-                "artifact_refs"}
-    if not required.issubset(present):
+        current = _schema_current(db)
+    if not current:
         initialize(project)
 
 
@@ -847,6 +998,39 @@ def rebuild_search(project) -> int:
     return count
 
 
+def _search_needles(query: str) -> List[str]:
+    """Meaningful terms for post-filtering: CJK 2-grams, latin words.
+
+    ``tokenize`` indexes single characters *and* 2-grams so two-character
+    names are findable at all; searching with every token OR-ed together would
+    match a chapter that only contains 林 for the query 林溪.  The single
+    characters remain indexed, but they are not required query terms.
+    """
+    needles: List[str] = []
+    for token in tokenize(query).split():
+        if len(token) >= 2 and token not in needles:
+            needles.append(token)
+    if not needles:
+        raw = str(query or "").strip().casefold()
+        if raw:
+            needles = [raw]
+    return needles
+
+
+def _compact_cjk(text: str) -> str:
+    """CJK/latin text with punctuation and whitespace removed.
+
+    A query like ``林溪`` should still recall ``林，溪走进档案馆`` without
+    weakening the requirement to a single character: FTS may match the
+    indexed single characters, then this compact form verifies that every
+    query character occurs in order once punctuation/whitespace is ignored.
+    """
+    return "".join(
+        ch for ch in str(text or "").casefold()
+        if ch.isalnum() or 0x3400 <= ord(ch) <= 0x9FFF or 0xF900 <= ord(ch) <= 0xFAFF
+    )
+
+
 def search(project, query: str, *, limit: int = 20, chapter: Optional[int] = None,
            max_chapter: Optional[int] = None) -> List[Dict[str, Any]]:
     """Deterministic local full-book search (0 model calls)."""
@@ -856,6 +1040,8 @@ def search(project, query: str, *, limit: int = 20, chapter: Optional[int] = Non
     # Quote each token so FTS5 does not interpret punctuation as syntax.
     expr = " OR ".join('"' + term.replace('"', '""') + '"' for term in dict.fromkeys(terms))
     _ensure(project)
+    needles = _search_needles(query)
+    raw_limit = max(64, min(1000, int(limit) * 8))
     with connect(project) as db:
         exists = db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='search_fts'"
@@ -870,21 +1056,48 @@ def search(project, query: str, *, limit: int = 20, chapter: Optional[int] = Non
         elif max_chapter is not None:
             where += " AND (d.chapter_id IS NULL OR d.chapter_id<=?)"
             params.append(int(max_chapter))
-        params.append(int(limit))
+        params.append(raw_limit)
         rows = db.execute(
             "SELECT d.doc_key, d.kind, d.chapter_id, d.title, d.content, d.updated_at, "
             "bm25(search_fts) AS rank FROM search_fts JOIN search_docs d ON d.doc_key=search_fts.doc_key "
             "WHERE " + where + " ORDER BY rank LIMIT ?",
             tuple(params),
         ).fetchall()
-    results = []
+    matched = []
+    folded_query = str(query or "").casefold()
+    compact_query = _compact_cjk(query)
     for row in rows:
         item = dict(row)
+        content = item["content"]
+        haystack = content.casefold()
+        # Require at least one meaningful term; otherwise a two-character
+        # name degrades into "any chapter containing either character".
+        # Punctuation inside a name ("林，溪") is ignored only after the FTS
+        # candidate matched, so the two-character requirement still holds.
+        compact_hit = bool(compact_query) and (
+            compact_query in _compact_cjk(content) or compact_query in _compact_cjk(item["title"])
+        )
+        if needles and not compact_hit and not any(
+            needle in haystack or needle in item["title"].casefold()
+            for needle in needles
+        ):
+            continue
+        exact = 1 if folded_query and folded_query in haystack else 0
+        matched.append((exact, item))
+    matched.sort(key=lambda entry: entry[0], reverse=True)
+    results = []
+    for _exact, item in matched[:max(1, int(limit))]:
         content = item.pop("content")
         index = content.find(query)
         if index < 0:
             haystack = content.casefold()
             index = haystack.find(str(query).casefold())
+        if index < 0:
+            needles = _search_needles(query)
+            for needle in needles:
+                index = content.casefold().find(needle)
+                if index >= 0:
+                    break
         if index < 0:
             index = 0
         item["snippet"] = content[max(0, index - 40): index + max(80, len(str(query)) + 40)].strip()

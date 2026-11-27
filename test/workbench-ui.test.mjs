@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 const root = new URL('..', import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), 'utf8');
@@ -27,6 +28,67 @@ const workbenchSection = (() => {
   assert.ok(open >= 0 && next > open, 'workbench section must be a sibling page section');
   return html.slice(open, next);
 })();
+
+const clientSource = read('client.js');
+
+function between(text, begin, end) {
+  const start = text.indexOf(begin);
+  assert.ok(start >= 0, 'missing generated block start: ' + begin);
+  const stop = text.indexOf(end, start + begin.length);
+  assert.ok(stop > start, 'missing generated block end: ' + end);
+  return text.slice(start + begin.length, stop);
+}
+
+function generatedAtelierCss(client) {
+  const block = between(client,
+    '        // BEGIN GENERATED ATELIER CSS\n',
+    '        // END GENERATED ATELIER CSS\n');
+  const chunks = [];
+  for (const line of block.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const literal = trimmed.endsWith(',') ? trimmed.slice(0, -1) : trimmed;
+    if (!/^".*"$/.test(literal)) continue;
+    chunks.push(JSON.parse(literal));
+  }
+  return chunks.join('');
+}
+
+function expectedAtelierCss() {
+  const fonts = [
+    ['manrope', 'Whale Geometric', '200 800'],
+    ['notosanssc', 'Whale Text', '100 900'],
+    ['notoserifsc', 'Whale Editorial', '400'],
+  ].map(([file, family, weight]) => {
+    const data = readFileSync(new URL(`assets/fonts/${file}.woff2`, root)).toString('base64');
+    return `@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${data}) format("woff2");font-weight:${weight};font-display:swap}`;
+  });
+  return fonts.join('\n') + '\n' + read('assets/atelier-base.css') + '\n' + read('assets/atelier-native.css');
+}
+
+function generatedWorkbenchCore(client) {
+  return between(client,
+    '        // BEGIN GENERATED WORKBENCH CORE\n',
+    '        // END GENERATED WORKBENCH CORE\n');
+}
+
+function loadWorkbenchHooks() {
+  const sandbox = {
+    console,
+    setTimeout,
+    clearTimeout,
+    WorkbenchCore: {},
+    document: { readyState: 'loading', addEventListener: () => {} },
+    window: {},
+    localStorage: { getItem: () => null, setItem: () => {} },
+    location: { hash: '' },
+  };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(js, sandbox, { filename: 'workbench.js' });
+  assert.ok(sandbox.__workbenchTestHooks, 'workbench.js must expose its pure decisions for behaviour tests');
+  return sandbox.__workbenchTestHooks;
+}
 
 test('workbench assets exist and are non-trivial', () => {
   assert.ok(existsSync(new URL('backend/manager/static/workbench.js', root)));
@@ -64,14 +126,78 @@ test('every element id referenced by workbench.js exists in index.html', () => {
   }
 });
 
-test('IME composition is guarded and .value is not overwritten mid-composition', () => {
-  assert.match(js, /"compositionstart"/);
-  assert.match(js, /"compositionend"/);
-  assert.match(js, /state\.composing\s*=\s*true/);
-  assert.match(js, /state\.composing\s*=\s*false/);
-  assert.match(js, /state\.composing[^\n]*return false/);
-  assert.match(js, /state\.adapter\.beginComposition\(\)/);
-  assert.match(js, /state\.adapter\.endComposition\(\)/);
+test('IME composition defers editor writes instead of force-overwriting', () => {
+  const hooks = loadWorkbenchHooks();
+  assert.equal(hooks.editorWriteBlocked(false, true, false), true, 'composing text must not be overwritten');
+  assert.equal(hooks.editorWriteBlocked(false, false, true), true, 'adapter composition must also block writes');
+  assert.equal(hooks.editorWriteBlocked(true, true, true), false, 'explicit force is the only bypass');
+  assert.equal(hooks.chapterApplyDeferred(true, false), true);
+  assert.equal(hooks.chapterApplyDeferred(false, true), true);
+  assert.equal(hooks.chapterApplyDeferred(false, false), false);
+});
+
+test('a restored draft keeps the version it was based on (D-01)', () => {
+  const hooks = loadWorkbenchHooks();
+  const current = { version_id: 'v2', sha256: 'b'.repeat(64) };
+  const stale = hooks.resolveDraftBaseline(
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64) },
+    current,
+  );
+  assert.equal(stale.baseVersionId, 'v1');
+  assert.equal(stale.baseSha, 'a'.repeat(64));
+  const fresh = hooks.resolveDraftBaseline({ exists: false }, current);
+  assert.equal(fresh.baseVersionId, 'v2');
+  assert.equal(fresh.baseSha, 'b'.repeat(64));
+  const unbased = hooks.resolveDraftBaseline({ exists: true, baseVersionId: null, baseSha: null }, { version_id: 'v3', content_sha256: 'c' });
+  assert.equal(unbased.baseVersionId, '');
+  assert.equal(unbased.baseSha, '');
+  assert.equal(unbased.blocked, true, 'a draft without its own base must not fall back to v3');
+});
+
+test('Ctrl+S targets the focused editor instead of always saving a chapter (D-05)', () => {
+  const hooks = loadWorkbenchHooks();
+  const element = (id, tagName, extra) => ({ id, tagName: tagName || 'TEXTAREA', ...(extra || {}) });
+  assert.equal(hooks.ctrlSIntentFor(element('wb-editor')), 'save-version');
+  assert.equal(hooks.ctrlSIntentFor(element('wb-title', 'INPUT')), 'save-version');
+  assert.equal(hooks.ctrlSIntentFor(element('wb-outline-text')), 'save-outline');
+  assert.equal(hooks.ctrlSIntentFor(element('wb-lore-text')), 'save-lore');
+  assert.equal(hooks.ctrlSIntentFor(element('wb-meta-master')), 'save-meta');
+  assert.equal(hooks.ctrlSIntentFor(element('wb-annotation-input')), 'none');
+  assert.equal(hooks.ctrlSIntentFor(element('other', 'DIV')), 'save-version');
+});
+
+test('annotation POST matches the backend create_annotation contract (D-02)', () => {
+  const hooks = loadWorkbenchHooks();
+  const body = hooks.annotationPayload(
+    { startCp: 3, endCp: 9, text: '选中的正文' },
+    '这里更紧张',
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64) },
+    'v2', 'b'.repeat(64),
+  );
+  assert.equal(body.instruction, '这里更紧张');
+  assert.equal(body.scope, 'selection');
+  assert.equal(body.anchor.char_start, 3);
+  assert.equal(body.anchor.char_end, 9);
+  assert.equal(body.anchor.quote, '选中的正文');
+  assert.equal(body.base_version_id, 'v1');
+  assert.equal(body.base_content_sha256, 'a'.repeat(64));
+  assert.equal(body.note, undefined, 'backend rejects unknown top-level note fields by ignoring them; the contract field is instruction');
+});
+
+test('generated ATELIER CSS is byte-identical to fonts + source stylesheets (D-08)', () => {
+  assert.equal(generatedAtelierCss(clientSource), expectedAtelierCss(),
+    'client.js CSS drift: run python3 -X utf8 scripts/build-client-ui.py');
+  for (const name of ['assets/atelier-base.css', 'assets/atelier-native.css']) {
+    assert.doesNotMatch(read(name), /\r/, name + ' must be LF-only');
+  }
+});
+
+test('generated workbench core blocks match the shared kernel byte-for-byte (D-08)', () => {
+  const coreText = core.endsWith('\n') ? core : core + '\n';
+  assert.equal(generatedWorkbenchCore(clientSource), coreText,
+    'client.js workbench core drift: run python3 -X utf8 scripts/build-client-ui.py');
+  assert.equal(read('backend/manager/static/workbench-core.js'), coreText,
+    'static workbench core drift: run python3 -X utf8 scripts/build-client-ui.py');
 });
 
 test('no contenteditable and no hidden mirror div for caret measurement', () => {
@@ -153,8 +279,8 @@ test('every mutation endpoint used by the UI exists in index.js WRITE_ROUTES', (
 });
 
 test('mobile layout collapses to drawers and a fixed bottom selection bar', () => {
-  assert.match(css, /@media \(max-width: 767px\)/);
-  const mobile = css.slice(css.indexOf('@media (max-width: 767px)'));
+  assert.match(css, /@media \(max-width: 760px\)/);
+  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'));
   assert.match(mobile, /\.wb-left[\s\S]*?position:\s*fixed/);
   assert.match(mobile, /\.wb-right[\s\S]*?position:\s*fixed/);
   assert.match(mobile, /\.wb-bubble\s*\{[\s\S]*?display:\s*none/);
@@ -167,4 +293,48 @@ test('workbench has no inline event handlers and new files are LF-only', () => {
     assert.doesNotMatch(text, /\r/, name + ' must be LF-only');
     assert.doesNotMatch(text, /[ \t]+$/m, name + ' must not have trailing whitespace');
   }
+});
+
+function loadSharedCore() {
+  const sandbox = { console, setTimeout, clearTimeout, TextDecoder, AbortController, ReadableStream, Promise };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(core, sandbox, { filename: 'workbench-core.js' });
+  return sandbox.WorkbenchCore;
+}
+
+test('SSE parser honours retry: and 503 reconnects when retryOnError is enabled (D-10)', async () => {
+  const Core = loadSharedCore();
+  const parser = new Core.SseParser();
+  parser.feed('retry: 2500\n\n');
+  assert.equal(parser.retry, 2500, 'server retry field must be parsed');
+
+  let attempts = 0;
+  const errors = [];
+  const connection = Core.connectEventStream({
+    url: '/stream',
+    retryDelayMs: 5,
+    respectRetryField: false,
+    retryOnError: true,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) return { ok: false, status: 503, body: null };
+      return { ok: true, status: 200, body: new ReadableStream({ start(controller) { controller.close(); } }) };
+    },
+    onError: (error) => errors.push(error),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.ok(attempts >= 2, '503 must schedule a reconnect instead of closing forever');
+  assert.ok(errors.length >= 1);
+  connection.close();
+  assert.equal(connection.closed, true);
+});
+
+test('761–767px stays on the desktop dock and desktop workbench layout (D-16)', () => {
+  const overlapAt = css.indexOf('@media (min-width: 761px) and (max-width: 767px)');
+  assert.ok(overlapAt >= 0, 'the 761–767px overlap must be handled explicitly');
+  const overlap = css.slice(overlapAt);
+  assert.match(overlap, /\.mobile-dock\s*\{[\s\S]*?display:\s*none/);
+  assert.match(overlap, /main:not\(\.pair-shell\)\s*\{[\s\S]*?padding-bottom:\s*42px/);
+  assert.match(css, /@media \(max-width: 760px\)/, 'workbench mobile breakpoint must end at 760px');
 });

@@ -77,7 +77,14 @@ def _lock_path(project, level: str, key: str) -> Path:
 
 @contextmanager
 def hold(project, level: str, key: str = "", *, timeout: float = 5.0):
-    """Acquire one level; retries briefly so a short UI save does not 500."""
+    """Acquire one level; retries briefly so a short UI save does not 500.
+
+    Only the *acquisition* is retried.  Once the lock is held, an exception
+    raised by the caller inside the ``with`` block must propagate unchanged:
+    catching ``PublicationBlocked`` around the ``yield`` used to swallow a
+    nested lock's ``resource_busy`` and turn it into ``generator didn't stop
+    after throw`` (audit C-05).
+    """
     if level not in LEVELS:
         raise LockError("unknown_lock_level")
     if _sqlite_depth() > 0:
@@ -89,24 +96,33 @@ def hold(project, level: str, key: str = "", *, timeout: float = 5.0):
     path = _lock_path(project, level, key)
     deadline = time.monotonic() + max(0.0, float(timeout))
     while True:
+        # A fresh context manager per attempt: contextlib clears its generator
+        # after __enter__, so the failed attempt cannot be retried.
+        context = safety.file_lock(path)
         try:
-            with safety.file_lock(path):
-                stack.append((LEVELS[level], level))
-                try:
-                    yield path
-                finally:
-                    stack.pop()
-                return
+            context.__enter__()
+            break
         except safety.PublicationBlocked:
             if time.monotonic() >= deadline:
                 raise LockError("lock_busy", detail={"level": level, "key": key}) from None
             time.sleep(0.02)
+    stack.append((LEVELS[level], level))
+    try:
+        yield path
+    finally:
+        stack.pop()
+        context.__exit__(None, None, None)
 
 
 @contextmanager
 def ordered(project, requests: Iterable[Tuple[str, str]], *, timeout: float = 5.0):
     """Acquire several locks in ascending order; release in reverse."""
-    rows = sorted(((LEVELS[level], level, key) for level, key in requests), key=lambda row: row[0])
+    rows = []
+    for level, key in requests:
+        if level not in LEVELS:
+            raise LockError("unknown_lock_level")
+        rows.append((LEVELS[level], level, key))
+    rows.sort(key=lambda row: row[0])
     with _ExitStack() as stack:
         for _, level, key in rows:
             stack.enter_context(hold(project, level, key, timeout=timeout))

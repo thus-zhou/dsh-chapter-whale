@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from manager import app as module
+from integration import annotations
+from integration import revision_plan
 
 
 class V08ApiTests(unittest.TestCase):
@@ -174,6 +176,31 @@ class V08ApiTests(unittest.TestCase):
         response = self.client.get(f"/api/projects/{self.identity}/search", params={"q": "林溪"})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["count"], 1)
+
+
+    def test_annotation_preview_blocks_revision_accept_and_revision_preview_has_no_merge_state(self):
+        self.create(content="第一段。\n\n第二段。\n")
+        created = annotations.create_annotation(self.project, 1, {
+            "scope": "chapter", "instruction": "整体收紧"})
+        run = annotations.run_annotations(
+            self.project, 1, {"op_id": "v08-preview-run", "annotation_ids": [created["id"]]},
+            generate=lambda a, c: "<replacement>第一段收紧。\n\n第二段。\n</replacement>")
+        annotation_preview = run["previews"][0]["preview_id"]
+        revision = revision_plan.save_preview(
+            self.project, 1, "第一段。\n\n第二段。\n", "第一段。\n\n第二段改。\n",
+            mode="targeted_fix")
+        response = self.client.get(
+            f"/api/projects/{self.identity}/chapters/1/previews")
+        self.assertEqual(response.status_code, 200, response.text)
+        rows = {row["preview_id"]: row for row in response.json()["previews"]}
+        annotation_row = rows[annotation_preview]
+        self.assertEqual(annotation_row["apply_via"], "annotation_hunks")
+        self.assertTrue(annotation_row["accept_blocked"])
+        self.assertTrue(annotation_row["merge_state"]["applicable"])
+        revision_row = rows[revision["preview_id"]]
+        self.assertEqual(revision_row["apply_via"], "revision_accept")
+        self.assertFalse(revision_row["accept_blocked"])
+        self.assertIsNone(revision_row["merge_state"])
 
 
 if __name__ == "__main__":

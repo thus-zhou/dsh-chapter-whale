@@ -104,9 +104,9 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     if status not in FACT_STATUSES:
         raise WorldStateError("invalid_status")
     fact_id = str(fact.get("fact_id") or wb.new_id("fact"))
+    wb.initialize(project)
     if not fact.get("fact_id"):
         # 同一逻辑事实（实体+谓词+宾语+有效期）重复提取时复用既有 fact_id。
-        wb.initialize(project)
         with wb.connect(project) as db:
             existing_row = db.execute(
                 "SELECT fact_id FROM world_facts WHERE entity_id IS ? AND subject=? AND predicate=? "
@@ -124,12 +124,42 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     if not 0.0 <= confidence <= 1.0:
         raise WorldStateError("invalid_confidence")
     pinned = 1 if fact.get("pinned") else 0
+    author_locked = 1 if fact.get("author_locked") else 0
+    author_edit = bool(fact.get("author_edit"))
     with wb.write_tx(project) as db:
         existing = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
         if existing:
             previous = _row_fact(existing)
             if AUTHORITY.get(previous.get("authority_level"), 0) > AUTHORITY.get(authority, 0):
                 return {"status": "ignored_lower_authority", "fact": previous}
+            # 审计 C-16：AI 再次提取同一事实不得静默清掉作者的 pin / 锁定。
+            # 只有显式 author_edit=true 才能降级，否则用旧值兜底。
+            if not author_edit:
+                pinned = max(pinned, 1 if previous.get("pinned") else 0)
+                author_locked = max(author_locked, 1 if previous.get("author_locked") else 0)
+        if (not fact.get("fact_id") and assertion == "fact"
+                and status == "active" and fact.get("valid_from_chapter") is not None):
+            # 审计 C-18/C-R2-01：同一 subject+谓词出现新值时关闭旧的有效窗口。
+            # Pending AI candidates must not close anything before author
+            # confirmation, and a lower-authority inference must never close
+            # pinned/author-confirmed prose (or another subject's null-entity
+            # fact).
+            db.execute(
+                "UPDATE world_facts SET valid_until_chapter=?, updated_at=? "
+                "WHERE entity_id IS ? AND subject=? AND predicate=? AND assertion_type='fact' "
+                "AND status='active' AND fact_id!=? AND valid_until_chapter IS NULL "
+                "AND (pinned=0 OR ?='author_locked') "
+                "AND (author_locked=0 OR ?='author_locked') "
+                "AND (CASE ? WHEN 'author_locked' THEN 4 WHEN 'published_prose' THEN 3 "
+                "WHEN 'confirmed_prose' THEN 2 ELSE 1 END >= "
+                "CASE authority_level WHEN 'author_locked' THEN 4 WHEN 'published_prose' THEN 3 "
+                "WHEN 'confirmed_prose' THEN 2 ELSE 1 END) "
+                "AND (valid_from_chapter IS NULL OR valid_from_chapter < ?)",
+                (int(fact["valid_from_chapter"]) - 1, _now(), fact.get("entity_id"),
+                 str(fact.get("subject") or ""), str(fact.get("predicate") or ""), fact_id,
+                 authority, authority, authority,
+                 int(fact["valid_from_chapter"])),
+            )
         db.execute(
             "INSERT INTO world_facts(fact_id, entity_id, pinned, domain, assertion_type, subject, "
             "predicate, object, story_time, narrative_chapter, valid_from_chapter, valid_until_chapter, "
@@ -153,7 +183,7 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
              json.dumps(list(fact.get("exceptions") or []), ensure_ascii=False),
              fact.get("source_chapter"), fact.get("source_chapter_uid"), fact.get("source_version_id"),
              fact.get("source_quote"), authority, confidence, status,
-             1 if fact.get("author_locked") else 0, _now()),
+             author_locked, _now()),
         )
     return {"status": "saved", "fact": get_fact(project, fact_id)}
 
@@ -211,6 +241,16 @@ def facts_by_status(project, status: str, *, limit: int = 200) -> List[Dict[str,
     return [_row_fact(row) for row in rows]
 
 
+def count_facts_by_status(project, status: str) -> int:
+    """Exact backlog count; ``facts_by_status`` truncates at 200 (audit C-24)."""
+    if status not in FACT_STATUSES:
+        raise WorldStateError("invalid_status")
+    wb.initialize(project)
+    with wb.connect(project) as db:
+        row = db.execute("SELECT COUNT(*) FROM world_facts WHERE status=?", (status,)).fetchone()
+    return int(row[0] if row else 0)
+
+
 def confirm_fact(project, fact_id: str, *, authority_level: str = "confirmed_prose") -> Dict[str, Any]:
     """Author confirmation is the only path that raises AI-extracted authority."""
     if authority_level not in AUTHORITY or authority_level in {"future_plan", "discarded_candidate"}:
@@ -242,13 +282,20 @@ def set_card(project, card: Dict[str, Any]) -> Dict[str, Any]:
     kind = str(card.get("kind") or "character")
     aliases = list(card.get("aliases") or [])
     with wb.write_tx(project) as db:
+        existing = db.execute("SELECT pinned FROM world_entities WHERE entity_id=?",
+                              (entity_id,)).fetchone()
+        # 审计 C-16：局部更新卡片（未传 pinned）不得把作者已有的 pin 取消。
+        if "pinned" in card:
+            pinned_value = 1 if card.get("pinned") else 0
+        else:
+            pinned_value = int(existing["pinned"]) if existing else 0
         db.execute(
             "INSERT INTO world_entities(entity_id, name, kind, aliases_json, pinned, story_time, card_md, updated_at) "
             "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(entity_id) DO UPDATE SET name=excluded.name, kind=excluded.kind, "
             "aliases_json=excluded.aliases_json, pinned=excluded.pinned, story_time=excluded.story_time, "
             "card_md=excluded.card_md, updated_at=excluded.updated_at",
             (entity_id, name, kind, json.dumps(aliases, ensure_ascii=False),
-             1 if card.get("pinned") else 0, card.get("story_time"), str(card.get("card_md") or ""), _now()),
+             pinned_value, card.get("story_time"), str(card.get("card_md") or ""), _now()),
         )
     return get_card(project, entity_id)
 
@@ -318,7 +365,7 @@ def detect_conflicts(project, chapter: int) -> List[Dict[str, Any]]:
     facts = facts_for_chapter(project, chapter)
     grouped: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     for fact in facts:
-        if fact.get("assertion_type") in {"lie", "rumor"}:
+        if fact.get("assertion_type") in {"lie", "rumor", "belief"}:
             continue
         key = (str(fact.get("entity_id") or fact.get("subject") or ""),
                str(fact.get("predicate") or ""))
@@ -344,27 +391,28 @@ def detect_conflicts(project, chapter: int) -> List[Dict[str, Any]]:
 
 # ------------------------------------------------------------- context pack
 
-def _rules(project, chapter: int) -> List[Dict[str, Any]]:
+def _rules(project, chapter: int) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """L1 rules plus an explicit error marker instead of silent emptiness."""
     try:
         from integration import memory_library
         items = memory_library.contract(project)
-    except Exception:
-        return []
+    except Exception:  # noqa: BLE001 - report, never hide the safety layer
+        return [], "rules_unavailable"
     result = []
     for item in items:
         effective = item.get("effective_from_chapter")
         if isinstance(effective, int) and effective > int(chapter):
             continue
         result.append(item)
-    return result
+    return result, None
 
 
-def _outline_for(project, chapter: int) -> Dict[str, Any]:
+def _outline_for(project, chapter: int) -> Tuple[Dict[str, Any], Optional[str]]:
     try:
         plan = outline_editor.recover_plan(project, persist=False)
-        return plan.get("chapters", {}).get(str(int(chapter))) or {}
-    except Exception:
-        return {}
+        return plan.get("chapters", {}).get(str(int(chapter))) or {}, None
+    except Exception:  # noqa: BLE001
+        return {}, "outline_unavailable"
 
 
 def _previous_tail(project, chapter: int, limit: int = 300) -> str:
@@ -389,7 +437,10 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
                        "chars": len(text), "tokens": _token_estimate(text),
                        "share": char_share})
 
-    rules = _rules(project, chapter)
+    rules, rules_error = _rules(project, chapter)
+    warnings: List[Dict[str, Any]] = []
+    if rules_error:
+        warnings.append({"layer": "L1", "code": rules_error})
     rule_text = "\n".join(f"- {item.get('title')}: {item.get('content')}" for item in rules)
     add("L1", "核心创作契约", [{"kind": "author_rule", "id": item.get("id"),
                               "effective_from_chapter": item.get("effective_from_chapter")}
@@ -403,14 +454,18 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         [f"- {fact.get('subject')}{fact.get('predicate')}{fact.get('object')}" for fact in pinned[:40]])
     add("L2", "全书长期记忆", [{"kind": "card", "entity_id": card["entity_id"]} for card in cards] +
         [{"kind": "fact", "fact_id": fact["fact_id"]} for fact in pinned[:40]], l2_text, 0.20)
-    outline = _outline_for(project, chapter)
+    outline, outline_error = _outline_for(project, chapter)
+    if outline_error:
+        warnings.append({"layer": "L3", "code": outline_error})
     l3_text = f"- 本章细纲：{outline.get('title', '')} {outline.get('outline', '')}".strip()
     add("L3", "分卷中期记忆", [{"kind": "outline", "chapter": chapter}], l3_text, 0.15)
     previous = _previous_tail(project, chapter)
     l4_text = f"- 上一章结尾：{previous}\n- 本章细纲：{outline.get('outline', '')}"
     add("L4", "近期短期记忆", [{"kind": "previous_chapter", "chapter": chapter - 1},
                               {"kind": "outline", "chapter": chapter}], l4_text, 0.30)
-    hits = search(project, query, max_chapter=chapter, limit=8) if str(query or "").strip() else []
+    # 审计 C-21：为第 N 章组装上下文时，L5 不得包含第 N 章自己的正文。
+    hits = search(project, query, max_chapter=max(0, chapter - 1), limit=8) \
+        if str(query or "").strip() else []
     l5_text = "\n".join(f"- 第{hit.get('chapter_id') or '?'}章：{hit.get('snippet', '')}" for hit in hits)
     add("L5", "按需精确检索", [{"kind": "retrieval", "doc_key": hit.get("doc_key"),
                                 "chapter_id": hit.get("chapter_id")} for hit in hits], l5_text, 0.25)
@@ -431,6 +486,8 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         layer["tokens"] = _token_estimate(layer["text"])
         layer["trimmed"] = True
         total = sum(item["chars"] for item in layers)
+    total = sum(layer["chars"] for layer in layers)
+    overflow_chars = max(0, total - content_budget)
     text = "\n\n".join(f"【{layer['layer']}·{layer['title']}】\n{layer['text']}"
                        for layer in layers if layer["text"])
     if text:
@@ -443,6 +500,9 @@ def build_context(project, chapter: int, *, query: str = "", budget_chars: int =
         "budget_chars": budget_chars,
         "chars": len(text),
         "tokens": _token_estimate(text),
+        "over_budget": overflow_chars > 0,
+        "budget_overflow_chars": overflow_chars,
+        "warnings": warnings,
         "layers": [{key: layer.get(key) for key in
                     ("layer", "title", "chars", "tokens", "share", "trimmed")} for layer in layers],
         "items": [{**item, "layer": layer["layer"]} for layer in layers for item in layer["items"]],
@@ -461,9 +521,10 @@ def state(project, *, chapter: int = 1, query: str = "") -> Dict[str, Any]:
     chapter = max(1, int(chapter))
     context = build_context(project, chapter, query=query, persist=False)
     pending = facts_by_status(project, "pending_confirm")
+    pending_count = count_facts_by_status(project, "pending_confirm")
     return {"chapter_id": chapter, "cards": list_cards(project),
             "facts": facts_for_chapter(project, chapter),
-            "pending_facts": pending, "pending_count": len(pending),
+            "pending_facts": pending, "pending_count": pending_count,
             "conflicts": detect_conflicts(project, chapter),
             "manifest": context["manifest"], "context": context["text"],
             "search": search(project, query, chapter=chapter) if query else []}
@@ -521,20 +582,29 @@ def extract_candidates(project, chapter: int, payload: Dict[str, Any], *,
         if confidence < 0.75:
             rejected.append({"reason": "low_confidence", "confidence": confidence})
             continue
-        fact = {
-            **raw, "fact_id": raw.get("fact_id"),
+        # AI extraction is untrusted input.  Never let it carry author-only
+        # switches such as author_edit/pinned/author_locked or choose an
+        # existing fact_id; those fields are author API territory (C-16/X-P1-2).
+        allowed = {"entity_id", "domain", "subject", "predicate", "object",
+                   "assertion_type", "confidence", "story_time", "narrative_chapter",
+                   "valid_from_chapter", "valid_until_chapter", "source_quote"}
+        fact = {key: value for key, value in raw.items() if key in allowed}
+        fact.update({
             "confidence": confidence, "assertion_type": assertion,
             "narrative_chapter": chapter, "source_chapter": chapter,
             "source_chapter_uid": wb.chapter_uid(project, chapter),
             "source_version_id": (versions.current_version(project, chapter) or {}).get("version_id"),
             "status": "active", "authority_level": "ai_inferred",
-        }
+        })
         # AI extraction may never self-promote to confirmed/author authority.
         existing_pinned = False
         if fact.get("entity_id"):
             try:
                 with wb.connect(project) as db:
+                    # 卡片 pin 与事实行 pin 都算「作者已 pin 的实体」。
                     existing_pinned = bool(db.execute(
+                        "SELECT 1 FROM world_entities WHERE entity_id=? AND pinned=1 LIMIT 1",
+                        (fact["entity_id"],)).fetchone()) or bool(db.execute(
                         "SELECT 1 FROM world_facts WHERE entity_id=? AND "
                         "(pinned=1 OR authority_level='author_locked' OR author_locked=1) LIMIT 1",
                         (fact["entity_id"],)).fetchone())
@@ -542,7 +612,10 @@ def extract_candidates(project, chapter: int, payload: Dict[str, Any], *,
                 existing_pinned = False
         high_risk = (any(word in str(fact.get("predicate") or "") or word in str(fact.get("object") or "")
                          for word in HIGH_RISK_PREDICATES) or
-                     (fact.get("pinned") and assertion == "fact"))
+                     (fact.get("pinned") and assertion == "fact") or
+                     # 审计 C-17：对已 pin / 已锁定实体的新「事实」推断一律待确认；
+                     # lie/rumor/belief 是叙述层陈述，不参与权威提升。
+                     (existing_pinned and assertion == "fact"))
         if high_risk:
             fact["status"] = "pending_confirm"
             saved = upsert_fact(project, fact)
@@ -554,14 +627,6 @@ def extract_candidates(project, chapter: int, payload: Dict[str, Any], *,
             "rejected": rejected, "counts": {"accepted": len(accepted),
                                               "pending_confirm": len(pending),
                                               "rejected": len(rejected)}}
-
-
-def confirm_fact(project, fact_id: str) -> Dict[str, Any]:
-    return set_fact_status(project, fact_id, "active")
-
-
-def reject_fact(project, fact_id: str) -> Dict[str, Any]:
-    return set_fact_status(project, fact_id, "superseded")
 
 
 def causal_scan(project, *, change: str, apply_to_existing: bool = True,
@@ -612,11 +677,14 @@ def add_exemption(project, *, chapter: int, rule_id: str, rule_text: str,
     content_sha = versions.file_sha256(path) if path else ""
     if not content_sha:
         raise WorldStateError("chapter_missing", status=404)
+    # 审计 C-02：chapter_uid 可能在 chapter_meta 无行时自己开写事务；
+    # 必须在进入本事务之前解析，不能嵌套在 BEGIN IMMEDIATE 内。
+    chapter_uid = wb.chapter_uid(project, chapter)
     with wb.write_tx(project) as db:
         db.execute("INSERT OR REPLACE INTO directive_exemptions(chapter_id, chapter_uid, version_id, "
                    "content_sha256, rule_id, rule_content_sha256, scan_method, confirmed_by, verified_at) "
                    "VALUES(?,?,?,?,?,?,?,?,?)",
-                   (int(chapter), wb.chapter_uid(project, chapter), meta.get("version_id"), content_sha,
+                   (int(chapter), chapter_uid, meta.get("version_id"), content_sha,
                     rule_id, _sha(rule_text), scan_method, "author", _now()))
     return {"status": "exempted", "chapter_id": int(chapter), "rule_id": rule_id,
             "content_sha256": content_sha}

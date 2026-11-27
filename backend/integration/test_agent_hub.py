@@ -143,5 +143,58 @@ class AmendmentTest(unittest.TestCase):
         self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "held")
 
 
+class AmendmentPersistenceTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self.tmp.name) / "manager.sqlite3"
+        room.initialize(self.db)
+        self.directive = room.create_directive(self.db, session_id="s", project_id="p",
+                                               title="写前三章", raw_instruction="写前三章",
+                                               autonomy="auto_chain")
+        self.task = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",
+                                     project_id="p", role="writer", title="写第2章",
+                                     tool_name="write_chapter", status="running")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_invalid_request_does_not_advance_revision(self):
+        with self.assertRaises(hub.HubError) as caught:
+            hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                amendment_text="改", task_ids=[self.task["id"]], fallback="bogus")
+        self.assertEqual(caught.exception.code, "invalid_amendment_fallback")
+        self.assertEqual(room.get_directive(self.db, self.directive["id"])["directive_revision"], 1)
+        with self.assertRaises(hub.HubError) as caught:
+            hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                amendment_text="改", task_ids=["tsk_foreign"])
+        self.assertEqual(caught.exception.code, "amendment_task_mismatch")
+        self.assertEqual(room.get_directive(self.db, self.directive["id"])["directive_revision"], 1)
+
+    def test_amendment_text_persisted_and_update_releases_task(self):
+        started = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                      amendment_text="第二章别进山", task_ids=[self.task["id"]])
+        record = room.get_amendment(self.db, started["amendment_id"])
+        self.assertEqual(record["raw_text"], "第二章别进山")
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "held")
+        result = hub.evaluate_amendment(
+            self.db, amendment_id=started["amendment_id"], directive_id=self.directive["id"],
+            evaluator=lambda ctx: {"keep": [], "update": [self.task["id"]],
+                                   "wait_and_redo": []})
+        self.assertEqual(result["status"], "evaluated")
+        task = room.get_task(self.db, self.task["id"])
+        self.assertEqual(task["status"], "pending")
+        self.assertIn("更新", task["wait_reason"])
+        self.assertEqual(room.get_amendment(self.db, started["amendment_id"])["status"], "evaluated")
+
+    def test_resume_releases_held_tasks(self):
+        hub.start_amendment(self.db, directive_id=self.directive["id"],
+                            amendment_text="改", task_ids=[self.task["id"]])
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "held")
+        resumed = hub.resume_directive(self.db, directive_id=self.directive["id"])
+        self.assertEqual(resumed["status"], "running")
+        self.assertEqual(resumed["released_tasks"], 1)
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "pending")
+
+
 if __name__ == "__main__":
     unittest.main()

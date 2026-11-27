@@ -111,8 +111,8 @@
               <select id="wb-project" aria-label="选择作品"><option value="">正在读取作品…</option></select>
             </label>
             <div class="wb-view-switch" role="tablist" aria-label="工作台视图">
-              <button type="button" role="tab" id="wb-view-write" aria-selected="true" aria-controls="wb-write-view">直写</button>
-              <button type="button" role="tab" id="wb-view-outline" aria-selected="false" aria-controls="wb-outline-view">大纲与设定</button>
+              <button type="button" role="tab" id="wb-view-write" aria-selected="true" aria-controls="wb-write-view" tabindex="0">直写</button>
+              <button type="button" role="tab" id="wb-view-outline" aria-selected="false" aria-controls="wb-outline-view" tabindex="-1">大纲与设定</button>
             </div>
             <div class="wb-more-wrap">
               <button type="button" class="button button-secondary button-small" id="wb-more-toggle" aria-expanded="false" aria-controls="wb-more-menu">更多</button>
@@ -142,11 +142,11 @@
             <button type="button" class="button button-ghost button-small" id="wb-conflict-later">稍后处理</button>
           </div>
         </div>
-        <div class="wb-write" id="wb-write-view">
+        <div class="wb-write" id="wb-write-view" role="tabpanel" aria-labelledby="wb-view-write">
           <div class="wb-mobile-bar">
-            <button type="button" id="wb-mobile-left">目录</button>
+            <button type="button" id="wb-mobile-left" aria-controls="wb-left" aria-expanded="false">目录</button>
             <span id="wb-mobile-title">未选择章节</span>
-            <button type="button" id="wb-mobile-right">批注</button>
+            <button type="button" id="wb-mobile-right" aria-controls="wb-right" aria-expanded="false">批注</button>
           </div>
           <div class="wb-shell" id="wb-shell">
             <aside class="wb-left" id="wb-left" aria-label="章节目录">
@@ -157,7 +157,7 @@
                 <button type="button" data-wb-filter="published" aria-pressed="false">已发布</button>
                 <button type="button" data-wb-filter="annotations" aria-pressed="false">待采纳</button>
               </div>
-              <div class="wb-chapter-list" id="wb-chapter-list" role="list"></div>
+              <ul class="wb-chapter-list" id="wb-chapter-list" role="list" aria-label="章节目录"></ul>
               <div class="wb-pane-foot"><span id="wb-chapter-count">0 章</span><button type="button" id="wb-left-new">＋ 新章</button></div>
             </aside>
             <section class="wb-center" aria-label="正文编辑">
@@ -182,15 +182,15 @@
             <aside class="wb-right" id="wb-right" aria-label="本章工具">
               <div class="wb-pane-head wb-right-head">
                 <div class="wb-tabs" id="wb-tabs" role="tablist" aria-label="本章工具">
-                  <button type="button" role="tab" data-wb-tab="annotations" aria-selected="true" aria-controls="wb-panel-annotations">批注</button>
-                  <button type="button" role="tab" data-wb-tab="check" aria-selected="false" aria-controls="wb-panel-check">快速体检</button>
-                  <button type="button" role="tab" data-wb-tab="versions" aria-selected="false" aria-controls="wb-panel-versions">版本</button>
-                  <button type="button" role="tab" data-wb-tab="reference" aria-selected="false" aria-controls="wb-panel-reference">本章参考</button>
-                  <button type="button" role="tab" data-wb-tab="insights" aria-selected="false" aria-controls="wb-panel-insights">世界状态</button>
+                  <button type="button" role="tab" id="wb-tab-annotations" data-wb-tab="annotations" aria-selected="true" aria-controls="wb-panel-annotations" tabindex="0">批注</button>
+                  <button type="button" role="tab" id="wb-tab-check" data-wb-tab="check" aria-selected="false" aria-controls="wb-panel-check" tabindex="-1">快速体检</button>
+                  <button type="button" role="tab" id="wb-tab-versions" data-wb-tab="versions" aria-selected="false" aria-controls="wb-panel-versions" tabindex="-1">版本</button>
+                  <button type="button" role="tab" id="wb-tab-reference" data-wb-tab="reference" aria-selected="false" aria-controls="wb-panel-reference" tabindex="-1">本章参考</button>
+                  <button type="button" role="tab" id="wb-tab-insights" data-wb-tab="insights" aria-selected="false" aria-controls="wb-panel-insights" tabindex="-1">世界状态</button>
                 </div>
                 <button type="button" class="wb-icon-btn" id="wb-right-close" aria-label="收起本章工具">×</button>
               </div>
-              <div class="wb-panel" id="wb-panel-annotations" role="tabpanel">
+              <div class="wb-panel" id="wb-panel-annotations" role="tabpanel" aria-labelledby="wb-tab-annotations">
                 <div class="wb-note-compose">
                   <label for="wb-annotation-input">选区批注</label>
                   <textarea id="wb-annotation-input" rows="3" maxlength="2000" placeholder="先在正文中选中一段，再写下你的修改意见"></textarea>
@@ -203,23 +203,23 @@
                 </div>
                 <div class="wb-annotation-list" id="wb-annotation-list"></div>
               </div>
-              <div class="wb-panel" id="wb-panel-check" role="tabpanel" hidden>
+              <div class="wb-panel" id="wb-panel-check" role="tabpanel" aria-labelledby="wb-tab-check" hidden>
                 <div class="wb-check-summary" id="wb-check-summary">尚未体检。快速体检不调用模型。</div>
                 <div class="wb-check-list" id="wb-check-list"></div>
               </div>
-              <div class="wb-panel" id="wb-panel-versions" role="tabpanel" hidden>
+              <div class="wb-panel" id="wb-panel-versions" role="tabpanel" aria-labelledby="wb-tab-versions" hidden>
                 <div class="wb-panel-title"><strong>版本历史</strong><button type="button" class="button button-secondary button-small" id="wb-versions-refresh">刷新</button></div>
                 <div class="wb-version-summary" id="wb-version-summary">正在读取版本…</div>
                 <div class="wb-version-list" id="wb-version-list"></div>
                 <div class="wb-version-preview" id="wb-version-preview" hidden></div>
               </div>
-              <div class="wb-panel" id="wb-panel-reference" role="tabpanel" hidden>
+              <div class="wb-panel" id="wb-panel-reference" role="tabpanel" aria-labelledby="wb-tab-reference" hidden>
                 <div class="wb-ref-block"><span>本章细纲</span><pre id="wb-ref-outline">—</pre></div>
                 <div class="wb-ref-block"><span>上一章结尾（最后 300 字）</span><pre id="wb-ref-tail">—</pre></div>
                 <div class="wb-ref-block"><span>人物与伏笔卡</span><div id="wb-ref-lore" class="wb-ref-lore">—</div></div>
                 <p class="wb-hint" id="wb-ref-status"></p>
               </div>
-              <div class="wb-panel" id="wb-panel-insights" role="tabpanel" hidden>
+              <div class="wb-panel" id="wb-panel-insights" role="tabpanel" aria-labelledby="wb-tab-insights" hidden>
                 <div class="wb-card-head">
                   <strong>世界状态 · 并发 · 质量</strong>
                   <span>
@@ -239,7 +239,7 @@
             </aside>
           </div>
         </div>
-        <div class="wb-outline" id="wb-outline-view" hidden>
+        <div class="wb-outline" id="wb-outline-view" role="tabpanel" aria-labelledby="wb-view-outline" hidden>
           <div class="wb-outline-grid">
             <article class="wb-card">
               <div class="wb-card-head"><strong>大纲文件</strong><button type="button" class="wb-link-btn" id="wb-outline-refresh">刷新</button></div>
@@ -247,7 +247,7 @@
             </article>
             <article class="wb-card wb-outline-editor">
               <div class="wb-card-head"><strong id="wb-outline-name">选择一个大纲文件</strong><span id="wb-outline-state">—</span></div>
-              <textarea id="wb-outline-text" rows="16" spellcheck="false" placeholder="选择左侧大纲文件后编辑"></textarea>
+              <textarea id="wb-outline-text" rows="16" spellcheck="false" placeholder="选择左侧大纲文件后编辑" aria-label="大纲内容" aria-describedby="wb-outline-state"></textarea>
               <div class="wb-card-actions"><span class="wb-mono" id="wb-outline-revision"></span><button type="button" class="button button-primary button-small" id="wb-outline-save">保存大纲</button></div>
               <details class="wb-meta">
                 <summary>全书规划字段</summary>
@@ -263,7 +263,7 @@
               <div class="wb-file-list" id="wb-lore-files"></div>
               <div class="wb-lore-editor">
                 <span class="wb-mono" id="wb-lore-name">选择一个设定文件</span>
-                <textarea id="wb-lore-text" rows="9" spellcheck="false" placeholder="选择左侧设定文件后编辑"></textarea>
+                <textarea id="wb-lore-text" rows="9" spellcheck="false" placeholder="选择左侧设定文件后编辑" aria-label="设定内容" aria-describedby="wb-lore-state"></textarea>
                 <div class="wb-card-actions"><span class="wb-mono" id="wb-lore-state">—</span><button type="button" class="button button-primary button-small" id="wb-lore-save">保存设定</button></div>
               </div>
             </article>

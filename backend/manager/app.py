@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import math
@@ -33,6 +34,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from integration import bridge, scheduler, recovery, writer_runner
+from integration import concurrent_engine
 from manager import ai_tools, device_access, api_v08, api_v085, api_v09
 from integration import model_roles, studio, memory_library, style_profile, secret_store, character_state, continuity, scenes, scene_writer, workflow
 from integration import entity_state, evidence_usage, invalidation, retrieval_plan, style_rules
@@ -42,6 +44,8 @@ from integration import publishing
 from integration import costs
 
 DATA = bridge.COMBINED_ROOT / "integration_data"
+# 后台通知投递间隔；测试可改小以免等待 3 秒。
+NOTIFY_INTERVAL_SECONDS = 3.0
 # main() 在监听前写入实际端口；进程内 create_app() 测试时保持 None。
 _LISTEN_PORT = None
 # Serializes "find existing (project, publication_mode) + create/update" in this
@@ -248,6 +252,18 @@ class Operations:
                 existing = self.store.operation_by_key(operation_key)
                 if existing:
                     return reused(existing)
+            # 审计 C-09：「全站急停」必须拦住真正的自动化入口，而不只是
+            # 没有消费者的 v0.9 /tasks/claim。
+            if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                raise HTTPException(503, "全站急停中，已阻止新的操作；恢复后可重试")
+            pause_project = str((metadata or {}).get("project_path") or "")
+            if not pause_project:
+                try:
+                    pause_project = str(args[list(args).index("--project") + 1])
+                except (ValueError, IndexError):
+                    pause_project = ""
+            if pause_project and concurrent_engine.project_paused(pause_project):
+                raise HTTPException(409, "该作品已暂停自动化，请恢复后再执行")
             if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':
                 raise HTTPException(409,'正在维护升级，暂不派发新操作；完成后可继续原任务')
             active = self.store.operations(active_only=True)
@@ -358,6 +374,8 @@ class Operations:
                                       if wanted is not None and Path(x['path']).expanduser().resolve()==wanted),None)
                     if project is None:
                         raise ValueError('等待批次的作品已不在登记表中')
+                    if concurrent_engine.project_paused(project['path']):
+                        continue
                     project_key=project['id']
                     if payload.get('project_id')!=project_key:
                         payload['project_id']=project_key
@@ -1156,12 +1174,18 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         while True:
             await asyncio.sleep(20)
             try:
+                # 审计 C-09：急停期间连 resume_due / 定时任务派发一起停。
+                if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                    continue
                 await asyncio.to_thread(ops.resume_due)
                 for job in await asyncio.to_thread(scheduler.due_jobs):
+                    if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                        break
                     identity = job["id"]
                     meta = {
                         "job_id": identity,
                         "project_id": project_id_for_path(job.get("project", "")),
+                        "project_path": job.get("project", ""),
                         "book": job.get("book") or project_title(job.get("project", "")),
                     }
                     try:
@@ -1180,7 +1204,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
             return
         owner = f"notify-{os.getpid()}"
         while True:
-            await asyncio.sleep(3)
+            await asyncio.sleep(NOTIFY_INTERVAL_SECONDS)
             try:
                 await asyncio.to_thread(_deliver_notifications_once, owner)
             except (ValueError, KeyError, RuntimeError, OSError, sqlite3.Error) as exc:
@@ -1188,8 +1212,10 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
     @asynccontextmanager
     async def lifespan(app):
+        # 审计 C-38：start_dispatcher=False（所有 API 测试）不得启动任何
+        # 后台任务；通知投递会写真实通知库并可能发邮件/webhook。
         task = asyncio.create_task(dispatch()) if start_dispatcher else None
-        notify_task = asyncio.create_task(deliver_notifications())
+        notify_task = asyncio.create_task(deliver_notifications()) if start_dispatcher else None
         if start_dispatcher:
             def _restore_ofm():
                 try:
@@ -1220,6 +1246,25 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                     project_title=project_title, data_dir=DATA)
     api_v085.install(app, project=project, data_dir=DATA)
     api_v09.install(app, project=project, data_dir=DATA)
+    # 审计 C-47：并发引擎的唤醒路径 /internal/events/notify 曾完全不存在。
+    fanout = concurrent_engine.EventFanout()
+    app.state.event_fanout = fanout
+
+    @app.post("/internal/events/notify")
+    async def internal_events_notify(request: Request):
+        expected = os.environ.get("CHAPTER_WHALE_INTERNAL_TOKEN", "")
+        actual = request.headers.get("x-internal-token", "")
+        if not expected or not hmac.compare_digest(str(actual), str(expected)):
+            return JSONResponse(status_code=403,
+                                content={"code": "forbidden", "message": "内部令牌无效"})
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {"value": payload}
+        dropped = fanout.publish({"kind": "wake", **payload})
+        return {"ok": True, "subscribers_dropped": len(dropped)}
     access = device_access.DeviceAccess(network_hosts, port, pairing_required=device_pairing_required)
     app.state.device_access = access
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver", *network_hosts])
@@ -1239,7 +1284,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         if content_length > 32 * 1024 * 1024:
             return JSONResponse({"code": "payload_too_large", "message": "请求体超过32MB上限"},
                                 status_code=413)
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and \
+                request.url.path != "/internal/events/notify":
             if request.headers.get("X-Novel-Helper") != "1":
                 return JSONResponse({"code": "header_missing",
                                      "message": "需要管理界面的请求标识"},
@@ -1267,6 +1313,15 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
                 # 发布/入队持锁属于“暂时不可用”，不是客户端请求错误。
                 return JSONResponse({"code": "resource_busy", "message": "系统正忙，请稍后重试"},
                                     status_code=503, headers={"Retry-After": "2"})
+            try:
+                from integration import lock_manager as _locks
+                if isinstance(exc, _locks.LockError):
+                    status = 503 if exc.code in {"lock_busy", "resource_busy"} else int(exc.status or 409)
+                    headers = {"Retry-After": "2"} if status == 503 else None
+                    return JSONResponse({"code": exc.code, "message": redact(str(exc))},
+                                        status_code=status, headers=headers)
+            except Exception:
+                pass
             code = 404 if isinstance(exc, (KeyError, FileNotFoundError)) else 409 if isinstance(exc, FileExistsError) else 400
             return JSONResponse({"code": "request_failed", "message": redact(str(exc))},
                                 status_code=code)
@@ -2516,6 +2571,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         meta = {
             "job_id": identity,
             "project_id": project_id_for_path(job.get("project", "")),
+            "project_path": job.get("project", ""),
             "book": job.get("book") or project_title(job.get("project", "")),
         }
         return ops.start("daily", ["run", "--job-id", identity, *extra], f"job:{identity}", meta)

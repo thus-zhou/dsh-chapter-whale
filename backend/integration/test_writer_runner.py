@@ -13,8 +13,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 try:
     from . import writer_runner as writer
+    from . import chapter_versions as versions
 except ImportError:
     import writer_runner as writer
+    import chapter_versions as versions
 
 PASS = {"success": True, "review_decision": "pass", "needs_revision": False,
         "quality": {"format": "json", "verdict": "pass", "issues": [], "not_applicable": [],
@@ -113,6 +115,51 @@ class WriterRunnerTest(unittest.TestCase):
         self.assertEqual(result["post_save"]["entities"]["status"], "synced")
         self.assertEqual(list(self.project.rglob("*.tmp")), [])
 
+    def test_generated_body_commits_through_chapter_versions(self):
+        """生成正文必须同时生成版本索引、版本列表、当前版本和绑定回执。"""
+        result = self.generate()
+        body = Path(result["destination"])
+        payload = body.read_bytes()
+        digest = writer.hashlib.sha256(payload).hexdigest()
+        meta = versions.current_version(self.project, 1)
+        self.assertIsNotNone(meta)
+        self.assertEqual(meta["source"], "writer_runner")
+        self.assertEqual(meta["sha256"], digest)
+        self.assertEqual(meta["content_sha256"], digest)
+        self.assertEqual(meta["version_id"], result["version_id"])
+        self.assertEqual(meta["title"], "标题1")
+        self.assertEqual(versions.chapter_path(self.project, 1), body)
+        self.assertEqual(versions.file_sha256(body), digest)
+        index_entry = versions.load_index(self.project)["chapters"]["1"]
+        self.assertEqual(index_entry["current"], digest)
+        self.assertEqual(index_entry["current_version_id"], meta["version_id"])
+        self.assertEqual([item["version_id"] for item in versions.list_versions(self.project, 1)],
+                         [meta["version_id"]])
+        self.assertTrue(versions.compare_current(self.project, 1, digest)["version_matches_disk"])
+        receipt = json.loads((self.project / ".webnovel" / "writer_receipts.json").read_text(encoding="utf-8"))["1"]
+        self.assertEqual(receipt["sha256"], digest)
+        self.assertEqual(receipt["version_id"], meta["version_id"])
+        self.assertEqual(receipt["destination"], str(body.resolve()))
+        from integration import chapter_editor
+        state = chapter_editor.chapter_state(self.project, 1)
+        self.assertEqual(state["version_id"], meta["version_id"])
+        self.assertEqual(state["version_source"], "writer_runner")
+        self.assertEqual(state["content_sha256"], digest)
+        self.assertEqual(state["review_state"]["current_version_id"], meta["version_id"])
+        self.assertFalse(state["review_state"]["stale"])
+
+    def test_repeated_generation_reuses_the_committed_version(self):
+        first = self.generate()
+        before = Path(first["destination"]).read_bytes()
+        second = self.generate(chapter_id=1)
+        self.assertEqual(second["status"], "recovered")
+        self.assertEqual(second["destination"], first["destination"])
+        self.generator.assert_awaited_once()
+        self.assertEqual(Path(second["destination"]).read_bytes(), before)
+        self.assertEqual([item["version_id"] for item in versions.list_versions(self.project, 1)],
+                         [first["version_id"]])
+        self.assertEqual(versions.current_version(self.project, 1)["version_id"], first["version_id"])
+
     def test_changed_or_duplicate_body_invalidates_receipt(self):
         result = self.generate()
         Path(result["destination"]).write_text("改动正文", encoding="utf-8")
@@ -192,20 +239,93 @@ class WriterRunnerTest(unittest.TestCase):
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["current_chapter"], 1)
         self.generator.assert_awaited_once()
 
-    def test_receipt_failure_leaves_no_body(self):
+    def test_receipt_failure_never_points_at_an_uncommitted_body(self):
+        """版本提交成功后回执写入失败：不留回执，但正文与版本必须自洽。"""
         with patch.object(writer, "atomic_json", side_effect=OSError("模拟审查记录写入失败")):
             with self.assertRaises(OSError):
                 self.generate()
+        bodies = list((self.project / "正文").glob("*.md"))
+        self.assertEqual(len(bodies), 1)
+        meta = versions.current_version(self.project, 1)
+        self.assertIsNotNone(meta)
+        self.assertEqual(meta["sha256"], versions.file_sha256(bodies[0]))
+        self.assertEqual(versions.load_index(self.project)["chapters"]["1"]["current"], meta["sha256"])
+        receipts_path = self.project / ".webnovel" / "writer_receipts.json"
+        self.assertFalse(receipts_path.exists())
+        self.assertEqual(writer.reviewed_chapters(self.project), {})
+
+    def test_version_commit_failure_leaves_no_body_or_receipt(self):
+        """版本层提交失败时，正文与回执都不得出现，回执不能指向临时稿。"""
+        with patch.object(versions, "commit_raw_bytes",
+                          side_effect=versions.VersionConflict("simulated_commit_failure")):
+            with self.assertRaises(versions.VersionConflict):
+                self.generate()
         self.assertEqual(list((self.project / "正文").glob("*.md")), [])
+        self.assertEqual(versions.list_versions(self.project, 1), [])
+        self.assertIsNone(versions.current_version(self.project, 1))
+        receipts_path = self.project / ".webnovel" / "writer_receipts.json"
+        self.assertFalse(receipts_path.exists())
 
     def test_body_created_during_generation_is_not_overwritten(self):
         async def concurrent_write(*args):
-            (self.project / "正文" / "第1章-他人保存.md").write_text("保留原文", encoding="utf-8")
+            versions.commit_raw_bytes(
+                self.project, 1, "保留原文".encode("utf-8"), title="他人保存",
+                source="chapter_editor", allow_new=True, expect_absent=True)
             return await self.generated(*args)
         self.generator.side_effect = concurrent_write
         with self.assertRaises(FileExistsError):
             self.generate()
-        self.assertEqual((self.project / "正文" / "第1章-他人保存.md").read_text(encoding="utf-8"), "保留原文")
+        body = self.project / "正文" / "第1章-他人保存.md"
+        self.assertEqual(body.read_text(encoding="utf-8"), "保留原文")
+        committed = versions.list_versions(self.project, 1)
+        self.assertEqual(len(committed), 1)
+        self.assertEqual(committed[0]["source"], "chapter_editor")
+        self.assertEqual(versions.current_version(self.project, 1)["sha256"],
+                         versions.file_sha256(body))
+        self.assertEqual(writer.reviewed_chapters(self.project), {})
+
+    def test_chapter_created_at_commit_boundary_is_not_overwritten(self):
+        """expect_absent：章锁外出现的同名章必须让生成失败，而不是覆盖它。"""
+        real_commit = versions.commit_raw_bytes
+
+        def racing_commit(*args, **kwargs):
+            (self.project / "正文" / "第1章-并发保存.md").write_text("并发正文", encoding="utf-8")
+            return real_commit(*args, **kwargs)
+
+        with patch.object(versions, "commit_raw_bytes", side_effect=racing_commit):
+            with self.assertRaises(versions.VersionConflict):
+                self.generate()
+        self.assertEqual((self.project / "正文" / "第1章-并发保存.md").read_text(encoding="utf-8"),
+                         "并发正文")
+        self.assertEqual([path.name for path in (self.project / "正文").glob("*.md")],
+                         ["第1章-并发保存.md"])
+        self.assertEqual(versions.list_versions(self.project, 1), [])
+        self.assertFalse((self.project / ".webnovel" / "writer_receipts.json").exists())
+
+    def test_chapter_editor_lock_blocks_generated_body_publication(self):
+        """发布点必须与工作台共用 chapter_editor 的章锁，而不是只持有 writer.lock。"""
+        from integration import chapter_editor
+        acquired, release = threading.Event(), threading.Event()
+
+        def hold():
+            with chapter_editor._locked(self.project, 1):
+                acquired.set()
+                release.wait(5)
+
+        holder = threading.Thread(target=hold)
+        holder.start()
+        try:
+            self.assertTrue(acquired.wait(5))
+            with self.assertRaises(chapter_editor.ChapterError) as caught:
+                self.generate()
+            self.assertEqual(caught.exception.code, "file_in_use_retry")
+            self.assertEqual(list((self.project / "正文").glob("*.md")), [])
+            self.assertEqual(versions.list_versions(self.project, 1), [])
+            self.assertFalse((self.project / ".webnovel" / "writer_receipts.json").exists())
+        finally:
+            release.set()
+            holder.join(5)
+        self.assertFalse(holder.is_alive())
 
     def test_unclear_or_contradictory_review_cannot_be_saved(self):
         for review in ({"success": "true", "review_decision": "pass"},

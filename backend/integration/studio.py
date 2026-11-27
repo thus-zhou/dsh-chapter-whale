@@ -535,6 +535,7 @@ def polish_existing(project,chapter,min_words=0,preview=False):
         prepared_sha = hashlib.sha256(payload).hexdigest()
         versions.commit_raw_bytes(project, chapter, payload,
                                   op_id=f"polish-{uuid.uuid4().hex[:16]}",
+                                  expected_sha256=base_sha,
                                   source="studio_polish", note="润色回写",
                                   allow_new=False)
         receipt={"destination":str(source.resolve()),"sha256":prepared_sha,"review":review,"creative_contract_hash":contract,"reviewed_at":bridge.now_iso(),"revision_rounds":0}

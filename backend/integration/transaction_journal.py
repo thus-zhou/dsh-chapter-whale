@@ -1110,6 +1110,198 @@ def _first_dir(root, candidates: Sequence[str]):
     return None, None
 
 
+_BODY_CHAPTER = re.compile(r"^(?:第\s*0*(\d+)\s*章|\s*0*(\d+)(?:[：:\-＿_\s]|$))")
+
+
+def _body_chapter_number(name: str) -> Optional[int]:
+    match = _BODY_CHAPTER.search(Path(name).stem.strip())
+    if not match:
+        return None
+    value = match.group(1) or match.group(2)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _body_sha_map(folder) -> Dict[int, str]:
+    folder = Path(folder)
+    result: Dict[int, str] = {}
+    if not folder.is_dir():
+        return result
+    for path in sorted(folder.glob("*.md")):
+        if _is_link_like(path) or not path.is_file():
+            continue
+        number = _body_chapter_number(path.name)
+        if number is None or number in result:
+            continue
+        result[number] = _file_sha(path) or ""
+    return result
+
+
+def _index_current(index_data: Any) -> Dict[int, str]:
+    result: Dict[int, str] = {}
+    if not isinstance(index_data, dict):
+        return result
+    chapters = index_data.get("chapters")
+    if not isinstance(chapters, dict):
+        return result
+    for key, entry in chapters.items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            number = int(key)
+        except (TypeError, ValueError):
+            continue
+        current = str(entry.get("current") or "")
+        if current:
+            result[number] = current
+    return result
+
+
+@contextmanager
+def _versions_lock(project, timeout: float):
+    """Exclusive lock shared with ``chapter_versions`` (same ``.lock`` file)."""
+    path = Path(project) / ".webnovel" / "chapter_versions" / ".lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stream = path.open("a+b")
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    try:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        stream.seek(0)
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as exc:
+                if time.monotonic() >= deadline:
+                    raise BarrierTimeout("backup_versions_busy") from exc
+                time.sleep(0.05)
+        yield
+    finally:
+        try:
+            stream.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        stream.close()
+
+
+def _recopy_file(source, target, rel: str, records: List[Dict[str, Any]]) -> None:
+    checksum, size = _copy_file_atomic(source, target)
+    for entry in records:
+        if entry.get("path") == rel:
+            entry["sha256"] = checksum
+            entry["size"] = size
+            return
+    records.append({"path": rel, "kind": "file", "sha256": checksum, "size": size})
+
+
+def _reconcile_backup_index(project_path: Path, dest: Path, records: List[Dict[str, Any]],
+                            wait_seconds: float) -> Dict[str, Any]:
+    """Copy the version index and bodies as one consistent generation.
+
+    A save can land between the body copy and the index copy.  Re-reading the
+    index under the version lock and re-copying only mismatched bodies closes
+    that window without holding the lock for the whole backup (A-P2-7).
+    """
+    index_rel = None
+    for candidate in (".webnovel/chapter_versions/index.json", "chapter_versions/index.json"):
+        if (dest / Path(candidate)).is_file():
+            index_rel = candidate
+            break
+    if index_rel is None:
+        return {"ok": True, "chapters": 0}
+    problems: List[str] = []
+    for attempt in range(4):
+        with _versions_lock(project_path, wait_seconds):
+            source_index = project_path / Path(index_rel)
+            if not source_index.is_file():
+                return {"ok": True, "chapters": 0, "attempts": attempt + 1}
+            _recopy_file(source_index, dest / Path(index_rel), index_rel, records)
+            try:
+                index_data = json.loads((dest / Path(index_rel)).read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                return {"ok": False, "problems": ["index_unreadable"]}
+            current = _index_current(index_data)
+            project_bodies = _body_sha_map(project_path / "正文")
+            dest_bodies = _body_sha_map(dest / "正文")
+            problems = []
+            for number, sha in sorted(current.items()):
+                source = project_bodies.get(number)
+                if not source or source != sha:
+                    problems.append(f"index_body_missing:{number}")
+                    continue
+                if dest_bodies.get(number) != sha:
+                    body_path = None
+                    for path in (project_path / "正文").glob("*.md"):
+                        if _body_chapter_number(path.name) == number and not _is_link_like(path):
+                            body_path = path
+                            break
+                    if body_path is None:
+                        problems.append(f"index_body_missing:{number}")
+                        continue
+                    rel = "正文/" + body_path.name
+                    _recopy_file(body_path, dest / "正文" / body_path.name, rel, records)
+            if not problems:
+                return {"ok": True, "chapters": len(current), "attempts": attempt + 1}
+        time.sleep(0.05)
+    return {"ok": False, "problems": problems}
+
+
+def _backup_index_problems(reader, manifest: Mapping[str, Any]) -> List[str]:
+    index_rel = None
+    for candidate in (".webnovel/chapter_versions/index.json", "chapter_versions/index.json"):
+        if any(isinstance(item, dict) and item.get("path") == candidate
+               for item in (manifest.get("files") or [])):
+            index_rel = candidate
+            break
+    if index_rel is None:
+        return []
+    try:
+        index_data = json.loads(reader.read(index_rel).decode("utf-8-sig"))
+    except (OSError, ValueError, UnsafePath, FileNotFoundError):
+        return ["index_unreadable"]
+    current = _index_current(index_data)
+    if not current:
+        return []
+    body_entries: Dict[int, str] = {}
+    for item in manifest.get("files") or []:
+        if not isinstance(item, dict):
+            continue
+        rel = str(item.get("path") or "")
+        if not rel.startswith("正文/"):
+            continue
+        number = _body_chapter_number(Path(rel).name)
+        if number is None or number in body_entries:
+            continue
+        try:
+            body_entries[number] = _sha256(reader.read(rel))
+        except (OSError, UnsafePath, FileNotFoundError):
+            continue
+    problems: List[str] = []
+    for number, sha in sorted(current.items()):
+        actual = body_entries.get(number)
+        if actual is None:
+            problems.append(f"index_body_missing:{number}")
+        elif actual != sha:
+            problems.append(f"index_body_mismatch:{number}")
+    return problems
+
+
 def _sqlite_backup(source, target) -> Tuple[str, int]:
     source = Path(source)
     target = Path(target)
@@ -1171,6 +1363,11 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0) -
             ".webnovel/chapter_versions/objects", "chapter_versions/objects"))
         if objects is not None:
             _copy_tree(objects, dest, records, skipped=skipped, prefix=objects_rel)
+        consistency = _reconcile_backup_index(project_path, dest, records, wait_seconds)
+        if not consistency.get("ok"):
+            skipped.append({"path": ".webnovel/chapter_versions/index.json",
+                            "reason": "chapter_versions_inconsistent",
+                            "problems": consistency.get("problems", [])})
         for names, dest_rel in (
             ((".webnovel/writer_receipts.json", "writer_receipts.json"), ".webnovel/writer_receipts.json"),
             ((".webnovel/story_plan.json", "story_plan.json"), ".webnovel/story_plan.json"),
@@ -1219,6 +1416,7 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0) -
             "skipped": skipped,
             "count": len(records),
             "total_bytes": sum(int(item.get("size") or 0) for item in records),
+            "chapter_versions_consistency": consistency,
         }
         _atomic_write_bytes(dest / "backup_manifest.json", _json_bytes(manifest))
     return {
@@ -1486,6 +1684,7 @@ def inspect_backup(path, *, max_total_bytes: int = _MAX_TOTAL_BYTES,
             result["sqlite"] = sum(1 for item in entries
                                    if isinstance(item, dict) and item.get("kind") == "sqlite")
             problems = reader.verify(manifest)
+            problems += _backup_index_problems(reader, manifest)
             result["problems"] = problems
             result["valid"] = not problems
     except UnsafePath as exc:
@@ -1518,6 +1717,7 @@ def restore_backup(project, backup_path, confirmed: bool = False, *,
         manifest = reader.manifest()
         plan = _backup_plan(project_path, manifest)
         problems = reader.verify(manifest)
+        problems += _backup_index_problems(reader, manifest)
         if problems:
             raise TransactionConflict("backup_corrupt", "; ".join(problems[:5]))
         preview = {

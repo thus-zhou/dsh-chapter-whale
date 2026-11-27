@@ -51,7 +51,9 @@ const DEFAULT_PORT = 18765;
 const PROBE_TIMEOUT_MS = 1800;
 const DEFAULT_START_TIMEOUT_MS = 75_000;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 180_000;
-const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
+// 审计 C-40：manager 的全局上限是 32MB；插件端保持同一数值，避免
+// 32–64MB 的上传先被代理接收、再被 manager 413。
+const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 export const name = PLUGIN_ID;
 export const inject = ['tools'];
@@ -181,6 +183,17 @@ export function isLoopbackAuthority(authority) {
 }
 
 /**
+ * 审计 C-44：Host 头可以被 LAN 客户端伪造成 127.0.0.1；真正的回环判定
+ * 必须看套接字的对端地址。测试用的假 request 没有 socket，按本机处理。
+ */
+export function isLoopbackRemote(request) {
+  const address = request?.socket?.remoteAddress;
+  if (address === undefined || address === null) return true;
+  const normalized = String(address).replace(/^::ffff:/i, '');
+  return normalized === '127.0.0.1' || normalized === '::1';
+}
+
+/**
  * Gate 2: browser-originated requests must be same-origin with the Host header.
  * Non-browser clients (no Origin, no Sec-Fetch-Site) pass; they are local
  * processes that could reach the manager port directly anyway.
@@ -239,6 +252,7 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/chapters/:chapter/annotations/run',
   'POST /api/projects/:identity/chapters/:chapter/annotations/:annotation/followup',
   'POST /api/projects/:identity/chapters/:chapter/revision/apply-hunks',
+  'POST /api/projects/:identity/chapters/:chapter/revision/reject-hunks',
   'POST /api/projects/:identity/chapters/:chapter/revision/undo-apply',
   'POST /api/chief/messages',
   'POST /api/projects/:identity/chief/messages',
@@ -248,6 +262,8 @@ const WRITE_ROUTES = [
   'POST /api/projects/:identity/chief/commands',
   'POST /api/projects/:identity/approvals/:approval/resolve',
   'POST /api/projects/:identity/directives/:directive/amend',
+  'POST /api/projects/:identity/directives/:directive/amendments/:amendment/evaluate',
+  'POST /api/projects/:identity/directives/:directive/amendments/:amendment/release',
   'POST /api/projects/:identity/directives/:directive/cancel',
   'POST /api/projects/:identity/tasks/:task/retry',
   'POST /api/projects/:identity/automation/pause',
@@ -838,17 +854,26 @@ function readBody(request, limit) {
   return new Promise((done, fail) => {
     const chunks = [];
     let size = 0;
+    let failed = false;
     request.on('data', (chunk) => {
+      if (failed) return;
       size += chunk.length;
       if (size > limit) {
+        // 审计 C-40：这里只标记失败，不 destroy；调用方先发 413 再关闭连接。
+        failed = true;
         fail(new Error(`请求体超过 ${Math.round(limit / 1024 / 1024)}MB`));
-        request.destroy();
         return;
       }
       chunks.push(chunk);
     });
-    request.on('end', () => done(Buffer.concat(chunks)));
-    request.on('error', fail);
+    request.on('end', () => {
+      if (!failed) done(Buffer.concat(chunks));
+    });
+    request.on('error', (error) => {
+      if (failed) return;
+      failed = true;
+      fail(error);
+    });
   });
 }
 
@@ -879,22 +904,36 @@ async function forward(request, response, config, context, targetPath, search) {
   // gate 3 authenticated the caller. Only mutations carry it upstream.
   if (!SAFE_METHODS.has(method)) headers['x-novel-helper'] = '1';
 
-  let body;
-  if (!SAFE_METHODS.has(method)) {
-    try {
-      body = await readBody(request, config.maxBodyBytes);
-    } catch (error) {
-      const detail = String(error?.message || error || '读取请求体失败');
-      sendJson(response, detail.includes('超过') ? 413 : 400, { detail });
-      return;
-    }
-  }
-
+  // 审计 C-41：监听器必须在 await readBody 之前注册。Node 26 在请求体
+  // 读完时立即触发 request 'close'，旧实现注册太晚，客户端断开后上游仍跑。
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
-  const abortAll = () => controller.abort();
-  request.once('close', abortAll);
+  const abortAll = () => {
+    if (!response.writableEnded) controller.abort();
+  };
+  request.once?.('aborted', abortAll);
+  response.once?.('close', abortAll);
+  let body;
+  let timer = null;
   try {
+    if (!SAFE_METHODS.has(method)) {
+      try {
+        body = await readBody(request, config.maxBodyBytes);
+      } catch (error) {
+        const detail = String(error?.message || error || '读取请求体失败');
+        const tooLarge = detail.includes('超过');
+        // 审计 C-40：先写 413 并结束响应，再关闭请求，客户端才会收到 JSON。
+        sendJson(response, tooLarge ? 413 : 400, { detail },
+          tooLarge ? { connection: 'close' } : undefined);
+        if (tooLarge) {
+          const closeRequest = () => { try { request.destroy(); } catch { /* already gone */ } };
+          if (typeof response.once === 'function') response.once('finish', closeRequest);
+          else if (typeof request.destroy === 'function') request.destroy();
+        }
+        return;
+      }
+    }
+
+    timer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
     const upstream = await fetch(`${baseUrl(config)}${targetPath}${search}`, {
       method,
       headers,
@@ -961,8 +1000,9 @@ async function forward(request, response, config, context, targetPath, search) {
       service_down: true,
     });
   } finally {
-    clearTimeout(timer);
-    request.off?.('close', abortAll);
+    if (timer) clearTimeout(timer);
+    request.off?.('aborted', abortAll);
+    response.off?.('close', abortAll);
   }
 }
 
@@ -989,6 +1029,10 @@ export function createHandler(config, token) {
       // No CORS is ever granted: a preflight fails, so a cross-origin page can
       // never attach the token header.
       sendJson(response, 403, { detail: '不允许跨站请求' });
+      return;
+    }
+    if (!isLoopbackRemote(request)) {
+      sendJson(response, 403, { detail: '只接受本机回环地址访问', code: 'loopback-remote-required' });
       return;
     }
     if (!isLoopbackAuthority(authority)) {
@@ -1419,6 +1463,7 @@ export const __internals = {
   parseTarget,
   originProblem,
   isLoopbackAuthority,
+  isLoopbackRemote,
   hostnameOf,
   redactService,
   ensureStarted,

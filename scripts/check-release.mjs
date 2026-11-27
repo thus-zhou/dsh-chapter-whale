@@ -263,6 +263,91 @@ if (existsSync(catalogPath)) {
   }
 }
 
+// D-08：client.js 里内嵌的 ATELIER CSS 与 workbench 内核必须能从源文件逐字节
+// 复算。assets/*.css 或 scripts/shared/workbench-core.js 改动后忘了重新构建时，
+// 测试与发布校验都必须失败，而不是静默发出旧面板。
+function readTextFile(path) {
+  return readFileSync(path, 'utf8');
+}
+function blockBetween(text, begin, end) {
+  const start = text.indexOf(begin);
+  if (start < 0) throw new Error('缺少生成块起点：' + begin.trim());
+  const stop = text.indexOf(end, start + begin.length);
+  if (stop < 0) throw new Error('缺少生成块终点：' + end.trim());
+  return text.slice(start + begin.length, stop);
+}
+function embeddedAtelierCss(client) {
+  const block = blockBetween(client,
+    '        // BEGIN GENERATED ATELIER CSS\n',
+    '        // END GENERATED ATELIER CSS\n');
+  const chunks = [];
+  for (const line of block.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const literal = trimmed.endsWith(',') ? trimmed.slice(0, -1) : trimmed;
+    if (!/^".*"$/.test(literal)) continue;
+    chunks.push(JSON.parse(literal));
+  }
+  return chunks.join('');
+}
+function expectedAtelierCssFromSources() {
+  const fonts = [
+    ['manrope', 'Whale Geometric', '200 800'],
+    ['notosanssc', 'Whale Text', '100 900'],
+    ['notoserifsc', 'Whale Editorial', '400'],
+  ].map(([file, family, weight]) => {
+    const path = join(root, 'assets', 'fonts', file + '.woff2');
+    if (!existsSync(path)) throw new Error('缺少字体源文件：' + path);
+    const data = readFileSync(path).toString('base64');
+    return `@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${data}) format("woff2");font-weight:${weight};font-display:swap}`;
+  });
+  const base = readTextFile(join(root, 'assets', 'atelier-base.css'));
+  const native = readTextFile(join(root, 'assets', 'atelier-native.css'));
+  return fonts.join('\n') + '\n' + base + '\n' + native;
+}
+function embeddedWorkbenchCore(client) {
+  return blockBetween(client,
+    '        // BEGIN GENERATED WORKBENCH CORE\n',
+    '        // END GENERATED WORKBENCH CORE\n');
+}
+try {
+  const clientPath = join(root, 'client.js');
+  const uiSources = [
+    join(root, 'assets', 'atelier-base.css'),
+    join(root, 'assets', 'atelier-native.css'),
+    join(root, 'assets', 'fonts', 'manrope.woff2'),
+    join(root, 'assets', 'fonts', 'notosanssc.woff2'),
+    join(root, 'assets', 'fonts', 'notoserifsc.woff2'),
+  ];
+  if (!existsSync(clientPath)) {
+    notes.push('未包含 client.js，跳过生成产物一致性校验。');
+  } else if (!uiSources.every((path) => existsSync(path))) {
+    errors.push('发行包缺少生成用前端源文件（assets/*.css 或字体），无法校验 client.js 内嵌样式。');
+  } else {
+    const clientText = readTextFile(clientPath);
+    if (embeddedAtelierCss(clientText) !== expectedAtelierCssFromSources()) {
+      errors.push('client.js 内嵌 ATELIER CSS 与 assets/atelier-base.css + atelier-native.css + 字体不一致：请运行 python3 -X utf8 scripts/build-client-ui.py。');
+    }
+    const staticCorePath = join(root, 'backend', 'manager', 'static', 'workbench-core.js');
+    const sharedCorePath = join(root, 'scripts', 'shared', 'workbench-core.js');
+    const corePath = existsSync(sharedCorePath) ? sharedCorePath : (existsSync(staticCorePath) ? staticCorePath : null);
+    if (!corePath) {
+      errors.push('缺少 workbench-core 源文件，无法校验内嵌内核。');
+    } else {
+      const source = readTextFile(corePath);
+      const normalized = source.endsWith('\n') ? source : source + '\n';
+      if (embeddedWorkbenchCore(clientText) !== normalized) {
+        errors.push('client.js 内嵌 WORKBENCH CORE 与 scripts/shared/workbench-core.js 不一致：请运行 python3 -X utf8 scripts/build-client-ui.py。');
+      }
+      if (existsSync(staticCorePath) && readTextFile(staticCorePath) !== normalized) {
+        errors.push('backend/manager/static/workbench-core.js 与 scripts/shared/workbench-core.js 不一致：请运行 python3 -X utf8 scripts/build-client-ui.py。');
+      }
+    }
+  }
+} catch (error) {
+  errors.push('前端产物一致性校验失败：' + error.message);
+}
+
 const summary = {
   root, version: pkg.version, packageVersion: manifest.packageVersion,
   buildId: manifest.buildId, recomputedBuildId, files: Object.keys(manifest.files || {}).length,

@@ -16,9 +16,20 @@ from integration import concurrent_engine, costs, maintenance, quality, world_st
 
 
 def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path) -> None:
-    concurrent_engine.configure_global_pause(Path(data_dir) / "global_pause.json")
+    # 审计 C-39：暂停文件按应用实例挂载，不写模块级全局变量；同进程多个
+    # create_app 不再互相覆盖。
+    pause_path = Path(data_dir) / "global_pause.json"
+    app.state.global_pause_path = pause_path
+    export_dir = Path(data_dir) / "diagnostics"
+
     def _book(identity: str) -> Path:
         return Path(project(identity)["path"])
+
+    def _owner(body: Dict[str, Any]) -> str:
+        owner = str(body.get("owner") or "").strip()
+        if not owner:
+            raise concurrent_engine.SchedulerError("owner_required", status=422)
+        return owner
 
     def guard(fn):
         @functools.wraps(fn)
@@ -168,44 +179,62 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @guard
     def submit_task(identity: str, data: dict | None = None):
         body = data or {}
-        return concurrent_engine.submit(_book(identity), body.get("payload") or {},
+        payload = body.get("payload")
+        if payload is not None and not isinstance(payload, dict):
+            raise concurrent_engine.SchedulerError("invalid_payload", status=422)
+        blocked_by = body.get("blocked_by")
+        if blocked_by is None:
+            blocked_by = []
+        # 审计 C-37：字符串会被 list("abc") 拆成三个 blocker；只接受字符串列表。
+        if not isinstance(blocked_by, (list, tuple)) or any(
+                not isinstance(item, str) or not item.strip() for item in blocked_by):
+            raise concurrent_engine.SchedulerError("invalid_blocked_by", status=422)
+        task_id = body.get("task_id")
+        if task_id is not None and (not isinstance(task_id, str) or not task_id.strip()):
+            raise concurrent_engine.SchedulerError("invalid_task_id", status=422)
+        return concurrent_engine.submit(_book(identity), payload or {},
                                         priority=str(body.get("priority") or "P2"),
                                         chapter_id=body.get("chapter_id"),
+                                        task_id=task_id,
                                         parent_task_id=body.get("parent_task_id"),
-                                        blocked_by=body.get("blocked_by") or (),
+                                        blocked_by=blocked_by,
                                         amendment_fallback=str(body.get("amendment_fallback") or "wait"))
 
     @app.post("/api/projects/{identity}/tasks/claim")
     @guard
     def claim_task(identity: str, data: dict | None = None):
         body = data or {}
-        item = concurrent_engine.claim(_book(identity), str(body.get("owner") or "worker"),
-                                       max_slots=int(body.get("max_slots") or 4))
+        item = concurrent_engine.claim(_book(identity), _owner(body),
+                                       max_slots=int(body.get("max_slots") or 4),
+                                       pause_path=pause_path,
+                                       max_attempts=int(body.get("max_attempts")
+                                                        or concurrent_engine.MAX_ATTEMPTS))
         return {"task": item}
 
     @app.post("/api/projects/{identity}/tasks/{task_id}/renew")
     @guard
     def renew_task(identity: str, task_id: str, data: dict | None = None):
-        return concurrent_engine.renew(_book(identity), task_id,
-                                       str((data or {}).get("owner") or "worker"))
+        body = data or {}
+        return concurrent_engine.renew(_book(identity), task_id, _owner(body))
 
     @app.post("/api/projects/{identity}/tasks/{task_id}/commit")
     @guard
     def commit_task(identity: str, task_id: str, data: dict | None = None):
-        return concurrent_engine.begin_commit(_book(identity), task_id,
-                                              str((data or {}).get("owner") or "worker"))
+        body = data or {}
+        return concurrent_engine.begin_commit(_book(identity), task_id, _owner(body))
 
     @app.post("/api/projects/{identity}/tasks/{task_id}/complete")
     @guard
     def complete_task(identity: str, task_id: str, data: dict | None = None):
-        return concurrent_engine.complete(_book(identity), task_id,
-                                          owner=str((data or {}).get("owner") or ""))
+        body = data or {}
+        return concurrent_engine.complete(_book(identity), task_id, owner=_owner(body))
 
     @app.post("/api/projects/{identity}/tasks/{task_id}/fail")
     @guard
     def fail_task(identity: str, task_id: str, data: dict | None = None):
-        return concurrent_engine.fail(_book(identity), task_id,
-                                      error=str((data or {}).get("error") or ""))
+        body = data or {}
+        return concurrent_engine.fail(_book(identity), task_id, owner=_owner(body),
+                                      error=str(body.get("error") or ""))
 
     @app.post("/api/projects/{identity}/tasks/{task}/retry")
     @guard
@@ -229,7 +258,8 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         body = data or {}
         paused = bool(body.get("paused", True))
         result = concurrent_engine.set_global_pause(
-            paused, reason=str(body.get("reason") or ("全站急停" if paused else "全站恢复")))
+            paused, reason=str(body.get("reason") or ("全站急停" if paused else "全站恢复")),
+            path=pause_path)
         identity = str(body.get("identity") or "")
         if identity:
             book = _book(identity)
@@ -253,8 +283,11 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
 
     @app.post("/api/projects/{identity}/tasks/recover")
     @guard
-    def recover_tasks(identity: str):
-        return {"recovered": concurrent_engine.recover(_book(identity))}
+    def recover_tasks(identity: str, data: dict | None = None):
+        body = data or {}
+        max_attempts = int(body.get("max_attempts") or concurrent_engine.MAX_ATTEMPTS)
+        return {"recovered": concurrent_engine.recover(_book(identity),
+                                                       max_attempts=max(1, max_attempts))}
 
     @app.get("/api/projects/{identity}/directives/{directive}/cost")
     @guard
@@ -265,13 +298,16 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     # -------------------------------------------------------------- quality
     @app.get("/api/projects/{identity}/quality/dashboard")
     @guard
-    def quality_dashboard_alias(identity: str):
-        return quality.dashboard(_book(identity))
+    def quality_dashboard_alias(identity: str, limit: int = 200, offset: int = 0):
+        # 审计 C-26：分页透传，205 章不再只显示 200 且 total 报 200。
+        return quality.dashboard(_book(identity), limit=max(1, min(int(limit), 1000)),
+                                 offset=max(0, int(offset)))
 
     @app.get("/api/projects/{identity}/quality")
     @guard
-    def quality_board(identity: str):
-        return quality.dashboard(_book(identity))
+    def quality_board(identity: str, limit: int = 200, offset: int = 0):
+        return quality.dashboard(_book(identity), limit=max(1, min(int(limit), 1000)),
+                                 offset=max(0, int(offset)))
 
     @app.get("/api/projects/{identity}/quality/{chapter}")
     @guard
@@ -297,15 +333,20 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     def system_recover(data: dict | None = None):
         body = data or {}
         identity = str(body.get("identity") or "")
-        if identity and body.get("action") in {"gc", "export"}:
+        action = str(body.get("action") or "")
+        # 审计 C-31：未知 action 不能再返回 200 ok。
+        if action and action not in {"gc", "export"}:
+            raise maintenance.MaintenanceError("unsupported_action", status=400)
+        if action and not identity:
+            raise maintenance.MaintenanceError("identity_required", status=400)
+        if action:
             book = _book(identity)
-            if body["action"] == "gc":
+            if action == "gc":
                 return maintenance.collect_garbage(
                     book, dry_run=bool(body.get("dry_run", True)),
                     min_age_seconds=max(86400, int(body.get("min_age_seconds") or 7 * 86400)))
-            destination = Path(body.get("destination") or (
-                data_dir / "diagnostics" / f"recover-{os.getpid()}-{int(time.time())}.zip"))
-            return maintenance.export_bundle(book, destination)
+            destination = export_dir / f"recover-{os.getpid()}-{int(time.time())}-{os.urandom(3).hex()}.zip"
+            return maintenance.export_bundle(book, destination, allowed_dir=export_dir)
         return {"status": "ok", "recovered": [], "message": "没有可自动恢复的卡单"}
 
     @app.get("/api/projects/{identity}/diagnostics")
@@ -330,10 +371,11 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @app.post("/api/projects/{identity}/diagnostics/export")
     @guard
     def export_diagnostics(identity: str, data: dict | None = None):
-        target = (data or {}).get("destination")
-        destination = Path(target).expanduser() if target else (
-            data_dir / "diagnostics" / f"diagnostics-{identity}-{int(time.time())}.zip")
-        return maintenance.export_bundle(_book(identity), destination)
+        # 审计 C-14：忽略客户端 destination，固定写到 data_dir/diagnostics，
+        # 杜绝 LAN/配对设备向任意可写路径落 zip。
+        stamp = f"{int(time.time())}-{os.getpid()}-{os.urandom(3).hex()}"
+        destination = export_dir / f"diagnostics-{identity}-{stamp}.zip"
+        return maintenance.export_bundle(_book(identity), destination, allowed_dir=export_dir)
 
     @app.post("/api/projects/{identity}/diagnostics/heal")
     @guard

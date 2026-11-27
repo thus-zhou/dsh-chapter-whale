@@ -372,10 +372,15 @@ const WorkbenchCore = (() => {
       this._data = null;
       this._event = '';
       this._lastEventId = null;
+      this._retry = null;
     }
 
     get lastEventId() {
       return this._lastEventId;
+    }
+
+    get retry() {
+      return this._retry;
     }
 
     feed(chunk) {
@@ -433,6 +438,9 @@ const WorkbenchCore = (() => {
         this._event = value;
       } else if (field === 'id') {
         if (value.indexOf('\u0000') < 0) this._lastEventId = value;
+      } else if (field === 'retry') {
+        const delay = Number(value);
+        if (Number.isFinite(delay) && delay >= 0) this._retry = delay;
       }
     }
 
@@ -467,8 +475,13 @@ const WorkbenchCore = (() => {
         ? event.event_id
         : event.id;
       const idKey = idValue === null || idValue === undefined ? null : 'id:' + String(idValue);
-      if (idKey !== null && this._ids.has(idKey)) return false;
-      if (seq !== null && this._seqs.has(seq)) return false;
+      // A resync marker is a control frame, not a duplicate data frame: it must
+      // reach the consumer even when it reuses the last delivered seq
+      // (B-14R-2).  Data frames keep both dedupe checks.
+      if (event.kind !== 'resync_required') {
+        if (idKey !== null && this._ids.has(idKey)) return false;
+        if (seq !== null && this._seqs.has(seq)) return false;
+      }
       if (idKey !== null) this._ids.add(idKey);
       if (seq !== null) this._seqs.add(seq);
       this._events.push({ event: event, seq: seq, order: this._events.length });
@@ -990,12 +1003,15 @@ const WorkbenchCore = (() => {
     const onError = typeof settings.onError === 'function' ? settings.onError : function () {};
     const baseDelay = Math.max(0, _integer(settings.retryDelayMs, 1000));
     const maximumDelay = Math.max(baseDelay, _integer(settings.maxRetryDelayMs, 15000));
+    const retryOnError = settings.retryOnError === true;
+    const respectRetryField = settings.respectRetryField !== false;
     const externalSignal = settings.signal || null;
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     let closed = externalSignal ? Boolean(externalSignal.aborted) : false;
     let timer = null;
     let reader = null;
     let retryDelay = baseDelay;
+    let serverRetry = null;
     let lastEventId = settings.lastEventId === undefined || settings.lastEventId === null ? null : String(settings.lastEventId);
 
     function report(error) {
@@ -1017,7 +1033,7 @@ const WorkbenchCore = (() => {
 
     function schedule() {
       if (closed) return;
-      const wait = retryDelay;
+      const wait = serverRetry === null ? retryDelay : serverRetry;
       retryDelay = Math.min(retryDelay * 2, maximumDelay);
       timer = setTimeout(run, wait);
     }
@@ -1053,6 +1069,12 @@ const WorkbenchCore = (() => {
         const error = new Error('Event stream request failed with status ' + status);
         error.status = status;
         report(error);
+        /* 401/403 cannot be repaired by retrying; 429/5xx and gateway
+           timeouts are transient and must reconnect instead of dying. */
+        if (retryOnError && status !== 401 && status !== 403 && status !== 410) {
+          schedule();
+          return;
+        }
         close();
         return;
       }
@@ -1068,11 +1090,17 @@ const WorkbenchCore = (() => {
           const events = parser.feed(step.value);
           for (let i = 0; i < events.length; i += 1) emit(events[i]);
           if (parser.lastEventId !== null) lastEventId = parser.lastEventId;
+          if (respectRetryField && parser.retry !== null) {
+            serverRetry = Math.min(Math.max(0, parser.retry), maximumDelay);
+          }
         }
         if (!closed) {
           const tail = parser.flush();
           for (let i = 0; i < tail.length; i += 1) emit(tail[i]);
           if (parser.lastEventId !== null) lastEventId = parser.lastEventId;
+          if (respectRetryField && parser.retry !== null) {
+            serverRetry = Math.min(Math.max(0, parser.retry), maximumDelay);
+          }
         }
       } catch (error) {
         if (!closed) report(error);

@@ -1225,8 +1225,6 @@ async def _generate_chapter_locked(
     if not content.strip():
         raise RuntimeError("正文不能为空")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if selected_chapter in existing_chapter_ids(project_root):
-        raise FileExistsError(f"第{selected_chapter}章在生成期间已被保存")
     payload = content.encode("utf-8")
     receipts_path = project_root / ".webnovel" / "writer_receipts.json"
     receipts = strict_json(receipts_path, {})
@@ -1239,30 +1237,39 @@ async def _generate_chapter_locked(
     if creative_contract_hash(project_root) != contract_hash:
         raise RuntimeError("生成期间创作约定已改变，未保存正文，请按最新约定重新生成")
     receipt["creative_contract_hash"] = contract_hash
-    receipts[str(selected_chapter)] = receipt
-    # Receipt first, then a fully written body published without replacement.
-    # A crash at either boundary leaves recoverable evidence, never half a body.
-    atomic_json(receipts_path, receipts)
-    fd, name = tempfile.mkstemp(prefix=".writer-", suffix=".tmp", dir=destination.parent)
-    temporary = Path(name)
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.link(temporary, destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+    # 正文的唯一发布入口是版本层：章锁内提交正文与索引，提交成功后才写回执。
+    # 回执先写会留下指向未提交正文的记录；先 os.link 再补索引会让生成章在
+    # chapter_versions 中缺席。新章用 expect_absent 拒绝并发出现的同名章。
+    from . import chapter_editor, chapter_versions
+    op_id = f"writer-{selected_chapter}-{uuid.uuid4().hex}"
+    with chapter_editor._locked(project_root, selected_chapter):
+        if selected_chapter in existing_chapter_ids(project_root):
+            raise FileExistsError(f"第{selected_chapter}章在生成期间已被保存")
+        # 版本层按标题落盘；用已算好的目标文件名反推标题，避免二次清洗
+        # 把正文写到与 destination 不同的文件。
+        prefix = f"第{selected_chapter}章-"
+        version_title = (destination.name[len(prefix):-3]
+                         if destination.name.startswith(prefix)
+                         and destination.name.endswith(".md") else "")
+        record = chapter_versions.commit_raw_bytes(
+            project_root, selected_chapter, payload, title=version_title,
+            op_id=op_id, source="writer_runner",
+            allow_new=True, expect_absent=True,
+            invalidation_reason="chapter_generated")
+        if record.get("state") != "committed":
+            raise RuntimeError(f"正文版本未提交：{record.get('state')}")
+        committed = chapter_versions.chapter_path(project_root, selected_chapter)
+        if committed is None or chapter_versions.file_sha256(committed) != receipt["sha256"]:
+            raise RuntimeError("正文版本提交后校验失败，回执未写入")
+        destination = committed
+        receipt["destination"] = str(destination.resolve())
+        receipt["version_id"] = record.get("version_id")
+        receipt["op_id"] = op_id
+        receipts[str(selected_chapter)] = receipt
+        atomic_json(receipts_path, receipts)
+    result["destination"] = str(destination)
+    result["version_id"] = record.get("version_id")
     _save_progress(project_root, selected_chapter)
-    # 重新生成正文同样让「依据旧正文的事实」失效：生成、导入、人工改共用一个入口。
-    try:
-        from . import invalidation
-        invalidation.invalidate(
-            project_root, chapters=[selected_chapter], reason="chapter_generated",
-            source=f"generate:{selected_chapter}",
-            op_id=f"generate-{selected_chapter}-{receipt.get('sha256', '')[:12]}")
-    except (ValueError, OSError, RuntimeError):
-        pass
     candidates = _commit_review_candidates(project_root, selected_chapter, content, generated["review"], _writer_locked=True)
     receipt["candidates"] = candidates
     receipts[str(selected_chapter)] = receipt

@@ -146,5 +146,63 @@ class MergeTest(unittest.TestCase):
                 self.assertIn(current[:len(current) - len(suffix) - len("【目标】")], result["text"])
 
 
+class DeterminismAndLedgerTest(unittest.TestCase):
+    def test_zero_length_deletion_conflicts_with_same_range_replacement(self):
+        base = "甲。\n删除这一段。\n结尾。\n"
+        start = base.index("删除这一段。")
+        end = start + len("删除这一段。")
+        deletion = {"id": "hk_del", "char_start": start, "char_end": end,
+                    "before_text": "删除这一段。", "after_text": ""}
+        replacement = {"id": "hk_rep", "char_start": start, "char_end": end,
+                       "before_text": "删除这一段。", "after_text": "替换。"}
+        for _ in range(100):
+            result = tm.apply_hunks(base, base, [deletion, replacement])
+            applied = [row for row in result["results"] if row["status"] == "applied"]
+            self.assertEqual(len(applied), 1, result["results"])
+            self.assertFalse(result["clean"])
+            self.assertTrue(any(row["reason"] == "hunk_overlap" for row in result["conflicts"]))
+            self.assertIn("结尾。", result["text"])
+
+    def test_ledger_from_another_snapshot_is_not_replayed_by_old_offsets(self):
+        base = "X。\nA。\nB。\nC1。\n"
+        ledger = [{"char_start": 6, "char_end": 9, "applied_text": "C1。",
+                   "before_quote": "C。", "base_snapshot_id": "old"}]
+        self.assertEqual(tm.build_intermediate_base(base, [], ledger=ledger,
+                                                    base_snapshot_id="new"), base)
+        original = "X。\nA。\nB。\nC。\n"
+        relocated = tm.build_intermediate_base(original, [], ledger=ledger,
+                                               base_snapshot_id="new")
+        self.assertEqual(relocated, base)
+
+    def test_reverse_deletion_uses_snapshot_context_instead_of_stale_offset(self):
+        row = {"applied_text": "", "before_quote": "甲乙丙丁戊", "char_start": 0, "char_end": 0,
+               "prefix_ctx": "", "suffix_ctx": "NEW。\n"}
+        result = tm.reverse_patch("前言。NEW。\n", row)
+        self.assertEqual(result["status"], "reversed")
+        self.assertEqual(result["text"], "前言。甲乙丙丁戊NEW。\n")
+        ambiguous = tm.reverse_patch("重复。NEW。\n重复。NEW。\n", row)
+        self.assertEqual(ambiguous["status"], "relocated_needed")
+        self.assertEqual(ambiguous["text"], "重复。NEW。\n重复。NEW。\n")
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class PartialDeletionOverlapTest(unittest.TestCase):
+    def test_pure_deletion_range_cannot_be_replaced_by_an_overlapping_hunk(self):
+        # B-09R-1: the deleted interval, not its zero-length result, is what a
+        # later hunk must overlap-check against.
+        text = "0123456789ABCDEFGHIJ"
+        hunks = [
+            {"id": "del", "char_start": 10, "char_end": 16,
+             "before_text": "ABCDEF", "after_text": ""},
+            {"id": "rep", "char_start": 5, "char_end": 12,
+             "before_text": "56789AB", "after_text": "REPL"},
+        ]
+        result = tm.apply_hunks(text, text, hunks)
+        statuses = {row["hunk_id"]: row["status"] for row in result["results"]}
+        self.assertEqual(statuses["del"], "applied")
+        self.assertEqual(statuses["rep"], "overlap_conflict")
+        self.assertFalse(result["clean"])
+        self.assertEqual(result["text"], "0123456789GHIJ")

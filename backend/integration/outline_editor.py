@@ -57,12 +57,35 @@ def _book(project) -> Path:
     return Path(project)
 
 
+def _assert_storage_dir(project, name: str) -> Path:
+    """Return ``project/name`` after rejecting symlinked storage directories.
+
+    A synced or untrusted project may contain ``大纲``/``设定`` as a link to a
+    directory outside the book; writes would then escape the project (A-P2-12).
+    """
+    root = _book(project).resolve()
+    target = _book(project) / name
+    try:
+        if target.is_symlink():
+            raise OutlineError("path_escape")
+    except OSError as exc:
+        raise OutlineError("path_escape") from exc
+    if target.exists():
+        try:
+            resolved = target.resolve()
+        except OSError as exc:
+            raise OutlineError("path_escape") from exc
+        if resolved != root and root not in resolved.parents:
+            raise OutlineError("path_escape")
+    return target
+
+
 def _outline_dir(project) -> Path:
-    return _book(project) / "大纲"
+    return _assert_storage_dir(project, "大纲")
 
 
 def _lore_dir(project) -> Path:
-    return _book(project) / "设定"
+    return _assert_storage_dir(project, "设定")
 
 
 def _meta_path(project) -> Path:
@@ -194,6 +217,7 @@ def load_meta(project) -> Dict[str, Any]:
         data.setdefault("volumes", "")
         data.setdefault("character_arcs", "")
         data.setdefault("foreshadowing", "")
+        data.setdefault("legacy_chapters", {})
         return data
     # 兼容 v0.7.5：仅当 meta 尚不存在时，从旧 story_plan.json 一次性回填。
     legacy = {}
@@ -212,6 +236,7 @@ def load_meta(project) -> Dict[str, Any]:
         "volumes": str(legacy.get("volumes") or ""),
         "character_arcs": str(legacy.get("character_arcs") or ""),
         "foreshadowing": str(legacy.get("foreshadowing") or ""),
+        "legacy_chapters": legacy.get("chapters") if isinstance(legacy.get("chapters"), dict) else {},
         "updated_at": _now(),
     }
     safety.atomic_json(path, meta)
@@ -397,6 +422,13 @@ def conflicts(project) -> List[Dict[str, Any]]:
     for path in _plan_files(project):
         visible, _ = _strip_plan_comment(_read_text(path))
         present |= {str(row["id"]) for row in _parse_visible(visible)}
+    tombstones = _tombstone_numbers(project)
+    for key in _legacy_chapters(project, meta):
+        try:
+            if int(key) not in tombstones:
+                present.add(str(int(key)))
+        except (TypeError, ValueError):
+            continue
     for missing in sorted(indexed - present, key=lambda x: int(x) if str(x).isdigit() else 0):
         found.append({"kind": "outline_file_missing_chapter", "chapter": missing})
     if folder.is_dir():
@@ -413,6 +445,50 @@ def conflicts(project) -> List[Dict[str, Any]]:
     return found
 
 
+def _tombstone_numbers(project) -> set:
+    numbers = set()
+    for path in _plan_files(project):
+        _visible, plan = _strip_plan_comment(_read_text(path))
+        for item in (plan or {}).get("chapters") or []:
+            if isinstance(item, dict) and item.get("deleted"):
+                try:
+                    numbers.add(int(item.get("id")))
+                except (TypeError, ValueError):
+                    continue
+    return numbers
+
+
+def _legacy_chapters(project, meta: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Collect v0.7.5 ``story_plan.json`` chapters captured at meta migration.
+
+    Only the one-time migration snapshot is trusted: a chapter that was
+    derived from an ``AI规划-*.md`` and later deleted must not resurrect from
+    the rebuildable cache (tombstoned deletions stay deleted).
+    """
+    result: Dict[str, Dict[str, Any]] = {}
+    rows = meta.get("legacy_chapters")
+    if not isinstance(rows, dict):
+        return result
+    for key, item in rows.items():
+        if not isinstance(item, dict):
+            continue
+        try:
+            number = int(key)
+        except (TypeError, ValueError):
+            continue
+        if number <= 0:
+            continue
+        outline = str(item.get("outline") or "")
+        result[str(number)] = {
+            "id": number, "title": str(item.get("title") or ""), "outline": outline,
+            "key_scene": bool(item.get("key_scene")),
+            "chapter_rev": int(item.get("chapter_rev") or 0),
+            "outline_sha256": _sha(outline), "source_file": "story_plan.json",
+            "legacy": True,
+        }
+    return result
+
+
 def recover_plan(project, persist: bool = True) -> Dict[str, Any]:
     """Authoritative, tombstone-aware rebuild of ``story_plan.json``.
 
@@ -423,19 +499,38 @@ def recover_plan(project, persist: bool = True) -> Dict[str, Any]:
     meta = load_meta(project)
     meta["_project"] = str(project)
     chapters, found = _merge_chapters(meta)
+    legacy = _legacy_chapters(project, meta)
+    tombstones = _tombstone_numbers(project)
+    preserved: List[str] = []
+    for key, item in legacy.items():
+        try:
+            number = int(key)
+        except (TypeError, ValueError):
+            continue
+        if key in chapters or number in tombstones:
+            continue
+        chapters[key] = dict(item)
+        preserved.append(key)
     if not _plan_files(_book_path(meta)):
-        previous = {}
-        story = _story_plan_path(project)
-        if story.is_file():
-            try:
-                value = safety.read_json_strict(story)
-                if isinstance(value, dict):
-                    previous = value.get("chapters") or {}
-            except Exception:
-                previous = {}
-        if previous:
+        if preserved:
             found.append({"kind": "outline_file_missing",
-                          "chapters": sorted(previous, key=lambda key: int(key))[:20]})
+                          "chapters": sorted(preserved, key=lambda key: int(key))[:20]})
+        else:
+            previous = {}
+            story = _story_plan_path(project)
+            if story.is_file():
+                try:
+                    value = safety.read_json_strict(story)
+                    if isinstance(value, dict):
+                        previous = value.get("chapters") or {}
+                except Exception:
+                    previous = {}
+            if previous:
+                found.append({"kind": "outline_file_missing",
+                              "chapters": sorted(previous, key=lambda key: int(key))[:20]})
+    elif preserved:
+        found.append({"kind": "legacy_chapters_preserved",
+                      "chapters": sorted(preserved, key=lambda key: int(key))[:20]})
     meta.pop("_project", None)
     if persist:
         _sync_story_plan(project, meta, chapters, found)
@@ -458,88 +553,120 @@ def write_file(project, filename: str, *, content: str, revision: Optional[str] 
     if "\x00" in content:
         raise OutlineError("invalid_content")
     normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-    with _lock(project):
-        path = _safe_outline_path(project, filename)
-        if not path.is_file():
-            raise OutlineError("outline_file_missing", status=404)
-        current_raw = path.read_bytes()
-        current_rev = hashlib.sha256(current_raw).hexdigest()
-        if revision and revision != current_rev:
-            raise OutlineError("outline_conflict", status=409,
-                               detail={"current_revision": current_rev})
-        _backup(project, path)
-        old_visible, old_plan = _strip_plan_comment(_decode(current_raw))
-        old_numbers = {row["id"] for row in _parse_visible(old_visible)}
-        new_rows = _parse_visible(normalized)
-        if not new_rows and old_numbers:
-            raise OutlineError("missing_chapter_headings", status=409,
-                               detail={"missing_chapters": sorted(old_numbers)})
-        new_numbers = {row["id"] for row in new_rows}
-        removed = sorted(old_numbers - new_numbers)
-        confirmed = {int(x) for x in (confirm_removed_chapters or [])}
-        missing = [number for number in removed if number not in confirmed]
-        if missing:
-            raise OutlineError("missing_chapter_headings", status=409,
-                               detail={"missing_chapters": missing})
-        meta = load_meta(project)
-        meta["_project"] = str(project)
-        chapters, _ = _merge_chapters(meta)
-        tombstones = _tombstones(old_plan)
-        stamp = _now()
-        payload_chapters = []
-        for row in new_rows:
-            key = str(row["id"])
-            old_item = next((item for item in (old_plan or {}).get("chapters") or []
-                             if isinstance(item, dict) and str(item.get("id")) == key), {})
-            if old_item.get("deleted"):
-                rev = int(old_item.get("chapter_rev") or 0) or 1
-            else:
-                rev = max(_chapter_rev(old_plan, row["id"]),
-                          int((chapters.get(key) or {}).get("chapter_rev") or 0)) + 1
-            payload_chapters.append({
-                "id": row["id"], "title": row["title"], "outline": row["outline"],
-                "key_scene": bool((chapters.get(key) or {}).get("key_scene")),
-                "chapter_rev": rev, "outline_sha256": _sha(row["outline"]),
-                "author_edited": True,
-            })
-        for number in confirmed:
-            if number in old_numbers:
-                tombstones[number] = {"id": number, "deleted": True,
-                                      "chapter_rev": _chapter_rev(old_plan, number) + 1}
-        for number, item in tombstones.items():
-            if number not in new_numbers:
-                payload_chapters.append(item)
-        payload = {
-            "schema_version": 2,
-            "chapters": payload_chapters,
-            "meta_revision": int(meta.get("meta_revision") or 0),
-            "updated_at": stamp,
-        }
-        visible = "\n\n".join(
-            f"## 第{row['id']}章 {row['title']}".rstrip() + "\n" + row["outline"]
-            for row in new_rows
-        ).rstrip() + "\n"
-        comment = "<!-- novel-plan:" + json.dumps(payload, ensure_ascii=False).replace("-->", "--\\u003e") + " -->\n\n"
-        if len((comment + visible).encode("utf-8")) > MAX_FILE_BYTES:
-            raise OutlineError("outline_too_large", status=413)
-        temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    op = str(op_id or "").strip()
+    project_key = str(Path(project).resolve())
+    if op:
+        from . import workbench_db as wb
+        params = {"filename": filename, "content": normalized, "revision": revision,
+                  "confirm_removed_chapters": sorted(int(x) for x in (confirm_removed_chapters or []))}
+        cached = wb.idempotency_begin(project, actor="author", project_id=project_key,
+                                      action="outline_write", op_id=op, params=params)
+        if cached["status"] == "mismatch":
+            raise OutlineError("op_id_params_mismatch", status=409)
+        if cached["status"] == "completed":
+            return {**(cached.get("response") or {}), "reused": True}
+        if cached["status"] == "in_progress":
+            raise OutlineError("op_in_progress", status=409, detail={"message": "同一操作正在执行，请稍候"})
+    try:
+        with _lock(project):
+            path = _safe_outline_path(project, filename)
+            if not path.is_file():
+                raise OutlineError("outline_file_missing", status=404)
+            current_raw = path.read_bytes()
+            current_rev = hashlib.sha256(current_raw).hexdigest()
+            if revision and revision != current_rev:
+                raise OutlineError("outline_conflict", status=409,
+                                   detail={"current_revision": current_rev})
+            _backup(project, path)
+            old_visible, old_plan = _strip_plan_comment(_decode(current_raw))
+            old_numbers = {row["id"] for row in _parse_visible(old_visible)}
+            new_rows = _parse_visible(normalized)
+            if not new_rows and old_numbers:
+                raise OutlineError("missing_chapter_headings", status=409,
+                                   detail={"missing_chapters": sorted(old_numbers)})
+            new_numbers = {row["id"] for row in new_rows}
+            removed = sorted(old_numbers - new_numbers)
+            confirmed = {int(x) for x in (confirm_removed_chapters or [])}
+            missing = [number for number in removed if number not in confirmed]
+            if missing:
+                raise OutlineError("missing_chapter_headings", status=409,
+                                   detail={"missing_chapters": missing})
+            meta = load_meta(project)
+            meta["_project"] = str(project)
+            chapters, _ = _merge_chapters(meta)
+            tombstones = _tombstones(old_plan)
+            stamp = _now()
+            payload_chapters = []
+            for row in new_rows:
+                key = str(row["id"])
+                old_item = next((item for item in (old_plan or {}).get("chapters") or []
+                                 if isinstance(item, dict) and str(item.get("id")) == key), {})
+                if old_item.get("deleted"):
+                    rev = int(old_item.get("chapter_rev") or 0) or 1
+                else:
+                    rev = max(_chapter_rev(old_plan, row["id"]),
+                              int((chapters.get(key) or {}).get("chapter_rev") or 0)) + 1
+                payload_chapters.append({
+                    "id": row["id"], "title": row["title"], "outline": row["outline"],
+                    "key_scene": bool((chapters.get(key) or {}).get("key_scene")),
+                    "chapter_rev": rev, "outline_sha256": _sha(row["outline"]),
+                    "author_edited": True,
+                })
+            for number in confirmed:
+                if number in old_numbers:
+                    tombstones[number] = {"id": number, "deleted": True,
+                                          "chapter_rev": _chapter_rev(old_plan, number) + 1}
+            for number, item in tombstones.items():
+                if number not in new_numbers:
+                    payload_chapters.append(item)
+            payload = {
+                "schema_version": 2,
+                "chapters": payload_chapters,
+                "meta_revision": int(meta.get("meta_revision") or 0),
+                "updated_at": stamp,
+            }
+            visible = "\n\n".join(
+                f"## 第{row['id']}章 {row['title']}".rstrip() + "\n" + row["outline"]
+                for row in new_rows
+            ).rstrip() + "\n"
+            comment = "<!-- novel-plan:" + json.dumps(payload, ensure_ascii=False).replace("-->", "--\\u003e") + " -->\n\n"
+            if len((comment + visible).encode("utf-8")) > MAX_FILE_BYTES:
+                raise OutlineError("outline_too_large", status=413)
+            temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+            try:
+                with temporary.open("xb") as stream:
+                    stream.write((comment + visible).encode("utf-8"))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                safety.replace_with_retry(temporary, path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            # 权威 .md 已落盘，再刷新派生索引；若此处崩溃，recover_plan 从 .md 重建。
+            meta.pop("_project", None)
+            if not _story_plan_path(project).is_file():
+                meta["plan_revision"] = int(meta.get("meta_revision") or 0)
+            rebuild = recover_plan(project, persist=True)
+        response = {"status": "saved", "name": path.name, "revision": _revision_of(path),
+                    "chapter_revs": {str(c["id"]): c["chapter_rev"] for c in payload_chapters if not c.get("deleted")},
+                    "tombstones": sorted(tombstones), "removed_chapters": removed,
+                    "plan": rebuild, "op_id": op_id}
+    except Exception:
+        if op:
+            try:
+                from . import workbench_db as wb
+                wb.idempotency_fail(project, actor="author", project_id=project_key,
+                                    action="outline_write", op_id=op)
+            except Exception:
+                pass
+        raise
+    if op:
         try:
-            with temporary.open("xb") as stream:
-                stream.write((comment + visible).encode("utf-8"))
-                stream.flush()
-                os.fsync(stream.fileno())
-            safety.replace_with_retry(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
-        # 权威 .md 已落盘，再刷新派生索引；若此处崩溃，recover_plan 从 .md 重建。
-        meta.pop("_project", None)
-        if not _story_plan_path(project).is_file():
-            meta["plan_revision"] = int(meta.get("meta_revision") or 0)
-        rebuild = recover_plan(project, persist=True)
-    return {"status": "saved", "name": path.name, "revision": _revision_of(path),
-            "chapter_revs": {str(c["id"]): c["chapter_rev"] for c in payload_chapters if not c.get("deleted")},
-            "tombstones": sorted(tombstones), "removed_chapters": removed,
-            "plan": rebuild, "op_id": op_id}
+            from . import workbench_db as wb
+            wb.idempotency_complete(project, actor="author", project_id=project_key,
+                                    action="outline_write", op_id=op, response=response)
+        except Exception:
+            pass
+    return response
 
 
 def create_file(project, *, filename: str, content: str = "") -> Dict[str, Any]:

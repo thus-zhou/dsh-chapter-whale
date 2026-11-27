@@ -157,13 +157,32 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
     @app.get("/api/projects/{identity}/chapters/{chapter}/previews")
     @guard
     def chapter_previews(identity: str, chapter: int):
-        rows = revision_plan.list_previews(_book(identity), chapter)
-        try:
-            from integration import annotations
-            rows = [{**row, "merge_state": annotations.preview_merge_state(_book(identity), chapter, row)} for row in rows]
-        except Exception:
-            pass
-        return {"chapter_id": int(chapter), "previews": rows, "count": len(rows)}
+        project = _book(identity)
+        rows = revision_plan.list_previews(project, chapter)
+        from integration import annotations
+        annotation_previews = {
+            row["preview_id"]: row
+            for row in annotations.list_previews(project, chapter)["previews"]
+        }
+        enriched = []
+        for row in rows:
+            item = dict(row)
+            if str(item.get("mode") or "") == "annotation":
+                known = annotation_previews.get(item.get("preview_id"), {})
+                item["merge_state"] = annotations.preview_merge_state(
+                    project, chapter,
+                    {**known, "mode": "annotation", "hunks": known.get("hunks") or []})
+                # Annotation candidates must be committed through hunk apply,
+                # not revision_plan.accept; the UI must not offer a second
+                # submit path that leaves hunk/annotation state stale (B-16).
+                item["accept_blocked"] = True
+                item["apply_via"] = "annotation_hunks"
+            else:
+                item["merge_state"] = None
+                item["accept_blocked"] = False
+                item["apply_via"] = "revision_accept"
+            enriched.append(item)
+        return {"chapter_id": int(chapter), "previews": enriched, "count": len(enriched)}
 
     # -------------------------------------------------------------- outline
     @app.get("/api/projects/{identity}/outline/files")

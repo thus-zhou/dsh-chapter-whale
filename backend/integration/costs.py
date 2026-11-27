@@ -134,8 +134,25 @@ def record_gap(db_path, kind):
         print('[费用记录] 严重：独立告警也无法写入，禁止自动付费回退', flush=True)
 
 
-def ledger_gaps(db_path):
-    return len(list(Path(str(db_path) + '.gaps').glob('*.json')))
+def ledger_gaps(db_path, *, within_hours=None):
+    """Count gap markers, optionally only those recent enough to matter.
+
+    A single transient write failure used to mark the whole report incomplete
+    forever (B-25).  ``within_hours`` lets the report judge completeness by a
+    rolling window while still exposing the historical total.
+    """
+    files = list(Path(str(db_path) + '.gaps').glob('*.json'))
+    if within_hours is None:
+        return len(files)
+    cutoff = time.time() - float(within_hours) * 3600
+    count = 0
+    for path in files:
+        try:
+            if path.stat().st_mtime >= cutoff:
+                count += 1
+        except OSError:
+            continue
+    return count
 
 
 def empty_prices(): return {"revision":0,"usd_to_cny":None,"rates":[]}
@@ -189,12 +206,17 @@ def budget_limits(config=None):
 
 def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None,
                     operation=None, config=None, limits=None,
-                    directive_id=None, guard=None, agent_role=None):
+                    directive_id=None, guard=None, agent_role=None,
+                    count_only=False, guard_tokens=None):
     """发请求前预留一次网络尝试。超限抛 BudgetExceeded，且不写入任何占位。
 
     未配置任何上限且没有指令级护栏时返回 None（不改动既有行为）。金额未知时记
     ``unknown_cost=1`` 并按 ``unknown_reserve_cny`` 保守占用，不当作 0。
     2B 起只要带 ``directive_id + guard``，即使全局未设上限也强制原子预留。
+
+    ``count_only=True`` 用于只做调用次数/Token 护栏、拿不到真实金额的网关：
+    仍占一次调用，但费用记 0 且不设 unknown_cost，避免每次调用固定吃掉 1 元
+    的指令预算（B-17）。
     """
     policy = limits if limits is not None else budget_limits(config)
     if not db_path:
@@ -206,7 +228,12 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         return None
     tokens = int(tokens or 0)
     amount = None if cost_cny is None else Decimal(str(cost_cny))
-    reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
+    if count_only and amount is None:
+        reserve_amount = Decimal(0)
+        unknown_cost = 0
+    else:
+        reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
+        unknown_cost = 1 if amount is None else 0
     day = _today()
     project = str(Path(project).resolve()) if project else ''
     db = None
@@ -238,10 +265,10 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         if guard:
             usage = _directive_usage_db(db, directive_id)
             max_calls = guard.get('max_calls')
-            if max_calls is not None and usage['calls'] + 1 > int(max_calls):
+            if max_calls is not None and usage['attempts'] + 1 > int(max_calls):
                 raise BudgetExceeded('该指令的模型调用次数已到上限',
                                      {'limit': 'max_calls', 'limit_value': str(max_calls),
-                                      'used': str(usage['calls'])})
+                                      'used': str(usage['attempts'])})
             max_chapters = guard.get('max_chapters')
             if max_chapters is not None and int(chapter or 0) not in usage['chapters'] \
                     and len(usage['chapters']) + 1 > int(max_chapters):
@@ -249,7 +276,8 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
                                      {'limit': 'max_chapters', 'limit_value': str(max_chapters),
                                       'used': str(len(usage['chapters']))})
             max_tokens = guard.get('max_tokens')
-            if max_tokens is not None and usage['tokens'] + tokens > int(max_tokens):
+            if max_tokens is not None and usage['tokens'] + (tokens if guard_tokens is None
+                                                              else int(guard_tokens or 0)) > int(max_tokens):
                 raise BudgetExceeded('该指令 Token 已到上限',
                                      {'limit': 'max_tokens', 'limit_value': str(max_tokens),
                                       'used': str(usage['tokens'])})
@@ -261,7 +289,7 @@ def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None
         identity = uuid.uuid4().hex
         db.execute('INSERT INTO request_budget VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                    (identity, datetime.now(timezone.utc).isoformat(), project, int(chapter or 0), str(stage or 'other'),
-                    day, 'reserved', tokens, str(reserve_amount), 1 if amount is None else 0,
+                    day, 'reserved', tokens, str(reserve_amount), unknown_cost,
                     str(operation or '')))
         if directive_id:
             db.execute('INSERT INTO directive_budget_links(request_id, directive_id, op_id, agent_role, created_at) '
@@ -306,7 +334,11 @@ def _directive_usage_db(db, directive_id: str) -> Dict[str, Any]:
                 cost += Decimal(str(row['cost_cny']))
             except InvalidOperation:
                 pass
+    # Every attempt counts toward the directive call cap, including a failed
+    # call that was released without a fee; otherwise a failure storm can
+    # bypass max_calls indefinitely (B-02R-2).
     return {'calls': sum(1 for row in rows if row['state'] != 'released'),
+            'attempts': len(rows),
             'chapters': chapters, 'tokens': tokens, 'cost_cny': cost, 'states': states}
 
 
@@ -378,6 +410,17 @@ def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='sett
             record_gap(db_path, 'budget_settlement_missing')
             return None
         amount = row['cost_cny']
+        if state in {'failed', 'cancelled'}:
+            # A failed request that reported no usage can release the
+            # reservation.  If the provider already reported cost/tokens, the
+            # failure is still billable and must not be erased; an interrupted
+            # request may likewise have been billed upstream.
+            if state == 'failed' and cost_cny is None and not tokens:
+                state = 'released'
+            elif cost_cny is not None:
+                state = 'settled'
+            else:
+                state = 'unknown_charge'
         if state not in {'settled', 'unknown_charge', 'released'}:
             db.rollback()
             raise ValueError('budget_state_invalid')
@@ -826,7 +869,9 @@ def report(db_path, project=None, chapter=None, days=0):
         return [{"key":value,"label":label(items[0]),**aggregate(items)} for value,items in sorted(grouped.items())]
     summary = aggregate(events)
     gaps = ledger_gaps(db_path)
-    summary.update(ledger_gaps=gaps, complete=summary['complete'] and not gaps)
+    gaps_recent = ledger_gaps(db_path, within_hours=24)
+    summary.update(ledger_gaps=gaps, gaps_recent=gaps_recent,
+                   complete=summary['complete'] and not gaps_recent)
     return {"summary":summary,"stages":groups(lambda e:e["stage"],lambda e:STAGES.get(e["stage"],e["stage"])),
             'providers':groups(lambda e:e.get('provider_id') or e['base_url'],lambda e:e.get('provider_name') or e['base_url']),
             'fallback':aggregate([e for e in events if e.get('fallback_from')]),
@@ -837,7 +882,7 @@ def report(db_path, project=None, chapter=None, days=0):
             "daily":groups(lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat(),
                            lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()),
             "recent":list(reversed(events[-100:])),"total_records":len(events),
-            "missed_events":max(gaps, MISSED_EVENTS)}
+            "missed_events":max(gaps_recent, MISSED_EVENTS)}
 
 
 def export_csv(db_path, **filters):

@@ -429,7 +429,11 @@ class DraftIdentityTest(unittest.TestCase):
             ce.restore_trash(project, deleted["trash_entry"])
             epochs.append(wb.ensure_chapter_meta(project, 1)["draft_epoch"])
             self.assertEqual(epochs, sorted(epochs))
-            self.assertIsNone(wb.get_draft(project, 1))
+            restored_draft = wb.get_draft(project, 1)
+            self.assertIsNotNone(restored_draft)
+            self.assertEqual(restored_draft["content"], "d2")
+            ce.discard_draft(project, 1)
+            epochs.append(wb.ensure_chapter_meta(project, 1)["draft_epoch"])
             fresh = ce.save_draft(project, 1, {
                 "title": "开端", "content": "restored", "expected_draft_id": None,
                 "expected_draft_epoch": epochs[-1], "expected_draft_revision": 0})

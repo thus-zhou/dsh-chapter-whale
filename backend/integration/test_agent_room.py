@@ -160,5 +160,75 @@ class BroadcasterTest(unittest.TestCase):
         asyncio.run(scenario())
 
 
+class IsolationAndResyncTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self.tmp.name) / "manager.sqlite3"
+        room.initialize(self.db)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_session_snapshot_never_aggregates_other_books(self):
+        room.append_event(self.db, session_id="author", project_id="p1", summary="A 书机密")
+        room.append_event(self.db, session_id="author", project_id="p2", summary="B 书机密")
+        room.append_event(self.db, session_id="author", project_id=None, summary="未绑定对话")
+        self.assertEqual([row["summary"] for row in
+                          room.snapshot(self.db, project_id="p1")["events"]], ["A 书机密"])
+        session = room.snapshot(self.db, session_id="author")
+        self.assertEqual([row["summary"] for row in session["events"]], ["未绑定对话"])
+        self.assertEqual(session["snapshot_seq"], session["events"][0]["seq"])
+
+    def test_null_project_event_is_not_broadcast_to_book_subscribers(self):
+        broadcaster = room.BoundedBroadcaster(maxsize=8)
+
+        async def scenario():
+            token_a, queue_a = broadcaster.subscribe(project_id="book-a")
+            token_s, queue_s = broadcaster.subscribe(session_id="author")
+            broadcaster.publish({"kind": "artifact_card", "seq": 1, "project_id": None,
+                                 "session_id": "author", "summary": "未绑定"})
+            broadcaster.publish({"kind": "artifact_card", "seq": 2, "project_id": "book-b",
+                                 "session_id": "author", "summary": "B 书"})
+            await asyncio.sleep(0.05)
+            self.assertTrue(queue_a.empty())
+            self.assertEqual((await asyncio.wait_for(queue_s.get(), 1))["summary"], "未绑定")
+            broadcaster.unsubscribe(token_a)
+            broadcaster.unsubscribe(token_s)
+
+        asyncio.run(scenario())
+
+    def test_resync_marker_uses_last_delivered_seq(self):
+        broadcaster = room.BoundedBroadcaster(maxsize=1)
+
+        async def scenario():
+            token, queue = broadcaster.subscribe(project_id="p1")
+            broadcaster.publish({"kind": "artifact_card", "seq": 1, "project_id": "p1", "summary": "一"})
+            await asyncio.sleep(0.05)
+            self.assertFalse(queue.empty())
+            broadcaster.publish({"kind": "artifact_card", "seq": 2, "project_id": "p1", "summary": "二"})
+            await asyncio.sleep(0.05)
+            marker = await asyncio.wait_for(queue.get(), 1)
+            self.assertEqual(marker["kind"], "resync_required")
+            # No frame was ever yielded to the client, so the delivered cursor
+            # is still 0; using the enqueue seq here would make the client skip
+            # events 1..N on reconnect.
+            self.assertEqual(marker["seq"], 0)
+            self.assertTrue(marker["full_reload"])
+            self.assertTrue(marker["resync_required"])
+            self.assertEqual(broadcaster.subscriber_count(), 0)
+
+        asyncio.run(scenario())
+
+    def test_resolve_requires_card_binding_fields(self):
+        approval = room.create_approval(self.db, session_id="s", project_id="p1", directive_id=None,
+                                        directive_revision=1, task_id=None, kind="publish",
+                                        title="发布", artifact_fingerprint="fp",
+                                        approved_scope_hash="scope", detail={})
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, approval["id"], approved=True,
+                                  artifact_fingerprint="", approved_scope_hash="")
+        self.assertEqual(caught.exception.code, "approval_binding_required")
+
+
 if __name__ == "__main__":
     unittest.main()

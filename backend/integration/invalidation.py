@@ -147,16 +147,38 @@ def _invalidate_once(project, *, chapters, reason, source="", actor="author", op
     key = str(op_id or "")
     if key:
         for entry in doc["entries"]:
-            if entry.get("op_id") == key:
-                return {"status": "reused", "entry": entry, "marked": entry.get("marked", [])}
+            if entry.get("op_id") != key:
+                continue
+            if entry.get("state", "applied") != "applied":
+                # The previous attempt wrote the log but crashed/failed before
+                # the memory marks landed; retry the marks instead of
+                # reporting a successful no-op (A-P2-8).
+                reviewing = _mark_facts(project, entry.get("chapters") or chapters,
+                                        reason=entry.get("reason") or reason,
+                                        source=entry.get("source") or source, actor=actor)
+                entry["state"] = "applied"
+                entry["applied_at"] = bridge.now_iso()
+                if reviewing:
+                    entry["marked"] = reviewing
+                writer.atomic_json(_path(project), doc)
+                rebuilt = _schedule_rebuild(project) if async_rebuild else _rebuild(project)
+                return {"status": "invalidated", "entry": entry,
+                        "marked": entry.get("marked", []), "reviewing": len(reviewing),
+                        "rebuilt": rebuilt, "reapplied": True}
+            return {"status": "reused", "entry": entry, "marked": entry.get("marked", [])}
     marked = affected_facts(project, chapters)
     entry = {"op_id": key, "at": bridge.now_iso(), "chapters": chapters, "reason": reason,
              "reason_label": REASONS[reason], "source": str(source or "")[:120], "actor": str(actor or "")[:40],
-             "marked": marked}
+             "state": "pending", "marked": marked}
     doc["revision"] = int(doc.get("revision") or 0) + 1
     doc["entries"] = [*doc["entries"], entry][-MAX_ENTRIES:]
     writer.atomic_json(_path(project), doc)
     reviewing = _mark_facts(project, chapters, reason=reason, source=source, actor=actor)
+    entry["state"] = "applied"
+    entry["applied_at"] = bridge.now_iso()
+    if reviewing:
+        entry["marked"] = reviewing
+    writer.atomic_json(_path(project), doc)
     if async_rebuild:
         rebuilt = _schedule_rebuild(project)
     else:

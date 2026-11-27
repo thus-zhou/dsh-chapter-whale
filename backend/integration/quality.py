@@ -6,6 +6,7 @@ A 轨是纯本地确定性指标（随时可跑、零模型费用）；B 轨是�
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -97,12 +98,28 @@ def fuse(judgments: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
             "weights": dict(WEIGHTS), "reviewers": len(rows)}
 
 
-def _auto_count(project, chapter: int, version_id: str) -> int:
+def _content_sha(text: str) -> str:
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _review_key(version_id: str, text: str) -> str:
+    """Review identity: the version id, or the body hash for legacy chapters.
+
+    A chapter created by ``import_chapters`` has no ``chapter_versions`` row;
+    storing ``version_id=''`` made the auto-review limit count *every* historic
+    B-track review forever and made staleness undetectable (audit C-12).
+    """
+    if version_id:
+        return version_id
+    return "sha256:" + _content_sha(text)
+
+
+def _auto_count(project, chapter: int, review_key: str) -> int:
     wb.initialize(project)
     with wb.connect(project) as db:
         row = db.execute("SELECT COUNT(*) FROM quality_reviews WHERE chapter_id=? AND "
-                         "reviewer NOT IN ('author','A-local') AND (version_id=? OR ?='')",
-                         (int(chapter), version_id, version_id)).fetchone()
+                         "reviewer NOT IN ('author','A-local') AND version_id=?",
+                         (int(chapter), review_key)).fetchone()
     return int(row[0] if row else 0)
 
 
@@ -117,27 +134,32 @@ def review(project, chapter: int, *, judgments: Optional[Iterable[Dict[str, Any]
     text = _chapter_text(project, chapter)
     meta = versions.current_version(project, chapter) or {}
     version_id = str(meta.get("version_id") or "")
+    review_key = _review_key(version_id, text)
+    # 审计 C-02：chapter_uid 在写事务之前解析，避免嵌套 BEGIN IMMEDIATE。
+    chapter_uid = wb.chapter_uid(project, chapter)
     rows = judgment_list if judgment_list is not None else [
         {"scores": local_scores(text), "reviewer": "A-local"},
     ]
     fused = fuse(rows)
     wb.initialize(project)
     stored_reviewer = reviewer if judgment_list is not None else "A-local"
+    # 审计 C-25：传了 judgments 就是 B 轨，与 reviewer 名字无关。
+    track = "B" if judgment_list is not None else "A"
     with wb.write_tx(project) as db:
         if judgment_list is not None and reviewer != "author" and not force:
             row = db.execute("SELECT COUNT(*) FROM quality_reviews WHERE chapter_id=? AND "
-                             "reviewer NOT IN ('author','A-local') AND (version_id=? OR ?='')",
-                             (chapter, version_id, version_id)).fetchone()
+                             "reviewer NOT IN ('author','A-local') AND version_id=?",
+                             (chapter, review_key)).fetchone()
             if int(row[0] if row else 0) >= MAX_AUTO_REVIEWS:
                 raise QualityError("auto_review_limit", status=409,
                                    detail={"max_auto_reviews": MAX_AUTO_REVIEWS})
         db.execute("INSERT INTO quality_reviews(chapter_id, chapter_uid, version_id, reviewer, "
                    "scores_json, total, verdict, created_at) VALUES(?,?,?,?,?,?,?,?)",
-                   (chapter, wb.chapter_uid(project, chapter), version_id, stored_reviewer,
+                   (chapter, chapter_uid, review_key, stored_reviewer,
                     json.dumps(fused["scores"], ensure_ascii=False), fused["total"],
                     fused["verdict"], _now()))
     return {"status": "reviewed", "chapter_id": chapter, "version_id": version_id,
-            **fused, "track": "A" if reviewer == "auto" else "B"}
+            "review_key": review_key, **fused, "track": track}
 
 
 def history(project, chapter: int) -> List[Dict[str, Any]]:
@@ -156,15 +178,20 @@ def history(project, chapter: int) -> List[Dict[str, Any]]:
     return result
 
 
-def dashboard(project, *, limit: int = 200) -> Dict[str, Any]:
+def dashboard(project, *, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
     wb.initialize(project)
     mapping = versions.chapter_map(project)
     with wb.connect(project) as db:
         latest = {}
         for row in db.execute("SELECT * FROM quality_reviews ORDER BY id"):
             latest[int(row["chapter_id"])] = dict(row)
+    order = sorted(mapping)
+    total_chapters = len(order)
+    offset = max(0, int(offset))
+    limit = max(1, int(limit))
+    window = order[offset:offset + limit]
     chapters = []
-    for chapter in sorted(mapping)[:int(limit)]:
+    for chapter in window:
         row = latest.get(chapter)
         item = {"chapter_id": chapter, "title": versions.parse_chapter_name(mapping[chapter].name)[1]}
         if row:
@@ -173,15 +200,31 @@ def dashboard(project, *, limit: int = 200) -> Dict[str, Any]:
             except ValueError:
                 item["scores"] = {}
             item.update({"total": row["total"], "verdict": row["verdict"],
-                         "reviewed_at": row["created_at"], "version_id": row["version_id"]})
+                         "reviewed_at": row["created_at"], "version_id": row["version_id"],
+                         "review_key": row["version_id"]})
             current_id = str((versions.current_version(project, chapter) or {}).get("version_id") or "")
-            item["stale_review"] = bool(row["version_id"] and current_id and row["version_id"] != current_id)
+            if current_id:
+                current_key = current_id
+            else:
+                try:
+                    current_key = _review_key("", _chapter_text(project, chapter))
+                except (QualityError, OSError):
+                    current_key = ""
+            stored_key = str(row["version_id"] or "")
+            # 审计 C-12：无版本章节用正文哈希比较，重写后必须显示 stale。
+            item["stale_review"] = bool(current_key and stored_key != current_key)
             if item["stale_review"]:
                 item["verdict"] = "stale"
         else:
-            item["scores"] = local_scores(_chapter_text(project, chapter))
-            item["total"] = round(sum(item["scores"][dim] * WEIGHTS[dim] for dim in DIMENSIONS), 2)
-            item["verdict"] = "unreviewed"
+            try:
+                item["scores"] = local_scores(_chapter_text(project, chapter))
+                item["total"] = round(sum(item["scores"][dim] * WEIGHTS[dim] for dim in DIMENSIONS), 2)
+                item["verdict"] = "unreviewed"
+            except (QualityError, OSError):
+                # 审计 C-27：一章在两次系统调用之间消失时，降级该行而不是整盘 404。
+                item["scores"] = {}
+                item["total"] = None
+                item["verdict"] = "missing"
             item["reviewed_at"] = None
         item["flags"] = [DIMENSION_LABELS[dim] for dim in DIMENSIONS
                          if item["scores"].get(dim, 100) < THRESHOLD]
@@ -191,4 +234,6 @@ def dashboard(project, *, limit: int = 200) -> Dict[str, Any]:
     return {"chapters": chapters, "averages": averages,
             "labels": DIMENSION_LABELS, "weights": dict(WEIGHTS),
             "reviewed": sum(1 for row in chapters if row["reviewed_at"] and not row.get("stale_review")),
-            "total": len(chapters)}
+            "total": total_chapters, "total_chapters": total_chapters,
+            "returned": len(chapters), "offset": offset, "limit": limit,
+            "truncated": offset + len(chapters) < total_chapters}

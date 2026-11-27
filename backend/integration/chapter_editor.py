@@ -110,6 +110,16 @@ def _validate_title(title: str) -> str:
     return value
 
 
+def _validate_title_for_chapter(chapter: int, title: str) -> str:
+    """Validate characters *and* the final UTF-8 filename byte budget."""
+    value = _validate_title(title)
+    try:
+        versions.validate_chapter_filename(int(chapter), value, with_temporary=True)
+    except versions.VersionConflict as exc:
+        raise ChapterError(str(exc) or "title_too_long_for_filesystem", status=400) from None
+    return value
+
+
 def _validate_op_id(value: Any) -> str:
     text = str(value or "")
     if text and not _OP_ID_RE.fullmatch(text):
@@ -149,15 +159,23 @@ def _read_receipts(project) -> Dict[str, Any]:
     return value
 
 
-def _write_receipts(project, receipts: Dict[str, Any]) -> None:
+def _update_receipts(project, mutate) -> None:
+    """Read-latest → mutate → write under ``receipts.lock``.
+
+    Never rewrite the table from a stale snapshot: a concurrent
+    ``author_confirm`` for another chapter must survive a delete (A-P2-14).
+    """
     path = _receipts_path(project)
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = path.parent / "receipts.lock"
     with safety.file_lock(lock):
-        # 重新读最新，绝不拿旧整表覆盖其他章的并行回执。
         latest = _read_receipts(project)
-        latest.update(receipts)
+        mutate(latest)
         safety.atomic_json(path, latest)
+
+
+def _write_receipts(project, receipts: Dict[str, Any]) -> None:
+    _update_receipts(project, lambda latest: latest.update(receipts))
 
 
 @contextmanager
@@ -275,6 +293,13 @@ def chapter_state(project, chapter: int, *, include_draft: bool = True) -> Dict[
         epoch = (draft or {}).get("draft_epoch")
         if epoch is None:
             epoch = wb.draft_epoch(project, chapter)
+        base_id = (draft or {}).get("base_version_id") or (draft or {}).get("base_content_sha256")
+        base_content = None
+        if draft and base_id:
+            try:
+                base_content = versions.read_version(project, chapter, str(base_id))["text"]
+            except Exception:
+                base_content = None
         payload["draft"] = {
             "exists": bool(draft),
             "draft_id": (draft or {}).get("draft_id"),
@@ -283,6 +308,7 @@ def chapter_state(project, chapter: int, *, include_draft: bool = True) -> Dict[
             "base_version_id": (draft or {}).get("base_version_id"),
             "base_sha256": (draft or {}).get("base_content_sha256"),
             "base_content_sha256": (draft or {}).get("base_content_sha256"),
+            "base_content": base_content,
             "title": (draft or {}).get("title"),
             "content": (draft or {}).get("content"),
             "cursor": (draft or {}).get("cursor", {}),
@@ -373,9 +399,88 @@ def _idempotent(project, action: str, op_id: str, params: Any) -> Optional[Dict[
     return None
 
 
-def _finish(project, action: str, op_id: str, response: Dict[str, Any]) -> None:
-    wb.idempotency_complete(project, actor="author", project_id=str(Path(project).resolve()),
-                            action=action, op_id=op_id, response=response)
+def _finish(project, action: str, op_id: str, response: Dict[str, Any]) -> bool:
+    """Best-effort completion; the body commit already succeeded.
+
+    A SQLite busy/disk failure here must not turn a committed save into an
+    error response (A-P2-1); retries recover the response from the commit
+    marker instead.
+    """
+    try:
+        wb.idempotency_complete(project, actor="author", project_id=str(Path(project).resolve()),
+                                action=action, op_id=op_id, response=response)
+        return True
+    except Exception:
+        return False
+
+
+def _idempotent_soft(project, action: str, op_id: str, params: Any) -> Optional[Dict[str, Any]]:
+    """Idempotency for optional ``op_id`` write endpoints (A-P2-10)."""
+    if not op_id:
+        return None
+    result = wb.idempotency_begin(project, actor="author", project_id=str(Path(project).resolve()),
+                                  action=action, op_id=op_id, params=params)
+    if result["status"] == "mismatch":
+        raise ChapterError("op_id_params_mismatch", status=409)
+    if result["status"] == "completed":
+        return result.get("response")
+    if result["status"] == "in_progress":
+        raise ChapterError("op_in_progress", status=409, detail={"message": "同一操作正在执行，请稍候"})
+    return None
+
+
+def _finish_soft(project, action: str, op_id: str, response: Dict[str, Any]) -> None:
+    if op_id:
+        _finish(project, action, op_id, response)
+
+
+def _fail_soft(project, action: str, op_id: str) -> None:
+    if not op_id:
+        return
+    try:
+        wb.idempotency_fail(project, actor="author", project_id=str(Path(project).resolve()),
+                            action=action, op_id=op_id)
+    except Exception:
+        pass
+
+
+def _recover_completed_save(project, chapter: int, op_id: str, content: str,
+                            title: str) -> Optional[Dict[str, Any]]:
+    """Rebuild the response of a save whose ``idempotency_complete`` failed.
+
+    The commit marker is the source of truth: only when it is committed, the
+    body/index still carry exactly that sha, and title/content match the
+    request do we return success.  Otherwise the normal conflict checks run.
+    """
+    if not op_id:
+        return None
+    try:
+        record = versions._load_commit(project, op_id)
+    except versions.VersionError:
+        return None
+    if not isinstance(record, dict) or record.get("state") != "committed":
+        return None
+    if int(record.get("chapter_id") or 0) != int(chapter):
+        return None
+    sha = _raw_sha(content.encode("utf-8"))
+    if record.get("content_sha256") != sha:
+        return None
+    if versions.normalize_title(str(record.get("title") or "")) != versions.normalize_title(title):
+        return None
+    if versions.file_sha256(versions.chapter_path(project, chapter)) != sha:
+        return None
+    entry = versions.load_index(project)["chapters"].get(str(int(chapter))) or {}
+    if entry.get("current") != sha:
+        return None
+    response = {
+        "status": "saved", "state": "committed", "chapter_id": int(chapter),
+        "title": title, "sha256": sha, "content_sha256": sha,
+        "version_id": record.get("version_id") or entry.get("current_version_id"),
+        "unchanged": False, "recovered": True, "draft_cleared": False,
+        "draft_preserved": False, "current_draft_revision": 0,
+    }
+    _finish(project, "chapter_save", op_id, response)
+    return {**response, "reused": True}
 
 
 def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -383,7 +488,7 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     chapter = int(chapter)
     if chapter <= 0:
         raise ChapterError("chapter_invalid")
-    title = _validate_title(data.get("title", ""))
+    title = _validate_title_for_chapter(chapter, data.get("title", ""))
     content = _validate_content(data.get("content", ""))
     op_id = _validate_op_id(data.get("op_id"))
     expected_version = str(data.get("expected_version_id") or "").strip()
@@ -398,6 +503,9 @@ def save_version(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
         versions.recover_pending(project)
     except Exception:
         pass
+    recovered = _recover_completed_save(project, chapter, op_id, content, title)
+    if recovered is not None:
+        return recovered
     existing = _idempotent(project, "chapter_save", op_id, params)
     if existing is not None:
         return {**existing, "reused": True}
@@ -529,22 +637,34 @@ def _rename_chapter_file(project, chapter: int, source: Path, title: str) -> boo
 def new_chapter(project, data: Dict[str, Any]) -> Dict[str, Any]:
     title = _validate_title(data.get("title") or "未命名章节")
     content = _validate_content(data.get("content") or "")
-    mapping = versions.chapter_map(project)
-    chapter = int(data.get("chapter") or (max(mapping) + 1 if mapping else 1))
-    if str(chapter) in {str(x) for x in mapping}:
-        raise ChapterError("chapter_exists", status=409)
-    uid = wb.chapter_uid(project, chapter)
-    result = versions.commit_raw_bytes(project, chapter, content.encode("utf-8"), title=title,
-                                       op_id=_validate_op_id(data.get("op_id") or uuid.uuid4().hex),
-                                       source="author_new", note="新建空白章节", allow_new=True,
-                                       expect_absent=True)
+    op_id = _validate_op_id(data.get("op_id") or "")
+    params = {"requested_chapter": data.get("chapter"), "title": title, "content": content}
+    cached = _idempotent_soft(project, "chapter_new", op_id, params)
+    if cached is not None:
+        return {**cached, "reused": True}
     try:
-        wb.index_document(project, doc_key=f"正文:{chapter}", kind="chapter", chapter_id=chapter,
-                          title=title, content=content)
+        mapping = versions.chapter_map(project)
+        chapter = int(data.get("chapter") or (max(mapping) + 1 if mapping else 1))
+        if str(chapter) in {str(x) for x in mapping}:
+            raise ChapterError("chapter_exists", status=409)
+        title = _validate_title_for_chapter(chapter, title)
+        uid = wb.chapter_uid(project, chapter)
+        result = versions.commit_raw_bytes(project, chapter, content.encode("utf-8"), title=title,
+                                           op_id=op_id or uuid.uuid4().hex,
+                                           source="author_new", note="新建空白章节", allow_new=True,
+                                           expect_absent=True)
+        try:
+            wb.index_document(project, doc_key=f"正文:{chapter}", kind="chapter", chapter_id=chapter,
+                              title=title, content=content)
+        except Exception:
+            pass
+        response = {"status": "created", "chapter_id": chapter, "chapter_uid": uid, "title": title,
+                    "version_id": result.get("version_id"), "sha256": result.get("content_sha256")}
     except Exception:
-        pass
-    return {"status": "created", "chapter_id": chapter, "chapter_uid": uid, "title": title,
-            "version_id": result.get("version_id"), "sha256": result.get("content_sha256")}
+        _fail_soft(project, "chapter_new", op_id)
+        raise
+    _finish_soft(project, "chapter_new", op_id, response)
+    return response
 
 
 def _chapter_receipt_snapshot(project, chapter: int) -> Dict[str, Any]:
@@ -563,89 +683,194 @@ def _drop_index_entry(project, chapter: int) -> None:
             versions._save_index(project, index)
 
 
+class _ReceiptsAfterDrop(dict):
+    """Late-bound receipts view used when removing one chapter's receipt.
+
+    ``file_lock`` is thread-reentrant, so a same-thread confirm can legitimately
+    land after the read but before the write (the adversarial interleaving).
+    ``json.dump`` calls ``items()`` at serialization time, so the table we
+    actually write always excludes only this chapter and keeps every other
+    receipt that exists at that moment (A-P2-14).
+    """
+
+    def __init__(self, project, chapter: int):
+        super().__init__()
+        self._project = project
+        self._chapter = str(int(chapter))
+
+    def items(self):
+        latest = _read_receipts(self._project)
+        latest.pop(self._chapter, None)
+        return latest.items()
+
+    def __len__(self):
+        latest = _read_receipts(self._project)
+        latest.pop(self._chapter, None)
+        return len(latest)
+
+
 def _drop_receipt(project, chapter: int) -> None:
-    receipts = _read_receipts(project)
-    if str(int(chapter)) in receipts:
-        receipts.pop(str(int(chapter)), None)
-        safety.atomic_json(_receipts_path(project), receipts)
+    path = _receipts_path(project)
+    if not path.is_file():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.parent / "receipts.lock"
+    with safety.file_lock(lock):
+        safety.atomic_json(path, _ReceiptsAfterDrop(project, chapter))
+
+
+def _active_chapter_tasks(project, chapter: int) -> List[Dict[str, Any]]:
+    try:
+        with wb.connect(project) as db:
+            rows = db.execute(
+                "SELECT task_id, state FROM task_queue WHERE chapter_id=? "
+                "AND state IN ('pending','running','held') ORDER BY task_id",
+                (int(chapter),),
+            ).fetchall()
+        return [dict(row) for row in rows]
+    except Exception:
+        return []
 
 
 def delete_chapter(project, chapter: int, *, expected_version_id: str = "",
                    expected_content_sha256: str = "", op_id: str = "") -> Dict[str, Any]:
     """受限删除：仅未发布、未入队且为尾章或空章的章节，归档而非物理删除。"""
     chapter = int(chapter)
-    mapping = versions.chapter_map(project)
-    if chapter not in mapping:
-        raise ChapterError("chapter_missing", status=404)
-    path = mapping[chapter]
-    text = _decode(path.read_bytes())
-    is_tail = chapter == max(mapping)
-    if not is_tail and _count_words(text) > 0:
-        raise ChapterError("only_tail_chapter_deletable", status=409)
-    published = _published_state(project, chapter)
-    if published["status"] in {"published", "staged"}:
-        raise ChapterError("chapter_published_readonly", status=409)
-    current_sha = versions.file_sha256(path)
-    meta = versions.current_version(project, chapter) or {}
-    if expected_content_sha256 and expected_content_sha256 != current_sha:
-        raise ChapterError("concurrent_modification", status=409)
-    if not expected_content_sha256:
-        raise ChapterError("expected_version_required")
-    if expected_version_id and expected_version_id not in {meta.get("version_id"), meta.get("sha256")}:
-        raise ChapterError("concurrent_modification", status=409)
-    op = op_id or f"delete-{chapter}-{uuid.uuid4().hex[:8]}"
-    archive_base = Path(project) / ".webnovel" / _TRASH / f"{datetime.now().strftime('%Y%m%dT%H%M%S')}-ch{chapter:04d}"
-    archive = archive_base
-    suffix = 1
-    while archive.exists():
-        suffix += 1
-        archive = Path(str(archive_base) + f"-{suffix}")
-    archive.mkdir(parents=True, exist_ok=False)
-    manifest = {
-        "chapter_id": chapter,
-        "chapter_uid": wb.chapter_uid(project, chapter),
-        "title": versions.parse_chapter_name(path.name)[1],
-        "filename": path.name,
-        "content_sha256": current_sha,
-        "version_id": meta.get("version_id"),
-        "payload_sha256": current_sha,
-        "deleted_at": _now(),
-        "index_entry": _index_entry(project, chapter),
-        "receipt": _chapter_receipt_snapshot(project, chapter),
-        "draft": wb.get_draft(project, chapter),
-        "annotations": [],
-        "op_id": op,
-    }
+    op_id = _validate_op_id(op_id)
+    params = {"chapter": chapter, "expected_version_id": str(expected_version_id or ""),
+              "expected_content_sha256": str(expected_content_sha256 or "")}
+    cached = _idempotent_soft(project, "chapter_delete", op_id, params)
+    if cached is not None:
+        return {**cached, "reused": True}
     try:
-        from integration import annotations
-        manifest["annotations"] = annotations.export_chapter(project, chapter)
+        result = _delete_chapter_locked(project, chapter,
+                                        expected_version_id=expected_version_id,
+                                        expected_content_sha256=expected_content_sha256,
+                                        op_id=op_id)
     except Exception:
-        pass
-    (archive / "original.md").write_bytes(path.read_bytes())
-    safety.atomic_json(archive / "manifest.json", manifest)
-    try:
-        os.replace(path, archive / path.name)
-    except OSError as exc:
-        raise ChapterError("delete_failed") from exc
-    try:
-        wb.delete_draft(project, chapter)
-    except Exception:
-        pass
-    try:
-        from integration import annotations
-        annotations.delete_chapter(project, chapter)
-    except Exception:
-        pass
-    _drop_receipt(project, chapter)
-    _drop_index_entry(project, chapter)
-    try:
-        wb.drop_document(project, f"正文:{chapter}")
-    except Exception:
-        pass
-    if isinstance(manifest.get("draft"), dict):
-        _drop_draft_doc(project, chapter, manifest["draft"].get("draft_id"))
-    return {"status": "deleted", "chapter_id": chapter, "trash_entry": archive.name,
-            "archived_to": str(archive)}
+        _fail_soft(project, "chapter_delete", op_id)
+        raise
+    _finish_soft(project, "chapter_delete", op_id, result)
+    return result
+
+
+def _delete_chapter_locked(project, chapter: int, *, expected_version_id: str,
+                           expected_content_sha256: str, op_id: str) -> Dict[str, Any]:
+    with _locked(project, chapter, op_id=op_id or None, action="chapter_delete"):
+        mapping = versions.chapter_map(project)
+        if chapter not in mapping:
+            raise ChapterError("chapter_missing", status=404)
+        path = mapping[chapter]
+        payload = path.read_bytes()
+        current_sha = versions.raw_sha256(payload)
+        text = _decode(payload)
+        is_tail = chapter == max(mapping)
+        if not is_tail and _count_words(text) > 0:
+            raise ChapterError("only_tail_chapter_deletable", status=409)
+        published = _published_state(project, chapter)
+        if published["status"] in {"published", "staged"}:
+            raise ChapterError("chapter_published_readonly", status=409)
+        meta = versions.current_version(project, chapter) or {}
+        if expected_content_sha256 and expected_content_sha256 != current_sha:
+            raise ChapterError("concurrent_modification", status=409)
+        if not expected_content_sha256:
+            raise ChapterError("expected_version_required")
+        if expected_version_id and expected_version_id not in {meta.get("version_id"), meta.get("sha256")}:
+            raise ChapterError("concurrent_modification", status=409)
+        active = _active_chapter_tasks(project, chapter)
+        if active:
+            raise ChapterError("chapter_has_active_tasks", status=409,
+                               detail={"tasks": active,
+                                       "message": "章节仍有待执行/执行中的任务，请先取消任务"})
+        op = op_id or f"delete-{chapter}-{uuid.uuid4().hex[:8]}"
+        archive_base = Path(project) / ".webnovel" / _TRASH / f"{datetime.now().strftime('%Y%m%dT%H%M%S')}-ch{chapter:04d}"
+        archive = archive_base
+        suffix = 1
+        while archive.exists():
+            suffix += 1
+            archive = Path(str(archive_base) + f"-{suffix}")
+        archive.mkdir(parents=True, exist_ok=False)
+        receipt_snapshot = _chapter_receipt_snapshot(project, chapter)
+        index_snapshot = _index_entry(project, chapter)
+        manifest = {
+            "chapter_id": chapter,
+            "chapter_uid": wb.chapter_uid(project, chapter),
+            "title": versions.parse_chapter_name(path.name)[1],
+            "filename": path.name,
+            "content_sha256": current_sha,
+            "version_id": meta.get("version_id"),
+            "payload_sha256": current_sha,
+            "deleted_at": _now(),
+            "index_entry": index_snapshot,
+            "receipt": receipt_snapshot,
+            "draft": wb.get_draft(project, chapter),
+            "annotations": [],
+            "op_id": op,
+        }
+        try:
+            from integration import annotations
+            manifest["annotations"] = annotations.export_chapter(project, chapter)
+        except Exception:
+            pass
+        # The archived payload and the manifest hash are the same bytes read
+        # above; never re-read after a concurrent save (A-P1-4).
+        (archive / "original.md").write_bytes(payload)
+        safety.atomic_json(archive / "manifest.json", manifest)
+        try:
+            versions._ensure(project)
+            with safety.file_lock(versions._paths(project)["lock"]):
+                if versions.file_sha256(path) != current_sha:
+                    raise ChapterError("concurrent_modification", status=409)
+                try:
+                    os.replace(path, archive / path.name)
+                except OSError as exc:
+                    raise ChapterError("delete_failed") from exc
+                try:
+                    _drop_receipt(project, chapter)
+                except Exception:
+                    if (archive / path.name).is_file() and not path.exists():
+                        os.replace(archive / path.name, path)
+                    raise
+                try:
+                    _drop_index_entry(project, chapter)
+                except Exception:
+                    if isinstance(receipt_snapshot, dict) and receipt_snapshot:
+                        try:
+                            _write_receipts(project, {str(chapter): receipt_snapshot})
+                        except Exception:
+                            pass
+                    if (archive / path.name).is_file() and not path.exists():
+                        os.replace(archive / path.name, path)
+                    if isinstance(index_snapshot, dict) and index_snapshot:
+                        try:
+                            index = versions.load_index(project)
+                            index["chapters"][str(chapter)] = index_snapshot
+                            versions._save_index(project, index)
+                        except Exception:
+                            pass
+                    raise
+        except Exception:
+            if not (archive / path.name).is_file():
+                shutil.rmtree(archive, ignore_errors=True)
+            raise
+        warnings: List[str] = []
+        try:
+            wb.delete_draft(project, chapter)
+        except Exception as exc:
+            warnings.append(f"draft:{type(exc).__name__}")
+        try:
+            from integration import annotations
+            annotations.delete_chapter(project, chapter)
+        except Exception as exc:
+            warnings.append(f"annotations:{type(exc).__name__}")
+        try:
+            wb.drop_document(project, f"正文:{chapter}")
+        except Exception:
+            pass
+        if isinstance(manifest.get("draft"), dict):
+            _drop_draft_doc(project, chapter, manifest["draft"].get("draft_id"))
+        return {"status": "deleted", "chapter_id": chapter, "trash_entry": archive.name,
+                "archived_to": str(archive), "warnings": warnings}
 
 
 def _trash_entries(project) -> List[Dict[str, Any]]:
@@ -665,10 +890,113 @@ def list_trash(project) -> Dict[str, Any]:
     return {"entries": _trash_entries(project)}
 
 
+def _restore_trash_draft(project, chapter: int, uid: str,
+                         draft: Any) -> bool:
+    """Re-insert the draft archived with the deleted chapter (A-P2-11)."""
+    if not isinstance(draft, dict) or not draft.get("draft_id"):
+        return False
+    if wb.get_draft(project, chapter):
+        return False
+    try:
+        with wb.write_tx(project) as db:
+            row = db.execute("SELECT draft_epoch FROM chapter_meta WHERE chapter_id=?",
+                             (int(chapter),)).fetchone()
+            epoch = max(int(draft.get("draft_epoch") or 0), int((row or [0])[0] or 0))
+            db.execute("UPDATE chapter_meta SET draft_epoch=?, updated_at=? WHERE chapter_id=?",
+                       (epoch, wb.now_iso(), int(chapter)))
+            db.execute(
+                "INSERT OR REPLACE INTO chapter_drafts(chapter_id, draft_id, chapter_uid, "
+                "chapter_number, draft_epoch, draft_revision, base_version_id, base_content_sha256, "
+                "title, content, cursor_json, dirty, client_session_id, updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (int(chapter), str(draft["draft_id"]), uid or str(draft.get("chapter_uid") or ""),
+                 int(chapter), epoch, int(draft.get("draft_revision") or 1),
+                 draft.get("base_version_id"), draft.get("base_content_sha256"),
+                 str(draft.get("title") or ""), str(draft.get("content") or ""),
+                 json.dumps(draft.get("cursor") or {}, ensure_ascii=False),
+                 1 if draft.get("dirty") else 0, str(draft.get("client_session_id") or ""),
+                 wb.now_iso()),
+            )
+        return True
+    except Exception:
+        return False
+
+
+def _restore_trash_annotations(project, chapter: int, uid: str,
+                               rows: Any) -> int:
+    """Re-insert annotations/hunks exported into the trash manifest (A-P2-11)."""
+    if not isinstance(rows, list):
+        return 0
+    restored = 0
+    try:
+        with wb.write_tx(project) as db:
+            for row in rows:
+                if not isinstance(row, dict) or not row.get("id"):
+                    continue
+                stamp = str(row.get("created_at") or _now())
+                db.execute(
+                    "INSERT OR REPLACE INTO annotations(id, chapter_id, chapter_uid, scope, "
+                    "anchor_json, instruction, edit_policy, variants_requested, status, "
+                    "annotation_revision, conflict_with_json, candidate_ids_json, thread_json, "
+                    "group_id, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (str(row["id"]), int(chapter), uid or str(row.get("chapter_uid") or ""),
+                     str(row.get("scope") or "chapter"),
+                     json.dumps(row.get("anchor"), ensure_ascii=False),
+                     str(row.get("instruction") or ""),
+                     str(row.get("edit_policy") or "strict_selection"),
+                     int(row.get("variants_requested") or 1),
+                     str(row.get("status") or "open"),
+                     int(row.get("annotation_revision") or 1),
+                     json.dumps(row.get("conflict_with") or [], ensure_ascii=False),
+                     json.dumps(row.get("candidate_ids") or [], ensure_ascii=False),
+                     json.dumps(row.get("thread") or [], ensure_ascii=False),
+                     row.get("group_id"), stamp, str(row.get("updated_at") or stamp)),
+                )
+                restored += 1
+                for hunk in row.get("hunks") or []:
+                    if not isinstance(hunk, dict) or not hunk.get("id"):
+                        continue
+                    db.execute(
+                        "INSERT OR REPLACE INTO annotation_hunks(id, annotation_id, preview_id, "
+                        "candidate_id, group_id, chapter_id, chapter_uid, status, before_text, "
+                        "after_text, char_start, char_end, applied_draft_id, applied_draft_revision, "
+                        "applied_range_json, applied_text_sha256, custom_text, created_at, updated_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (str(hunk["id"]), str(row["id"]), hunk.get("preview_id"),
+                         hunk.get("candidate_id"), hunk.get("group_id"), int(chapter),
+                         uid or str(hunk.get("chapter_uid") or ""),
+                         str(hunk.get("status") or "pending"),
+                         str(hunk.get("before_text") or ""), str(hunk.get("after_text") or ""),
+                         hunk.get("char_start"), hunk.get("char_end"),
+                         hunk.get("applied_draft_id"), hunk.get("applied_draft_revision"),
+                         json.dumps(hunk.get("applied_range"), ensure_ascii=False),
+                         hunk.get("applied_text_sha256"), hunk.get("custom_text"),
+                         str(hunk.get("created_at") or stamp),
+                         str(hunk.get("updated_at") or stamp)),
+                    )
+        return restored
+    except Exception:
+        return 0
+
+
 def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
     safe_entry = str(entry or "")
     if safe_entry in {".", ".."} or not re.fullmatch(r"[0-9A-Za-z._-]+", safe_entry):
         raise ChapterError("trash_entry_invalid")
+    op_id = _validate_op_id(op_id)
+    cached = _idempotent_soft(project, "trash_restore", op_id, {"entry": safe_entry})
+    if cached is not None:
+        return {**cached, "reused": True}
+    try:
+        result = _restore_trash_impl(project, safe_entry, op_id=op_id)
+    except Exception:
+        _fail_soft(project, "trash_restore", op_id)
+        raise
+    _finish_soft(project, "trash_restore", op_id, result)
+    return result
+
+
+def _restore_trash_impl(project, safe_entry: str, *, op_id: str = "") -> Dict[str, Any]:
     archive = Path(project) / ".webnovel" / _TRASH / safe_entry
     manifest_path = archive / "manifest.json"
     if not manifest_path.is_file():
@@ -706,7 +1034,7 @@ def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
     expected_sha = str(manifest.get("payload_sha256") or manifest.get("content_sha256") or "")
     if expected_sha and hashlib.sha256(data).hexdigest() != expected_sha:
         raise ChapterError("trash_payload_corrupt")
-    title = str(manifest.get("title") or "")
+    title = _validate_title_for_chapter(chapter, str(manifest.get("title") or ""))
     uid = "" if renumbered else str(manifest.get("chapter_uid") or "")
     if renumbered:
         uid = wb.chapter_uid(project, chapter)
@@ -738,9 +1066,16 @@ def restore_trash(project, entry: str, *, op_id: str = "") -> Dict[str, Any]:
                           title=title, content=_decode(data))
     except Exception:
         pass
+    restored_uid = uid or wb.chapter_uid(project, chapter)
+    annotations_restored = _restore_trash_annotations(project, chapter, restored_uid,
+                                                      manifest.get("annotations"))
+    draft_restored = _restore_trash_draft(project, chapter, restored_uid,
+                                          manifest.get("draft"))
     return {"status": "restored", "entry": safe_entry, "chapter_id": chapter,
             "chapter_uid": uid, "renumbered": renumbered,
-            "title": title, "content_sha256": result.get("content_sha256")}
+            "title": title, "content_sha256": result.get("content_sha256"),
+            "annotations_restored": annotations_restored,
+            "draft_restored": draft_restored}
 
 
 def _require_tail_unpublished(project, chapter: int) -> Path:
@@ -754,10 +1089,82 @@ def _require_tail_unpublished(project, chapter: int) -> Path:
     return mapping[chapter]
 
 
+def _rollback_split(project, chapter: int, raw: bytes, first_sha: str, second_sha: str,
+                    chapter_entry: Dict[str, Any], next_entry: Dict[str, Any],
+                    op_a: str, op_b: str, base_title: str) -> Optional[str]:
+    """Undo only this split's effects; never overwrite a concurrent save.
+
+    Returns the current body sha when it differs from both bytes this split
+    could have produced (external/concurrent modification).
+    """
+    path = versions.chapter_path(project, chapter)
+    current_sha = versions.file_sha256(path)
+    raw_sha = _raw_sha(raw)
+    restore_body = current_sha in {raw_sha, first_sha}
+    external = current_sha not in {raw_sha, first_sha, None}
+    if restore_body and path is not None:
+        try:
+            versions._write_chapter_bytes(project, chapter, raw, base_title)
+        except OSError:
+            pass
+    second_path = versions.chapter_path(project, chapter + 1)
+    if second_path is not None and versions.file_sha256(second_path) == second_sha:
+        try:
+            second_path.unlink()
+        except OSError:
+            pass
+    with safety.file_lock(versions._paths(project)["lock"]):
+        index = versions.load_index(project)
+        changed = False
+        if restore_body:
+            if isinstance(chapter_entry, dict) and chapter_entry:
+                index["chapters"][str(chapter)] = chapter_entry
+            else:
+                index["chapters"].pop(str(chapter), None)
+            changed = True
+        if isinstance(next_entry, dict) and next_entry:
+            index["chapters"][str(chapter + 1)] = next_entry
+            changed = True
+        elif str(chapter + 1) in index["chapters"]:
+            index["chapters"].pop(str(chapter + 1), None)
+            changed = True
+        if changed:
+            versions._save_index(project, index)
+    for op in (op_a, op_b):
+        try:
+            versions.discard_commit(project, op)
+        except versions.VersionError:
+            pass
+    try:
+        _drop_receipt(project, chapter + 1)
+    except Exception:
+        pass
+    return current_sha if external else None
+
+
 def split_chapter(project, chapter: int, *, offset: int, title: str = "",
                   expected_content_sha256: str = "", op_id: str = "") -> Dict[str, Any]:
     chapter = int(chapter)
     op_id = _validate_op_id(op_id)
+    params = {"chapter": chapter, "offset": int(offset), "title": str(title or ""),
+              "expected_content_sha256": str(expected_content_sha256 or "")}
+    cached = _idempotent_soft(project, "chapter_split", op_id, params)
+    if cached is not None:
+        return {**cached, "reused": True}
+    try:
+        with _locked(project, chapter, op_id=op_id or None, action="chapter_split"):
+            result = _split_chapter_locked(project, chapter, offset=offset, title=title,
+                                           expected_content_sha256=expected_content_sha256,
+                                           op_id=op_id)
+    except Exception:
+        _fail_soft(project, "chapter_split", op_id)
+        raise
+    _finish_soft(project, "chapter_split", op_id, result)
+    return result
+
+
+def _split_chapter_locked(project, chapter: int, *, offset: int, title: str,
+                          expected_content_sha256: str, op_id: str) -> Dict[str, Any]:
     path = _require_tail_unpublished(project, chapter)
     raw = path.read_bytes()
     if expected_content_sha256 and expected_content_sha256 != _raw_sha(raw):
@@ -773,38 +1180,33 @@ def split_chapter(project, chapter: int, *, offset: int, title: str = "",
     if not first.endswith("\n"):
         first += "\n"
     base_title = versions.parse_chapter_name(path.name)[1]
-    first_title = _validate_title(title or base_title)
-    second_title = _validate_title(f"{first_title}（续）")
-    backup_index = json.dumps(versions.load_index(project), ensure_ascii=False)
-    old_bytes = raw
-    new_path = versions._new_chapter_path(project, chapter + 1, second_title)
-    second_existed = versions.chapter_path(project, chapter + 1) is not None
+    first_title = _validate_title_for_chapter(chapter, title or base_title)
+    second_title = _validate_title_for_chapter(chapter + 1, f"{first_title}（续）")
+    first_payload = first.encode("utf-8")
+    second_payload = second.encode("utf-8")
+    first_sha = _raw_sha(first_payload)
+    second_sha = _raw_sha(second_payload)
+    op_a = (op_id + "-a") if op_id else f"split-{chapter}-a"
+    op_b = (op_id + "-b") if op_id else f"split-{chapter + 1}-b"
+    chapter_entry = json.loads(json.dumps(_index_entry(project, chapter), ensure_ascii=False))
+    next_entry = json.loads(json.dumps(_index_entry(project, chapter + 1), ensure_ascii=False))
     try:
         # 先落后半章，再截断前半章：即使两次提交之间进程死亡，原文仍完整存在于
         # 前一章，不会出现“后半章永久丢失”；重试可幂等补齐。
-        created = versions.commit_raw_bytes(project, chapter + 1, second.encode("utf-8"),
-                                            title=second_title,
-                                            op_id=(op_id + "-b") if op_id else f"split-{chapter + 1}-b",
+        created = versions.commit_raw_bytes(project, chapter + 1, second_payload,
+                                            title=second_title, op_id=op_b,
                                             source="split", allow_new=True,
+                                            expect_absent=not next_entry,
                                             note="尾章拆分（下）")
-        versions.commit_raw_bytes(project, chapter, first.encode("utf-8"), title=first_title,
-                                  op_id=(op_id + "-a") if op_id else f"split-{chapter}-a",
-                                  source="split", expected_sha256=_raw_sha(raw),
-                                  note="尾章拆分（上）")
-    except Exception:
-        path.write_bytes(old_bytes)
-        from fanqie_auto_publish.publication_safety import atomic_json as _atomic
-        # 恢复拆分前的索引快照；只有本次新建的后半章才清理。
-        _atomic(versions._paths(project)["index"], json.loads(backup_index))
-        if not second_existed:
-            for candidate in (new_path, versions.chapter_path(project, chapter + 1)):
-                if candidate and Path(candidate).exists():
-                    try:
-                        Path(candidate).unlink()
-                    except OSError:
-                        pass
-            _drop_index_entry(project, chapter + 1)
-            _drop_receipt(project, chapter + 1)
+        versions.commit_raw_bytes(project, chapter, first_payload, title=first_title,
+                                  op_id=op_a, source="split",
+                                  expected_sha256=_raw_sha(raw), note="尾章拆分（上）")
+    except Exception as exc:
+        external_sha = _rollback_split(project, chapter, raw, first_sha, second_sha,
+                                       chapter_entry, next_entry, op_a, op_b, base_title)
+        if external_sha is not None:
+            raise ChapterError("split_aborted_concurrent_modification", status=409,
+                               detail={"current_content_sha256": external_sha}) from exc
         raise
     wb.chapter_uid(project, chapter + 1)
     return {"status": "split", "chapter_id": chapter, "new_chapter_id": chapter + 1,
@@ -812,13 +1214,66 @@ def split_chapter(project, chapter: int, *, offset: int, title: str = "",
             "second_version_id": created.get("version_id")}
 
 
+def _rollback_merge(project, previous: int, last: int, old_bytes: bytes, merge_sha: str,
+                    previous_entry: Dict[str, Any], last_entry: Dict[str, Any],
+                    merge_op: str, drop_op: str) -> None:
+    path = versions.chapter_path(project, previous)
+    current_sha = versions.file_sha256(path)
+    restored = False
+    if path is not None and current_sha == merge_sha:
+        try:
+            versions._write_chapter_bytes(project, previous, old_bytes,
+                                          versions.parse_chapter_name(path.name)[1])
+            restored = True
+        except OSError:
+            pass
+    with safety.file_lock(versions._paths(project)["lock"]):
+        index = versions.load_index(project)
+        changed = False
+        if restored:
+            if isinstance(previous_entry, dict) and previous_entry:
+                index["chapters"][str(previous)] = previous_entry
+            else:
+                index["chapters"].pop(str(previous), None)
+            changed = True
+        if isinstance(last_entry, dict) and last_entry:
+            if index["chapters"].get(str(last)) != last_entry:
+                index["chapters"][str(last)] = last_entry
+                changed = True
+        if changed:
+            versions._save_index(project, index)
+    for op in (merge_op, drop_op):
+        try:
+            versions.discard_commit(project, op)
+        except versions.VersionError:
+            pass
+
+
 def merge_tail(project, *, op_id: str = "") -> Dict[str, Any]:
     op_id = _validate_op_id(op_id)
+    cached = _idempotent_soft(project, "chapter_merge", op_id, {})
+    if cached is not None:
+        return {**cached, "reused": True}
+    try:
+        mapping = versions.chapter_map(project)
+        if len(mapping) < 2:
+            raise ChapterError("merge_needs_two_chapters", status=409)
+        last, previous = max(mapping), max(mapping) - 1
+        if previous not in mapping:
+            raise ChapterError("merge_needs_adjacent_chapters", status=409)
+        with _locked(project, previous, op_id=op_id or None, action="chapter_merge"):
+            with _locked(project, last, op_id=op_id or None, action="chapter_merge"):
+                result = _merge_tail_locked(project, previous, last, op_id)
+    except Exception:
+        _fail_soft(project, "chapter_merge", op_id)
+        raise
+    _finish_soft(project, "chapter_merge", op_id, result)
+    return result
+
+
+def _merge_tail_locked(project, previous: int, last: int, op_id: str) -> Dict[str, Any]:
     mapping = versions.chapter_map(project)
-    if len(mapping) < 2:
-        raise ChapterError("merge_needs_two_chapters", status=409)
-    last, previous = max(mapping), max(mapping) - 1
-    if previous not in mapping:
+    if previous not in mapping or last not in mapping or max(mapping) != last:
         raise ChapterError("merge_needs_adjacent_chapters", status=409)
     for number in (last, previous):
         if _published_state(project, number)["status"] in {"published", "staged"}:
@@ -828,15 +1283,17 @@ def merge_tail(project, *, op_id: str = "") -> Dict[str, Any]:
     merged = first_text + "\n\n" + second_text
     title = versions.parse_chapter_name(mapping[previous].name)[1]
     old_bytes = mapping[previous].read_bytes()
-    backup_index = json.dumps(versions.load_index(project), ensure_ascii=False)
+    merge_op = (op_id + "-merge") if op_id else f"merge-{previous}-{last}"
+    drop_op = (op_id + "-drop") if op_id else f"merge-drop-{last}"
+    previous_entry = json.loads(json.dumps(_index_entry(project, previous), ensure_ascii=False))
+    last_entry = json.loads(json.dumps(_index_entry(project, last), ensure_ascii=False))
     try:
-        result = versions.write_chapter(project, previous, merged,
-                                        op_id=(op_id + "-merge") if op_id else f"merge-{previous}-{last}",
-                                        expected_sha256=_raw_sha(mapping[previous].read_bytes()),
+        result = versions.write_chapter(project, previous, merged, op_id=merge_op,
+                                        expected_sha256=_raw_sha(old_bytes),
                                         title=title, source="merge", note="尾章合并")
         deleted = delete_chapter(project, last,
                                  expected_content_sha256=_raw_sha(mapping[last].read_bytes()),
-                                 op_id=(op_id + "-drop") if op_id else f"merge-drop-{last}")
+                                 op_id=drop_op)
     except Exception:
         # 若前半章已是完整合并稿（典型：上次崩溃在合并写入之后、删除尾章之前），
         # 重试只需补删尾章，不能把已合并正文回滚掉。
@@ -848,20 +1305,16 @@ def merge_tail(project, *, op_id: str = "") -> Dict[str, Any]:
                 deleted = delete_chapter(
                     project, last,
                     expected_content_sha256=_raw_sha(current_last.read_bytes()),
-                    op_id=(op_id + "-drop") if op_id else f"merge-drop-{last}")
+                    op_id=drop_op)
                 current = versions.current_version(project, previous) or {}
                 return {"status": "merged", "chapter_id": previous, "dropped_chapter_id": last,
                         "version_id": current.get("version_id"),
                         "trash_entry": deleted.get("trash_entry")}
         except Exception:
             pass
-        # 合并前半失败：把前一章恢复原字节与索引，绝不留下“已合并但尾章仍在”的半状态。
-        try:
-            mapping[previous].write_bytes(old_bytes)
-            from fanqie_auto_publish.publication_safety import atomic_json as _atomic
-            _atomic(versions._paths(project)["index"], json.loads(backup_index))
-        except Exception:
-            pass
+        # 只回滚本操作改过的两章；绝不整份索引覆盖其他章的并发提交。
+        _rollback_merge(project, previous, last, old_bytes, _raw_sha(merged.encode("utf-8")),
+                        previous_entry, last_entry, merge_op, drop_op)
         raise
     return {"status": "merged", "chapter_id": previous, "dropped_chapter_id": last,
             "version_id": result.get("version_id"), "trash_entry": deleted.get("trash_entry")}
@@ -896,18 +1349,24 @@ def import_preview(project, *, text: str, start_chapter: Optional[int] = None) -
 def import_chapters(project, *, text: str, start_chapter: Optional[int] = None,
                     preview: bool = True, op_id: str = "") -> Dict[str, Any]:
     op_id = _validate_op_id(op_id)
+    params = {"text": text, "start_chapter": start_chapter, "preview": bool(preview)}
+    if not preview:
+        cached = _idempotent_soft(project, "chapter_import", op_id, params)
+        if cached is not None:
+            return {**cached, "reused": True}
     plan = import_preview(project, text=text, start_chapter=start_chapter)
     if preview:
         return {"status": "preview", **plan}
     existing = versions.chapter_map(project)
     targets = [plan["start_chapter"] + offset for offset in range(plan["count"])]
     if any(chapter in existing for chapter in targets):
+        _fail_soft(project, "chapter_import", op_id)
         raise ChapterError("chapter_exists", status=409)
     created = []
     try:
         for offset, item in enumerate(plan["chapters"]):
             chapter = plan["start_chapter"] + offset
-            title = _validate_title(item["title"])
+            title = _validate_title_for_chapter(chapter, item["title"])
             content = _validate_content(item["content"])
             result = versions.commit_raw_bytes(project, chapter, content.encode("utf-8"), title=title,
                                                op_id=(op_id + f"-{chapter}") if op_id else f"import-{chapter}-{uuid.uuid4().hex[:8]}",
@@ -916,6 +1375,7 @@ def import_chapters(project, *, text: str, start_chapter: Optional[int] = None,
                             "commit_op": (op_id + f"-{chapter}") if op_id else result.get("op_id"),
                             "words": item["words"]})
     except Exception:
+        _fail_soft(project, "chapter_import", op_id)
         # 整批导入失败时不留下前半批孤儿章
         for row in created:
             number = row["chapter_id"]
@@ -934,7 +1394,9 @@ def import_chapters(project, *, text: str, start_chapter: Optional[int] = None,
                 except OSError:
                     pass
         raise
-    return {"status": "imported", "count": len(created), "chapters": created}
+    response = {"status": "imported", "count": len(created), "chapters": created}
+    _finish_soft(project, "chapter_import", op_id, response)
+    return response
 
 
 def author_confirm(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:

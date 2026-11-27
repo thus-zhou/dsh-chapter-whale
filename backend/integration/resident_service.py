@@ -501,8 +501,8 @@ def _recover_pending(base: Path) -> int:
             continue
         try:
             fixed += len(chapter_versions.recover_pending(Path(job["project"])))
-        except (ValueError, OSError, RuntimeError) as error:
-            sys.stderr.write(f"resident_service: 恢复提交失败（{job.get('project')}）：{error}\n")
+        except Exception as error:  # noqa: BLE001 - one bad project must not stop the service
+            sys.stderr.write(f"resident_service: 恢复提交失败（{job.get('project')}）：{type(error).__name__}: {error}\n")
     return fixed
 
 

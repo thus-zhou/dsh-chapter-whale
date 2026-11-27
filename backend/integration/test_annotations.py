@@ -348,5 +348,285 @@ class OverlapAndLifecycleTest(unittest.TestCase):
             self.assertIn("她撞开门。", second["draft"]["content"])
 
 
+class AuditBRegressionTest(unittest.TestCase):
+    def _ident(self, project):
+        return wb.get_draft(project, 1) or {"draft_id": None, "draft_epoch": 0, "draft_revision": 0}
+
+    def _create(self, project, text, quote="她推开门。", occurrence=0):
+        return ann.create_annotation(project, 1, {
+            "scope": "selection", "instruction": "改", "against": "version",
+            "anchor": anchor_for(text, quote, occurrence)})["id"]
+
+    def test_b01_ledger_coordinate_space_keeps_second_apply_clean(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "A。\nB。\nC。\n"
+            seed(project, text)
+            first = self._create(project, text, "C。")
+            preview1 = ann.run_annotations(
+                project, 1, {"op_id": "b01-run1", "annotation_ids": [first]},
+                generate=lambda a, c: "<replacement>C1。</replacement>")["previews"][0]
+            draft = self._ident(project)
+            ann.apply_hunks(project, 1, {
+                "op_id": "b01-apply1", "hunk_ids": [preview1["hunks"][0]["id"]],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            draft = wb.get_draft(project, 1)
+            ce.save_draft(project, 1, {
+                "title": "开端", "content": "X。\n" + draft["content"],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            current = wb.get_draft(project, 1)["content"]
+            second = ann.create_annotation(project, 1, {
+                "scope": "selection", "instruction": "改B", "against": "draft",
+                "anchor": anchor_for(current, "B。")})["id"]
+            preview2 = ann.run_annotations(
+                project, 1, {"op_id": "b01-run2", "annotation_ids": [second]},
+                generate=lambda a, c: "<replacement>B1。</replacement>")["previews"][0]
+            draft = wb.get_draft(project, 1)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "b01-apply2", "hunk_ids": [preview2["hunks"][0]["id"]],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertTrue(applied["clean"], applied["conflicts"])
+            self.assertEqual(applied["draft"]["content"], "X。\nA。\nB1。\nC1。\n")
+
+    def test_b06_multi_patch_uses_declared_paragraph_ranges(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "第一段甲。\n第二段乙。\n第三段丙。\n"
+            seed(project, text)
+            aid = ann.create_annotation(project, 1, {"scope": "chapter", "instruction": "按段落改"})["id"]
+            raw = ('<patch id="p1" start_para="0" end_para="0">第一段改。</patch>'
+                   '<patch id="p2" start_para="2" end_para="2">第三段改。</patch>')
+            result = ann.run_annotations(project, 1, {"op_id": "b06", "annotation_ids": [aid]},
+                                         generate=lambda a, c: raw)
+            self.assertEqual(result["status"], "proposed", result["errors"])
+            preview = result["previews"][0]
+            self.assertEqual(len(preview["hunks"]), 2)
+            self.assertEqual(preview["hunks"][0]["before_text"], "第一段甲。")
+            self.assertEqual(preview["hunks"][1]["before_text"], "第三段丙。")
+            self.assertEqual(preview["candidate_text"], "第一段改。\n第二段乙。\n第三段改。\n")
+
+    def test_b07_custom_text_persisted_and_deletion_is_committed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头一句。\n她推开门。\n结尾一句。\n"
+            seed(project, text)
+            aid = self._create(project, text)
+            preview = ann.run_annotations(
+                project, 1, {"op_id": "b07-run", "annotation_ids": [aid]},
+                generate=lambda a, c: "<replacement>她轻轻推开门。</replacement>")["previews"][0]
+            hunk_id = preview["hunks"][0]["id"]
+            draft = self._ident(project)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "b07-apply", "hunk_ids": [hunk_id],
+                "custom_texts": {hunk_id: "她悄悄推开门。"},
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["custom_text"],
+                             "她悄悄推开门。")
+            stats = ann.mark_committed(project, 1, text=applied["draft"]["content"])
+            self.assertEqual(stats["committed"], 1)
+
+            # 纯删除型：原文消失即 committed，而不是永远 committed_modified
+            text2 = "她推开门。\n"
+            project2 = make_project(tempfile.mkdtemp())
+            seed(project2, text2)
+            delete_id = self._create(project2, text2)
+            delete_preview = ann.run_annotations(
+                project2, 1, {"op_id": "b07-del-run", "annotation_ids": [delete_id]},
+                generate=lambda a, c: {"format": "xml_replacement", "replacement": ""})["previews"][0]
+            draft2 = self._ident(project2)
+            deleted = ann.apply_hunks(project2, 1, {
+                "op_id": "b07-del-apply", "hunk_ids": [delete_preview["hunks"][0]["id"]],
+                "expected_draft_id": draft2["draft_id"], "expected_draft_epoch": draft2["draft_epoch"],
+                "expected_draft_revision": draft2["draft_revision"]})
+            stats2 = ann.mark_committed(project2, 1, text=deleted["draft"]["content"])
+            self.assertEqual(stats2["committed"], 1)
+            self.assertEqual(ann.get_annotation(project2, 1, delete_id)["hunks"][0]["status"],
+                             "committed")
+
+    def test_b08_author_rewrote_selection_skips_model_call(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "她说：我很害怕。\n他点头。\n"
+            seed(project, text)
+            aid = ann.create_annotation(project, 1, {
+                "scope": "selection", "instruction": "改", "against": "version",
+                "anchor": anchor_for(text, "我很害怕")})["id"]
+            draft = self._ident(project)
+            ce.save_draft(project, 1, {
+                "title": "开端", "content": text.replace("我很害怕", "她怕得发抖"),
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            calls = []
+            result = ann.run_annotations(
+                project, 1, {"op_id": "b08", "annotation_ids": [aid]},
+                generate=lambda a, c: calls.append(1) or "<replacement>x</replacement>")
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(calls, [])
+            self.assertEqual(ann.get_annotation(project, 1, aid)["status"],
+                             "author_rewrote_selection")
+
+    def test_b10_undo_deletion_after_author_prefix_uses_context(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "甲乙丙丁戊NEW。\n"
+            seed(project, text)
+            aid = ann.create_annotation(project, 1, {
+                "scope": "selection", "instruction": "删掉开头", "against": "version",
+                "anchor": {"char_start": 0, "char_end": 5, "quote": "甲乙丙丁戊"}})["id"]
+            preview = ann.run_annotations(
+                project, 1, {"op_id": "b10-run", "annotation_ids": [aid]},
+                generate=lambda a, c: {"format": "xml_replacement", "replacement": ""})["previews"][0]
+            draft = self._ident(project)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "b10-apply", "hunk_ids": [preview["hunks"][0]["id"]],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(applied["draft"]["content"], "NEW。\n")
+            draft = wb.get_draft(project, 1)
+            ce.save_draft(project, 1, {
+                "title": "开端", "content": "前言。" + draft["content"],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            undone = ann.undo_apply(project, 1, {"op_id": "b10-undo"})
+            self.assertEqual(undone["draft"]["content"], "前言。甲乙丙丁戊NEW。\n")
+
+    def test_b12_rejected_annotation_cannot_apply(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "甲改。\n乙句。\n"
+            seed(project, text)
+            aid = self._create(project, text, "甲改。")
+            preview = ann.run_annotations(
+                project, 1, {"op_id": "b12-run", "annotation_ids": [aid]},
+                generate=lambda a, c: "<replacement>甲再改。</replacement>")["previews"][0]
+            ann.update_annotation(project, 1, aid, {"status": "rejected"})
+            self.assertEqual(ann.get_annotation(project, 1, aid)["hunks"][0]["status"], "rejected")
+            draft = self._ident(project)
+            with self.assertRaises(ann.AnnotationError) as caught:
+                ann.apply_hunks(project, 1, {
+                    "op_id": "b12-apply", "hunk_ids": [preview["hunks"][0]["id"]],
+                    "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                    "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(caught.exception.code, "no_pending_hunks")
+
+    def test_b13_missing_snapshot_does_not_break_annotation_list(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "她推开门。\n"
+            seed(project, text)
+            created = ann.create_annotation(project, 1, {
+                "scope": "selection", "instruction": "改", "against": "version",
+                "anchor": anchor_for(text, "她推开门。")})
+            digest = created["anchor"]["base_snapshot_id"]
+            (project / ".webnovel" / "snapshots" / f"{digest}.txt").unlink()
+            listing = ann.list_annotations(project, 1)
+            self.assertEqual(len(listing["annotations"]), 1)
+            item = listing["annotations"][0]
+            self.assertEqual(item["relocated"]["status"], "snapshot_missing")
+            self.assertEqual(item["status"], "relocated_needed")
+
+    def test_b19_same_op_id_does_not_bill_or_apply_twice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "她推开门。\n"
+            seed(project, text)
+            aid = self._create(project, text)
+            calls = []
+
+            def generate(annotation, context):
+                calls.append(context.get("op_id"))
+                return "<replacement>她撞开门。</replacement>"
+
+            first = ann.run_annotations(project, 1, {"op_id": "b19-run", "annotation_ids": [aid]},
+                                        generate=generate)
+            second = ann.run_annotations(project, 1, {"op_id": "b19-run", "annotation_ids": [aid]},
+                                         generate=generate)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(first["previews"][0]["preview_id"], second["previews"][0]["preview_id"])
+            hunk_id = first["previews"][0]["hunks"][0]["id"]
+            draft = self._ident(project)
+            body = {"op_id": "b19-apply", "hunk_ids": [hunk_id],
+                    "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                    "expected_draft_revision": draft["draft_revision"]}
+            ann.apply_hunks(project, 1, body)
+            ann.apply_hunks(project, 1, body)
+            with wb.connect(project) as db:
+                ledger = db.execute("SELECT COUNT(*) FROM patch_ledger WHERE chapter_id=1").fetchone()[0]
+            self.assertEqual(ledger, 1)
+
+    def test_b21_independent_excludes_coupled_members(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "第一段。\n第二段。\n第三段。\n"
+            seed(project, text)
+            ids = []
+            for quote, instruction in (("第一段。", "改一"), ("第二段。", "改二")):
+                ids.append(ann.create_annotation(project, 1, {
+                    "scope": "selection", "instruction": instruction, "against": "version",
+                    "anchor": anchor_for(text, quote)})["id"])
+            rows = [ann.get_annotation(project, 1, value) for value in ids]
+            triage = ann.triage(project, 1, rows)
+            coupled = {value for group in triage["coupled_batch"] for value in group}
+            self.assertTrue(coupled)
+            self.assertFalse(coupled & set(triage["independent"]))
+
+    def test_b22_conflict_envelope_is_not_labelled_applied(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "甲句。\n乙句。\n丙句。\n"
+            seed(project, text)
+            aid = self._create(project, text, "丙句。")
+            preview = ann.run_annotations(
+                project, 1, {"op_id": "b22-run", "annotation_ids": [aid]},
+                generate=lambda a, c: "<replacement>丙改。</replacement>")["previews"][0]
+            draft = self._ident(project)
+            ce.save_draft(project, 1, {
+                "title": "开端", "content": text.replace("丙句。", "丙句改了。"),
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            draft = wb.get_draft(project, 1)
+            result = ann.apply_hunks(project, 1, {
+                "op_id": "b22-apply", "hunk_ids": [preview["hunks"][0]["id"]],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(result["status"], "conflict")
+            self.assertEqual(result["applied"], [])
+            self.assertTrue(result["conflicts"])
+            self.assertEqual(result["draft"]["content"], "甲句。\n乙句。\n丙句改了。\n")
+
+    def test_b23_reject_hunks_and_b24_superseded_preview(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "她说：我很害怕。\n"
+            seed(project, text)
+            aid = self._create(project, text, "我很害怕")
+            result = ann.run_annotations(
+                project, 1, {"op_id": "b24-run", "annotation_ids": [aid], "variants": 2},
+                generate=lambda a, c: f"<replacement>{'她攥紧门把手。' if a['variant'] == 0 else '她发抖。'}</replacement>")
+            variant_a, variant_b = result["previews"]
+            draft = self._ident(project)
+            ann.apply_hunks(project, 1, {
+                "op_id": "b24-apply", "hunk_ids": [variant_a["hunks"][0]["id"]],
+                "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            previews = {row["preview_id"]: row["status"]
+                        for row in ann.list_previews(project, 1)["previews"]}
+            self.assertEqual(previews[variant_b["preview_id"]], "superseded")
+
+            # 逐 hunk 拒绝：另一条批注仍 pending 时可单独拒绝
+            other = self._create(project, text, "她说", occurrence=0)
+            pending = ann.run_annotations(
+                project, 1, {"op_id": "b23-run", "annotation_ids": [other]},
+                generate=lambda a, c: "<replacement>她低声说</replacement>")["previews"][0]
+            rejected = ann.reject_hunks(project, 1, {
+                "op_id": "b23-reject", "hunk_ids": [pending["hunks"][0]["id"]]})
+            self.assertEqual(rejected["status"], "rejected")
+            self.assertEqual(ann.get_annotation(project, 1, other)["hunks"][0]["status"], "rejected")
+
+
 if __name__ == "__main__":
     unittest.main()
