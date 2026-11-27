@@ -1159,6 +1159,68 @@ def _index_current(index_data: Any) -> Dict[int, str]:
     return result
 
 
+_OBJECT_SHA = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _index_version_objects(index_data: Any) -> List[Tuple[int, str]]:
+    """Every version-object sha referenced by an index (versions + current)."""
+    result: List[Tuple[int, str]] = []
+    seen = set()
+    if not isinstance(index_data, dict):
+        return result
+    chapters = index_data.get("chapters")
+    if not isinstance(chapters, dict):
+        return result
+    for key, entry in chapters.items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            number = int(key)
+        except (TypeError, ValueError):
+            continue
+        candidates = [entry.get("current")]
+        for item in entry.get("versions") or []:
+            if isinstance(item, dict):
+                candidates.append(item.get("sha256"))
+        for value in candidates:
+            sha = str(value or "")
+            if _OBJECT_SHA.match(sha) and (number, sha) not in seen:
+                seen.add((number, sha))
+                result.append((number, sha))
+    return result
+
+
+def _objects_rel_for(index_rel: str) -> str:
+    base = index_rel.rsplit("/", 1)[0] if "/" in index_rel else ""
+    return (base + "/objects") if base else "objects"
+
+
+def _drop_record(records: List[Dict[str, Any]], rel: str) -> None:
+    records[:] = [item for item in records if item.get("path") != rel]
+
+
+def _drop_stale_bodies(dest_body_dir: Path, number: int, keep_name: str,
+                       records: List[Dict[str, Any]]) -> None:
+    """Remove other backup files for the same chapter number.
+
+    A title rename during backup leaves both the old and new filename; the
+    manifest then lists the old body first and ``restore`` rejects the whole
+    backup with ``index_body_mismatch`` (A-P2-04).
+    """
+    if not dest_body_dir.is_dir():
+        return
+    for path in sorted(dest_body_dir.glob("*.md")):
+        if path.name == keep_name:
+            continue
+        if _body_chapter_number(path.name) != int(number):
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        _drop_record(records, "正文/" + path.name)
+
+
 @contextmanager
 def _versions_lock(project, timeout: float):
     """Exclusive lock shared with ``chapter_versions`` (same ``.lock`` file)."""
@@ -1226,6 +1288,7 @@ def _reconcile_backup_index(project_path: Path, dest: Path, records: List[Dict[s
     if index_rel is None:
         return {"ok": True, "chapters": 0}
     problems: List[str] = []
+    objects_rel = _objects_rel_for(index_rel)
     for attempt in range(4):
         with _versions_lock(project_path, wait_seconds):
             source_index = project_path / Path(index_rel)
@@ -1238,26 +1301,45 @@ def _reconcile_backup_index(project_path: Path, dest: Path, records: List[Dict[s
                 return {"ok": False, "problems": ["index_unreadable"]}
             current = _index_current(index_data)
             project_bodies = _body_sha_map(project_path / "正文")
-            dest_bodies = _body_sha_map(dest / "正文")
             problems = []
             for number, sha in sorted(current.items()):
                 source = project_bodies.get(number)
                 if not source or source != sha:
                     problems.append(f"index_body_missing:{number}")
                     continue
-                if dest_bodies.get(number) != sha:
-                    body_path = None
-                    for path in (project_path / "正文").glob("*.md"):
-                        if _body_chapter_number(path.name) == number and not _is_link_like(path):
-                            body_path = path
-                            break
-                    if body_path is None:
-                        problems.append(f"index_body_missing:{number}")
-                        continue
+                body_path = None
+                for path in (project_path / "正文").glob("*.md"):
+                    if _body_chapter_number(path.name) == number and not _is_link_like(path):
+                        body_path = path
+                        break
+                if body_path is None:
+                    problems.append(f"index_body_missing:{number}")
+                    continue
+                # Remove a same-chapter file left by a rename during the copy
+                # before/after writing the current body (A-P2-04).
+                _drop_stale_bodies(dest / "正文", number, body_path.name, records)
+                target_body = dest / "正文" / body_path.name
+                if not (target_body.is_file() and _file_sha(target_body) == sha):
                     rel = "正文/" + body_path.name
-                    _recopy_file(body_path, dest / "正文" / body_path.name, rel, records)
+                    _recopy_file(body_path, target_body, rel, records)
+            # The backup must contain every version object the index points at,
+            # not just the current body: restored history otherwise fails with
+            # VersionNotFound("object_missing") (A-P2-03).
+            for number, sha in _index_version_objects(index_data):
+                source_object = project_path / Path(objects_rel) / f"{sha}.txt"
+                dest_object = dest / Path(objects_rel) / f"{sha}.txt"
+                if not source_object.is_file():
+                    problems.append(f"index_object_missing:{number}:{sha}")
+                    continue
+                if _file_sha(source_object) != sha:
+                    problems.append(f"index_object_corrupt:{number}:{sha}")
+                    continue
+                if _file_sha(dest_object) != sha:
+                    _recopy_file(source_object, dest_object, f"{objects_rel}/{sha}.txt", records)
             if not problems:
-                return {"ok": True, "chapters": len(current), "attempts": attempt + 1}
+                return {"ok": True, "chapters": len(current),
+                        "objects": len(_index_version_objects(index_data)),
+                        "attempts": attempt + 1}
         time.sleep(0.05)
     return {"ok": False, "problems": problems}
 
@@ -1293,12 +1375,234 @@ def _backup_index_problems(reader, manifest: Mapping[str, Any]) -> List[str]:
         except (OSError, UnsafePath, FileNotFoundError):
             continue
     problems: List[str] = []
+    duplicates: Dict[int, set] = {}
+    for item in manifest.get("files") or []:
+        if not isinstance(item, dict):
+            continue
+        rel = str(item.get("path") or "")
+        if rel.startswith("正文/"):
+            number = _body_chapter_number(Path(rel).name)
+            if number is not None:
+                duplicates.setdefault(number, set()).add(rel)
+    for number, shas in sorted(duplicates.items()):
+        if len(shas) > 1:
+            problems.append(f"index_body_duplicate:{number}")
     for number, sha in sorted(current.items()):
         actual = body_entries.get(number)
         if actual is None:
             problems.append(f"index_body_missing:{number}")
         elif actual != sha:
             problems.append(f"index_body_mismatch:{number}")
+    # Version objects are part of the backup contract: an index entry whose
+    # object is absent makes every historical read fail after restore
+    # (A-P2-03).
+    objects_rel = _objects_rel_for(index_rel)
+    manifest_paths = {str(item.get("path") or "") for item in manifest.get("files") or []
+                      if isinstance(item, dict)}
+    for number, sha in _index_version_objects(index_data):
+        rel = f"{objects_rel}/{sha}.txt"
+        if rel not in manifest_paths:
+            problems.append(f"index_object_missing:{number}:{sha}")
+            continue
+        try:
+            data = reader.read(rel)
+        except (OSError, UnsafePath, FileNotFoundError):
+            problems.append(f"index_object_missing:{number}:{sha}")
+            continue
+        if _sha256(data) != sha:
+            problems.append(f"index_object_mismatch:{number}:{sha}")
+    return problems
+
+
+def _annotation_snapshot_refs(sqlite_bytes: bytes) -> set:
+    """Snapshot ids referenced by annotations/preview_index in a backup DB."""
+    import tempfile
+    refs: set = set()
+    handle = tempfile.NamedTemporaryFile(prefix="backup-refs-", suffix=".sqlite3", delete=False)
+    try:
+        handle.write(sqlite_bytes)
+        handle.flush()
+        handle.close()
+        connection = sqlite3.connect(handle.name)
+        try:
+            tables = {row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "annotations" in tables:
+                for (raw,) in connection.execute(
+                        "SELECT anchor_json FROM annotations WHERE anchor_json IS NOT NULL"):
+                    try:
+                        value = json.loads(raw or "null")
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(value, dict) and value.get("base_snapshot_id"):
+                        refs.add(str(value["base_snapshot_id"]))
+            if "preview_index" in tables:
+                for (raw,) in connection.execute(
+                        "SELECT base_snapshot_id FROM preview_index WHERE base_snapshot_id IS NOT NULL"):
+                    if raw:
+                        refs.add(str(raw))
+        except sqlite3.Error:
+            return refs
+        finally:
+            connection.close()
+    except OSError:
+        return refs
+    finally:
+        handle.close()
+        try:
+            os.unlink(handle.name)
+        except OSError:
+            pass
+    return refs
+
+
+def _revision_candidate_refs(json_bytes: bytes) -> List[str]:
+    try:
+        value = json.loads(json_bytes.decode("utf-8-sig"))
+    except (UnicodeDecodeError, ValueError):
+        return []
+    if not isinstance(value, dict) or not value.get("candidate_id"):
+        return []
+    return [str(value["candidate_id"])]
+
+
+def _reconcile_backup_evidence(project_path: Path, dest: Path,
+                               records: List[Dict[str, Any]],
+                               skipped: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Make ID-referenced evidence (snapshots/previews/trash) complete.
+
+    ``workbench.sqlite3`` is backed up by the SQLite API because it is a live
+    database; the files it references are plain files copied tree-by-tree.  A
+    write between the two copies can reference a snapshot the tree copy
+    missed, so re-check every id under the same rules as the index reconcile.
+    """
+    problems: List[str] = []
+    snapshots = 0
+    previews = 0
+    trash = 0
+    workbench = dest / ".webnovel" / "workbench.sqlite3"
+    refs = _annotation_snapshot_refs(workbench.read_bytes()) if workbench.is_file() else set()
+    for digest in sorted(refs):
+        if not _OBJECT_SHA.match(digest):
+            continue
+        snapshots += 1
+        rel = f".webnovel/snapshots/{digest}.txt"
+        target = _join(dest, rel)
+        source = project_path / ".webnovel" / "snapshots" / f"{digest}.txt"
+        if target.is_file() and _file_sha(target) == digest:
+            continue
+        if source.is_file() and _file_sha(source) == digest:
+            _recopy_file(source, target, rel, records)
+        else:
+            problems.append(f"annotation_snapshot_missing:{digest}")
+    candidates_root = None
+    for candidate in (".webnovel/chapter_versions/candidates", "chapter_versions/candidates"):
+        if (dest / Path(candidate)).is_dir():
+            candidates_root = Path(candidate)
+            break
+    for path in sorted((dest / ".webnovel" / "revision_previews").glob("*.json")) \
+            if (dest / ".webnovel" / "revision_previews").is_dir() else []:
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        for candidate_id in _revision_candidate_refs(data):
+            previews += 1
+            if candidates_root is None:
+                problems.append(f"revision_candidate_missing:{candidate_id}")
+                continue
+            rel = (candidates_root / f"{candidate_id}.json").as_posix()
+            target = _join(dest, rel)
+            source = project_path / Path(rel)
+            if target.is_file():
+                continue
+            if source.is_file():
+                _recopy_file(source, target, rel, records)
+            else:
+                problems.append(f"revision_candidate_missing:{candidate_id}")
+    trash_root = dest / ".webnovel" / "trash"
+    for manifest_path in sorted(trash_root.glob("*/manifest.json")) if trash_root.is_dir() else []:
+        try:
+            entry = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(entry, dict):
+            continue
+        payload_sha = str(entry.get("payload_sha256") or entry.get("content_sha256") or "")
+        if not payload_sha:
+            continue
+        trash += 1
+        if any(_file_sha(candidate) == payload_sha
+               for candidate in sorted(manifest_path.parent.glob("*.md"))):
+            continue
+        problems.append(f"trash_payload_missing:{manifest_path.parent.name}")
+    if problems:
+        skipped.append({"path": ".webnovel/evidence", "reason": "evidence_inconsistent",
+                        "problems": problems[:20]})
+    return {"ok": not problems, "problems": problems, "snapshots": snapshots,
+            "previews": previews, "trash": trash}
+
+
+def _backup_evidence_problems(reader, manifest: Mapping[str, Any]) -> List[str]:
+    """Validate ID references inside a backup before declaring it restorable."""
+    problems: List[str] = []
+    entries = [item for item in (manifest.get("files") or []) if isinstance(item, dict)]
+    manifest_paths = {str(item.get("path") or "") for item in entries}
+    workbench_rel = ".webnovel/workbench.sqlite3"
+    refs: set = set()
+    if workbench_rel in manifest_paths:
+        try:
+            refs = _annotation_snapshot_refs(reader.read(workbench_rel))
+        except (OSError, UnsafePath, FileNotFoundError):
+            problems.append("annotation_snapshot_unreadable")
+    for digest in sorted(refs):
+        if not _OBJECT_SHA.match(digest):
+            continue
+        rel = f".webnovel/snapshots/{digest}.txt"
+        if rel not in manifest_paths:
+            problems.append(f"annotation_snapshot_missing:{digest}")
+            continue
+        try:
+            if _sha256(reader.read(rel)) != digest:
+                problems.append(f"annotation_snapshot_mismatch:{digest}")
+        except (OSError, UnsafePath, FileNotFoundError):
+            problems.append(f"annotation_snapshot_missing:{digest}")
+    candidate_paths = {path for path in manifest_paths
+                       if path.endswith(".json") and "chapter_versions/candidates/" in path}
+    for rel in sorted(path for path in manifest_paths
+                      if path.startswith(".webnovel/revision_previews/") and path.endswith(".json")):
+        try:
+            data = reader.read(rel)
+        except (OSError, UnsafePath, FileNotFoundError):
+            continue
+        for candidate_id in _revision_candidate_refs(data):
+            if not any(path.endswith(f"/{candidate_id}.json") for path in candidate_paths):
+                problems.append(f"revision_candidate_missing:{candidate_id}")
+    trash_manifests = [path for path in manifest_paths
+                       if path.startswith(".webnovel/trash/") and path.endswith("/manifest.json")]
+    for rel in sorted(trash_manifests):
+        try:
+            entry = json.loads(reader.read(rel).decode("utf-8-sig"))
+        except (OSError, UnsafePath, FileNotFoundError, UnicodeDecodeError, ValueError):
+            continue
+        if not isinstance(entry, dict):
+            continue
+        payload_sha = str(entry.get("payload_sha256") or entry.get("content_sha256") or "")
+        if not payload_sha:
+            continue
+        folder = rel.rsplit("/", 1)[0] + "/"
+        matched = False
+        for path in manifest_paths:
+            if not path.startswith(folder) or not path.endswith(".md"):
+                continue
+            try:
+                if _sha256(reader.read(path)) == payload_sha:
+                    matched = True
+                    break
+            except (OSError, UnsafePath, FileNotFoundError):
+                continue
+        if not matched:
+            problems.append(f"trash_payload_missing:{folder.rstrip('/').rsplit('/', 1)[-1]}")
     return problems
 
 
@@ -1368,6 +1672,18 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0,
             ".webnovel/chapter_versions/objects", "chapter_versions/objects"))
         if objects is not None:
             _copy_tree(objects, dest, records, skipped=skipped, prefix=objects_rel)
+        # User-visible state that SQLite/JSON references by id: trash payloads,
+        # annotation snapshots, revision previews and candidates.  Omitting
+        # them made a "valid" backup restore books whose trash was empty and
+        # whose annotations could never be relocated or applied (A-P2-12).
+        for name in ("trash", "snapshots", "revision_previews"):
+            folder = project_path / ".webnovel" / name
+            _copy_tree(folder, dest, records, skipped=skipped,
+                       prefix=f".webnovel/{name}")
+        candidates, candidates_rel = _first_dir(project_path, (
+            ".webnovel/chapter_versions/candidates", "chapter_versions/candidates"))
+        if candidates is not None:
+            _copy_tree(candidates, dest, records, skipped=skipped, prefix=candidates_rel)
         consistency = _reconcile_backup_index(project_path, dest, records, wait_seconds)
         if not consistency.get("ok"):
             skipped.append({"path": ".webnovel/chapter_versions/index.json",
@@ -1378,6 +1694,10 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0,
             ((".webnovel/story_plan.json", "story_plan.json"), ".webnovel/story_plan.json"),
             ((".webnovel/story_plan_meta.json", "story_plan_meta.json"), ".webnovel/story_plan_meta.json"),
             ((".webnovel/state.json", "state.json"), ".webnovel/state.json"),
+            ((".webnovel/invalidation_log.json", "invalidation_log.json"),
+             ".webnovel/invalidation_log.json"),
+            ((".webnovel/shared_memory.json", "shared_memory.json"),
+             ".webnovel/shared_memory.json"),
         ):
             source, actual_rel = _first_file(project_path, names)
             if source is None:
@@ -1408,6 +1728,7 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0,
                      "sha256": checksum, "size": size}
             sqlite_records.append(entry)
             records.append(entry)
+        evidence = _reconcile_backup_evidence(project_path, dest, records, skipped)
         generation = time.time_ns()
         stamp = _now()
         manifest = {
@@ -1422,6 +1743,7 @@ def backup(project, destination, extra_sqlite=None, wait_seconds: float = 5.0,
             "count": len(records),
             "total_bytes": sum(int(item.get("size") or 0) for item in records),
             "chapter_versions_consistency": consistency,
+            "evidence_consistency": evidence,
         }
         _atomic_write_bytes(dest / "backup_manifest.json", _json_bytes(manifest))
     return {
@@ -1690,6 +2012,7 @@ def inspect_backup(path, *, max_total_bytes: int = _MAX_TOTAL_BYTES,
                                    if isinstance(item, dict) and item.get("kind") == "sqlite")
             problems = reader.verify(manifest)
             problems += _backup_index_problems(reader, manifest)
+            problems += _backup_evidence_problems(reader, manifest)
             result["problems"] = problems
             result["valid"] = not problems
     except UnsafePath as exc:
@@ -1723,6 +2046,7 @@ def restore_backup(project, backup_path, confirmed: bool = False, *,
         plan = _backup_plan(project_path, manifest)
         problems = reader.verify(manifest)
         problems += _backup_index_problems(reader, manifest)
+        problems += _backup_evidence_problems(reader, manifest)
         if problems:
             raise TransactionConflict("backup_corrupt", "; ".join(problems[:5]))
         preview = {

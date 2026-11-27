@@ -10,6 +10,7 @@ from pathlib import Path
 from integration import annotations
 from integration import chapter_editor as ce
 from integration import maintenance
+from integration import workbench_db as wb
 
 
 def project(folder):
@@ -67,27 +68,38 @@ class MaintenanceTest(unittest.TestCase):
                              {"reserved", "dispatched", "settled", "unknown_charge", "released"})
             self.assertGreaterEqual(ledger["total_tokens"], 0)
 
-    def test_gc_never_removes_baseline_snapshots_or_revision_previews(self):
-        """审计 C-03：批注基线快照与待审修订预览是不可重建的编辑证据。"""
+    def test_gc_keeps_referenced_snapshots_and_pending_previews(self):
+        """审计 C3-06：引用计数生效；未引用旧快照可回收，待审预览永久保护。"""
         with tempfile.TemporaryDirectory() as folder:
             book = project(folder)
             ce.new_chapter(book, {"chapter": 1, "title": "开端", "content": "正文内容\n",
                                   "op_id": "m-4"})
             digest = annotations.save_snapshot(book, "正文内容\n")
             snapshot = book / ".webnovel" / "snapshots" / f"{digest}.txt"
+            orphan_digest = annotations.save_snapshot(book, "无人引用\n")
+            orphan_snapshot = book / ".webnovel" / "snapshots" / f"{orphan_digest}.txt"
+            with wb.write_tx(book) as db:
+                db.execute(
+                    "INSERT INTO annotations(id, chapter_id, chapter_uid, scope, anchor_json, "
+                    "instruction, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                    ("ann-1", 1, wb.chapter_uid(book, 1), "selection",
+                     json.dumps({"base_snapshot_id": digest}), "test", "2026-01-01T00:00:00Z",
+                     "2026-01-01T00:00:00Z"))
             previews = book / ".webnovel" / "revision_previews"
             previews.mkdir()
             preview = previews / "0001-abc.json"
             preview.write_text(json.dumps({"preview_id": "abc", "chapter_id": 1,
                                            "state": "pending"}), encoding="utf-8")
             old = time.time() - 30 * 86400
-            os.utime(snapshot, (old, old))
-            os.utime(preview, (old, old))
+            for path in (snapshot, orphan_snapshot, preview):
+                os.utime(path, (old, old))
             dry = maintenance.collect_garbage(book, dry_run=True, min_age_seconds=0)
             self.assertNotIn(str(snapshot.resolve()), dry["removed"])
             self.assertNotIn(str(preview.resolve()), dry["removed"])
+            self.assertIn(str(orphan_snapshot.resolve()), dry["removed"])
             maintenance.collect_garbage(book, dry_run=False, min_age_seconds=0)
             self.assertTrue(snapshot.is_file())
+            self.assertFalse(orphan_snapshot.is_file())
             self.assertTrue(preview.is_file())
             self.assertEqual(annotations.read_snapshot(book, digest), "正文内容\n")
 

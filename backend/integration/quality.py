@@ -44,16 +44,29 @@ def _db_exists(project) -> bool:
     return wb.db_path(project).exists()
 
 
+def _is_readonly_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(token in text for token in
+               ("readonly", "read-only", "unable to open database", "permission denied", "locked"))
+
+
 def _ensure_readable(project) -> bool:
-    """Read paths must not create ``workbench.sqlite3`` (audit C3-04)."""
+    """Read paths must not create ``workbench.sqlite3`` (audit C3-04).
+
+    A read-only database returns empty data; a corrupt one is 503
+    ``db_unavailable`` instead of a fake "no reviews" dashboard (C4-05).
+    """
     if not _db_exists(project):
         return False
     from integration import maintenance
     try:
         maintenance.ensure_schema(project)
         wb.initialize(project)
-    except sqlite3.Error:
-        return False
+    except sqlite3.Error as exc:
+        if _is_readonly_error(exc):
+            return False
+        raise QualityError("db_unavailable", status=503,
+                           detail={"reason": "database_unavailable"}) from None
     return True
 
 
@@ -141,14 +154,14 @@ def _review_key(version_id: str, text: str) -> str:
     return "sha256:" + _content_sha(text)
 
 
-def _auto_count(project, chapter: int, review_key: str) -> int:
-    if not _ensure_readable(project):
-        return 0
-    with wb.connect(project) as db:
-        row = db.execute("SELECT COUNT(*) FROM quality_reviews WHERE chapter_id=? AND "
-                         "reviewer NOT IN ('author','A-local') AND version_id=?",
-                         (int(chapter), review_key)).fetchone()
-    return int(row[0] if row else 0)
+def _current_review_key(project, chapter: int) -> str:
+    current_id = str((versions.current_version(project, chapter) or {}).get("version_id") or "")
+    if current_id:
+        return current_id
+    try:
+        return _review_key("", _chapter_text(project, chapter))
+    except (QualityError, OSError):
+        return ""
 
 
 def review(project, chapter: int, *, judgments: Optional[Iterable[Dict[str, Any]]] = None,
@@ -219,6 +232,25 @@ def dashboard(project, *, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
     total_chapters = len(order)
     offset = max(0, int(offset))
     limit = max(1, int(limit))
+    # 审计 C3-27：averages/reviewed 必须是全书聚合，不能随分页窗口变化。
+    # stale 判定对全书只做一次，窗口渲染直接复用。
+    stale_by_chapter: Dict[int, bool] = {}
+    full_rows = []
+    for chapter in order:
+        row = latest.get(chapter)
+        if not row:
+            continue
+        stored_key = str(row.get("version_id") or "")
+        current_key = _current_review_key(project, chapter)
+        stale = bool(current_key and stored_key != current_key)
+        stale_by_chapter[chapter] = stale
+        if not stale:
+            try:
+                scores = json.loads(row.get("scores_json") or "{}")
+            except ValueError:
+                scores = {}
+            if isinstance(scores, dict):
+                full_rows.append(scores)
     window = order[offset:offset + limit]
     chapters = []
     for chapter in window:
@@ -232,17 +264,8 @@ def dashboard(project, *, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
             item.update({"total": row["total"], "verdict": row["verdict"],
                          "reviewed_at": row["created_at"], "version_id": row["version_id"],
                          "review_key": row["version_id"]})
-            current_id = str((versions.current_version(project, chapter) or {}).get("version_id") or "")
-            if current_id:
-                current_key = current_id
-            else:
-                try:
-                    current_key = _review_key("", _chapter_text(project, chapter))
-                except (QualityError, OSError):
-                    current_key = ""
-            stored_key = str(row["version_id"] or "")
             # 审计 C-12：无版本章节用正文哈希比较，重写后必须显示 stale。
-            item["stale_review"] = bool(current_key and stored_key != current_key)
+            item["stale_review"] = stale_by_chapter.get(chapter, False)
             if item["stale_review"]:
                 item["verdict"] = "stale"
         else:
@@ -256,14 +279,15 @@ def dashboard(project, *, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
                 item["total"] = None
                 item["verdict"] = "missing"
             item["reviewed_at"] = None
+            item["stale_review"] = False
         item["flags"] = [DIMENSION_LABELS[dim] for dim in DIMENSIONS
                          if item["scores"].get(dim, 100) < THRESHOLD]
         chapters.append(item)
-    averages = {dim: round(sum(row["scores"].get(dim, 0) for row in chapters) / max(1, len(chapters)), 2)
+    averages = {dim: round(sum(row.get(dim, 0) for row in full_rows) / max(1, len(full_rows)), 2)
                 for dim in DIMENSIONS}
     return {"chapters": chapters, "averages": averages,
             "labels": DIMENSION_LABELS, "weights": dict(WEIGHTS),
-            "reviewed": sum(1 for row in chapters if row["reviewed_at"] and not row.get("stale_review")),
+            "reviewed": len(full_rows), "unreviewed": max(0, total_chapters - len(full_rows)),
             "total": total_chapters, "total_chapters": total_chapters,
             "returned": len(chapters), "offset": offset, "limit": limit,
             "truncated": offset + len(chapters) < total_chapters}

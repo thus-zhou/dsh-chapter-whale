@@ -343,7 +343,9 @@ class SubmitContractTest(unittest.TestCase):
             self.assertIsNone(ce.claim(book, "w", max_slots=4))
             snapshot = ce.snapshot(book)
             row = next(item for item in snapshot["tasks"] if item["task_id"] == "waiting")
-            self.assertEqual(row["blocked_reason"], {"task_id": "ghost", "reason": "missing"})
+            self.assertEqual(row["blocked_reason"],
+                             {"task_id": "ghost", "reason": "missing",
+                              "action": "resubmit_blocker"})
 
 
 class CardPartialUpdateTest(unittest.TestCase):

@@ -158,9 +158,20 @@ class ReserveTest(BudgetBase):
         with self.assertRaises(costs.BudgetExceeded):
             costs.reserve_request(self.db, self.project, 2, 'draft', limits=limits)
 
-    def test_missing_reservation_on_settle_records_a_gap(self):
-        costs.settle_request(self.db, 'not-a-real-id')
+    def test_missing_reservation_on_settle_records_a_project_gap(self):
+        costs.settle_request(self.db, 'not-a-real-id', project=self.project)
         self.assertEqual(costs.ledger_gaps(self.db), 1)
+        gaps = costs.gap_records(self.db)
+        self.assertEqual(gaps[0]['project'], str(self.project.resolve()))
+
+    def test_missing_reservation_without_project_never_writes_a_global_gap(self):
+        # R-03: an unowned settlement failure must not block every book's paid
+        # fallback through a project-less gap file.
+        costs.UNRECORDED_GAPS.clear()
+        costs.settle_request(self.db, 'not-a-real-id')
+        self.assertEqual(costs.ledger_gaps(self.db), 0)
+        self.assertGreaterEqual(costs.unrecorded_gap_count(), 1)
+        costs.UNRECORDED_GAPS.clear()
 
 
 class AttemptHookTest(BudgetBase):

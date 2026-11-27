@@ -3492,17 +3492,37 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         }
 
         function Segmented(props) {
+          const options = props.options || [];
+          const selectedIndex = Math.max(0, options.findIndex((option) => option.value === props.value));
+          const onKeyDown = (event) => {
+            const current = options.findIndex((option) => option.value === props.value);
+            let next = null;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1 + options.length) % options.length;
+            else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + options.length) % options.length;
+            else if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = options.length - 1;
+            if (next === null || !options[next]) return;
+            event.preventDefault();
+            props.onChange(options[next].value);
+            const list = event.currentTarget.parentElement;
+            const buttons = list ? list.querySelectorAll('[role="tab"]') : [];
+            if (buttons[next] && typeof buttons[next].focus === 'function') buttons[next].focus();
+          };
           return e(
             'div',
-            { className: 'nh-seg', style: { flexWrap: 'wrap', ...(props.style || {}) } },
-            (props.options || []).map((option) =>
+            { className: 'nh-seg', role: 'tablist', 'aria-label': props.label || '选项', style: { flexWrap: 'wrap', ...(props.style || {}) } },
+            options.map((option, index) =>
               e(
                 'button',
                 {
                   key: option.value,
                   type: 'button',
+                  role: 'tab',
                   className: 'nh-segbtn',
                   'data-active': props.value === option.value ? 'true' : 'false',
+                  'aria-selected': props.value === option.value ? 'true' : 'false',
+                  tabIndex: index === selectedIndex ? 0 : -1,
+                  onKeyDown,
                   onClick: () => props.onChange(option.value),
                 },
                 option.label,
@@ -6159,12 +6179,43 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             && String(project.id) === String(owner.projectId));
         }
 
+        /* A chapter poll key change must not replace text the author typed
+           while the GET was in flight.  IME composition defers the apply;
+           ordinary dirty input is flushed as the old chapter's draft first
+           (D-R4-03). */
+        function wbChapterKeyChangeAction(composing, dirty) {
+          if (composing) return 'pending-ime';
+          if (dirty) return 'pending-dirty';
+          return 'apply';
+        }
+
+        /* Conflict payloads omit base_content.  When the adopted base is
+           blocked and names a version, the panel must GET the chapter once to
+           resolve it instead of waiting for the 15s poll (D-R4-08). */
+        function wbConflictBaseNeedsFetch(draft, base) {
+          const adopted = wbDraftBaseAdoption(draft, base);
+          return Boolean(adopted.blocked && draft && draft.base_version_id);
+        }
+
+        /* The last two chapters in id order, not simply max-1: a deleted
+           middle chapter would make the GET 404 and be reported as a generic
+           failure (D-R4-09). */
+        function wbMergeTailIds(rows) {
+          const ids = Array.from(new Set((Array.isArray(rows) ? rows : [])
+            .map((row) => Number(row && row.id))
+            .filter((id) => Number.isFinite(id)))).sort((left, right) => left - right);
+          if (ids.length < 2) return { last: 0, previous: 0, adjacent: false };
+          const last = ids[ids.length - 1];
+          const previous = ids[ids.length - 2];
+          return { last, previous, adjacent: previous === last - 1 };
+        }
+
         function wbMergeTailDraftMessage(rows) {
           const details = Array.isArray(rows) ? rows : [];
           const drafted = details.filter((row) => row && row.draft && row.draft.exists);
           if (!drafted.length) return null;
           return drafted.map((row) => `第 ${Number(row.id)} 章`).join('、')
-            + ' 还有未提交草稿；合并会归档并在回收站中保留整章（含草稿）。继续？';
+            + ' 还有未提交草稿；合并只归档尾章（含其草稿），合并目标章的未提交草稿会保留，合并后请核对或清理。继续？';
         }
 
         /* A draft PUT that finishes after more typing must schedule another
@@ -6200,6 +6251,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const adapterRef = React.useRef(null);
           const undoRef = React.useRef(null);
           const composingRef = React.useRef(false);
+          const titleComposingRef = React.useRef(false);
           const dirtyRef = React.useRef(false);
           const chapterRef = React.useRef(null);
           const projectRef = React.useRef(null);
@@ -6369,11 +6421,17 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (!data) return;
             const key = `${projectId}:${data.id}`;
             if (key !== loadedKeyRef.current) {
-              if (composingRef.current) {
-                // Never replace the textarea while the IME owns it; keep the
-                // new chapter pending until composition ends or focus leaves
-                // (D-C1, mirroring the static pendingChapter path).
+              const action = wbChapterKeyChangeAction(composingRef.current, dirtyRef.current);
+              if (action !== 'apply') {
+                // Never replace text the author typed while this GET was in
+                // flight.  IME stays pending; ordinary dirty input is first
+                // persisted as the old chapter's draft (D-R4-03).
+                const pending = pendingChapterRef.current;
+                if (pending && pending.key === key) return;
                 pendingChapterRef.current = { key, data };
+                if (action === 'pending-dirty' && commitPendingRef.current) {
+                  commitPendingRef.current().catch(() => {});
+                }
                 return;
               }
               loadedKeyRef.current = key;
@@ -6412,7 +6470,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const persistDraftOnce = async (capture) => {
             if (!capture) return false;
-            if (composingRef.current) return false;
+            if (composingRef.current || titleComposingRef.current) return false;
             setDraftState('saving');
             const body = wbDraftPayload(capture);
             const sameChapter = () => Boolean(
@@ -6498,7 +6556,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
             draftTimerRef.current = setTimeout(() => {
               draftTimerRef.current = null;
-              if (composingRef.current) {
+              if (composingRef.current || titleComposingRef.current) {
                 scheduleDraft();
                 return;
               }
@@ -6509,6 +6567,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
           const flushDraft = async () => {
             cancelDraftTimer();
             if (!dirtyRef.current) return true;
+            if (composingRef.current || titleComposingRef.current) return false;
             return queueDraftSave(() => (dirtyRef.current ? captureDraft() : null));
           };
 
@@ -6519,6 +6578,13 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             const pending = pendingChapterRef.current;
             if (!pending || composingRef.current) return false;
             if (dirtyRef.current) {
+              // A blocked base must not be written under the other draft's
+              // identity; keep the text and let the author resolve conflict
+              // first (D-R4-03).
+              if (baseRef.current.blocked) {
+                setNotice({ tone: 'warn', text: '当前章草稿冲突尚未处理，已保留输入；请先处理冲突再切换章节。' });
+                return false;
+              }
               const flushed = await flushDraft();
               if (!flushed) return false;
             }
@@ -6611,6 +6677,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const applyTitleInput = (next) => {
             if (!chapterRef.current) return;
+            if (titleComposingRef.current) return;
             const value = String(next || '');
             const now = Date.now();
             if (now - lastCheckpointRef.current > 800) {
@@ -6650,6 +6717,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const changeProject = async (nextId) => {
             if (String(nextId) === String(projectId)) return;
+            if (titleComposingRef.current) {
+              toast.push('标题仍在输入法组合中，请完成后再切换作品', 'err');
+              return;
+            }
             cancelDraftTimer();
             if (dirtyRef.current) {
               // Wait for the old chapter's draft before switching.  A failed
@@ -6678,6 +6749,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
 
           const selectChapter = async (nextId) => {
             if (String(nextId) === String(selectedChapter)) return;
+            if (titleComposingRef.current) {
+              toast.push('标题仍在输入法组合中，请完成后再切换章节', 'err');
+              return;
+            }
             cancelDraftTimer();
             if (dirtyRef.current) {
               await draftChainRef.current;
@@ -6702,7 +6777,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             const state = chapterRef.current;
             const owner = projectRef.current;
             if (!state || !owner || savingVersionRef.current) return;
-            if (composingRef.current) return;
+            if (composingRef.current || titleComposingRef.current) return;
             savingVersionRef.current = true;
             setSavingVersion(true);
             cancelDraftTimer();
@@ -7091,20 +7166,26 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               toast.push('当前章有未保存修改或未提交草稿，请先保存正式版本再合并', 'err');
               return;
             }
-            const ids = chapters.map((row) => Number(row.id)).filter((id) => Number.isFinite(id));
-            if (ids.length < 2) {
+            const pair = wbMergeTailIds(chapters);
+            if (!pair.last || !pair.previous) {
               toast.push('至少需要两章才能合并', 'err');
               return;
             }
-            const last = Math.max.apply(null, ids);
-            const previous = last - 1;
+            if (!pair.adjacent) {
+              toast.push(`最后两章不连续（第 ${pair.previous} 章与第 ${pair.last} 章），无法合并尾章`, 'err');
+              return;
+            }
             let details;
             try {
-              details = await Promise.all([previous, last].map((id) => (
+              details = await Promise.all([pair.previous, pair.last].map((id) => (
                 api(`/projects/${owner.id}/chapters/${id}`)
               )));
             } catch (error) {
               toast.push(`检查尾章草稿失败：${error.message}`, 'err');
+              return;
+            }
+            if (!projectRef.current || String(projectRef.current.id) !== String(owner.id)) {
+              toast.push('作品已切换，已取消合并', 'err');
               return;
             }
             const warning = wbMergeTailDraftMessage(details);
@@ -7116,6 +7197,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 method: 'POST',
                 body: { op_id: wbOpId('merge') },
               });
+              if (!projectRef.current || String(projectRef.current.id) !== String(owner.id)) {
+                toast.push('作品已切换，合并已完成但未打开结果章节', 'ok');
+                return;
+              }
               toast.push(`已合并为第 ${result.chapter_id} 章`, 'ok');
               const mergedId = Number(result.chapter_id);
               const oldDraftId = chapterRef.current && Number(chapterRef.current.id) === mergedId
@@ -7179,8 +7264,34 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             }
           };
 
-          const reloadConflict = () => {
+          /* Conflict payloads omit base_content; GET the chapter once so the
+             adopted draft can merge immediately instead of waiting 15s for the
+             next poll (D-R4-08).  A chapter switch during the GET abandons the
+             result (D-R4-01). */
+          const resolveConflictDraftBase = async (current) => {
+            let adopted = wbDraftBaseAdoption(current, baseRef.current);
+            const chapter = chapterRef.current;
+            const owner = projectRef.current;
+            if (!wbConflictBaseNeedsFetch(current, baseRef.current) || !owner || !chapter) return adopted;
+            try {
+              const data = await api(`/projects/${owner.id}/chapters/${chapter.id}`);
+              if (!wbSameChapterRef(chapterRef.current, projectRef.current, { chapterId: chapter.id, projectId: owner.id })) {
+                return { ...adopted, stale: true };
+              }
+              const draft = data && data.draft;
+              if (!draft || !draft.exists) return adopted;
+              if (current.draft_id && draft.draft_id && String(draft.draft_id) !== String(current.draft_id)) return adopted;
+              adopted = wbDraftBaseAdoption({ ...current, base_content: draft.base_content }, baseRef.current);
+            } catch { /* keep blocked: a failed lookup must not invent a base */ }
+            return adopted;
+          };
+
+          const reloadConflict = async () => {
             if (!conflict) return;
+            if (composingRef.current || titleComposingRef.current) {
+              toast.push('输入法仍在组合文字，请完成后再载入', 'err');
+              return;
+            }
             const data = conflict.data || {};
             if (conflict.kind === 'draft_conflict') {
               const current = data.current_draft || {};
@@ -7198,7 +7309,12 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 scheduleDraft();
                 return;
               }
-              baseRef.current = wbDraftBaseAdoption(current, baseRef.current);
+              const adopted = await resolveConflictDraftBase(current);
+              if (adopted.stale) {
+                toast.push('章节已切换，已取消载入服务器草稿', 'err');
+                return;
+              }
+              baseRef.current = adopted;
               identityRef.current = {
                 draft_id: current.draft_id || null,
                 draft_epoch: Number(current.draft_epoch) || 0,
@@ -7227,19 +7343,25 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
             conflictRef.current = null;
           };
 
-          const mergeConflict = () => {
+          const mergeConflict = async () => {
             if (!conflict) return;
-            if (baseRef.current.blocked) {
-              setNotice({ tone: 'warn', text: '草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。' });
+            if (composingRef.current || titleComposingRef.current) {
+              toast.push('输入法仍在组合文字，请完成后再合并', 'err');
               return;
             }
             const data = conflict.data || {};
             if (conflict.kind === 'draft_conflict') {
               const current = data.current_draft || {};
               if (!current || typeof current.content !== 'string') {
-                reloadConflict();
+                await reloadConflict();
                 return;
               }
+              const adopted = await resolveConflictDraftBase(current);
+              if (adopted.stale) {
+                toast.push('章节已切换，已取消合并', 'err');
+                return;
+              }
+              baseRef.current = adopted;
               if (!wbMergeBaseCompatible(baseRef.current, current)) {
                 // Different base version: this is not a clean three-way merge
                 // and could erase background text on the next save (D-01R).
@@ -7248,7 +7370,6 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
               }
               const merged = wbMergeTexts(baseRef.current.content, textRef.current, current.content);
               adoptDocument({ title: titleRef.current, content: merged.text }, '合并服务器草稿', { autosave: merged.clean });
-              baseRef.current = wbDraftBaseAdoption(current, baseRef.current);
               identityRef.current = {
                 draft_id: current.draft_id || null,
                 draft_epoch: Number(current.draft_epoch) || 0,
@@ -7262,6 +7383,10 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                 if (capture) queueDraftSave(capture);
               }
             } else {
+              if (baseRef.current.blocked) {
+                setNotice({ tone: 'warn', text: '草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。' });
+                return;
+              }
               const server = typeof data.current_content === 'string' ? data.current_content : '';
               const merged = wbMergeTexts(baseRef.current.content, textRef.current, server);
               baseRef.current = {
@@ -7409,6 +7534,20 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
                   placeholder: '章节标题',
                   'aria-label': '章节标题',
                   onChange: (event) => applyTitleInput(event.target.value),
+                  onCompositionStart: () => {
+                    titleComposingRef.current = true;
+                  },
+                  onCompositionEnd: (event) => {
+                    titleComposingRef.current = false;
+                    applyTitleInput(event.target.value);
+                    if (commitPendingRef.current) commitPendingRef.current().catch(() => {});
+                  },
+                  onBlur: (event) => {
+                    if (!titleComposingRef.current) return;
+                    titleComposingRef.current = false;
+                    applyTitleInput(event.target.value);
+                    if (commitPendingRef.current) commitPendingRef.current().catch(() => {});
+                  },
                 }),
                 e('div', { className: 'wb-actions' },
                   e(Button, { kind: 'primary', size: 'sm', icon: 'check', busy: savingVersion, onClick: saveVersion }, '保存版本 (Ctrl+S)'),
@@ -14906,7 +15045,7 @@ body:not([data-ds-dark-theme]) .nh-modal{box-shadow:0 26px 70px -30px rgba(9,20,
         exports.apply = apply;
         /* Pure functions the panel's own test harness drives across every cycle
            shape. Exposed read-only: nothing here touches React or the DOM. */
-        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES, WorkbenchPage, wbPickProject, wbDraftIdentityFrom, wbInitialDocument, wbDraftPayload, wbVersionPayload, wbMergeTexts, wbOutlineExcerpt, wbVisibleWords, wbParagraphCount, wbFormatTime, wbShortId, wbIssueTone, wbDraftEpochCandidates, wbRetryDraftWithoutActive, wbResetComposition, wbDraftFollowUp, wbRememberDraftEpoch, wbRecallDraftEpoch, wbDraftBaseAdoption, wbMergeBaseCompatible, wbSameChapterRef, wbMergeTailDraftMessage };
+        exports.__internals = { workHeadline, chapterTiming, estimateChapterMs, fmtDuration, chapterStage, matchesProject, chapterMetrics, readAppearance, apiErrorMessage, NAV, HUBS, DashboardPage, Bars, CostsPage, ReadersPage, ChaptersPage, JobsPage, PricingPage, PublishPage, FreeChannelCard, buildPricingPayload, pricingRateKey, pendingBatchId, safeHttpUrl, safeQrSrc, loginPollReady, FREE_CHANNEL_FALLBACKS, OP_ACTIVE_STATUSES, WorkbenchPage, wbPickProject, wbDraftIdentityFrom, wbInitialDocument, wbDraftPayload, wbVersionPayload, wbMergeTexts, wbOutlineExcerpt, wbVisibleWords, wbParagraphCount, wbFormatTime, wbShortId, wbIssueTone, wbDraftEpochCandidates, wbRetryDraftWithoutActive, wbResetComposition, wbDraftFollowUp, wbRememberDraftEpoch, wbRecallDraftEpoch, wbDraftBaseAdoption, wbMergeBaseCompatible, wbSameChapterRef, wbMergeTailDraftMessage, wbChapterKeyChangeAction, wbConflictBaseNeedsFetch, wbMergeTailIds };
         return module.exports;
       },
     });

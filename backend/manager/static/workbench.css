@@ -16,6 +16,13 @@
   display: none !important;
 }
 
+/* Native inert removes tab stops; pointer-events also keeps the inert
+   background from swallowing clicks in browsers with partial support
+   (D-04M). */
+[inert] {
+  pointer-events: none;
+}
+
 .wb-chapter[hidden],
 .wb-panel[hidden],
 .wb-file-item[hidden],

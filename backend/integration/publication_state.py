@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -97,27 +98,150 @@ def _resolve_binding(project, chapter, content_sha256: str,
         return None, "version_store_unavailable"
 
 
+_RECEIPT_LOCK_RETRIES = 3
+
+
 def _update(project, chapter: int, mutate) -> Dict[str, Any]:
-    """在 ``receipts.lock`` 内读最新表 → 改单章 → 原子写回。"""
+    """在 ``receipts.lock`` 内读最新表 → 改单章 → 原子写回。
+
+    回执锁是非阻塞的：并发写者相遇时做很短的有限重试，避免“锁忙”直接把
+    发布/入队事实丢掉；损坏的回执不重试，返回稳定原因让调用方 fail-closed。
+    """
     path = receipts_path(project)
+    last_reason = "receipts_busy"
+    for attempt in range(_RECEIPT_LOCK_RETRIES):
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with safety.file_lock(path.parent / LOCK_NAME):
+                latest = load_receipts(project)
+                key = str(int(chapter))
+                entry = latest.get(key)
+                if entry is None:
+                    entry = {}
+                elif not isinstance(entry, dict):
+                    return {"recorded": False, "reason": "receipt_not_object"}
+                mutate(entry)
+                latest[key] = entry
+                safety.atomic_json(path, latest)
+                return {"recorded": True}
+        except safety.PublicationBlocked as exc:
+            # ``resource_busy`` is a transient inode lock; ``invalid_json`` is
+            # corruption and must never be retried as if it were busy.
+            if str(exc) != "resource_busy":
+                return {"recorded": False, "reason": "receipts_corrupt"}
+            last_reason = "receipts_busy"
+            if attempt + 1 < _RECEIPT_LOCK_RETRIES:
+                time.sleep(0.05 * (attempt + 1))
+        except (OSError, ValueError):
+            return {"recorded": False, "reason": "receipts_corrupt"}
+    return {"recorded": False, "reason": last_reason}
+
+
+def record_pending(project, chapter: int, *, content_sha256: str,
+                   platform: str = "", account: str = "", platform_book_id: str = "",
+                   source: str = "", evidence: str = "", reason: str = "",
+                   at: str = "") -> Dict[str, Any]:
+    """把“已发起真实平台写入、结果未知”记成只读待核对状态（E-01D）。
+
+    浏览器与第三层提交没有队列文件可以兜底。现有读模型只认 ``staged_at``，
+    因此这里在写入 ``publish_pending`` 证据的同时补上 staged 标记；已有真实
+    入队 staged 记录时保留原记录，不覆盖队列来源。摘要必须先是合法 sha256；
+    能解析到当前稿或历史版本时标记 ``verified``，否则按“未绑定正文”记录，
+    仍然阻止 delete/split/merge，但不冒充已绑定。
+    """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with safety.file_lock(path.parent / LOCK_NAME):
-            latest = load_receipts(project)
-            key = str(int(chapter))
-            entry = latest.get(key)
-            if entry is None:
-                entry = {}
-            elif not isinstance(entry, dict):
-                return {"recorded": False, "reason": "receipt_not_object"}
-            mutate(entry)
-            latest[key] = entry
-            safety.atomic_json(path, latest)
-            return {"recorded": True}
-    except safety.PublicationBlocked:
-        return {"recorded": False, "reason": "receipts_busy"}
-    except (OSError, ValueError):
-        return {"recorded": False, "reason": "receipts_corrupt"}
+        number = int(chapter)
+    except (TypeError, ValueError):
+        return {"recorded": False, "reason": "chapter_invalid", "chapter": chapter}
+    if number <= 0:
+        return {"recorded": False, "reason": "chapter_invalid", "chapter": number}
+    sha = str(content_sha256 or "").strip().lower()
+    if not _SHA256_RE.fullmatch(sha):
+        return {"recorded": False, "reason": "sha256_invalid", "chapter": number}
+    path, binding = _resolve_binding(project, number, sha, require_current=False)
+    verified = binding in {"current", "version"}
+    # Anchor the existing read-side staged marker to the chapter's current
+    # bytes when known, so a later "staged_sha != disk" stale check cannot
+    # silently unblock an unresolved platform write.  The attempted body stays
+    # in publish_pending.content_sha256 / stage.body_sha256.
+    anchor = ""
+    if path is not None:
+        try:
+            anchor = chapter_versions.file_sha256(path) or ""
+        except (OSError, ValueError, RuntimeError):
+            anchor = ""
+    stamp = str(at or _now())
+    pending = {
+        "content_sha256": sha,
+        "platform": str(platform or ""),
+        "account": str(account or ""),
+        "platform_book_id": str(platform_book_id or ""),
+        "source": str(source or ""),
+        "evidence": str(evidence or ""),
+        "reason": str(reason or ""),
+        "binding": binding,
+        "verified": verified,
+        "at": stamp,
+    }
+
+    def mutate(entry: Dict[str, Any]) -> None:
+        entry["publish_pending"] = pending
+        # Preserve a real queue stage (E-01C); otherwise create the read-side
+        # read-only marker so unknown/browser results cannot be deleted.
+        if not entry.get("staged_at"):
+            entry["staged_at"] = stamp
+            entry["staged_sha256"] = anchor or sha
+            entry["stage"] = {
+                "kind": "publish_pending",
+                "sha256": anchor or sha,
+                "body_sha256": sha,
+                "book": "",
+                "queue_file": "",
+                "at": stamp,
+            }
+
+    result = _update(project, number, mutate)
+    result.update({"chapter": number, "sha256": sha, "binding": binding,
+                   "verified": verified, "at": stamp})
+    return result
+
+
+def clear_pending(project, chapter: int, *, reason: str = "",
+                  evidence: str = "") -> Dict[str, Any]:
+    """清除结果待核对状态；只在确实存在 pending 时写回执（E-01D）。
+
+    ``abandoned`` 对账证明平台没有写入，才允许清除；已发布章节的
+    ``published_sha256`` 不会被这里改动。给出 ``evidence`` 时只清除属于同一
+    账本/证据的 pending，避免一次未写入的新尝试把另一条未知结果洗掉。
+    """
+    try:
+        number = int(chapter)
+    except (TypeError, ValueError):
+        return {"recorded": False, "cleared": False, "reason": "chapter_invalid",
+                "chapter": chapter}
+    before = chapter_receipt(project, number)
+    stage = before.get("stage") if isinstance(before.get("stage"), dict) else {}
+    pending = before.get("publish_pending") if isinstance(before.get("publish_pending"), dict) else {}
+    had_pending = bool(pending or stage.get("kind") == "publish_pending")
+    if not had_pending:
+        return {"recorded": True, "cleared": False, "chapter": number}
+    if evidence and str(pending.get("evidence") or "") != str(evidence):
+        return {"recorded": True, "cleared": False, "chapter": number,
+                "reason": "pending_belongs_to_other_attempt"}
+
+    def mutate(entry: Dict[str, Any]) -> None:
+        entry.pop("publish_pending", None)
+        current = entry.get("stage")
+        if isinstance(current, dict) and current.get("kind") == "publish_pending":
+            entry.pop("staged_at", None)
+            entry.pop("staged_sha256", None)
+            entry.pop("stage", None)
+
+    result = _update(project, number, mutate)
+    result.update({"chapter": number, "cleared": bool(result.get("recorded"))})
+    if reason:
+        result["reason"] = str(reason)
+    return result
 
 
 def record_staged(project, chapter: int, *, content_sha256: str,
@@ -185,6 +309,15 @@ def record_published(project, chapter: int, *, content_sha256: str,
             "at": stamp,
         })
         entry["publish"] = publish
+        # A confirmed publish resolves the unknown-result marker.  Only drop
+        # the staged fields when they were created by record_pending; a real
+        # queue stage stays as queue provenance (E-01D).
+        entry.pop("publish_pending", None)
+        stage = entry.get("stage")
+        if isinstance(stage, dict) and stage.get("kind") == "publish_pending":
+            entry.pop("staged_at", None)
+            entry.pop("staged_sha256", None)
+            entry.pop("stage", None)
 
     result = _update(project, chapter, mutate)
     result.update({"chapter": int(chapter), "sha256": content_sha256,
@@ -192,15 +325,75 @@ def record_published(project, chapter: int, *, content_sha256: str,
     return result
 
 
+def quality_advisory(project, chapter: int, *, content_sha256: str = "",
+                     version_id: str = "") -> Dict[str, Any]:
+    """只读 v0.9 ``quality_reviews``：返回绑定当前版本的最新质量结论（E-01G）。
+
+    v0.9 质量层只写 ``quality_reviews``，旧回执只写 ``writer_receipts.review``；
+    这里把前者按“当前版本/当前正文”对齐后交给发布门禁。查询本身是 advisory：
+    数据库不可读时只返回 ``available=False``，绝不阻断旧发布路径；是否 block
+    由调用方决定（``gate`` 只在结论与当前版本一致时为 ``block``）。
+    """
+    try:
+        number = int(chapter)
+    except (TypeError, ValueError):
+        return {"available": False, "reason": "chapter_invalid", "gate": "unknown"}
+    try:
+        meta = chapter_versions.current_version(project, number) or {}
+        current_id = str(version_id or meta.get("version_id") or "")
+        keys = [value for value in (
+            current_id,
+            ("sha256:" + str(content_sha256).lower()) if content_sha256 else "",
+        ) if value]
+        from . import quality  # local import: keep publication_state importable early
+        rows = quality.history(project, number)
+        match = None
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            stored = str(row.get("version_id") or "")
+            if stored and stored in keys:
+                match = row
+                break
+        if match is None:
+            return {"available": True, "verdict": None, "total": None,
+                    "version_id": None, "current_version_id": current_id,
+                    "stale": bool(rows), "gate": "unknown",
+                    "reason": "quality_stale" if rows else "quality_unreviewed"}
+        verdict = str(match.get("verdict") or "")
+        return {"available": True, "verdict": verdict or None,
+                "total": match.get("total"), "version_id": match.get("version_id"),
+                "current_version_id": current_id, "stale": False,
+                "gate": "block" if verdict == "block" else
+                        ("pass" if verdict == "pass" else "review"),
+                "reviewer": match.get("reviewer"),
+                "reviewed_at": match.get("created_at")}
+    except Exception as exc:  # noqa: BLE001 - advisory must never break publishing
+        return {"available": False, "reason": type(exc).__name__,
+                "verdict": None, "gate": "unknown"}
+
+
 def review_binding(project, chapter: int, *, content_sha256: str, text: str) -> Dict[str, Any]:
     """校验回执是否绑定“这份正文 + 这个版本”，供 publish/submit 门禁使用。
 
     ``ok=False`` 的 reason 是稳定短码，可直接进 API 说明；不返回正文。
+    若 legacy 回执完全没有 review，则允许同版本、同正文的 v0.9 质量
+    ``pass`` 作为等效事实源（E-01G）；legacy 回执存在但结论不合格时仍按
+    legacy 结论拒绝，避免两套结论互相洗白。
     """
     entry = chapter_receipt(project, chapter)
     review = entry.get("review")
     if not isinstance(review, dict):
-        return {"ok": False, "reason": "review_missing"}
+        quality = quality_advisory(project, chapter, content_sha256=content_sha256)
+        if quality.get("gate") == "pass":
+            return {"ok": True,
+                    "review": {"success": True, "review_decision": "pass",
+                               "source": "quality.reviews",
+                               "version_id": quality.get("version_id"),
+                               "total": quality.get("total")},
+                    "version_id": quality.get("version_id"),
+                    "source": "quality"}
+        return {"ok": False, "reason": "review_missing", "quality": quality}
     try:
         number = int(chapter)
         path = chapter_versions.chapter_path(project, number)

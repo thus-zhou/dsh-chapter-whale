@@ -5,6 +5,7 @@ import functools
 import hashlib
 import json
 import os
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict
@@ -15,7 +16,8 @@ from fastapi.responses import JSONResponse
 from integration import concurrent_engine, costs, maintenance, quality, world_state
 
 
-def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path) -> None:
+def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path,
+            projects: Callable[[], list] | None = None) -> None:
     # 审计 C-39：暂停文件按应用实例挂载，不写模块级全局变量；同进程多个
     # create_app 不再互相覆盖。
     pause_path = Path(data_dir) / "global_pause.json"
@@ -30,6 +32,23 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         if not owner:
             raise concurrent_engine.SchedulerError("owner_required", status=422)
         return owner
+
+    def _bool(body: Dict[str, Any], field: str, default: bool) -> bool:
+        """Strict boolean body field.
+
+        审计 C4-02：``bool("false")`` 是 True，旧实现会让 ``force="false"``
+        绕过自动审稿上限、``paused="false"`` 反向暂停。只接受 JSON 布尔值
+        （兼容历史客户端显式发的 0/1 整数）。
+        """
+        value = body.get(field)
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int) and value in (0, 1):
+            return bool(value)
+        raise concurrent_engine.SchedulerError(
+            "invalid_request", status=400, detail={"field": field, "message": f"{field} 必须是布尔值"})
 
     def guard(fn):
         @functools.wraps(fn)
@@ -47,6 +66,24 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
                 return JSONResponse(status_code=exc.status,
                                     content={"code": exc.code, "message": exc.code,
                                              **(getattr(exc, "detail", {}) or {})})
+            except (TypeError, ValueError, KeyError, OverflowError,
+                    sqlite3.ProgrammingError) as exc:
+                # 审计 C3-22/C4-02：JSON object 传给 int()/布尔解析是请求错误，
+                # 不再落到未捕获处理器的 500 并回显异常文本。
+                return JSONResponse(status_code=400,
+                                    content={"code": "invalid_request",
+                                             "message": f"请求字段不合法：{type(exc).__name__}"})
+            except sqlite3.OperationalError:
+                # 审计 C4-05：数据库损坏/只读是 503 db_unavailable，不是 500，
+                # 也不把绝对路径或 SQL 表名返回给 LAN 客户端。
+                return JSONResponse(status_code=503,
+                                    content={"code": "db_unavailable",
+                                             "message": "数据库当前不可用，请检查诊断页"})
+            except OSError as exc:
+                # 诊断/导出等文件系统错误同样收敛为 503，避免回显路径。
+                return JSONResponse(status_code=503,
+                                    content={"code": "storage_unavailable",
+                                             "message": "文件系统当前不可用，请稍后重试"})
         return wrapper
 
     # ----------------------------------------------------------- world state
@@ -139,7 +176,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     def causal(identity: str, data: dict | None = None):
         body = data or {}
         return world_state.causal_scan(_book(identity), change=str(body.get("change") or ""),
-                                       apply_to_existing=bool(body.get("apply_to_existing", True)),
+                                       apply_to_existing=_bool(body, "apply_to_existing", True),
                                        effective_from_chapter=body.get("effective_from_chapter"))
 
     @app.post("/api/projects/{identity}/world/exemptions")
@@ -156,7 +193,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         body = data or {}
         scan = world_state.causal_scan(
             _book(identity), change=str(body.get("change") or body.get("instruction") or ""),
-            apply_to_existing=bool(body.get("apply_to_existing", False)),
+            apply_to_existing=_bool(body, "apply_to_existing", False),
             effective_from_chapter=body.get("effective_from_chapter"))
         return {"directive_id": "scan_" + hashlib.sha256(
                     json.dumps(scan, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -254,7 +291,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         body = data or {}
         book = _book(identity)
         scope = "project:" + str(book.resolve())
-        if body.get("paused", True):
+        if _bool(body, "paused", True):
             return concurrent_engine.pause(book, scope, reason=str(body.get("reason") or "作者暂停"))
         return concurrent_engine.resume(book, scope)
 
@@ -262,17 +299,32 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @guard
     def system_ai_pause(data: dict | None = None):
         body = data or {}
-        paused = bool(body.get("paused", True))
+        paused = _bool(body, "paused", True)
+        identity = str(body.get("identity") or "")
+        # 审计 C3-23：先校验作品身份，再写全站暂停文件；旧实现先写后验，
+        # 错误 identity 的 404 请求也会把全站停掉（或恢复时删掉急停文件）。
+        book = _book(identity) if identity else None
         result = concurrent_engine.set_global_pause(
             paused, reason=str(body.get("reason") or ("全站急停" if paused else "全站恢复")),
             path=pause_path)
-        identity = str(body.get("identity") or "")
-        if identity:
-            book = _book(identity)
+        if book is not None:
             if paused:
                 concurrent_engine.pause(book, "global", reason=str(body.get("reason") or "全站急停"))
             else:
                 concurrent_engine.resume(book, "global")
+        elif not paused and projects is not None:
+            # 审计 C3-23：不带 identity 的全局恢复必须清掉旧版本/旧请求
+            # 写在各个项目里的 global 暂停行，否则作品永久 409。
+            for item in projects():
+                path = Path(str(item.get("path") or ""))
+                if not (path / ".webnovel" / "workbench.sqlite3").is_file():
+                    continue
+                if not path.is_dir():
+                    continue
+                try:
+                    concurrent_engine.resume(path, "global")
+                except (sqlite3.Error, OSError, concurrent_engine.SchedulerError):
+                    continue
         return result
 
     @app.post("/api/projects/{identity}/tasks/pause")
@@ -326,7 +378,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         body = data or {}
         return quality.review(_book(identity), int(chapter), judgments=body.get("judgments"),
                               reviewer=str(body.get("reviewer") or "auto"),
-                              force=bool(body.get("force")))
+                              force=_bool(body, "force", False))
 
     # --------------------------------------------------------- diagnostics
     @app.get("/api/system/diagnostics")
@@ -349,7 +401,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             book = _book(identity)
             if action == "gc":
                 return maintenance.collect_garbage(
-                    book, dry_run=bool(body.get("dry_run", True)),
+                    book, dry_run=_bool(body, "dry_run", True),
                     min_age_seconds=max(86400, int(body.get("min_age_seconds") or 7 * 86400)))
             destination = export_dir / f"recover-{os.getpid()}-{int(time.time())}-{os.urandom(3).hex()}.zip"
             return maintenance.export_bundle(book, destination, allowed_dir=export_dir)
@@ -371,7 +423,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     def garbage(identity: str, data: dict | None = None):
         body = data or {}
         return maintenance.collect_garbage(_book(identity),
-                                           dry_run=bool(body.get("dry_run", True)),
+                                           dry_run=_bool(body, "dry_run", True),
                                            min_age_seconds=max(86400, int(body.get("min_age_seconds") or 7 * 86400)))
 
     @app.post("/api/projects/{identity}/diagnostics/export")

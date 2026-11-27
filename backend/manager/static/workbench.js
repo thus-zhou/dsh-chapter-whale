@@ -79,6 +79,9 @@
     baseSha: "",
     dirty: false,
     composing: false,
+    titleComposing: false,
+    outlineComposing: false,
+    loreComposing: false,
     draftBlocked: false,
     draftEpochRetries: 0,
     saveTimer: null,
@@ -95,6 +98,7 @@
     annotationSeq: 0,
     annotationsReady: false,
     annotationProbed: false,
+    annotationProbeToken: 0,
     remoteAnnotations: [],
     pendingChapter: null,
     eventStream: null,
@@ -245,7 +249,8 @@
   }
 
   function isEditorBusyComposing() {
-    return chapterApplyDeferred(state.composing, state.adapter && state.adapter.composing);
+    return chapterApplyDeferred(state.composing, state.adapter && state.adapter.composing)
+      || Boolean(state.titleComposing);
   }
 
   /* A conflict payload is the other window's draft: its recorded base is the
@@ -290,11 +295,74 @@
     const drafted = rows.filter((row) => row && row.draft && row.draft.exists);
     if (!drafted.length) return null;
     return drafted.map((row) => "第 " + Number(row.id) + " 章").join("、") +
-      " 还有未提交草稿；合并会归档并在回收站中保留整章（含草稿）。继续？";
+      " 还有未提交草稿；合并只归档尾章（含其草稿），合并目标章的未提交草稿会保留，合并后请核对或清理。继续？";
   }
 
   function chapterApplyDeferred(composing, adapterComposing) {
     return Boolean(composing || adapterComposing);
+  }
+
+  /* A chapter GET can be slow enough for the author to type into the old
+     chapter.  Arriving data must not silently replace that text: flush it as
+     the old chapter's draft, or ask before discarding a blocked draft
+     (D-R4-03). */
+  function chapterArrivalAction(dirty, draftBlocked) {
+    if (!dirty) return "apply";
+    return draftBlocked ? "confirm" : "flush";
+  }
+
+  /* A blocked draft whose base version/hash is also missing cannot pass the
+     server's expected_version check on a chapter that already has a version.
+     Only those drafts must hide the "Ctrl+S" recovery promise (D-R4-06). */
+  function blockedDraftNeedsBase(identity, chapter) {
+    const draft = identity || {};
+    const current = chapter || {};
+    if (!draft.exists) return false;
+    const chapterHasVersion = Boolean(current.version_id || current.sha256 || current.content_sha256);
+    if (!chapterHasVersion) return false;
+    return !draft.baseVersionId || !draft.baseSha;
+  }
+
+  function blockedDraftMessage(identity, chapter) {
+    if (blockedDraftNeedsBase(identity, chapter)) {
+      return "已恢复草稿，但缺少基线正文与版本信息，无法直接保存；请先载入最新正文，或复制正文后重新创建版本。";
+    }
+    return "已恢复草稿，但缺少基线正文，自动草稿与三方合并已暂停；可按 Ctrl+S 直接保存正式版本。";
+  }
+
+  /* Chapter switching must reset the annotation affordance instead of leaving
+     the previous chapter's "connected" hint and enabled submit button
+     (D-02D). */
+  function annotationProbeReset() {
+    return {
+      annotationsReady: false,
+      annotationProbed: false,
+      remoteAnnotations: [],
+      hint: "正在检测批注接口…",
+      submitDisabled: true,
+      submitTitle: "正在检测批注接口",
+    };
+  }
+
+  /* aria-modal is only honest when every background region is inert.  The
+     workbench page head, banner/conflict panes, mobile bar and bottom dock are
+     outside the drawer but were still tabbable (D-04M). */
+  function backgroundInertSelectors() {
+    return [".sidebar", ".topbar", ".skip-link", ".wb-page-head", ".wb-banner",
+      ".wb-conflict", ".wb-mobile-bar", ".mobile-dock", "#cw-web-dock"];
+  }
+
+  /* merge-tail merges the last two chapters in id order; a deleted middle
+     chapter makes last-1 a 404.  Return the actual last two ids and whether
+     they are adjacent (D-R4-09). */
+  function mergeTailPair(chapters) {
+    const ids = Array.from(new Set((Array.isArray(chapters) ? chapters : [])
+      .map((row) => Number(row && row.id))
+      .filter((id) => Number.isFinite(id)))).sort((left, right) => left - right);
+    if (ids.length < 2) return { last: 0, previous: 0, adjacent: false };
+    const last = ids[ids.length - 1];
+    const previous = ids[ids.length - 2];
+    return { last: last, previous: previous, adjacent: previous === last - 1 };
   }
 
   function newOpId(prefix) {
@@ -502,11 +570,22 @@
     on(els.editor, "keydown", handleEditorKeyDown);
     on(els.editor, "keyup", handleEditorKeyUp);
     on(els.editor, "scroll", () => { if (!els.bubble.hidden) hideSelectionUI(); });
-    on(els.title, "input", () => {
-      if (state.composing) return;
-      if (state.adapter) state.adapter.title = els.title.value;
-      markDirty();
+    on(els.title, "compositionstart", () => {
+      state.titleComposing = true;
     });
+    on(els.title, "compositionend", () => {
+      state.titleComposing = false;
+      handleTitleInput();
+      commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
+    });
+    on(els.title, "blur", () => {
+      // Browsers can skip compositionend when focus leaves mid-composition.
+      if (!state.titleComposing) return;
+      state.titleComposing = false;
+      handleTitleInput();
+      commitPendingChapter().catch((error) => banner("推迟载入的章节读取失败：" + describeError(error), "error"));
+    });
+    on(els.title, "input", handleTitleInput);
     on(els.save, "click", () => saveVersion({}));
     on(els.quickCheck, "click", () => runQuickCheck());
     on(els.leftNew, "click", () => openTool("new-chapter"));
@@ -516,6 +595,13 @@
     on(els.rightClose, "click", () => toggleDrawer("right", false));
     on(els.backdrop, "click", () => { toggleDrawer("left", false); toggleDrawer("right", false); });
     on(els.moreToggle, "click", (event) => { event.stopPropagation(); toggleMore(); });
+    on(els.moreToggle, "keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        toggleMore(true);
+      }
+    });
+    on(els.moreMenu, "keydown", handleMoreMenuKeyDown);
     on(document, "click", (event) => {
       if (state.moreOpen && !els.moreToggle.contains(event.target) && !els.moreMenu.contains(event.target)) toggleMore(false);
     });
@@ -582,10 +668,28 @@
       state.outline.dirty = true;
       setText(els.outlineState, "有未保存修改");
     });
+    on(els.outlineText, "compositionstart", () => {
+      state.outlineComposing = true;
+    });
+    on(els.outlineText, "compositionend", () => {
+      state.outlineComposing = false;
+      state.outline.dirty = true;
+      setText(els.outlineState, "有未保存修改");
+    });
+    on(els.outlineText, "blur", () => { state.outlineComposing = false; });
     on(els.loreText, "input", () => {
       state.lore.dirty = true;
       setText(els.loreState, "有未保存修改");
     });
+    on(els.loreText, "compositionstart", () => {
+      state.loreComposing = true;
+    });
+    on(els.loreText, "compositionend", () => {
+      state.loreComposing = false;
+      state.lore.dirty = true;
+      setText(els.loreState, "有未保存修改");
+    });
+    on(els.loreText, "blur", () => { state.loreComposing = false; });
     ["master", "volumes", "arcs", "foreshadow"].forEach((key) => {
       const field = els["meta" + key.charAt(0).toUpperCase() + key.slice(1)];
       on(field, "input", () => {
@@ -865,6 +969,9 @@
     state.checkpointBase = "";
     state.dirty = false;
     state.composing = false;
+    state.titleComposing = false;
+    state.outlineComposing = false;
+    state.loreComposing = false;
     state.draftBlocked = false;
     state.savingDraft = false;
     state.savingVersion = false;
@@ -875,6 +982,7 @@
     state.annotations = [];
     state.annotationsReady = false;
     state.annotationProbed = false;
+    state.annotationProbeToken += 1;
     state.remoteAnnotations = [];
     state.pendingChapter = null;
     state.quickCheck = null;
@@ -1158,7 +1266,7 @@
     if (!chapterId || !state.projectId) return;
     const settings = options || {};
     if (!settings.force && chapterId === state.currentId && state.chapter) return;
-    if (state.composing) {
+    if (state.composing || state.titleComposing) {
       toast("输入法仍在组合文字，请完成后再切换章节", true);
       return;
     }
@@ -1166,9 +1274,11 @@
       toast("正在保存正式版本，请稍候再切换章节", true);
       return;
     }
+    let discardConfirmed = false;
     if (!settings.force && state.dirty) {
       if (state.draftBlocked) {
         if (!window.confirm("当前章节有草稿冲突，切换会丢掉本地未保存内容。继续？")) return;
+        discardConfirmed = true;
       } else {
         try {
           await flushDraftNow();
@@ -1184,6 +1294,38 @@
       const data = await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(chapterId), "GET", undefined, 25000);
       if (token !== state.chapterToken) return;
       if (settings.skipDraft) data.draft = { exists: false };
+      // The GET may have taken long enough for the author to keep typing in
+      // the chapter that is still on screen.  Never let the arriving data
+      // silently replace that text (D-R4-03).
+      const arrival = chapterArrivalAction(state.dirty, state.draftBlocked);
+      const alreadyDiscarded = arrival === "confirm" && discardConfirmed;
+      if (arrival !== "apply" && !alreadyDiscarded) {
+        const stayedTitle = state.currentId
+          ? "第 " + state.currentId + " 章 · " + (els.title.value || "无标题")
+          : "未选择章节";
+        if (arrival === "confirm") {
+          if (!window.confirm("切换章节期间你输入了文字。载入第 " + chapterId + " 章会丢弃这些输入。继续？")) {
+            setText(els.mobileTitle, stayedTitle);
+            return;
+          }
+        } else {
+          try {
+            await flushDraftNow();
+          } catch (error) {
+            banner("切换章节期间输入的文字未能保存，已留在当前章节：" + describeError(error), "error");
+            setText(els.mobileTitle, stayedTitle);
+            return;
+          }
+          if (token !== state.chapterToken || state.dirty) {
+            // A new switch started, or the flush was a no-op because the text
+            // did not produce a draft; never stack another apply on top.
+            if (token !== state.chapterToken) return;
+            setText(els.mobileTitle, stayedTitle);
+            return;
+          }
+          toast("切换章节期间输入的文字已保存为第 " + state.currentId + " 章草稿");
+        }
+      }
       applyChapter(data);
       try {
         localStorage.setItem("novel-helper-workbench-chapter:" + state.projectId, String(chapterId));
@@ -1244,9 +1386,7 @@
     state.quickCheck = null;
     state.versions = [];
     state.versionsFor = 0;
-    state.annotationsReady = false;
-    state.annotationProbed = false;
-    state.remoteAnnotations = [];
+    resetAnnotationProbe();
     state.view = "write";
     hideConflict();
     banner("");
@@ -1264,7 +1404,7 @@
     setText(els.mobileTitle, "第 " + state.currentId + " 章 · " + (title || "无标题"));
     if (hasDraft) {
       if (state.draftBlocked) {
-        banner("已恢复草稿，但缺少基线正文，自动草稿与三方合并已暂停；可按 Ctrl+S 直接保存正式版本。", "error");
+        banner(blockedDraftMessage(state.draft, data), "error");
       } else {
         banner("已恢复未提交草稿" + (draftInfo.stale ? "（基于旧版本，保存时会做并发对比）" : "") + "。按 Ctrl+S 保存为正式版本。", "info");
       }
@@ -1272,17 +1412,28 @@
     if (state.view === "outline") setView("write");
     if (state.rightTab === "versions") loadVersions().catch(() => {});
     if (state.rightTab === "reference") loadReference().catch(() => {});
+    // The previous chapter's probe result must not bless this chapter's
+    // annotation form; re-probe when the tab is visible (D-02D).
+    if (state.rightTab === "annotations") {
+      probeAnnotationEndpoint().catch(() => {});
+    }
   }
 
   async function commitPendingChapter() {
     const data = state.pendingChapter;
     if (!data || isEditorBusyComposing()) return;
-    if (state.dirty && !state.draftBlocked) {
-      try {
-        await flushDraftNow();
-      } catch (error) {
-        banner("切换章节前草稿保存失败，已留在当前章节：" + describeError(error), "error");
-        return;
+    if (state.dirty) {
+      if (state.draftBlocked) {
+        // Matches openChapter: a blocked draft plus unsaved input must ask
+        // before the pending chapter replaces the editor (D-R4-07).
+        if (!window.confirm("当前章节有草稿冲突，载入第 " + Number(data.id) + " 章会丢掉本地未保存内容。继续？")) return;
+      } else {
+        try {
+          await flushDraftNow();
+        } catch (error) {
+          banner("切换章节前草稿保存失败，已留在当前章节：" + describeError(error), "error");
+          return;
+        }
       }
     }
     if (state.pendingChapter !== data || isEditorBusyComposing()) return;
@@ -1300,7 +1451,7 @@
 
   function setEditorValue(text, title, force) {
     if (!els.editor) return false;
-    if (editorWriteBlocked(force, state.composing, state.adapter && state.adapter.composing)) return false;
+    if (editorWriteBlocked(force, state.composing || state.titleComposing, state.adapter && state.adapter.composing)) return false;
     els.editor.value = text;
     els.title.value = title;
     if (state.adapter) state.adapter.setValue(text, true);
@@ -1325,6 +1476,15 @@
     state.dirty = signature(title, content) !== state.persistedSignature;
     updateEditorMeta();
     if (state.dirty && !state.draftBlocked) scheduleDraftSave();
+  }
+
+  /* The title input had no composition guard: autosave could persist a half
+     composed title (D-IME2).  Keep title input out of dirty/save until the
+     IME commits, then run the same path from compositionend/blur. */
+  function handleTitleInput() {
+    if (state.titleComposing) return;
+    if (state.adapter) state.adapter.title = els.title.value;
+    markDirty();
   }
 
   function checkpoint() {
@@ -1463,7 +1623,8 @@
       setText(els.saveState, "已保存");
       els.saveState.className = "wb-save-pill is-saved";
     }
-    if (els.save) els.save.disabled = Boolean(!state.currentId);
+    if (els.save) els.save.disabled = Boolean(!state.currentId)
+      || (state.draftBlocked && blockedDraftNeedsBase(state.draft, state.chapter));
     setText(els.mobileTitle, "第 " + state.currentId + " 章 · " + (els.title.value || "无标题"));
   }
 
@@ -1514,9 +1675,40 @@
   }
 
   function toggleMore(force) {
+    const wasOpen = state.moreOpen;
     state.moreOpen = typeof force === "boolean" ? force : !state.moreOpen;
     setHidden(els.moreMenu, !state.moreOpen);
     els.moreToggle.setAttribute("aria-expanded", String(state.moreOpen));
+    if (state.moreOpen) {
+      // A menu button must move focus into the opened menu; otherwise keyboard
+      // users tab through the page instead of the menu (D-ARIA1).
+      const first = els.moreMenu.querySelector('[role="menuitem"]');
+      if (first && typeof first.focus === "function") first.focus();
+    } else if (wasOpen && els.moreMenu.contains(document.activeElement)) {
+      els.moreToggle.focus();
+    }
+  }
+
+  function handleMoreMenuKeyDown(event) {
+    const items = Array.from(els.moreMenu.querySelectorAll('[role="menuitem"]:not([disabled])'));
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement);
+    const move = (target) => {
+      if (!target) return;
+      event.preventDefault();
+      target.focus();
+    };
+    if (event.key === "ArrowDown") move(items[(current + 1 + items.length) % items.length]);
+    else if (event.key === "ArrowUp") move(items[(current - 1 + items.length) % items.length]);
+    else if (event.key === "Home") move(items[0]);
+    else if (event.key === "End") move(items[items.length - 1]);
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      toggleMore(false);
+    } else if (event.key === "Tab") {
+      // Menus close when focus leaves; do not trap Tab.
+      toggleMore(false);
+    }
   }
 
   function ctrlSIntentFor(element) {
@@ -1574,7 +1766,9 @@
 
   function setBackgroundInert(active) {
     // aria-modal is only honest when the rest of the app is actually inert.
-    [".sidebar", ".topbar", ".skip-link"].forEach((selector) => {
+    // The workbench page head, banner/conflict panes, mobile bar and bottom
+    // dock sit outside the drawer but were still tabbable (D-04M).
+    backgroundInertSelectors().forEach((selector) => {
       const element = document.querySelector(selector);
       if (!element) return;
       element.inert = Boolean(active);
@@ -1592,7 +1786,7 @@
     });
     const anyOpen = els.left.classList.contains("is-open") || els.right.classList.contains("is-open");
     if (els.center) els.center.inert = mobile && anyOpen;
-    if (els.mobileBar) els.mobileBar.inert = false;
+    if (els.mobileBar) els.mobileBar.inert = mobile && anyOpen;
     setBackgroundInert(mobile && anyOpen);
   }
 
@@ -1635,7 +1829,7 @@
     setHidden(els.backdrop, !anyOpen);
     document.body.classList.toggle("modal-open", anyOpen);
     if (els.center) els.center.inert = anyOpen;
-    if (els.mobileBar) els.mobileBar.inert = false;
+    if (els.mobileBar) els.mobileBar.inert = anyOpen;
     setBackgroundInert(anyOpen);
     if (els.mobileLeft) els.mobileLeft.setAttribute("aria-expanded", String(els.left.classList.contains("is-open")));
     if (els.mobileRight) els.mobileRight.setAttribute("aria-expanded", String(els.right.classList.contains("is-open")));
@@ -1720,19 +1914,28 @@
     clearTimeout(state.saveTimer);
     state.saveTimer = null;
     if (!state.currentId || state.draftBlocked || state.savingVersion || state.versionSavePending || !state.dirty) return;
+    const chapterToken = state.chapterToken;
     state.saveTimer = setTimeout(() => {
       state.saveTimer = null;
-      saveDraftNow().catch((error) => handleDraftError(error));
+      saveDraftNow().catch((error) => {
+        // A save that was in flight when the author switched chapters must not
+        // paint its error/conflict onto the newly opened chapter (D-R4-05).
+        if (chapterToken !== state.chapterToken) return;
+        handleDraftError(error);
+      });
     }, delay === undefined ? DRAFT_DEBOUNCE_MS : delay);
   }
 
   async function saveDraftNow() {
     if (!state.currentId || state.draftBlocked || state.savingVersion || !state.draftQueue) return null;
     if (!state.dirty) return null;
-    if (state.composing) {
+    if (state.composing || state.titleComposing) {
       scheduleDraftSave(400);
       return null;
     }
+    const chapterToken = state.chapterToken;
+    const chapterId = state.currentId;
+    const projectId = state.projectId;
     const title = els.title.value;
     const content = els.editor.value;
     const submitted = signature(title, content);
@@ -1742,6 +1945,13 @@
         const payload = draftPayload(title, content);
         return putDraft(payload);
       });
+      // The PUT belongs to the chapter/project captured above.  If a forced
+      // switch (merge/split/restore) replaced state while it was in flight,
+      // writing its identity into the new chapter would corrupt autosave
+      // (D-R4-05).
+      if (chapterToken !== state.chapterToken || chapterId !== state.currentId || projectId !== state.projectId) {
+        return result;
+      }
       const draft = result && result.draft ? result.draft : null;
       if (draft) {
         state.draft = draftIdentityFrom(draft);
@@ -1855,7 +2065,8 @@
     }
   }
 
-  function handleDraftError(error) {
+  function handleDraftError(error, chapterToken) {
+    if (chapterToken !== undefined && chapterToken !== state.chapterToken) return;
     if (!(error instanceof ApiError)) {
       banner("草稿保存失败：" + describeError(error), "error");
       return;
@@ -1896,8 +2107,14 @@
       toast("正在保存，请稍候", false);
       return;
     }
-    if (state.composing) {
+    if (state.composing || state.titleComposing) {
       toast("输入法仍在组合文字，请完成后再保存", true);
+      return;
+    }
+    // A blocked draft without base version/hash cannot satisfy the server's
+    // expected_version check; do not promise Ctrl+S for it (D-R4-06).
+    if (state.draftBlocked && blockedDraftNeedsBase(state.draft, state.chapter)) {
+      banner("缺少基线版本信息，无法保存；请先载入最新正文。", "error");
       return;
     }
     state.versionSavePending = true;
@@ -2136,18 +2353,20 @@
      unknown (blocked draft) or names another version, fetch the chapter's
      draft base from the server; if that also fails, the caller stays blocked
      instead of merging against the wrong text (D-01R/D-01R2). */
-  async function fetchConflictDraftBase(current) {
+  async function fetchConflictDraftBase(current, target) {
     const source = current || {};
+    const chapterId = target && target.chapterId ? Number(target.chapterId) : state.currentId;
+    const projectId = target && target.projectId ? String(target.projectId) : state.projectId;
     const fallback = state.baseContent === null || state.baseContent === undefined ? null : {
       baseVersionId: state.baseVersionId,
       baseSha: state.baseSha,
       baseContent: state.baseContent,
     };
     let adopted = conflictDraftBaseline(source, fallback);
-    if (!adopted.blocked || !source.base_version_id || !state.projectId || !state.currentId) return adopted;
+    if (!adopted.blocked || !source.base_version_id || !projectId || !chapterId) return adopted;
     try {
       const data = await api(
-        "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(state.currentId),
+        "/api/projects/" + enc(projectId) + "/chapters/" + enc(chapterId),
         "GET", undefined, 15000,
       );
       const draft = data && data.draft;
@@ -2166,6 +2385,15 @@
       hideConflict();
       return;
     }
+    // reload/merge await a chapter GET.  Confirm the author is still looking
+    // at the same chapter/project when it returns; otherwise the other
+    // chapter's draft identity would be written into the newly opened chapter
+    // (D-R4-01).
+    const chapterToken = state.chapterToken;
+    const chapterId = state.currentId;
+    const projectId = state.projectId;
+    const stillCurrent = () => state.chapterToken === chapterToken
+      && state.currentId === chapterId && state.projectId === projectId;
     if (action === "later") {
       setHidden(els.conflict, true);
       if (conflict.kind === "draft") {
@@ -2177,8 +2405,12 @@
     if (action === "reload") {
       if (conflict.kind === "draft") {
         const current = conflict.current || {};
-        const adopted = await fetchConflictDraftBase(current);
-        state.draft = {
+        const adopted = await fetchConflictDraftBase(current, { chapterId: chapterId, projectId: projectId });
+        if (!stillCurrent()) {
+          toast("章节已切换，已取消载入对方版本", true);
+          return;
+        }
+        const nextDraft = {
           id: current.draft_id || null,
           epoch: Number(current.draft_epoch || 0),
           revision: Number(current.draft_revision || 0),
@@ -2188,6 +2420,14 @@
           baseContent: adopted.blocked ? null : adopted.baseContent,
           updatedAt: current.updated_at || null,
         };
+        // Write the editor first: if it is still composing, the adopted draft
+        // identity/base must stay untouched, otherwise the next autosave
+        // submits local text under the other draft's identity (D-R4-04).
+        if (!setEditorValue(String(current.content || ""), String(current.title || ""), false)) {
+          toast("输入法仍在组合文字，请完成后再载入对方版本", true);
+          return;
+        }
+        state.draft = nextDraft;
         // The other draft was edited from its own base, not from the newest
         // file version; adopting it keeps the next Ctrl+S on the right
         // expected version (D-01R2).
@@ -2195,10 +2435,6 @@
         state.baseSha = adopted.baseSha;
         state.baseContent = adopted.baseContent;
         state.draftBlocked = Boolean(adopted.blocked);
-        if (!setEditorValue(String(current.content || ""), String(current.title || ""), false)) {
-          toast("输入法仍在组合文字，请完成后再载入对方版本", true);
-          return;
-        }
         state.persistedSignature = signature(els.title.value, els.editor.value);
         state.dirty = false;
         state.checkpointBase = els.editor.value;
@@ -2206,13 +2442,13 @@
         if (state.draftBlocked) banner("对方草稿的基线正文不可用，自动合并已暂停；请核对正文后保存或载入最新正文。", "error");
       } else {
         const payload = conflict.current || {};
-        state.baseVersionId = String(payload.current_version_id || "");
-        state.baseSha = String(payload.current_content_sha256 || "");
-        state.baseContent = String(payload.current_content || "");
         if (!setEditorValue(String(payload.current_content || ""), String(payload.current_title || ""), false)) {
           toast("输入法仍在组合文字，请完成后再载入最新正文", true);
           return;
         }
+        state.baseVersionId = String(payload.current_version_id || "");
+        state.baseSha = String(payload.current_content_sha256 || "");
+        state.baseContent = String(payload.current_content || "");
         state.persistedSignature = signature(els.title.value, els.editor.value);
         state.dirty = false;
         state.checkpointBase = els.editor.value;
@@ -2237,7 +2473,11 @@
             "），自动合并可能覆盖后台正文。请先载入对方草稿，核对后再保存。");
           return;
         }
-        adoptedDraft = await fetchConflictDraftBase(conflict.current);
+        adoptedDraft = await fetchConflictDraftBase(conflict.current, { chapterId: chapterId, projectId: projectId });
+        if (!stillCurrent()) {
+          toast("章节已切换，已取消合并", true);
+          return;
+        }
         if (adoptedDraft.blocked) {
           toast("草稿缺少基线正文，不能安全三方合并；请载入对方版本或手动复制。", true);
           return;
@@ -2258,10 +2498,12 @@
           " 处同句冲突，未自动改动正文。请先载入对方版本，或手动把需要的句子复制到本地后再保存。");
         return;
       }
+      let nextDraft = null;
+      let nextBase = null;
       if (conflict.kind === "draft") {
         const current = conflict.current || {};
         const adopted = adoptedDraft;
-        state.draft = {
+        nextDraft = {
           id: current.draft_id || null,
           epoch: Number(current.draft_epoch || 0),
           revision: Number(current.draft_revision || 0),
@@ -2271,20 +2513,32 @@
           baseContent: adopted.blocked ? null : adopted.baseContent,
           updatedAt: current.updated_at || null,
         };
-        state.baseVersionId = adopted.baseVersionId;
-        state.baseSha = adopted.baseSha;
-        state.baseContent = adopted.baseContent;
-        state.draftBlocked = Boolean(adopted.blocked);
+        nextBase = {
+          baseVersionId: adopted.baseVersionId,
+          baseSha: adopted.baseSha,
+          baseContent: adopted.baseContent,
+          blocked: Boolean(adopted.blocked),
+        };
       } else {
         const payload = conflict.current || {};
-        state.baseVersionId = String(payload.current_version_id || state.baseVersionId);
-        state.baseSha = String(payload.current_content_sha256 || "");
-        state.baseContent = server;
+        nextBase = {
+          baseVersionId: String(payload.current_version_id || state.baseVersionId),
+          baseSha: String(payload.current_content_sha256 || ""),
+          baseContent: server,
+          blocked: false,
+        };
       }
+      // Same ordering as reload: the editor write must succeed before the
+      // adopted identity/base replaces the local one (D-R4-04).
       if (!setEditorValue(merged.text, els.title.value, false)) {
         toast("输入法仍在组合文字，请完成后再合并正文", true);
         return;
       }
+      if (nextDraft) state.draft = nextDraft;
+      state.baseVersionId = nextBase.baseVersionId;
+      state.baseSha = nextBase.baseSha;
+      state.baseContent = nextBase.baseContent;
+      if (nextDraft) state.draftBlocked = nextBase.blocked;
       state.dirty = true;
       state.checkpointBase = merged.text;
       if (state.adapter) state.adapter.markRevision(state.draft.id, state.draft.epoch, state.draft.revision);
@@ -2483,20 +2737,38 @@
     return state.annotations.filter((item) => item.chapterId === state.currentId);
   }
 
+  function resetAnnotationProbe() {
+    const reset = annotationProbeReset();
+    state.annotationsReady = reset.annotationsReady;
+    state.annotationProbed = reset.annotationProbed;
+    state.remoteAnnotations = [];
+    state.annotationProbeToken += 1;
+    if (els.annotationSubmit) {
+      els.annotationSubmit.disabled = reset.submitDisabled;
+      els.annotationSubmit.setAttribute("title", reset.submitTitle);
+    }
+    if (els.annotationHint) setText(els.annotationHint, reset.hint);
+  }
+
   async function probeAnnotationEndpoint() {
     if (state.annotationsReady || state.annotationProbed || !state.currentId || !state.projectId) return;
     state.annotationProbed = true;
     const chapter = state.currentId;
+    const probeToken = state.annotationProbeToken;
     try {
       const data = await api("/api/projects/" + enc(state.projectId) + "/chapters/" + enc(chapter) + "/annotations", "GET", undefined, 8000);
-      if (chapter !== state.currentId) return;
+      if (chapter !== state.currentId || probeToken !== state.annotationProbeToken) return;
       state.annotationsReady = true;
       applyRemoteAnnotations(data);
       setText(els.annotationHint, "批注接口已连接 · 本章 " + state.remoteAnnotations.length + " 条批注。");
       els.annotationSubmit.disabled = false;
       els.annotationSubmit.removeAttribute("title");
     } catch (ignored) {
+      if (chapter !== state.currentId || probeToken !== state.annotationProbeToken) return;
       state.annotationsReady = false;
+      // Allow the next focus/tab visit to retry a failed probe instead of
+      // leaving the chapter permanently "unavailable" (D-02D).
+      state.annotationProbed = false;
       els.annotationSubmit.disabled = true;
       els.annotationSubmit.setAttribute("title", "批注后端暂不可用");
       setText(els.annotationHint, "批注后端暂不可用；当前批注只保存在本页内存，刷新后清空。");
@@ -3030,6 +3302,10 @@
       toast("请先选择一个大纲文件", true);
       return;
     }
+    if (state.outlineComposing) {
+      toast("输入法仍在组合文字，请完成后再保存大纲", true);
+      return;
+    }
     const content = els.outlineText.value;
     const payload = {
       content: content,
@@ -3163,6 +3439,10 @@
   async function saveLoreFile() {
     if (!state.lore.name || !state.projectId) {
       toast("请先选择一个设定文件", true);
+      return;
+    }
+    if (state.loreComposing) {
+      toast("输入法仍在组合文字，请完成后再保存设定", true);
       return;
     }
     try {
@@ -3375,20 +3655,33 @@
      before opening the tool (D-09R). */
   async function prepareMergeTail() {
     if (!state.projectId) return;
-    const ids = state.chapters.map((item) => Number(item.id)).filter((id) => Number.isFinite(id));
-    if (ids.length < 2) {
+    const projectId = state.projectId;
+    const projectToken = state.projectToken;
+    const pair = mergeTailPair(state.chapters);
+    if (!pair.last || !pair.previous) {
       toast("至少需要两章才能合并", true);
       return;
     }
-    const last = Math.max.apply(null, ids);
-    const previous = last - 1;
-    const details = await Promise.all([previous, last].map((id) => api(
-      "/api/projects/" + enc(state.projectId) + "/chapters/" + enc(id),
+    if (!pair.adjacent) {
+      // merge-tail merges last-1 + last; a deleted middle chapter would make
+      // the GET 404 look like a transient failure (D-R4-09).
+      toast("最后两章不连续（第 " + pair.previous + " 章与第 " + pair.last + " 章），无法合并尾章", true);
+      return;
+    }
+    const details = await Promise.all([pair.previous, pair.last].map((id) => api(
+      "/api/projects/" + enc(projectId) + "/chapters/" + enc(id),
       "GET", undefined, 15000,
     )));
+    if (state.projectId !== projectId || state.projectToken !== projectToken) {
+      // The project changed while the two chapter GETs were in flight; using
+      // the new state.projectId in submitMergeTail would merge another
+      // project's tail (D-R4-01/D-R4-09).
+      toast("作品已切换，已取消合并", true);
+      return;
+    }
     const warning = mergeTailDraftMessage(details);
     if (warning && !window.confirm(warning)) return;
-    setText(els.mergeLabel, "把第 " + last + " 章并入第 " + previous + " 章；两章都必须未发布。");
+    setText(els.mergeLabel, "把第 " + pair.last + " 章并入第 " + pair.previous + " 章；两章都必须未发布。");
     openDialog("合并最后两章", "toolMerge");
   }
 
@@ -3480,10 +3773,16 @@
   }
 
   async function submitMergeTail() {
+    const projectId = state.projectId;
+    const projectToken = state.projectToken;
     const result = await api(
-      "/api/projects/" + enc(state.projectId) + "/chapters/merge-tail",
+      "/api/projects/" + enc(projectId) + "/chapters/merge-tail",
       "POST", { op_id: newOpId("merge") }, 40000,
     );
+    if (state.projectId !== projectId || state.projectToken !== projectToken) {
+      toast("作品已切换，合并已完成但未打开结果章节");
+      return;
+    }
     closeDialog();
     toast("已合并为第 " + result.chapter_id + " 章");
     await loadChapters(state.projectId);
@@ -3702,6 +4001,12 @@
       ctrlSIntentFor: ctrlSIntentFor,
       editorWriteBlocked: editorWriteBlocked,
       chapterApplyDeferred: chapterApplyDeferred,
+      chapterArrivalAction: chapterArrivalAction,
+      blockedDraftNeedsBase: blockedDraftNeedsBase,
+      blockedDraftMessage: blockedDraftMessage,
+      annotationProbeReset: annotationProbeReset,
+      backgroundInertSelectors: backgroundInertSelectors,
+      mergeTailPair: mergeTailPair,
       annotationPayload: annotationPayload,
     });
   }

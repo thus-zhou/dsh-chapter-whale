@@ -167,9 +167,33 @@ class BudgetTest(unittest.TestCase):
             db.close()
         self.assertEqual((state, tokens, amount), ("unknown_charge", 5, "1"))
 
-    def test_count_only_guard_does_not_charge_unknown_reserve(self):
+    def test_count_only_guard_reserves_conservatively_when_a_cost_cap_is_set(self):
+        # B3-09: a count-only row used to store 0, so a positive budget_cap_cny
+        # was unreachable.  With a cap in force each call reserves the
+        # conservative unknown price.
+        first = costs.reserve_request(self.db, "/tmp/book", 1, "draft",
+                                      directive_id="dir_count", guard={"budget_cap_cny": "2"},
+                                      count_only=True, limits=LIMITS)
+        db = sqlite3.connect(self.db)
+        try:
+            amount, unknown = db.execute(
+                "SELECT cost_cny, unknown_cost FROM request_budget WHERE id=?", (first,)).fetchone()
+        finally:
+            db.close()
+        self.assertEqual((amount, unknown), ("1", 1))
+        self.assertEqual(costs.directive_usage(self.db, "dir_count")["cost_cny"], "1")
+        costs.reserve_request(self.db, "/tmp/book", 1, "draft",
+                              directive_id="dir_count", guard={"budget_cap_cny": "2"},
+                              count_only=True, limits=LIMITS)
+        with self.assertRaises(costs.BudgetExceeded) as raised:
+            costs.reserve_request(self.db, "/tmp/book", 1, "draft",
+                                  directive_id="dir_count", guard={"budget_cap_cny": "2"},
+                                  count_only=True, limits=LIMITS)
+        self.assertEqual(raised.exception.detail["limit"], "budget_cap_cny")
+
+    def test_count_only_guard_without_a_cost_cap_stays_zero(self):
         identity = costs.reserve_request(self.db, "/tmp/book", 1, "draft",
-                                         directive_id="dir_count", guard={"budget_cap_cny": "2"},
+                                         directive_id="dir_count_calls", guard={"max_calls": 3},
                                          count_only=True, limits=LIMITS)
         db = sqlite3.connect(self.db)
         try:
@@ -178,7 +202,60 @@ class BudgetTest(unittest.TestCase):
         finally:
             db.close()
         self.assertEqual((amount, unknown), ("0", 0))
-        self.assertEqual(costs.directive_usage(self.db, "dir_count")["cost_cny"], "0")
+
+    def test_attempt_marks_dispatched_before_finish(self):
+        with mock.patch.object(costs, "budget_limits", return_value=LIMITS):
+            with costs.scope(db=str(self.db), project="/tmp/book", chapter=1, stage="draft"):
+                meter = costs.Attempt("https://api.example.com/v1", "m",
+                                      {"messages": [{"content": "x"}]})
+                self.assertTrue(meter.reservation)
+                db = sqlite3.connect(self.db)
+                try:
+                    state = db.execute("SELECT state FROM request_budget WHERE id=?",
+                                       (meter.reservation,)).fetchone()[0]
+                finally:
+                    db.close()
+                self.assertEqual(state, "dispatched")
+                meter.completed = True
+                meter.output("正文")
+                meter.finish()
+
+    def test_recover_stale_reservations_releases_or_charges_unknown(self):
+        limits = dict(LIMITS)
+        reserved = costs.reserve_request(self.db, "/tmp/book", 1, "draft", limits=limits)
+        dispatched = costs.reserve_request(self.db, "/tmp/book", 1, "draft", limits=limits)
+        costs.mark_dispatched(self.db, dispatched)
+        old = "2020-01-01T00:00:00+00:00"
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE request_budget SET created_at=? WHERE id IN (?,?)",
+                       (old, reserved, dispatched))
+            db.commit()
+        finally:
+            db.close()
+        counts = costs.recover_stale_reservations(self.db, older_than_minutes=60)
+        self.assertEqual(counts, {"released": 1, "unknown_charge": 1})
+        db = sqlite3.connect(self.db)
+        try:
+            states = dict(db.execute("SELECT id, state FROM request_budget").fetchall())
+        finally:
+            db.close()
+        self.assertEqual(states[reserved], "released")
+        self.assertEqual(states[dispatched], "unknown_charge")
+
+    def test_stale_reserved_row_no_longer_blocks_the_next_request(self):
+        limits = dict(LIMITS, requests_per_day=1)
+        stale = costs.reserve_request(self.db, "/tmp/book", 1, "draft", limits=limits)
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE request_budget SET created_at=? WHERE id=?",
+                       ("2020-01-01T00:00:00+00:00", stale))
+            db.commit()
+        finally:
+            db.close()
+        costs._RECOVERY_STATE.clear()
+        identity = costs.reserve_request(self.db, "/tmp/book", 1, "draft", limits=limits)
+        self.assertTrue(identity)
 
     def test_attempt_finish_settles_failed_and_interrupted_without_gap(self):
         with mock.patch.object(costs, "budget_limits", return_value=LIMITS):

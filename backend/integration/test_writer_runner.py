@@ -356,6 +356,18 @@ class WriterRunnerTest(unittest.TestCase):
                 {"type": "review", "result": dict(PASS)}, {"type": "done", "success": True}])))
             self.assertTrue(result["errors"])
 
+    def test_generation_injects_world_state_context(self):
+        executor = self.pipeline([{"type": "content", "chunk": "正文"},
+                                  {"type": "review", "result": dict(PASS)},
+                                  {"type": "done", "success": True}])
+        prepared = {"status": "injected", "text": "- 林舟在码头",
+                    "manifest": {"chapter_id": 1, "chars": 6}, "chars": 6}
+        with patch.object(writer, "_prepare_world_context", return_value=prepared):
+            result = asyncio.run(writer._generate_and_review(self.project, 1, 100, 2))
+        self.assertEqual(executor.world_state_context, "- 林舟在码头")
+        self.assertEqual(executor.world_state_manifest["chapter_id"], 1)
+        self.assertEqual(result["world_state"]["text"], "- 林舟在码头")
+
     def test_revision_rechecks_exact_polished_body(self):
         executor = self.pipeline([{"type": "content", "chunk": "初稿"},
             {"type": "review", "result": dict(REVISE)}, {"type": "done", "success": True}])

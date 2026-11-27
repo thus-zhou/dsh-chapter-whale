@@ -177,25 +177,25 @@ class RenameTest(unittest.TestCase):
             original = "原始正文\n第二行\n"
             seed(project, 1, original)
             state = ce.chapter_state(project, 1)
-            real_replace = cv.os.replace
+            real_link = cv.os.link
             failures = {"count": 0}
 
-            def flaky_replace(source, target):
+            def flaky_link(source, target):
                 if "重命名后" in str(target) and failures["count"] < 3:
                     failures["count"] += 1
                     error = PermissionError(13, "sharing violation")
                     error.winerror = 32
                     raise error
-                return real_replace(source, target)
+                return real_link(source, target)
 
-            cv.os.replace = flaky_replace
+            cv.os.link = flaky_link
             try:
                 result = save(project, 1, state["content"], title="重命名后",
                               op_id="rename-retry",
                               expected_version_id=state["version_id"],
                               expected_content_sha256=state["sha256"])
             finally:
-                cv.os.replace = real_replace
+                cv.os.link = real_link
             self.assertEqual(failures["count"], 3)
             self.assertTrue(result.get("renamed"))
             path = cv.chapter_path(project, 1)

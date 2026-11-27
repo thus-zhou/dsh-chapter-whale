@@ -38,6 +38,24 @@ def config(privacy="private_api", protocol="openai"):
     }
 
 
+class MeteredService(FakeService):
+    """Simulates AIService: creates a costs.Attempt inside the gateway scope."""
+
+    def __init__(self, reply="好的"):
+        super().__init__(reply)
+        self.meters = []
+
+    async def chat(self, messages, **kwargs):
+        self.calls.append(messages)
+        meter = costs.Attempt("https://api.example.com/v1", "metered",
+                              {"messages": list(messages), "max_tokens": 10})
+        self.meters.append(meter)
+        meter.completed = True
+        meter.output(str(self.reply))
+        meter.finish()
+        return self.reply
+
+
 class GatewayTest(unittest.TestCase):
     def test_invoke_requires_op_id_and_returns_text(self):
         service = FakeService("候选正文")
@@ -102,6 +120,24 @@ class GatewayTest(unittest.TestCase):
                                   service_factory=lambda role, c: FakeService(RuntimeError("boom")))
         with self.assertRaises(RuntimeError):
             gateway.invoke_sync("C", [{"role": "user", "content": "x"}], op_id="op-fail")
+
+    def test_guard_without_a_ledger_is_refused(self):
+        # B4-07: a guard cannot be enforced without a cost database.
+        with mock.patch.object(mg, "_db_path", return_value=None):
+            gateway = mg.ModelGateway(config=config(),
+                                      service_factory=lambda role, c: FakeService())
+            with self.assertRaises(mg.GatewayError) as caught:
+                gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                    op_id="op-no-db", directive_id="dir_1",
+                                    directive_guard={"max_calls": 1})
+            self.assertEqual(caught.exception.code, "budget_db_required")
+
+    def test_unknown_stage_is_refused(self):
+        gateway = mg.ModelGateway(config=config(), service_factory=lambda role, c: FakeService())
+        with self.assertRaises(mg.GatewayError) as caught:
+            gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                op_id="op-stage", stage="not-a-stage")
+        self.assertEqual(caught.exception.code, "invalid_stage")
 
 
 class ProbeAuthorizationTest(unittest.TestCase):
@@ -186,6 +222,53 @@ class ProbeAuthorizationTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     client._choices()
 
+    def test_project_less_probe_cannot_carry_large_prose(self):
+        client = ProviderClient("B", self.dsh_config(), object(), lambda binding: object())
+        binding = {"provider_id": "dsh", "model_id": "m"}
+        small = [{"role": "user", "content": "连接检测：请仅回复连接成功"}]
+        large = [{"role": "user", "content": "密" * 2000}]
+        with mock.patch("integration.providers.verify_dsh_gateway"), \
+                mock.patch("integration.free_channels.home", return_value=self.dsh_home), \
+                mock.patch("integration.free_channels.token_saver_enabled",
+                           return_value=False):
+            with costs.scope(stage="probe"):
+                with client._scope(binding, False, small, 1024):
+                    pass
+                with self.assertRaises(ValueError):
+                    with client._scope(binding, False, large, 1024):
+                        pass
+            # A project-bearing probe is authorized by allowed_projects, not by
+            # a payload-size exemption.
+            with costs.scope(project=str(self.book_b.resolve()), stage="probe",
+                             db=str(self.root / "costs.sqlite3")):
+                with self.assertRaises(ValueError):
+                    with client._scope(binding, False, small, 1024):
+                        pass
+
+    def test_free_pool_project_less_probe_is_payload_bounded(self):
+        config = {
+            "providers": {
+                "free-pool": {"base_url": "http://127.0.0.1:18900/v1",
+                              "allowed_projects": [str(self.book_a.resolve())],
+                              "pool_members": [{"model_id": "first/free", "roles": ["B"]}]},
+                "ofm-standalone": {"base_url": "http://127.0.0.1:18900/v1"},
+            },
+            "multi_model": False,
+        }
+        client = free_pool.FreePoolClient("B", config, lambda binding: None)
+        with mock.patch("integration.ofm_runtime.ensure_started",
+                        return_value={"url": "http://127.0.0.1:9"}), \
+                mock.patch("integration.ofm_runtime.persist_service_url"), \
+                mock.patch("integration.ofm_runtime.HOME", self.dsh_home), \
+                mock.patch("integration.free_channels.ofm_token_saver_enabled",
+                           return_value=False):
+            with costs.scope(stage="probe"):
+                client._choices([{"role": "user", "content": "仅回复：连接成功"}])
+                with self.assertRaises(ValueError):
+                    client._choices([{"role": "user", "content": "密" * 2000}])
+            with costs.scope(stage="probe", project=str(self.book_a.resolve())):
+                client._choices([{"role": "user", "content": "密" * 2000}])
+
     def test_gateway_guard_without_directive_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             gateway = mg.ModelGateway(config=config(),
@@ -229,7 +312,7 @@ class AuditBGatewayTest(unittest.TestCase):
         self.assertEqual(seen["config"]["roles"]["C"],
                          {"provider_id": "p2", "model_id": "m2"})
 
-    def test_directive_guard_counts_calls_without_one_yuan_per_call(self):
+    def test_directive_guard_counts_calls_and_reserves_conservatively(self):
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "costs.sqlite3"
             gateway = mg.ModelGateway(config=config(), service_factory=lambda role, c: FakeService("ok"),
@@ -237,17 +320,61 @@ class AuditBGatewayTest(unittest.TestCase):
             for index in range(3):
                 gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
                                     op_id=f"guard-{index}", directive_id="dir_guard",
-                                    directive_guard={"budget_cap_cny": "2"})
+                                    directive_guard={"budget_cap_cny": "10"})
             usage = costs.directive_usage(db, "dir_guard")
             self.assertEqual(usage["calls"], 3)
-            self.assertEqual(usage["cost_cny"], "0")
+            # Each count-only call now carries a conservative cost so the cap
+            # can actually be reached (B3-09).
+            self.assertEqual(usage["cost_cny"], "3")
             check = sqlite3.connect(db)
             try:
                 rows = check.execute("SELECT cost_cny, unknown_cost FROM request_budget "
                                      "ORDER BY created_at").fetchall()
             finally:
                 check.close()
-            self.assertEqual([tuple(row) for row in rows], [("0", 0)] * 3)
+            self.assertEqual([tuple(row) for row in rows], [("1", 1)] * 3)
+
+    def test_directive_budget_cap_blocks_the_next_count_only_call(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "costs.sqlite3"
+            gateway = mg.ModelGateway(config=config(), service_factory=lambda role, c: FakeService("ok"),
+                                      db_path=db)
+            for index in range(2):
+                gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                    op_id=f"cap-{index}", directive_id="dir_cap",
+                                    directive_guard={"budget_cap_cny": "2"})
+            with self.assertRaises(costs.BudgetExceeded) as caught:
+                gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                    op_id="cap-blocked", directive_id="dir_cap",
+                                    directive_guard={"budget_cap_cny": "2"})
+            self.assertEqual(caught.exception.detail["limit"], "budget_cap_cny")
+
+    def test_gateway_and_attempt_share_one_request_budget_row(self):
+        # B3-10: one logical call used to consume two request_budget rows
+        # (gateway count-only + AIService Attempt), halving the daily limit.
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "costs.sqlite3"
+            service = MeteredService("ok")
+            gateway = mg.ModelGateway(config=config(), service_factory=lambda role, c: service,
+                                      db_path=db)
+            for index in range(2):
+                gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                    op_id=f"single-{index}", directive_id="dir_single",
+                                    directive_guard={"max_calls": 2})
+            check = sqlite3.connect(db)
+            try:
+                rows = check.execute("SELECT state, cost_cny FROM request_budget").fetchall()
+            finally:
+                check.close()
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(str(row[0]) == "settled" for row in rows))
+            usage = costs.directive_usage(db, "dir_single")
+            self.assertEqual(usage["calls"], 2)
+            with self.assertRaises(costs.BudgetExceeded) as caught:
+                gateway.invoke_sync("C", [{"role": "user", "content": "x"}],
+                                    op_id="single-3", directive_id="dir_single",
+                                    directive_guard={"max_calls": 2})
+            self.assertEqual(caught.exception.detail["limit"], "max_calls")
 
     def test_annotation_prompt_escapes_inner_closing_tags(self):
         service = FakeService("<replacement>改好了</replacement>")

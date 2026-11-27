@@ -128,8 +128,8 @@ class SchedulingTest(unittest.TestCase):
             self.assertEqual(ce.get(book, task["task_id"])["attempts"], 3)
             self.assertIsNone(ce.claim(book, "w", max_attempts=3))
 
-    def test_hold_for_amendment_does_not_freeze_running_task(self):
-        """审计 C-08：运行中任务只挂协作停止标志，仍可提交/完成。"""
+    def test_running_amendment_hold_blocks_commit_until_release(self):
+        """审计 C3-13：运行中改令挂起必须阻止 begin_commit/complete。"""
         with tempfile.TemporaryDirectory() as folder:
             book = project(folder)
             task = ce.submit(book, {}, priority="P1")
@@ -140,9 +140,15 @@ class SchedulingTest(unittest.TestCase):
             held = ce.get(book, task["task_id"])
             self.assertEqual(held["state"], "running")
             self.assertTrue(held["hold_requested"])
-            self.assertTrue(ce.begin_commit(book, task["task_id"], "w")["committing"])
+            with self.assertRaises(ce.SchedulerError) as caught:
+                ce.begin_commit(book, task["task_id"], "w")
+            self.assertEqual(caught.exception.code, "hold_pending")
+            with self.assertRaises(ce.SchedulerError) as caught:
+                ce.complete(book, task["task_id"], owner="w")
+            self.assertEqual(caught.exception.code, "hold_pending")
             ce.release_amendment(book, "amd_run")
             self.assertFalse(ce.get(book, task["task_id"])["hold_requested"])
+            self.assertTrue(ce.begin_commit(book, task["task_id"], "w")["committing"])
             self.assertEqual(ce.complete(book, task["task_id"], owner="w")["state"], "completed")
 
     def test_begin_commit_rejects_non_running_task(self):

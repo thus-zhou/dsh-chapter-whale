@@ -246,6 +246,23 @@ def _tombstones(meta: Optional[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
     return result
 
 
+def _max_tombstone_rev(project, number: int) -> int:
+    """Highest tombstone revision for ``number`` across every plan file."""
+    highest = 0
+    for path in _plan_files(project):
+        _visible, plan = _strip_plan_comment(_read_text(path))
+        for item in _chapter_items((plan or {}).get("chapters")):
+            if not isinstance(item, dict) or not item.get("deleted"):
+                continue
+            if str(item.get("id")) != str(int(number)):
+                continue
+            try:
+                highest = max(highest, int(item.get("chapter_rev") or 0))
+            except (TypeError, ValueError):
+                continue
+    return highest
+
+
 def load_meta(project) -> Dict[str, Any]:
     """Load the single authoritative book-level metadata, migrating once."""
     path = _meta_path(project)
@@ -439,9 +456,11 @@ def _merge_chapters(meta: Dict[str, Any]) -> Tuple[Dict[str, Dict[str, Any]], Li
                     tomb_rev = 0
                 tombstones[int(number)] = max(tombstones.get(int(number), 0), tomb_rev)
     # 墓碑统一在全部可见行之后结算：陈旧副本不能复活已删除章节。
+    # 只有严格更新的墓碑才删除：相等时保留作者刚重加的章节（重加路径本身
+    # 会 +1，见 write_file），避免复制文件里的同 rev 墓碑再次吞掉它（A-P2-09）。
     for number, tomb_rev in tombstones.items():
         current = chapters.get(str(number))
-        if current is None or tomb_rev >= int(current.get("chapter_rev") or 0):
+        if current is None or tomb_rev > int(current.get("chapter_rev") or 0):
             chapters.pop(str(number), None)
     # 外部 Markdown 编辑但未更新首行 JSON：可见正文优先，并显性报冲突
     for path in _plan_files(_book_path(meta)):
@@ -660,7 +679,15 @@ def write_file(project, filename: str, *, content: str, revision: Optional[str] 
                 old_item = next((item for item in _chapter_items((old_plan or {}).get("chapters"))
                                  if isinstance(item, dict) and str(item.get("id")) == key), {})
                 if old_item.get("deleted"):
-                    rev = int(old_item.get("chapter_rev") or 0) or 1
+                    # Re-adding a deleted chapter must outrank *every* stale
+                    # tombstone copy (the same file, a synced duplicate, or a
+                    # merged index); equal revs used to delete it again
+                    # (A-P2-09).
+                    rev = max(
+                        int(old_item.get("chapter_rev") or 0),
+                        int((chapters.get(key) or {}).get("chapter_rev") or 0),
+                        _max_tombstone_rev(project, row["id"]),
+                    ) + 1
                 else:
                     rev = max(_chapter_rev(old_plan, row["id"]),
                               int((chapters.get(key) or {}).get("chapter_rev") or 0)) + 1

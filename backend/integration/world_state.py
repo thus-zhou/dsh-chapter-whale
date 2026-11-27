@@ -97,12 +97,24 @@ def _db_exists(project) -> bool:
     return wb.db_path(project).exists()
 
 
+def _is_readonly_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(token in text for token in
+               ("readonly", "read-only", "unable to open database", "permission denied", "locked"))
+
+
+def _db_unavailable(exc: BaseException) -> WorldStateError:
+    return WorldStateError("db_unavailable", status=503,
+                           detail={"reason": "database_unavailable"})
+
+
 def _ensure_readable(project) -> bool:
     """Prepare the DB for a read path without ever creating it (audit C3-04).
 
     Read-only mounts/archived books have no ``workbench.sqlite3``; the old
     ``initialize()`` created one (and ``chapter_meta`` rows) from a plain GET.
-    An existing but unreadable database degrades to empty data, not a 500.
+    A read-only database still degrades to empty data; a corrupt/unreadable one
+    is a 503 ``db_unavailable`` instead of pretending there is no data (C4-05).
     """
     if not _db_exists(project):
         return False
@@ -110,8 +122,10 @@ def _ensure_readable(project) -> bool:
     try:
         maintenance.ensure_schema(project)
         wb.initialize(project)
-    except sqlite3.Error:
-        return False
+    except sqlite3.Error as exc:
+        if _is_readonly_error(exc):
+            return False
+        raise _db_unavailable(exc) from None
     return True
 
 
@@ -193,10 +207,12 @@ def upsert_fact(project, fact: Dict[str, Any]) -> Dict[str, Any]:
     author_locked = 1 if fact.get("author_locked") else 0
     author_edit = bool(fact.get("author_edit"))
     with wb.write_tx(project) as db:
-        # 审计 C3-08：去重 SELECT 与写入必须在同一个 BEGIN IMMEDIATE 里，
-        # 否则两个并发 upsert 都先看到空结果再各插一行。
         existing = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
-        if existing is None and not explicit_id:
+        if existing is None:
+            # 审计 C3-08：去重 SELECT 与写入必须在同一个 BEGIN IMMEDIATE 里，
+            # 否则两个并发 upsert 都先看到空结果再各插一行。
+            # 审计 C4-01：显式 fact_id 也不能绕过去重；逻辑键已存在时复用
+            # 旧 ID，避免同一事实以两个稳定 ID 确定性产生两行。
             # 审计 C3-09：逻辑键含 assertion_type，同键传闻不得覆盖事实，
             # 也不得复用其 fact_id 把叙述层次静默降级。
             duplicate = db.execute(
@@ -334,26 +350,42 @@ def count_facts_by_status(project, status: str) -> int:
 
 
 def confirm_fact(project, fact_id: str, *, authority_level: str = "confirmed_prose") -> Dict[str, Any]:
-    """Author confirmation is the only path that raises AI-extracted authority."""
+    """Author confirmation is the only path that raises AI-extracted authority.
+
+    审计 C3-21：确认不得把 pending 事实降成更低权威（例如
+    ``ai_inferred``）。降级会产生双 active 且让事实从 L2 消失；确认只允许
+    同级或更高权威，``author_locked`` 是显式最高权威。
+    """
     if authority_level not in AUTHORITY or authority_level in {"future_plan", "discarded_candidate"}:
         raise WorldStateError("invalid_authority")
     _ensure_writable(project)
     with wb.write_tx(project) as db:
-        cur = db.execute("UPDATE world_facts SET status='active', authority_level=?, updated_at=? "
-                         "WHERE fact_id=? AND status='pending_confirm'",
-                         (authority_level, _now(), fact_id))
-        if not cur.rowcount:
+        row = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
+        if row is None or str(row["status"]) != "pending_confirm":
             raise WorldStateError("fact_not_pending", status=409)
+        previous = _row_fact(row)
+        current_authority = str(previous.get("authority_level") or "")
+        if authority_level != "author_locked" and \
+                AUTHORITY.get(authority_level, 0) < AUTHORITY.get(current_authority, 0):
+            raise WorldStateError("authority_not_raised", status=409,
+                                  detail={"current": current_authority,
+                                          "requested": authority_level})
+        db.execute("UPDATE world_facts SET status='active', authority_level=?, updated_at=? "
+                   "WHERE fact_id=? AND status='pending_confirm'",
+                   (authority_level, _now(), fact_id))
         # 审计 C3-07：确认是 pending → active 的唯一出口，必须先提升权威再
         # 关闭同一 subject+谓词的旧窗口；否则作者确认后两条 active 事实并存。
+        # 审计 C3-21：只有 assertion_type='fact' 才参与事实窗口关闭；
+        # rumor/lie/belief 的确认不得改写事实层。
         row = db.execute("SELECT * FROM world_facts WHERE fact_id=?", (fact_id,)).fetchone()
         if row is not None:
             confirmed = _row_fact(row)
-            _close_previous_windows(db, fact_id=fact_id, entity_id=confirmed.get("entity_id"),
-                                    subject=confirmed.get("subject"),
-                                    predicate=confirmed.get("predicate"),
-                                    authority=authority_level,
-                                    valid_from_chapter=confirmed.get("valid_from_chapter"))
+            if str(confirmed.get("assertion_type") or "fact") == "fact":
+                _close_previous_windows(db, fact_id=fact_id, entity_id=confirmed.get("entity_id"),
+                                        subject=confirmed.get("subject"),
+                                        predicate=confirmed.get("predicate"),
+                                        authority=authority_level,
+                                        valid_from_chapter=confirmed.get("valid_from_chapter"))
     return get_fact(project, fact_id)
 
 
@@ -647,7 +679,9 @@ def state(project, *, chapter: int = 1, query: str = "") -> Dict[str, Any]:
             "pending_facts": pending, "pending_count": pending_count,
             "conflicts": detect_conflicts(project, chapter),
             "manifest": context["manifest"], "context": context["text"],
-            "search": search(project, query, chapter=chapter) if query else []}
+            # 审计 C3-27：dashboard 搜索与 build_context 的 L5 语义一致，
+            # 不召回本章正文（写第 N 章时不应看到第 N 章成品）。
+            "search": search(project, query, max_chapter=max(0, chapter - 1)) if query else []}
 
 
 def latest_manifest(project, chapter: int) -> Optional[Dict[str, Any]]:
@@ -733,9 +767,8 @@ def extract_candidates(project, chapter: int, payload: Dict[str, Any], *,
                 existing_pinned = False
         high_risk = (any(word in str(fact.get("predicate") or "") or word in str(fact.get("object") or "")
                          for word in HIGH_RISK_PREDICATES) or
-                     (fact.get("pinned") and assertion == "fact") or
-                     # 审计 C-17：对已 pin / 已锁定实体的新「事实」推断一律待确认；
-                     # lie/rumor/belief 是叙述层陈述，不参与权威提升。
+                     # 审计 C17/C3-27：AI 输入已过滤掉 pinned，不能再读一个恒为
+                     # None 的字段；真正的“已 pin 实体”判断只看 existing_pinned。
                      (existing_pinned and assertion == "fact"))
         if high_risk:
             fact["status"] = "pending_confirm"

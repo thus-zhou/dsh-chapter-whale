@@ -25,6 +25,7 @@ import os
 import re
 import threading
 import time
+from decimal import Decimal
 from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -169,13 +170,34 @@ class ModelGateway:
     def _settle(self, identity, *, state: str, tokens: Optional[int] = None) -> None:
         if identity and self.db_path is not None:
             try:
-                costs.settle_request(self.db_path, identity, tokens=tokens, state=state)
+                costs.settle_request(self.db_path, identity, tokens=tokens, state=state,
+                                     project=self.project)
                 if state == "released":
                     # v0.7.5 回滚兼容：释放的预留不得被旧版误计为已花费。
                     from integration import workbench_db
                     pass
             except Exception:
                 pass
+
+    def _guard_reserve_cost(self, binding: Mapping[str, Any], messages: Sequence[Mapping[str, Any]],
+                            max_tokens: int, guard: Mapping[str, Any]):
+        """Conservative per-call cost for a count-only guard row.
+
+        A count-only reservation stores ``0`` today, so ``budget_cap_cny`` can
+        never be reached (B3-09).  Use the provider's own price when known and
+        fall back to the ledger's ``unknown_reserve_cny`` otherwise.
+        """
+        if not isinstance(guard, Mapping) or guard.get("budget_cap_cny") is None:
+            return None
+        providers = (self.config or {}).get("providers") or {}
+        provider = providers.get(binding.get("provider_id")) or {}
+        model_id = binding.get("model_id")
+        if str(provider.get("protocol") or "") == "free_pool":
+            return Decimal(0)
+        if model_id in (provider.get("free_models") or []):
+            return Decimal(0)
+        price = (provider.get("pricing") or {}).get(model_id)
+        return costs._reserve_cost(price, costs.estimate(messages), max_tokens)
 
     # -------------------------------------------------------------- invoke
     async def invoke(self, role: str, messages: Sequence[Mapping[str, Any]], *,
@@ -188,12 +210,20 @@ class ModelGateway:
             raise GatewayError("invalid_role")
         if not str(op_id or "").strip():
             raise GatewayError("op_id_required")
+        stage = str(stage or "other")
+        if stage not in costs.STAGES:
+            raise GatewayError("invalid_stage", detail={"stage": stage})
         if directive_guard is not None and not directive_id:
             # A guard without its directive is silently dropped by the cost
             # layer; refuse instead of pretending max_calls/cap are enforced
             # (B3-25).
             raise GatewayError("directive_id_required",
                                detail={"message": "directive_guard 必须同时提供 directive_id"})
+        if directive_guard is not None and self.db_path is None:
+            # Without a ledger there is nothing to enforce the guard against;
+            # silently accepting the call looks like a working limit (B4-07).
+            raise GatewayError("budget_db_required",
+                               detail={"message": "指令护栏需要成本数据库"})
         if self.pause_check and self.pause_check():
             raise GatewayError("ai_paused", detail={"message": "全局 AI 已急停"})
         binding = self.check_binding(role, override_binding)
@@ -211,14 +241,16 @@ class ModelGateway:
                 self.db_path, self.project, chapter, stage, tokens=0, cost_cny=None,
                 operation=op_id, config=self.config,
                 directive_id=directive_id, guard=directive_guard, agent_role=agent_role,
-                count_only=True, guard_tokens=int(max_tokens or 0))
+                count_only=True, guard_tokens=int(max_tokens or 0),
+                reserve_cost=self._guard_reserve_cost(binding, messages, int(max_tokens or 0),
+                                                      directive_guard))
         started = time.perf_counter()
         dispatched = False
         if token:
             dispatched = costs.mark_dispatched(self.db_path, token)
         try:
             with costs.scope(stage=stage, project=self.project, chapter=chapter, role=role,
-                             directive=directive_id,
+                             directive=directive_id, budget_owner=token,
                              db=str(self.db_path) if self.db_path is not None else None):
                 reply = await service.chat(list(messages), max_tokens=max_tokens,
                                            temperature=temperature, **kwargs)

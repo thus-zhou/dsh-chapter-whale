@@ -332,13 +332,40 @@ def format_chapter(chapter: int, title: str, body: str, *, platform: str) -> Dic
             "format": CAPABILITIES[platform]["format"]}
 
 
+def _export_binding(project, chapter: int, *, title: str, body: str) -> Dict[str, Any]:
+    """导出正文与服务器版本的绑定信息（E-03）。
+
+    章节已存在：请求正文/标题必须逐字等于当前版本，否则拒绝——不能把从未
+    进入版本层、也未审查的正文导出成“当前稿”。章节不存在（例如先导出大纲
+    草稿）仍允许导出，但必须显式标注 ``review_bound=False``/``version_id=None``，
+    不能与已审查版本混用。只读，不创建版本。
+    """
+    try:
+        path = chapter_versions.chapter_path(project, int(chapter))
+    except chapter_versions.VersionError:
+        path = None
+    if path is None:
+        return {"version_bound": False, "review_bound": False, "version_id": None,
+                "content_sha256": None, "binding": "chapter_missing",
+                "review_reason": "chapter_missing"}
+    content = _submission_content(project, chapter, title=title, body=body)
+    reviewed = publication_state.review_binding(
+        project, chapter, content_sha256=content["content_sha256"], text=content["text"])
+    return {"version_bound": True, "review_bound": bool(reviewed.get("ok")),
+            "version_id": content.get("version_id"),
+            "content_sha256": content["content_sha256"], "binding": "current",
+            "review_reason": None if reviewed.get("ok") else reviewed.get("reason")}
+
+
 def export_chapter(project, *, platform: str, chapter: int, title: str, body: str,
                    account: str = "", platform_book_id: str = "") -> Dict[str, Any]:
     """导出到 `.webnovel/publish/<platform>/<账号-hash>/<平台作品ID>/exports/`。
 
     缺账号或平台作品 ID 直接拒绝（否则两本书会落到同一目录互相覆盖）；每次导出把
-    上一版摘要压进 `versions`，绝不顺带上传。
+    上一版摘要压进 `versions`，绝不顺带上传。导出 manifest 明确记录
+    ``version_bound``/``review_bound``，未绑定当前版本的导出不得冒充已审查稿（E-03）。
     """
+    binding = _export_binding(project, chapter, title=title, body=body)
     built = format_chapter(chapter, title, body, platform=platform)
     folder = namespace(project, platform, account=account,
                        platform_book_id=platform_book_id) / EXPORT_DIR
@@ -363,14 +390,22 @@ def export_chapter(project, *, platform: str, chapter: int, title: str, body: st
     items.append({"chapter": int(chapter), "sha256": built["sha256"],
                   "bytes": built["bytes"], "paragraphs": built["paragraphs"],
                   "chars": built["chars"], "title": built["title"],
-                  "file": path.name, "at": _now(), "versions": versions})
+                  "file": path.name, "at": _now(), "versions": versions,
+                  "version_bound": binding["version_bound"],
+                  "review_bound": binding["review_bound"],
+                  "version_id": binding["version_id"],
+                  "review_reason": binding["review_reason"]})
     manifest.update({"schema": SCHEMA, "platform": platform, "items": sorted(
         items, key=lambda item: int(item.get("chapter") or 0))})
     _write(manifest_path, manifest)
     return {key: built[key] for key in ("platform", "chapter", "title", "bytes",
                                         "sha256", "paragraphs", "chars")} | {
         "status": "exported", "path": str(path), "uploaded": False,
-        "versions_kept": len(versions)}
+        "versions_kept": len(versions),
+        "version_bound": binding["version_bound"],
+        "review_bound": binding["review_bound"],
+        "version_id": binding["version_id"],
+        "review_reason": binding["review_reason"]}
 
 
 def exports(project, *, platform: str, account: str = "", platform_book_id: str = "") -> Dict[str, Any]:
@@ -619,6 +654,16 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
                 "writes": 0, "version_id": content.get("version_id"),
                 "reason": f"正文未绑定当前版本的审查回执（{reviewed.get('reason')}）："
                           "先审查当前稿再提交"}
+    # E-01G：v0.9 质量层是第二事实源。只拦“与当前版本一致”的 block 结论；
+    # 未审查/旧版本结论不阻断 legacy 路径，但会随响应返回给调用方。
+    quality = publication_state.quality_advisory(
+        project, chapter, content_sha256=content["content_sha256"],
+        version_id=str(content.get("version_id") or ""))
+    if quality.get("gate") == "block":
+        return {"platform": platform, "chapter": int(chapter), "status": "refused",
+                "writes": 0, "version_id": content.get("version_id"),
+                "quality": quality,
+                "reason": "v0.9 质量审查结论为 block：先修订并重新审查当前稿再提交"}
     built = format_chapter(chapter, content["title"], content["text"], platform=platform)
     path = _ledger_path(project, platform, account, platform_book_id, count := int(chapter),
                         built["sha256"])
@@ -642,6 +687,21 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
               "state": "intent", "attempts": int(entry.get("attempts") or 0) + 1,
               "created_at": entry.get("created_at") or _now(), "updated_at": _now()}
     _write(path, intent)
+    # E-01D：在真正调用适配器前先落“结果待核对”回执。回执写不进去时拒绝
+    # 调用平台，避免出现“平台已写入、本地仍可删除”的无回执窗口。
+    pending = publication_state.record_pending(
+        project, count, content_sha256=content["content_sha256"], platform=platform,
+        account=account, platform_book_id=platform_book_id,
+        source="publishing.submit_chapter", evidence=str(path),
+        reason="adapter_result_pending")
+    if not pending.get("recorded"):
+        intent.update({"state": "abandoned", "updated_at": _now(),
+                       "reason": f"发布回执不可写：{pending.get('reason')}"})
+        _write(path, intent)
+        return {"platform": platform, "chapter": count, "status": "refused",
+                "writes_attempted": 0, "writes_confirmed": 0,
+                "publication_state": pending, "ledger": str(path),
+                "reason": "发布回执不可写，未调用适配器（避免无回执的平台写入）"}
     try:
         result = adapter.submit_draft(platform=platform, account=account,
                                       platform_book_id=platform_book_id,
@@ -653,6 +713,7 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
         _write(path, intent)
         return {"platform": platform, "chapter": count, "status": "unknown",
                 "writes_attempted": 1, "writes_confirmed": 0,
+                "publication_state": pending,
                 "reason": "提交结果未知：只对账，不重试", "ledger": str(path)}
     if not isinstance(result, dict) or result.get("accepted") is not True:
         intent.update({"state": "unknown", "updated_at": _now(),
@@ -660,6 +721,7 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
         _write(path, intent)
         return {"platform": platform, "chapter": count, "status": "unknown",
                 "writes_attempted": 1, "writes_confirmed": 0,
+                "publication_state": pending,
                 "reason": "适配器未确认接收：只对账，不重试", "ledger": str(path)}
     echoed = str(result.get("body_sha256") or "")
     matched = echoed == built["sha256"]
@@ -673,6 +735,7 @@ def submit_chapter(project, *, platform: str, account: str, platform_book_id: st
         return {"platform": platform, "chapter": count, "status": "mismatch",
                 "writes_attempted": 1, "writes_confirmed": 0,
                 "body_matches": False, "remote_id": intent["remote_id"],
+                "publication_state": pending,
                 "reason": intent["reason"], "ledger": str(path)}
     intent.update({"state": "accepted", "updated_at": _now(),
                    "remote_id": str(result.get("remote_id") or ""),
@@ -728,6 +791,10 @@ def reconcile(project, *, platform: str, account: str, platform_book_id: str,
             platform=platform, account=account, platform_book_id=platform_book_id,
             remote_id=str(entry.get("remote_id") or ""), source="publishing.reconcile",
             evidence=str(evidence).strip())
+    else:
+        # abandoned 证明平台没有写入，清除待核对标记；已发布事实不受影响。
+        result["publication_state"] = publication_state.clear_pending(
+            project, chapter, reason="reconcile_abandoned", evidence=str(path))
     return result
 
 

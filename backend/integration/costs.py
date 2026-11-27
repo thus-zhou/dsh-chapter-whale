@@ -297,34 +297,44 @@ def budget_limits(config=None):
 def reserve_request(db_path, project, chapter, stage, *, tokens=0, cost_cny=None,
                     operation=None, config=None, limits=None,
                     directive_id=None, guard=None, agent_role=None,
-                    count_only=False, guard_tokens=None):
+                    count_only=False, guard_tokens=None, reserve_cost=None):
     """发请求前预留一次网络尝试。超限抛 BudgetExceeded，且不写入任何占位。
 
     未配置任何上限且没有指令级护栏时返回 None（不改动既有行为）。金额未知时记
     ``unknown_cost=1`` 并按 ``unknown_reserve_cny`` 保守占用，不当作 0。
     2B 起只要带 ``directive_id + guard``，即使全局未设上限也强制原子预留。
 
-    ``count_only=True`` 用于只做调用次数/Token 护栏、拿不到真实金额的网关：
-    仍占一次调用，但费用记 0 且不设 unknown_cost，避免每次调用固定吃掉 1 元
-    的指令预算（B-17）。
+    ``count_only=True`` 用于只做调用次数/Token 护栏、拿不到真实金额的网关。
+    当指令同时设置了 ``budget_cap_cny`` 时，每次调用按 ``reserve_cost``（缺省
+    用 ``unknown_reserve_cny``）保守占用，否则正数上限永远不可达（B3-09）。
     """
     policy = limits if limits is not None else budget_limits(config)
-    if not db_path:
-        return None
-    capped = any(policy[key] is not None for key in ('requests_per_day', 'request_tokens', 'chapter_tokens',
-                                                     'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))
     if guard and not directive_id:
         # A guard without its directive used to be dropped silently, leaving
         # the caller believing max_calls/budget_cap_cny were enforced (B3-25).
         raise ValueError('directive_id_required')
+    if not db_path:
+        if guard:
+            # A guard cannot be enforced without a ledger; refusing is safer
+            # than silently accepting the call (B4-07).
+            raise ValueError('budget_db_required')
+        return None
+    capped = any(policy[key] is not None for key in ('requests_per_day', 'request_tokens', 'chapter_tokens',
+                                                     'chapter_cost_cny', 'project_tokens', 'project_cost_cny'))
     guard = dict(guard or {}) if directive_id else {}
     if not capped and not guard:
         return None
+    _maybe_recover(db_path)
     tokens = int(tokens or 0)
     amount = None if cost_cny is None else Decimal(str(cost_cny))
     if count_only and amount is None:
-        reserve_amount = Decimal(0)
-        unknown_cost = 0
+        if guard.get('budget_cap_cny') is not None:
+            conservative = reserve_cost if reserve_cost is not None else policy['unknown_reserve_cny']
+            reserve_amount = Decimal(str(conservative))
+            unknown_cost = 1 if reserve_amount > 0 else 0
+        else:
+            reserve_amount = Decimal(0)
+            unknown_cost = 0
     else:
         reserve_amount = amount if amount is not None else Decimal(str(policy['unknown_reserve_cny']))
         unknown_cost = 1 if amount is None else 0
@@ -491,7 +501,91 @@ def release_request(db_path, identity: str) -> bool:
 
 
 
-def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled'):
+def recover_stale_reservations(db_path, *, older_than_minutes: int = 120, project=None) -> Dict[str, int]:
+    """Release crash-orphaned reservations.
+
+    ``reserved`` rows never reached dispatch, so they can be released;
+    ``dispatched`` rows may have been billed upstream and become
+    ``unknown_charge`` instead (B3-11).
+    """
+    if not db_path:
+        return {'released': 0, 'unknown_charge': 0}
+    minutes = max(1, int(older_than_minutes))
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+    clause = " AND project=?" if project else ""
+    args = (cutoff, str(Path(project).resolve())) if project else (cutoff,)
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        released = db.execute(
+            "UPDATE request_budget SET state='released', tokens=0, cost_cny='0', unknown_cost=0 "
+            "WHERE state='reserved' AND created_at<?" + clause, args)
+        unknown = db.execute(
+            "UPDATE request_budget SET state='unknown_charge', unknown_cost=1 "
+            "WHERE state='dispatched' AND created_at<?" + clause, args)
+        db.commit()
+        return {'released': int(released.rowcount or 0),
+                'unknown_charge': int(unknown.rowcount or 0)}
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+_RECOVERY_STATE = {}
+
+
+def _maybe_recover(db_path) -> None:
+    """Run stale-reservation recovery at most once per ten minutes per ledger."""
+    try:
+        key = str(Path(db_path).resolve())
+        stamp = time.time()
+        if stamp - float(_RECOVERY_STATE.get(key, 0)) < 600:
+            return
+        _RECOVERY_STATE[key] = stamp
+        recover_stale_reservations(db_path, older_than_minutes=120)
+    except Exception:
+        # Recovery is best-effort; it must never block a legitimate request.
+        return
+
+
+def adopt_reservation(db_path, identity: str, *, tokens=None, cost_cny=None) -> bool:
+    """Attach an existing gateway reservation row to a service attempt.
+
+    ``ModelGateway`` reserves one row for the whole logical call (including a
+    directive guard); ``AIService`` then constructs an ``Attempt``.  Reusing
+    that row avoids double-accounting one logical call as two request_budget
+    rows (B3-10) while keeping the real cost on the same row.
+    """
+    if not db_path or not identity:
+        return False
+    db = connection(db_path)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute("SELECT state FROM request_budget WHERE id=?", (identity,)).fetchone()
+        if not row or str(row['state']) not in {'reserved', 'dispatched'}:
+            db.rollback()
+            return False
+        updates, params = [], []
+        if tokens is not None:
+            updates.append('tokens=?'); params.append(int(tokens))
+        if cost_cny is not None:
+            updates.append('cost_cny=?'); params.append(str(Decimal(str(cost_cny))))
+            updates.append('unknown_cost=0')
+        if updates:
+            db.execute("UPDATE request_budget SET " + ", ".join(updates) + " WHERE id=?",
+                       (*params, identity))
+        db.commit()
+        return True
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='settled', project=None):
     """请求结束后结算这次预留；未知金额保持未知并带 unknown_cost 标记。"""
     if not db_path or not identity:
         return None
@@ -501,7 +595,15 @@ def settle_request(db_path, identity, *, tokens=None, cost_cny=None, state='sett
         row = db.execute('SELECT * FROM request_budget WHERE id=?', (identity,)).fetchone()
         if row is None:
             db.rollback()
-            record_gap(db_path, 'budget_settlement_missing')
+            if project:
+                # Never write a project-less gap: that used to block every
+                # book's paid fallback for 24h (R-03).
+                record_gap(db_path, 'budget_settlement_missing', project)
+            else:
+                # The caller gave no project; keep the money-safety signal
+                # in-process instead of poisoning a global ledger.
+                UNRECORDED_GAPS['*'] = int(UNRECORDED_GAPS.get('*', 0)) + 1
+                print('[费用记录] 严重：结算找不到预留行且缺少作品归属，已按全局阻断付费回退', flush=True)
             return None
         amount = row['cost_cny']
         if state in {'failed', 'cancelled'}:
@@ -830,11 +932,25 @@ class Attempt:
                 self.event['price'] = dict(selected_price) if isinstance(selected_price,dict) else None
             # 预留必须发生在发请求之前：超限时这里直接抛 BudgetExceeded，不产生费用。
             try:
-                self.reservation = reserve_request(
-                    self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
-                    tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
-                    cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
-                    operation=self.event["operation"], limits=policy)
+                owner = str(meta.get('budget_owner') or '')
+                adopted = False
+                if owner:
+                    # The gateway already reserved (and dispatched) one row for
+                    # this logical call.  Adopt it instead of reserving a
+                    # second row (B3-10).
+                    adopted = adopt_reservation(
+                        self.db_path, owner,
+                        tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
+                        cost_cny=_reserve_cost(self.event["price"], self.input_estimate,
+                                               (inputs or {}).get("max_tokens")))
+                if adopted:
+                    self.reservation = owner
+                else:
+                    self.reservation = reserve_request(
+                        self.db_path, self.event["project"], self.event["chapter"], self.event["stage"],
+                        tokens=self.input_estimate + int((inputs or {}).get("max_tokens") or 0),
+                        cost_cny=_reserve_cost(self.event["price"], self.input_estimate, (inputs or {}).get("max_tokens")),
+                        operation=self.event["operation"], limits=policy)
             except BudgetExceeded:
                 raise
             except Exception as exc:
@@ -843,6 +959,12 @@ class Attempt:
                 raise BudgetExceeded('预算无法预留，已停止新请求',
                                      {'error_type': type(exc).__name__}) from exc
             self.persist()
+            if self.reservation:
+                # ``Attempt`` is constructed immediately before the network
+                # call in AIService; marking it dispatched lets a crash between
+                # reserve and finish be recovered as unknown_charge instead of
+                # occupying the cap forever (B3-11).
+                mark_dispatched(self.db_path, self.reservation)
         except BudgetExceeded:
             self.event=None
             raise
@@ -909,9 +1031,15 @@ class Attempt:
             if self.reservation is not None:
                 settle_request(self.db_path, self.reservation, tokens=int(self.event.get("input_tokens") or 0)+int(self.event.get("output_tokens") or 0),
                                cost_cny=self.event.get("cost_cny"),
+                               project=self.event.get("project"),
                                state={"success":"settled","interrupted":"cancelled"}.get(self.event["status"],"failed"))
         except Exception:
-            record_gap(self.db_path, 'finalization_failed')
+            project = self.event.get("project") if self.event else None
+            if project:
+                record_gap(self.db_path, 'finalization_failed', project)
+            else:
+                UNRECORDED_GAPS['*'] = int(UNRECORDED_GAPS.get('*', 0)) + 1
+                print('[费用记录] 严重：结算失败且缺少作品归属，已按全局阻断付费回退', flush=True)
             print("[费用记录] 无法完成记录；保留待核对状态",flush=True)
 
 

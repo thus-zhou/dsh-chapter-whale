@@ -84,8 +84,33 @@ def _idempotency_fail(project, action: str, op_id: str) -> None:
         pass
 
 
+def _evidence_dir(project, name: str) -> Path:
+    """Return ``.webnovel/<name>`` only when it cannot escape the project.
+
+    ``.webnovel/snapshots`` may arrive as a symlink from a synced or hostile
+    project; writing through it would place annotation baselines outside the
+    book and silently omit them from backups (A-P2-10).
+    """
+    root = Path(project).resolve()
+    base = Path(project) / ".webnovel"
+    for folder in (base, base / name):
+        try:
+            if folder.is_symlink():
+                raise AnnotationError("unsafe_evidence_store", status=409)
+        except OSError as exc:
+            raise AnnotationError("unsafe_evidence_store", status=409) from exc
+        if folder.exists():
+            try:
+                resolved = folder.resolve()
+            except OSError as exc:
+                raise AnnotationError("unsafe_evidence_store", status=409) from exc
+            if resolved != root and root not in resolved.parents:
+                raise AnnotationError("unsafe_evidence_store", status=409)
+    return base / name
+
+
 def _snapshot_path(project, digest: str) -> Path:
-    return Path(project) / ".webnovel" / "snapshots" / f"{digest}.txt"
+    return _evidence_dir(project, "snapshots") / f"{digest}.txt"
 
 
 def save_snapshot(project, text: str) -> str:
@@ -273,11 +298,39 @@ def update_annotation(project, chapter: int, annotation_id: str, data: Dict[str,
     return {"status": "updated", **get_annotation(project, chapter, annotation_id)}
 
 
+def _refresh_preview_status(db, preview_id: Optional[str], stamp: str) -> None:
+    """Recompute one preview row from its hunks (never leave phantom pending)."""
+    if not preview_id:
+        return
+    states = [row[0] for row in db.execute(
+        "SELECT status FROM annotation_hunks WHERE preview_id=?", (preview_id,))]
+    if not states:
+        status = "superseded"
+    elif any(state in {"applied_to_draft", "committed", "committed_modified"} for state in states):
+        status = "applied"
+    elif all(state in {"superseded", "rejected"} for state in states):
+        status = "superseded"
+    else:
+        status = "pending"
+    db.execute("UPDATE preview_index SET status=?, updated_at=? WHERE preview_id=?",
+               (status, stamp, preview_id))
+
+
 def delete_annotation(project, chapter: int, annotation_id: str) -> Dict[str, Any]:
     get_annotation(project, chapter, annotation_id)
+    stamp = _now()
     with wb.write_tx(project) as db:
+        # Drop the preview rows together with their hunks; otherwise the
+        # summary keeps reporting a pending preview with zero hunks forever
+        # (A-P3-04).
+        preview_ids = [row[0] for row in db.execute(
+            "SELECT DISTINCT preview_id FROM annotation_hunks "
+            "WHERE annotation_id=? AND preview_id IS NOT NULL", (annotation_id,))]
         db.execute("DELETE FROM annotation_hunks WHERE annotation_id=?", (annotation_id,))
-        db.execute("DELETE FROM annotations WHERE id=? AND chapter_id=?", (annotation_id, int(chapter)))
+        db.execute("DELETE FROM annotations WHERE id=? AND chapter_id=?",
+                   (annotation_id, int(chapter)))
+        for preview_id in preview_ids:
+            db.execute("DELETE FROM preview_index WHERE preview_id=?", (preview_id,))
     return {"status": "deleted", "annotation_id": annotation_id}
 
 
@@ -608,6 +661,16 @@ def _build_candidate(project, chapter: int, annotation: Dict[str, Any], base_tex
                 hunk_end = int(paragraphs[last]["end"])
                 if hunk_end < hunk_start:
                     hunk_start, hunk_end = hunk_end, hunk_start
+            if str(annotation.get("edit_policy") or "") == "strict_selection":
+                # A model-chosen paragraph range must never let one selection
+                # annotation rewrite paragraphs outside the author's selection
+                # (A-P3-05).  Clamp both ends into [start, end]; a patch that
+                # lies entirely before/after becomes an insertion at the
+                # corresponding selection boundary.
+                hunk_start = min(max(hunk_start, start), end)
+                hunk_end = min(max(hunk_end, start), end)
+                if hunk_end < hunk_start:
+                    hunk_start, hunk_end = hunk_end, hunk_start
             hunks.append({"id": f"hk_{index:02d}", "char_start": hunk_start, "char_end": hunk_end,
                           "before_text": text_merge.slice_codepoints(base_text, hunk_start, hunk_end),
                           "after_text": patch["text"]})
@@ -659,6 +722,17 @@ def _pending_count(project, annotation_id: str) -> int:
     with wb.connect(project) as db:
         return int(db.execute("SELECT COUNT(*) FROM annotation_hunks WHERE annotation_id=? AND status='pending'",
                               (annotation_id,)).fetchone()[0])
+
+
+def _selected_states(project, chapter: int, selected: List[str]) -> set:
+    if not selected:
+        return set()
+    placeholders = ",".join("?" for _ in selected)
+    with wb.connect(project) as db:
+        rows = db.execute(
+            f"SELECT status FROM annotation_hunks WHERE chapter_id=? AND id IN ({placeholders})",
+            (int(chapter), *selected)).fetchall()
+    return {str(row[0]) for row in rows}
 
 
 def list_previews(project, chapter: int) -> Dict[str, Any]:
@@ -716,7 +790,20 @@ def apply_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
               "expected_draft_id": str(data.get("expected_draft_id") or ""),
               "expected_draft_epoch": int(data.get("expected_draft_epoch") or 0),
               "expected_draft_revision": int(data.get("expected_draft_revision") or 0)}
-    cached = _idempotency_begin(project, "annotations.apply_hunks", op_id, params)
+    try:
+        cached = _idempotency_begin(project, "annotations.apply_hunks", op_id, params)
+    except AnnotationError as exc:
+        # A failed completion write leaves the key in_progress even though the
+        # draft/hunk commit landed.  When every selected hunk is already
+        # applied, rebuild the response from that authoritative state
+        # (A-P3-15); otherwise the operation may really be running.
+        if exc.code == "op_in_progress" and _selected_states(project, chapter, selected) == {"applied_to_draft"}:
+            try:
+                return _apply_hunks_impl(project, chapter, data, op_id=op_id, target=target,
+                                         selected=selected)
+            except AnnotationError:
+                pass
+        raise
     if cached is not None:
         return cached
     try:
@@ -725,7 +812,13 @@ def apply_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     except BaseException:
         _idempotency_fail(project, "annotations.apply_hunks", op_id)
         raise
-    _idempotency_complete(project, "annotations.apply_hunks", op_id, result)
+    try:
+        _idempotency_complete(project, "annotations.apply_hunks", op_id, result)
+    except Exception:
+        # The draft/hunk/ledger commit already succeeded.  A completion-key
+        # failure must not turn it into a 500; a retry reconstructs the result
+        # from the applied_to_draft rows (A-P3-15).
+        result = {**result, "completion_persisted": False}
     return result
 
 
@@ -780,16 +873,8 @@ def _hunk_already_present(project, base_text: str, current_text: str,
 def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
                       op_id: str, target: str, selected: List[str]) -> Dict[str, Any]:
     chapter = int(chapter)
-    draft = wb.get_draft(project, chapter)
-    if draft and target != "draft":
-        raise AnnotationError("draft_exists_target_draft_required", status=409)
-    if draft:
-        if (str(data.get("expected_draft_id") or "") != str(draft.get("draft_id"))
-                or int(data.get("expected_draft_epoch") or 0) != int(draft.get("draft_epoch") or 0)
-                or int(data.get("expected_draft_revision") or 0) != int(draft.get("draft_revision") or 0)):
-            raise AnnotationError("draft_conflict", status=409, detail={"current_draft": draft})
     with wb.connect(project) as db:
-        placeholders = ",".join("?" for _ in selected)
+        placeholders = ", ".join("?" for _ in selected)
         rows = [_row_hunk(r) for r in db.execute(
             "SELECT h.* FROM annotation_hunks h JOIN annotations a ON a.id=h.annotation_id "
             f"WHERE h.chapter_id=? AND h.id IN ({placeholders}) AND a.status<>'rejected'",
@@ -800,17 +885,57 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
             "WHERE l.chapter_id=? ORDER BY l.id", (chapter,))]
         applied_rows = [row for row in rows if row["status"] == "applied_to_draft"]
         pending_rows = [row for row in rows if row["status"] == "pending"]
-    if not pending_rows:
+        preview_snapshots: Dict[str, Optional[str]] = {}
+        for preview_id in sorted({row.get("preview_id") for row in rows if row.get("preview_id")}):
+            preview_row = db.execute(
+                "SELECT base_snapshot_id FROM preview_index WHERE preview_id=?",
+                (preview_id,)).fetchone()
+            preview_snapshots[preview_id] = preview_row[0] if preview_row else None
+    if not rows:
         raise AnnotationError("no_pending_hunks")
+    draft = wb.get_draft(project, chapter)
+    if not pending_rows:
+        if not applied_rows:
+            raise AnnotationError("no_pending_hunks")
+        # A retry after the draft/hunk commit but before idempotency_complete
+        # must be able to read the result back instead of getting a conflict
+        # (A-P3-15).
+        summary_rows = []
+        for row in applied_rows:
+            applied_range = row.get("applied_range") or []
+            summary_rows.append({
+                "hunk_id": row["id"], "status": "already_applied",
+                "start": applied_range[0] if len(applied_range) == 2 else row.get("char_start"),
+                "end": applied_range[1] if len(applied_range) == 2 else row.get("char_end"),
+                "applied_text": (row.get("custom_text") if row.get("custom_text") is not None
+                                 else row.get("after_text") or ""),
+                "before_text": str(row.get("before_text") or ""),
+            })
+        return {"status": "applied", "already_applied": True, "chapter_id": chapter,
+                "draft": draft, "applied": summary_rows, "conflicts": [], "clean": True,
+                "skipped": []}
+    distinct_snapshots = {value for value in preview_snapshots.values() if value}
+    if len(distinct_snapshots) > 1:
+        # Hunks generated against different draft baselines use different
+        # coordinate systems; silently applying only the first preview's base
+        # dropped the rest while still reporting "applied" (A-P2-07).
+        raise AnnotationError("mixed_base_snapshots", status=409, detail={
+            "previews": preview_snapshots,
+            "message": "所选批注来自不同草稿基线，请分组应用",
+        })
+    if draft and target != "draft":
+        raise AnnotationError("draft_exists_target_draft_required", status=409)
+    if draft:
+        if (str(data.get("expected_draft_id") or "") != str(draft.get("draft_id"))
+                or int(data.get("expected_draft_epoch") or 0) != int(draft.get("draft_epoch") or 0)
+                or int(data.get("expected_draft_revision") or 0) != int(draft.get("draft_revision") or 0)):
+            raise AnnotationError("draft_conflict", status=409, detail={"current_draft": draft})
     current_text = (draft or {}).get("content") if draft else _current_text(project, chapter)[0]
     base_text = current_text
     base_snapshot_id = None
     base_preview = next((row.get("preview_id") for row in pending_rows if row.get("preview_id")), None)
     if base_preview:
-        with wb.connect(project) as db:
-            preview_row = db.execute("SELECT base_snapshot_id FROM preview_index WHERE preview_id=?",
-                                     (base_preview,)).fetchone()
-        base_snapshot_id = preview_row[0] if preview_row else None
+        base_snapshot_id = preview_snapshots.get(base_preview)
     if base_snapshot_id:
         base_text = read_snapshot(project, base_snapshot_id)
     already = [dict(row) for row in applied_rows]
@@ -956,19 +1081,10 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
                         (stamp, group_id, hunk_id,
                          int(item.get("end") or 0), int(item.get("start") or 0)))
                     superseded_previews.update(value for value in overlapped if value)
-        preview_ids = {row.get("preview_id") for row in pending_rows if row.get("preview_id")}
+        preview_ids = {row.get("preview_id") for row in rows if row.get("preview_id")}
         preview_ids |= superseded_previews
         for preview_id in preview_ids:
-            states = [row[0] for row in db.execute(
-                "SELECT status FROM annotation_hunks WHERE preview_id=?", (preview_id,))]
-            if any(state in {"applied_to_draft", "committed", "committed_modified"} for state in states):
-                preview_status = "applied"
-            elif states and all(state in {"superseded", "rejected"} for state in states):
-                preview_status = "superseded"
-            else:
-                preview_status = "pending"
-            db.execute("UPDATE preview_index SET status=?, updated_at=? WHERE preview_id=?",
-                       (preview_status, stamp, preview_id))
+            _refresh_preview_status(db, preview_id, stamp)
         _recompute_annotation_status(project, {row["annotation_id"] for row in rows}, db=db)
     applied = [item for item in result["results"] if item["status"] == "applied"] + pre_applied
     if applied:
@@ -977,12 +1093,39 @@ def _apply_hunks_impl(project, chapter: int, data: Dict[str, Any], *,
         outcome = "conflict"
     else:
         outcome = "noop"
+    skipped = [{"hunk_id": item.get("hunk_id"), "status": item.get("status"),
+                "reason": item.get("reason")}
+               for item in result["results"]
+               if item.get("status") not in {"applied", "already_applied", "overlap_conflict"}]
     return {"status": outcome, "chapter_id": chapter, "draft": draft,
             "applied": applied,
-            "conflicts": result["conflicts"], "clean": result["clean"]}
+            "conflicts": result["conflicts"], "clean": result["clean"],
+            "skipped": skipped}
 
 
 def undo_apply(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    chapter = int(chapter)
+    op_id = str(data.get("op_id") or "")
+    params = {"ledger_id": data.get("ledger_id")}
+    if op_id:
+        cached = _idempotency_begin(project, "annotations.undo_apply", op_id, params)
+        if cached is not None:
+            return cached
+    try:
+        result = _undo_apply_impl(project, chapter, data)
+    except BaseException:
+        if op_id:
+            _idempotency_fail(project, "annotations.undo_apply", op_id)
+        raise
+    if op_id:
+        try:
+            _idempotency_complete(project, "annotations.undo_apply", op_id, result)
+        except Exception:
+            pass
+    return result
+
+
+def _undo_apply_impl(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     chapter = int(chapter)
     ledger_id = data.get("ledger_id")
     with wb.connect(project) as db:
@@ -1007,10 +1150,11 @@ def undo_apply(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
         "char_start": applied_range[0] if len(applied_range) == 2 else None,
         "char_end": applied_range[1] if len(applied_range) == 2 else None,
     }
-    if not row.get("applied_text") and row.get("preview_id"):
-        # Deletion undo needs the surrounding context from the snapshot the
-        # deletion was recorded against; the stale offset alone can insert the
-        # restored prose before text the author has since typed (B-10).
+    if row.get("preview_id") and entry["char_start"] is not None:
+        # The ledger offset is only meaningful in the preview's base snapshot.
+        # Passing that snapshot's context lets reverse_patch follow an author
+        # who typed before the patch without ever falling back to a global
+        # "unique occurrence" guess (A-P3-13).
         with wb.connect(project) as db:
             preview_row = db.execute("SELECT base_snapshot_id FROM preview_index WHERE preview_id=?",
                                      (row.get("preview_id"),)).fetchone()
@@ -1029,39 +1173,48 @@ def undo_apply(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     result = text_merge.reverse_patch(draft.get("content") or "", entry)
     if result["status"] != "reversed":
         raise AnnotationError("undo_relocation_needed", status=409, detail={"reason": result.get("reason")})
-    updated = chapter_editor.save_draft(project, chapter, {
-        "title": draft.get("title") or "", "content": result["text"],
-        "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
-        "expected_draft_revision": draft["draft_revision"],
-        "base_version_id": draft.get("base_version_id"),
-        "base_content_sha256": draft.get("base_content_sha256"),
-    })
+    stamp = _now()
+    # Draft rollback, ledger deletion and hunk reset must commit together: a
+    # failure after the draft was saved used to leave the hunk applied forever
+    # with a ledger row that no longer matches the draft (A-P3-12).
     with wb.write_tx(project) as db:
+        updated = chapter_editor.save_draft(project, chapter, {
+            "title": draft.get("title") or "", "content": result["text"],
+            "expected_draft_id": draft["draft_id"], "expected_draft_epoch": draft["draft_epoch"],
+            "expected_draft_revision": draft["draft_revision"],
+            "base_version_id": draft.get("base_version_id"),
+            "base_content_sha256": draft.get("base_content_sha256"),
+        })
         db.execute("DELETE FROM patch_ledger WHERE id=?", (row["id"],))
         if row.get("hunk_id"):
             db.execute("UPDATE annotation_hunks SET status='pending', applied_draft_id=NULL, "
                        "applied_draft_revision=NULL, applied_range_json=NULL, updated_at=? WHERE id=?",
-                       (_now(), row["hunk_id"]))
-    if row.get("annotation_id"):
-        _recompute_annotation_status(project, {row["annotation_id"]})
+                       (stamp, row["hunk_id"]))
+        _refresh_preview_status(db, row.get("preview_id"), stamp)
+        if row.get("annotation_id"):
+            _recompute_annotation_status(project, {row["annotation_id"]}, db=db)
     return {"status": "reverted", "chapter_id": chapter, "draft": updated["draft"],
             "range": [result.get("start"), result.get("end")]}
 
 
 def revert_draft_hunks(project, chapter: int, draft_id: Optional[str]) -> List[str]:
-    with wb.connect(project) as db:
+    stamp = _now()
+    with wb.write_tx(project) as db:
         rows = [dict(r) for r in db.execute(
-            "SELECT id, annotation_id FROM annotation_hunks WHERE chapter_id=? AND applied_draft_id=? "
-            "AND status='applied_to_draft'", (int(chapter), draft_id))]
-        db.execute("DELETE FROM patch_ledger WHERE chapter_id=? AND draft_id=?", (int(chapter), draft_id))
+            "SELECT id, annotation_id, preview_id FROM annotation_hunks "
+            "WHERE chapter_id=? AND applied_draft_id=? AND status='applied_to_draft'",
+            (int(chapter), draft_id))]
+        db.execute("DELETE FROM patch_ledger WHERE chapter_id=? AND draft_id=?",
+                   (int(chapter), draft_id))
         db.execute("UPDATE annotation_hunks SET status='pending', applied_draft_id=NULL, "
                    "applied_draft_revision=NULL, applied_range_json=NULL, updated_at=? "
                    "WHERE chapter_id=? AND applied_draft_id=? AND status='applied_to_draft'",
-                   (_now(), int(chapter), draft_id))
-    ids = [row["id"] for row in rows]
-    _recompute_annotation_status(project, {row["annotation_id"] for row in rows
-                                           if row.get("annotation_id")})
-    return ids
+                   (stamp, int(chapter), draft_id))
+        for preview_id in {row.get("preview_id") for row in rows if row.get("preview_id")}:
+            _refresh_preview_status(db, preview_id, stamp)
+        _recompute_annotation_status(project, {row["annotation_id"] for row in rows
+                                               if row.get("annotation_id")}, db=db)
+    return [row["id"] for row in rows]
 
 
 def reject_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1073,29 +1226,55 @@ def reject_hunks(project, chapter: int, data: Dict[str, Any]) -> Dict[str, Any]:
     selected = _as_list(data.get("hunk_ids"), "hunk_ids")
     if not selected:
         raise AnnotationError("hunk_ids_required")
+    params = {"hunk_ids": sorted(selected)}
+    try:
+        cached = _idempotency_begin(project, "annotations.reject_hunks", op_id, params)
+    except AnnotationError as exc:
+        if exc.code == "op_in_progress" and _selected_states(project, chapter, selected) == {"rejected"}:
+            try:
+                return _reject_hunks_impl(project, chapter, selected)
+            except AnnotationError:
+                pass
+        raise
+    if cached is not None:
+        return cached
+    try:
+        result = _reject_hunks_impl(project, chapter, selected)
+    except BaseException:
+        _idempotency_fail(project, "annotations.reject_hunks", op_id)
+        raise
+    try:
+        _idempotency_complete(project, "annotations.reject_hunks", op_id, result)
+    except Exception:
+        pass
+    return result
+
+
+def _reject_hunks_impl(project, chapter: int, selected: List[str]) -> Dict[str, Any]:
     with wb.connect(project) as db:
         placeholders = ",".join("?" for _ in selected)
         rows = [dict(r) for r in db.execute(
-            f"SELECT id, annotation_id, preview_id FROM annotation_hunks "
-            f"WHERE chapter_id=? AND id IN ({placeholders}) AND status='pending'",
+            f"SELECT id, annotation_id, preview_id, status FROM annotation_hunks "
+            f"WHERE chapter_id=? AND id IN ({placeholders}) AND status IN ('pending','rejected')",
             (chapter, *selected))]
-    if not rows:
+    pending = [row for row in rows if row["status"] == "pending"]
+    if not pending:
+        if rows:
+            # A retry whose response was lost must not become "no pending
+            # hunks": the author's rejections already landed (A-P3-03).
+            return {"status": "rejected", "chapter_id": chapter,
+                    "rejected": [row["id"] for row in rows], "already_rejected": True}
         raise AnnotationError("no_pending_hunks")
     stamp = _now()
     with wb.write_tx(project) as db:
-        for row in rows:
-            db.execute("UPDATE annotation_hunks SET status='rejected', updated_at=? WHERE id=?",
-                       (stamp, row["id"]))
-        for preview_id in {row.get("preview_id") for row in rows if row.get("preview_id")}:
-            states = [value[0] for value in db.execute(
-                "SELECT status FROM annotation_hunks WHERE preview_id=?", (preview_id,))]
-            status = "superseded" if states and all(state in {"superseded", "rejected"}
-                                                    for state in states) else "pending"
-            db.execute("UPDATE preview_index SET status=?, updated_at=? WHERE preview_id=?",
-                       (status, stamp, preview_id))
-    _recompute_annotation_status(project, {row["annotation_id"] for row in rows})
-    return {"status": "rejected", "chapter_id": chapter,
-            "rejected": [row["id"] for row in rows]}
+        for row in pending:
+            db.execute("UPDATE annotation_hunks SET status='rejected', updated_at=? "
+                       "WHERE id=? AND status='pending'", (stamp, row["id"]))
+        for preview_id in {row.get("preview_id") for row in pending if row.get("preview_id")}:
+            _refresh_preview_status(db, preview_id, stamp)
+        _recompute_annotation_status(project, {row["annotation_id"] for row in pending}, db=db)
+    rejected = [row["id"] for row in rows]
+    return {"status": "rejected", "chapter_id": chapter, "rejected": rejected}
 
 
 def mark_committed(project, chapter: int, *, text: str, draft_id: Optional[str] = None) -> Dict[str, Any]:
@@ -1140,6 +1319,94 @@ def mark_committed(project, chapter: int, *, text: str, draft_id: Optional[str] 
         db.execute("DELETE FROM patch_ledger WHERE chapter_id=?", (chapter,))
         _recompute_annotation_status(project, annotations_touched, db=db)
     return {"committed": committed, "committed_modified": modified}
+
+
+def migrate_split(project, chapter: int, offset: int, split_text: str,
+                  second_text: str) -> Dict[str, Any]:
+    """Re-anchor the second half's annotations to the new chapter.
+
+    Split moves body bytes; leaving the annotations on the old chapter makes
+    them permanently ``relocated_needed`` and the new chapter empty (A-P2-08).
+    Only annotations whose selection starts at/after the split point move;
+    earlier selections keep their (still valid) old-chapter anchor.
+    """
+    chapter = int(chapter)
+    split_text = text_merge.normalize_lf(split_text)
+    second_text = text_merge.normalize_lf(second_text)
+    offset = int(offset)
+    second_digest = save_snapshot(project, second_text)
+    split_digest = _sha(split_text)
+    uid = wb.chapter_uid(project, chapter + 1)
+    moved_annotations: List[str] = []
+    moved_hunks = 0
+    with wb.connect(project) as db:
+        annotations_rows = [_row_annotation(r) for r in db.execute(
+            "SELECT * FROM annotations WHERE chapter_id=?", (chapter,))]
+        preview_rows = {row["preview_id"]: dict(row) for row in db.execute(
+            "SELECT preview_id, base_snapshot_id FROM preview_index WHERE chapter_id=?", (chapter,))}
+    for item in annotations_rows:
+        anchor = item.get("anchor") or {}
+        if not anchor:
+            continue
+        try:
+            base = read_snapshot(project, anchor.get("base_snapshot_id"))
+        except AnnotationError:
+            continue
+        located = text_merge.relocate_anchor(base, split_text, anchor)
+        if located.get("status") not in {"exact", "relocated"}:
+            continue
+        start, end = int(located["start"]), int(located["end"])
+        if start < offset:
+            continue
+        new_start, new_end = start - offset, end - offset
+        new_anchor = dict(anchor)
+        new_anchor.update({
+            "char_start": new_start, "char_end": new_end,
+            "para_start": text_merge.paragraph_index(second_text, new_start),
+            "para_end": text_merge.paragraph_index(second_text, new_end),
+            "prefix_ctx": text_merge.context_of(second_text, new_start, new_end)[0],
+            "suffix_ctx": text_merge.context_of(second_text, new_start, new_end)[1],
+            "base_snapshot_id": second_digest,
+            "base_origin": "split",
+        })
+        stamp = _now()
+        with wb.write_tx(project) as db:
+            db.execute("UPDATE annotations SET chapter_id=?, chapter_uid=?, anchor_json=?, "
+                       "updated_at=? WHERE id=?",
+                       (chapter + 1, uid, json.dumps(new_anchor, ensure_ascii=False), stamp,
+                        item["id"]))
+            hunks = [dict(r) for r in db.execute(
+                "SELECT h.id, h.char_start, h.char_end, p.base_snapshot_id AS preview_base "
+                "FROM annotation_hunks h LEFT JOIN preview_index p ON p.preview_id=h.preview_id "
+                "WHERE h.annotation_id=?", (item["id"],))]
+            for hunk in hunks:
+                preview_base = hunk.get("preview_base")
+                if preview_base not in {None, split_digest, anchor.get("base_snapshot_id")}:
+                    db.execute("UPDATE annotation_hunks SET status='superseded', chapter_id=?, "
+                               "chapter_uid=?, updated_at=? WHERE id=?",
+                               (chapter + 1, uid, stamp, hunk["id"]))
+                    continue
+                h_start = int(hunk.get("char_start") or 0)
+                h_end = int(hunk.get("char_end") or 0)
+                if h_start < offset and h_end > offset:
+                    # Straddles the split point: it belongs to neither half.
+                    db.execute("UPDATE annotation_hunks SET status='superseded', chapter_id=?, "
+                               "chapter_uid=?, updated_at=? WHERE id=?",
+                               (chapter + 1, uid, stamp, hunk["id"]))
+                    continue
+                db.execute("UPDATE annotation_hunks SET chapter_id=?, chapter_uid=?, "
+                           "char_start=MAX(char_start-?, 0), char_end=MAX(char_end-?, 0), "
+                           "updated_at=? WHERE id=?",
+                           (chapter + 1, uid, offset, offset, stamp, hunk["id"]))
+                moved_hunks += 1
+            for preview_id, preview in preview_rows.items():
+                if preview.get("base_snapshot_id") in {split_digest, anchor.get("base_snapshot_id")}:
+                    preview_rows[preview_id]["base_snapshot_id"] = second_digest
+            db.execute("UPDATE preview_index SET chapter_id=?, chapter_uid=?, base_snapshot_id=?, "
+                       "updated_at=? WHERE annotation_id=?",
+                       (chapter + 1, uid, second_digest, stamp, item["id"]))
+        moved_annotations.append(item["id"])
+    return {"annotations": moved_annotations, "hunks": moved_hunks, "chapter_id": chapter + 1}
 
 
 def _annotation_status_updates(db, ids: List[str]) -> List[tuple]:

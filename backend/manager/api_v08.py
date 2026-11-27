@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -22,7 +23,7 @@ from fastapi.responses import JSONResponse
 
 from integration import chapter_editor, outline_editor
 from integration import chapter_versions as versions
-from integration import revision_plan, workbench_db
+from integration import maintenance, revision_plan, workbench_db
 from integration import transaction_journal
 
 
@@ -37,6 +38,12 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
+                identity = kwargs.get("identity")
+                if identity:
+                    # 审计 C3-03：v0.8 旧库缺表/缺列时，guard 以前直接放行，
+                    # 直到路由内 SQL 才 500。所有 v0.8 入口先按 SCHEMA 全量自愈；
+                    # create=False 绝不创建数据库（C3-04）。
+                    maintenance.ensure_schema(_book(identity))
                 return fn(*args, **kwargs)
             except (chapter_editor.ChapterError, outline_editor.OutlineError) as exc:
                 payload = {"code": exc.code, "message": exc.code, **exc.detail}
@@ -170,10 +177,23 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
         project = _book(identity)
         rows = revision_plan.list_previews(project, chapter)
         from integration import annotations
-        annotation_previews = {
-            row["preview_id"]: row
-            for row in annotations.list_previews(project, chapter)["previews"]
-        }
+        degraded = False
+        annotation_previews = {}
+        try:
+            annotation_previews = {
+                row["preview_id"]: row
+                for row in annotations.list_previews(project, chapter)["previews"]
+            }
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+            # 审计 C3-04：只读项目/旧库缺 preview_index 时批注预览不可读，
+            # 但章节修订预览（文件层）仍应返回；不能整页 500。
+            # 审计 C4-05：损坏库是故障，不是空数据。
+            text = str(exc).lower()
+            if "not a database" in text or "malformed" in text:
+                return JSONResponse(status_code=503,
+                                    content={"code": "db_unavailable",
+                                             "message": "数据库当前不可用，请检查诊断页"})
+            degraded = True
         enriched = []
         for row in rows:
             item = dict(row)
@@ -192,7 +212,11 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]],
                 item["accept_blocked"] = False
                 item["apply_via"] = "revision_accept"
             enriched.append(item)
-        return {"chapter_id": int(chapter), "previews": enriched, "count": len(enriched)}
+        result = {"chapter_id": int(chapter), "previews": enriched, "count": len(enriched)}
+        if degraded:
+            result["degraded"] = True
+            result["degraded_reason"] = "preview_index_unreadable"
+        return result
 
     # -------------------------------------------------------------- outline
     @app.get("/api/projects/{identity}/outline/files")

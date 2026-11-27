@@ -157,7 +157,8 @@ CREATE TABLE IF NOT EXISTS agent_approvals (
     decision_json TEXT,
     created_at TEXT NOT NULL,
     resolved_at TEXT,
-    capability_hash TEXT
+    capability_hash TEXT,
+    created_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(project_id, status);
 
@@ -189,6 +190,27 @@ def initialize(db_path=None) -> Path:
             # Additive migration for databases created before one-time
             # approval capabilities (B3-01).
             db.execute("ALTER TABLE agent_approvals ADD COLUMN capability_hash TEXT")
+        if "created_by" not in columns:
+            # Who produced the card.  Agent-created cards are issued without a
+            # plaintext capability; only the author channel can claim one
+            # (B4-02).
+            db.execute("ALTER TABLE agent_approvals ADD COLUMN created_by TEXT")
+        # R-04: a pre-capability pending card can never be resolved through the
+        # public API (GET no longer returns the binding values, and a legacy
+        # row ignores any caller-supplied capability).  Leaving those rows
+        # pending makes them permanently un-actionable, so expire them once and
+        # let the author recreate a fresh card.
+        legacy = db.execute(
+            "SELECT id FROM agent_approvals WHERE status='pending' AND capability_hash IS NULL"
+        ).fetchall()
+        if legacy:
+            stamp = now_iso()
+            db.execute(
+                "UPDATE agent_approvals SET status='expired', resolved_at=?, decision_json=? "
+                "WHERE status='pending' AND capability_hash IS NULL",
+                (stamp, json.dumps({"migrated": "legacy_card_expired",
+                                    "message": "升级前的审批卡无法携带一次性 capability，已失效；请重建"},
+                                   ensure_ascii=False)))
     return path
 
 
@@ -223,6 +245,7 @@ def create_directive(db_path=None, *, session_id: str, project_id: Optional[str]
                             detail={"field": "budget_cap_cny"}) from None
     directive_id = new_id("dir")
     stamp = now_iso()
+    initialize(db_path)
     with write_tx(db_path) as db:
         db.execute(
             "INSERT INTO agent_directives(id, session_id, project_id, directive_revision, title, "
@@ -232,6 +255,12 @@ def create_directive(db_path=None, *, session_id: str, project_id: Optional[str]
              autonomy, json.dumps(list(constraints or []), ensure_ascii=False), status,
              budget_cap_cny, int(max_calls), stamp, stamp),
         )
+    append_event(
+        db_path, session_id=session_id, topic_id="default", project_id=project_id,
+        directive_id=directive_id, channel="chief_chat", sender_role="system",
+        kind="directive_created", summary=str(title)[:200] or "新指令",
+        payload={"autonomy": autonomy, "status": status,
+                 "budget_cap_cny": budget_cap_cny, "max_calls": int(max_calls)})
     return get_directive(db_path, directive_id)
 
 
@@ -322,6 +351,10 @@ def bind_session_to_project(db_path=None, session_id: str = "", project_id: str 
                                      channel="chief_chat", sender_role="system", mentions=[],
                                      kind="project_bound", summary="已建书并绑定原开书对话",
                                      payload={"project_id": project_id}, created_at=stamp)
+    if event is not None:
+        # Live streams must see the bind immediately, not only on reconnect
+        # (B3-21).
+        broadcaster.publish(event)
     return {"status": "bound", "session_id": session_id, "project_id": project_id,
             "updated": counts, "event": event}
 
@@ -332,6 +365,7 @@ def create_task(db_path=None, *, directive_id: str, session_id: str, project_id:
                 wait_reason: str = "") -> Dict[str, Any]:
     task_id = new_id("tsk")
     stamp = now_iso()
+    initialize(db_path)
     with write_tx(db_path) as db:
         db.execute(
             "INSERT INTO agent_tasks(id, directive_id, session_id, project_id, role, title, tool_name, "
@@ -342,6 +376,11 @@ def create_task(db_path=None, *, directive_id: str, session_id: str, project_id:
              json.dumps(list(depends_on or []), ensure_ascii=False), status, wait_reason,
              stamp, stamp),
         )
+    append_event(
+        db_path, session_id=session_id, topic_id="default", project_id=project_id,
+        directive_id=directive_id, task_id=task_id, channel="task_signal",
+        sender_role="system", kind="task_created", summary=str(title)[:200] or "新任务",
+        payload={"role": role, "tool_name": tool_name, "status": status})
     return get_task(db_path, task_id)
 
 
@@ -371,11 +410,25 @@ def update_task(db_path=None, task_id: str = "", **fields) -> Dict[str, Any]:
         updates[column] = json.dumps(value, ensure_ascii=False) if column.endswith("_json") and value is not None else value
     if not updates:
         return get_task(db_path, task_id)
+    initialize(db_path)
+    with connect(db_path) as db:
+        previous = db.execute("SELECT status, session_id, project_id, directive_id, title "
+                              "FROM agent_tasks WHERE id=?", (task_id,)).fetchone()
     updates["updated_at"] = now_iso()
     assignments = ", ".join(f"{key}=?" for key in updates)
     with write_tx(db_path) as db:
         db.execute(f"UPDATE agent_tasks SET {assignments} WHERE id=?", (*updates.values(), task_id))
-    return get_task(db_path, task_id)
+    item = get_task(db_path, task_id)
+    if previous is not None and "status" in updates and str(previous["status"]) != str(item["status"]):
+        # Status changes are durable lifecycle facts; transient progress is
+        # broadcast-only (B3-06).
+        append_event(
+            db_path, session_id=str(previous["session_id"]), topic_id="default",
+            project_id=previous["project_id"], directive_id=previous["directive_id"],
+            task_id=task_id, channel="task_signal", sender_role="system",
+            kind="task_status", summary=f"{previous['title']}：{previous['status']} → {item['status']}",
+            payload={"from": str(previous["status"]), "to": str(item["status"])})
+    return item
 
 
 def list_tasks(db_path=None, *, project_id: Optional[str] = None,
@@ -386,7 +439,9 @@ def list_tasks(db_path=None, *, project_id: Optional[str] = None,
     clauses, params = [], []
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
-    elif unbound_only:
+    elif unbound_only or session_id:
+        # A session id is shared by every book; a session-only read must never
+        # aggregate another book's tasks (B3-22).
         clauses.append("project_id IS NULL")
     if directive_id:
         clauses.append("directive_id=?"); params.append(directive_id)
@@ -429,6 +484,31 @@ def _append_event_db(db, *, session_id: str, topic_id: str, project_id: Optional
             "kind": kind, "summary": summary, "payload": payload, "created_at": created_at}
 
 
+def publish_transient(db_path=None, *, session_id: str, topic_id: str = "default",
+                      project_id: Optional[str] = None, directive_id: Optional[str] = None,
+                      task_id: Optional[str] = None, channel: str = "task_signal",
+                      sender_role: str = "system", mentions: Optional[Sequence[str]] = None,
+                      kind: str = "progress_signal", summary: str = "",
+                      payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Broadcast a live-only frame (progress/preview) without persisting it.
+
+    Transient signals used to be inserted into ``agent_events`` forever, where
+    they crowded the 100/200 replay window and polluted chat context (B3-06).
+    """
+    if channel not in CHANNELS:
+        raise RoomError("invalid_channel")
+    if kind not in TRANSIENT_KINDS:
+        raise RoomError("not_transient_kind", detail={"kind": kind})
+    event = {"seq": None, "event_id": new_id("evt"), "session_id": session_id,
+             "topic_id": topic_id or "default", "project_id": project_id,
+             "directive_id": directive_id, "task_id": task_id, "channel": channel,
+             "sender_role": sender_role, "mentions": list(mentions or []),
+             "kind": kind, "summary": str(summary)[:4000], "payload": payload or {},
+             "created_at": now_iso(), "transient": True}
+    broadcaster.publish(event)
+    return event
+
+
 def append_event(db_path=None, *, session_id: str, topic_id: str = "default",
                  project_id: Optional[str] = None, directive_id: Optional[str] = None,
                  task_id: Optional[str] = None, channel: str = "chief_chat",
@@ -437,6 +517,11 @@ def append_event(db_path=None, *, session_id: str, topic_id: str = "default",
                  created_at: Optional[str] = None) -> Dict[str, Any]:
     if channel not in CHANNELS:
         raise RoomError("invalid_channel")
+    if kind in TRANSIENT_KINDS:
+        # Durable storage is for lifecycle facts; progress frames are
+        # broadcast-only (B3-06).
+        raise RoomError("transient_kind_not_durable",
+                        detail={"kind": kind, "message": "瞬态信号请使用 publish_transient"})
     initialize(db_path)
     with write_tx(db_path) as db:
         event = _append_event_db(db, session_id=session_id, topic_id=topic_id, project_id=project_id,
@@ -456,6 +541,9 @@ def events_after(db_path=None, *, after_seq: int = 0, project_id: Optional[str] 
     params: List[Any] = [int(after_seq)]
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
+    elif session_id:
+        # Session-only readers see unbound pre-book rows only (B3-22).
+        clauses.append("project_id IS NULL")
     if session_id:
         clauses.append("session_id=?"); params.append(session_id)
     if topic_id:
@@ -476,9 +564,27 @@ def max_seq(db_path=None, *, project_id: Optional[str] = None, session_id: Optio
     if project_id:
         clause, params = " WHERE project_id=?", (project_id,)
     elif session_id:
-        clause, params = " WHERE session_id=?", (session_id,)
+        clause, params = " WHERE session_id=? AND project_id IS NULL", (session_id,)
     with connect(db_path) as db:
         row = db.execute("SELECT COALESCE(MAX(seq),0) FROM agent_events" + clause, params).fetchone()
+    return int(row[0])
+
+
+def oldest_seq(db_path=None, *, project_id: Optional[str] = None,
+               session_id: Optional[str] = None) -> int:
+    """Oldest replayable seq for one scope (0 when the scope is empty).
+
+    A ``resync_required`` frame carries this so a client can page from the
+    beginning instead of guessing a cursor (B3-07).
+    """
+    initialize(db_path)
+    clause, params = "", ()
+    if project_id:
+        clause, params = " WHERE project_id=?", (project_id,)
+    elif session_id:
+        clause, params = " WHERE session_id=? AND project_id IS NULL", (session_id,)
+    with connect(db_path) as db:
+        row = db.execute("SELECT COALESCE(MIN(seq),0) FROM agent_events" + clause, params).fetchone()
     return int(row[0])
 
 
@@ -514,24 +620,37 @@ def recent_events(db_path=None, *, project_id: Optional[str] = None,
 def create_approval(db_path=None, *, session_id: str, project_id: Optional[str], directive_id: Optional[str],
                     directive_revision: int, task_id: Optional[str], kind: str, title: str,
                     artifact_fingerprint: str, approved_scope_hash: str, detail: Dict[str, Any],
-                    ttl_minutes: int = 120) -> Dict[str, Any]:
+                    ttl_minutes: int = 120, requester: str = "author") -> Dict[str, Any]:
     approval_id = new_id("apr")
     expires = (datetime.now(timezone.utc) + timedelta(minutes=int(ttl_minutes))).isoformat()
     stamp = now_iso()
-    # B3-01: the card creator receives a one-time capability.  Only its hash
-    # is stored; a GET or a database read can never reconstruct it.
+    # B3-01/B4-02: the card creator receives a one-time capability.  Only its
+    # hash is stored; a GET or a database read can never reconstruct it.  A
+    # non-author producer (agent/worker) gets no plaintext capability: the
+    # author channel must claim it explicitly before the card can be resolved.
     capability = secrets.token_urlsafe(32)
+    created_by = str(requester or "author")
+    initialize(db_path)
     with write_tx(db_path) as db:
         db.execute(
             "INSERT INTO agent_approvals(id, session_id, project_id, directive_id, directive_revision, "
             "task_id, kind, title, artifact_fingerprint, approved_scope_hash, expires_at, detail_json, "
-            "status, created_at, capability_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status, created_at, capability_hash, created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (approval_id, session_id, project_id, directive_id, int(directive_revision), task_id,
              kind, title, artifact_fingerprint, approved_scope_hash, expires, json.dumps(detail, ensure_ascii=False),
-             "pending", stamp, _capability_hash(capability)),
+             "pending", stamp, _capability_hash(capability), created_by),
         )
+    append_event(
+        db_path, session_id=session_id, topic_id="default", project_id=project_id,
+        directive_id=directive_id, task_id=task_id, channel="chief_chat",
+        sender_role="system", kind="approval_requested", summary=str(title)[:200] or "待审批",
+        payload={"approval_id": approval_id, "kind": kind, "created_by": created_by,
+                 "expires_at": expires})
     result = get_approval(db_path, approval_id)
-    result["capability"] = capability
+    if created_by == "author":
+        result["capability"] = capability
+    else:
+        result["capability_delivery"] = "author_channel_required"
     return result
 
 
@@ -542,6 +661,8 @@ def get_approval(db_path=None, approval_id: str = "") -> Dict[str, Any]:
     if not row:
         raise RoomError("approval_missing", status=404)
     item = dict(row)
+    item["capability_ready"] = bool(item.get("capability_hash"))
+    item["created_by"] = item.get("created_by") or None
     # Binding values are server-side only: a public GET must not hand back
     # values that could be echoed into a resolution request (B3-01).
     for field in ("capability_hash", "artifact_fingerprint", "approved_scope_hash",
@@ -567,6 +688,11 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
     after the card was created is rejected with 409.
     """
     stamp = now or now_iso()
+    if type(approved) is not bool:
+        # bool("false") is True; a library caller must not weak-cast an
+        # irreversible approval (B3-19).
+        raise RoomError("invalid_approved", status=400,
+                        detail={"field": "approved", "message": "approved 必须是布尔值"})
     if resolved_by != "author":
         raise RoomError("agents_cannot_approve", status=403)
     capability = str(capability or "").strip()
@@ -574,6 +700,7 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
                            or not str(approved_scope_hash or "").strip()):
         # Legacy binding echo; new cards additionally require a capability.
         raise RoomError("approval_binding_required", status=400)
+    initialize(db_path)
     expired = False
     with write_tx(db_path) as db:
         row = db.execute("SELECT * FROM agent_approvals WHERE id=?", (approval_id,)).fetchone()
@@ -636,7 +763,78 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
                         json.dumps(decision or {}, ensure_ascii=False), stamp, approval_id))
     if expired:
         raise RoomError("approval_expired", status=409)
-    return get_approval(db_path, approval_id)
+    result = get_approval(db_path, approval_id)
+    append_event(
+        db_path, session_id=str(item.get("session_id") or ""), topic_id="default",
+        project_id=item.get("project_id"), directive_id=item.get("directive_id"),
+        task_id=item.get("task_id"), channel="chief_chat", sender_role="system",
+        kind="approval_resolved", summary=f"{item.get('title') or '审批'}：{result['status']}",
+        payload={"approval_id": approval_id, "kind": item.get("kind"),
+                 "status": result["status"], "decision": decision or {}})
+    return result
+
+
+def issue_capability(db_path=None, approval_id: str = "") -> Dict[str, Any]:
+    """Author-channel delivery of a one-time capability for a pending card.
+
+    Cards produced by an agent/worker are inserted without exposing the
+    plaintext capability to their creator (B4-02).  The author UI claims it
+    here; the plaintext is returned once and only the hash is stored.
+    """
+    initialize(db_path)
+    capability = secrets.token_urlsafe(32)
+    stamp = now_iso()
+    with write_tx(db_path) as db:
+        row = db.execute("SELECT status, expires_at FROM agent_approvals WHERE id=?",
+                         (approval_id,)).fetchone()
+        if not row:
+            raise RoomError("approval_missing", status=404)
+        if str(row["status"]) != "pending":
+            raise RoomError("approval_not_pending", status=409)
+        if row["expires_at"] and str(row["expires_at"]) < stamp:
+            db.execute("UPDATE agent_approvals SET status='expired', resolved_at=? WHERE id=?",
+                       (stamp, approval_id))
+            raise RoomError("approval_expired", status=409)
+        db.execute("UPDATE agent_approvals SET capability_hash=? WHERE id=? AND status='pending'",
+                   (_capability_hash(capability), approval_id))
+    return {"approval_id": approval_id, "capability": capability,
+            "capability_delivery": "author_channel"}
+
+
+def recreate_approval(db_path=None, approval_id: str = "", *, ttl_minutes: int = 120) -> Dict[str, Any]:
+    """Replace an expired/superseded card with a fresh, resolvable revision.
+
+    Upgraded legacy cards are expired by :func:`initialize`; this is the
+    supported recovery path (R-04/B4-05).
+    """
+    initialize(db_path)
+    with connect(db_path) as db:
+        row = db.execute("SELECT * FROM agent_approvals WHERE id=?", (approval_id,)).fetchone()
+    if not row:
+        raise RoomError("approval_missing", status=404)
+    if str(row["status"]) == "pending":
+        raise RoomError("approval_already_pending", status=409,
+                        detail={"message": "待审批卡无需重建；请直接审批或先作废"})
+    revision = int(row["directive_revision"] or 1)
+    directive_id = row["directive_id"]
+    if directive_id:
+        live = None
+        with connect(db_path) as db:
+            live = db.execute("SELECT status, directive_revision FROM agent_directives WHERE id=?",
+                              (directive_id,)).fetchone()
+        if not live:
+            raise RoomError("approval_directive_missing", status=409)
+        if str(live["status"]) == "cancelled":
+            raise RoomError("approval_directive_cancelled", status=409)
+        revision = int(live["directive_revision"])
+    return create_approval(
+        db_path, session_id=str(row["session_id"]), project_id=row["project_id"],
+        directive_id=directive_id, directive_revision=revision, task_id=row["task_id"],
+        kind=str(row["kind"]), title=str(row["title"]),
+        artifact_fingerprint=str(row["artifact_fingerprint"] or ""),
+        approved_scope_hash=str(row["approved_scope_hash"] or ""),
+        detail=_json(row["detail_json"], {}), ttl_minutes=ttl_minutes,
+        requester="author")
 
 
 def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
@@ -649,7 +847,7 @@ def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
     params: List[Any] = [wanted]
     if project_id:
         clauses.append("project_id=?"); params.append(project_id)
-    elif unbound_only:
+    elif unbound_only or session_id:
         clauses.append("project_id IS NULL")
     if session_id:
         clauses.append("session_id=?"); params.append(session_id)
@@ -665,6 +863,7 @@ def pending_approvals(db_path=None, *, project_id: Optional[str] = None,
         rows = [dict(row) for row in db.execute(
             "SELECT * FROM agent_approvals WHERE " + " AND ".join(clauses) + " ORDER BY created_at", tuple(params))]
     for item in rows:
+        item["capability_ready"] = bool(item.get("capability_hash"))
         item.pop("capability_hash", None)
         # Public listings must not hand back replayable binding values.
         item.pop("artifact_fingerprint", None)
@@ -686,6 +885,7 @@ def chat_context(db_path=None, *, project_id: str, topic_id: str = "default",
     with connect(db_path) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT * FROM agent_events WHERE project_id=? AND topic_id=? AND channel='chief_chat' "
+            "AND kind NOT IN ('progress_signal','live_preview_delta','draft_updated') "
             "ORDER BY seq DESC LIMIT ?", (project_id, topic_id, max(1, int(limit) * 2)))]
     rows.reverse()
     picked, size = [], 0
@@ -702,7 +902,7 @@ def chat_context(db_path=None, *, project_id: str, topic_id: str = "default",
 
 def snapshot(db_path=None, *, project_id: Optional[str] = None,
              session_id: Optional[str] = None, topic_id: Optional[str] = None,
-             limit: int = 100) -> Dict[str, Any]:
+             limit: int = 200) -> Dict[str, Any]:
     """Room state scoped to one book, or to an unbound session before a book exists.
 
     A session id is shared by every book ("author"), so a session-only snapshot

@@ -177,7 +177,9 @@ class TombstoneTest(unittest.TestCase):
             recovered = oe.recover_plan(project)
             self.assertIn("2", recovered["chapters"])
             self.assertEqual(recovered["chapters"]["2"]["outline"], "二改")
-            self.assertEqual(saved["chapter_revs"].get("2"), 2)
+            # Re-adding must outrank the tombstone rev 2, so the new live rev
+            # is 3 rather than 2 (A-P2-09).
+            self.assertEqual(saved["chapter_revs"].get("2"), 3)
 
     @defect
     def test_deleting_whole_plan_file_reports_missing_source(self):

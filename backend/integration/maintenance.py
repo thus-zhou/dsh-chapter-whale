@@ -14,17 +14,21 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from integration import chapter_versions as versions
 from integration import lock_manager
 from integration import workbench_db as wb
 
-# 审计 C-03：snapshots 与 revision_previews 是批注/修订证据，不是可回收
-# 预览缓存。它们不再进入 GC 候选集；引用集仍从 SQLite 计算，作为纵深防御。
+# 审计 C3-06：snapshots / revision_previews 不再整目录永久保护。
+# - snapshots：只保护仍被 annotations/preview_index 引用的基线；无法解析
+#   引用时 fail-closed 整目录保护。
+# - revision_previews：pending（待作者裁决）或损坏的预览永久保护，已决/过期
+#   的候选才进入 GC 候选集。
 _PREVIEW_DIRS = ("previews", "preview-cache", "history")
 _EVIDENCE_DIRS = ("snapshots", "revision_previews")
 _KEEP_NAMES = {"manifest.json", "index.json", "receipts.json", "writer_receipts.json"}
+_RETENTION_KEEP = {"quality_reviews": 20, "drafts_history": 20, "context_manifests": 5}
 _SECRET_KEYS = {"api_key", "apikey", "token", "secret", "password", "authorization",
                 "content", "body", "outline", "master_outline", "card_md", "text"}
 
@@ -40,11 +44,16 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _referenced_snapshot_ids(project) -> Set[str]:
-    """Snapshot ids still referenced by annotations / previews (audit C-03)."""
+def _referenced_snapshot_ids(project) -> Tuple[Set[str], bool]:
+    """Snapshot ids still referenced by annotations / previews.
+
+    Returns ``(ids, unknown)``.  ``unknown`` means at least one anchor could not
+    be parsed or the database could not be read; the caller must then protect
+    every snapshot rather than risk deleting evidence (audit C3-06).
+    """
     ids: Set[str] = set()
     if not wb.db_path(project).exists():
-        return ids
+        return ids, False
     try:
         with wb.connect(project) as db:
             for row in db.execute("SELECT anchor_json FROM annotations "
@@ -52,7 +61,7 @@ def _referenced_snapshot_ids(project) -> Set[str]:
                 try:
                     anchor = json.loads(row[0] or "{}")
                 except ValueError:
-                    continue
+                    return ids, True
                 digest = anchor.get("base_snapshot_id") if isinstance(anchor, dict) else None
                 if digest:
                     ids.add(str(digest))
@@ -60,11 +69,11 @@ def _referenced_snapshot_ids(project) -> Set[str]:
                                   "WHERE base_snapshot_id IS NOT NULL AND base_snapshot_id!=''"):
                 ids.add(str(row[0]))
     except sqlite3.Error:
-        pass
-    return ids
+        return ids, True
+    return ids, False
 
 
-def _protected_paths(project) -> Set[str]:
+def _protected_paths(project) -> Tuple[Set[str], bool]:
     protected: Set[str] = set()
     mapping = versions.chapter_map(project)
     for path in mapping.values():
@@ -76,17 +85,11 @@ def _protected_paths(project) -> Set[str]:
             for path in folder.rglob("*"):
                 if path.is_file():
                     protected.add(str(path.resolve()))
-    # 引用的基线快照 + 全部修订预览都是作者证据，GC 永不触碰。
-    for digest in _referenced_snapshot_ids(project):
+    referenced, unknown_refs = _referenced_snapshot_ids(project)
+    for digest in referenced:
         protected.add(str((meta_dir / "snapshots" / f"{digest}.txt").resolve()))
-    for name in _EVIDENCE_DIRS:
-        folder = meta_dir / name
-        if folder.is_dir() and not folder.is_symlink():
-            for path in folder.rglob("*"):
-                if path.is_file() and not path.is_symlink():
-                    protected.add(str(path.resolve()))
     if not wb.db_path(project).exists():
-        return protected
+        return protected, unknown_refs
     try:
         wb.initialize(project)
         with wb.connect(project) as db:
@@ -95,14 +98,14 @@ def _protected_paths(project) -> Set[str]:
                     protected.add(str((Path(project) / row[0]).resolve()))
     except sqlite3.Error:
         pass
-    return protected
+    return protected, unknown_refs
 
 
 def _candidate_files(project) -> List[Path]:
     root = Path(project) / ".webnovel"
     project_root = Path(project).resolve()
     result = []
-    for name in _PREVIEW_DIRS:
+    for name in _PREVIEW_DIRS + _EVIDENCE_DIRS:
         folder = root / name
         if folder.is_symlink() or not folder.is_dir():
             continue
@@ -122,15 +125,60 @@ def _candidate_files(project) -> List[Path]:
     return sorted(result)
 
 
+def _revision_preview_open(path: Path) -> bool:
+    """Pending (or unreadable) revision previews are author evidence."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    if not isinstance(data, dict):
+        return True
+    return str(data.get("state") or "pending") == "pending"
+
+
+def _apply_db_retention(project, now: float) -> Dict[str, int]:
+    """Bounded DB retention; GC previously only removed files (audit C3-25)."""
+    if not wb.db_path(project).exists():
+        return {}
+    removed: Dict[str, int] = {}
+    try:
+        with wb.write_tx(project) as db:
+            cutoff = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 30 * 86400))
+            cur = db.execute("DELETE FROM task_events WHERE datetime(created_at) < datetime(?)",
+                             (cutoff,))
+            removed["task_events"] = int(cur.rowcount or 0)
+            now_stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+            cur = db.execute("DELETE FROM idempotency_keys WHERE datetime(expires_at) < datetime(?)",
+                             (now_stamp,))
+            removed["idempotency_keys"] = int(cur.rowcount or 0)
+            for table, keep in _RETENTION_KEEP.items():
+                cur = db.execute(
+                    f"DELETE FROM {table} WHERE id NOT IN (SELECT id FROM "
+                    f"(SELECT id, ROW_NUMBER() OVER (PARTITION BY chapter_id ORDER BY id DESC) rn "
+                    f"FROM {table}) WHERE rn <= ?)", (int(keep),))
+                removed[table] = int(cur.rowcount or 0)
+    except sqlite3.Error:
+        return {}
+    return removed
+
+
 def collect_garbage(project, *, dry_run: bool = True, min_age_seconds: int = 7 * 86400) -> Dict[str, Any]:
     # 审计 C-04：诊断域锁先于 SQLite 事务，GC 与导出不会交错删/读。
+    # 审计 C3-05：锁文件现在位于管理器数据目录/系统临时目录，dry-run 不会
+    # 在只读书的项目目录里 mkdir/open 失败，也不留下永久 L8 文件。
     with lock_manager.hold(project, "diagnostics", "diagnostics", timeout=10.0):
-        protected = _protected_paths(project)
+        protected, protect_evidence = _protected_paths(project)
         cutoff = time.time() - max(0, int(min_age_seconds))
         removed, kept, freed = [], [], 0
         for path in _candidate_files(project):
             resolved = str(path.resolve())
             if resolved in protected:
+                kept.append(resolved)
+                continue
+            if protect_evidence and path.parent.name in _EVIDENCE_DIRS:
+                kept.append(resolved)
+                continue
+            if path.parent.name == "revision_previews" and _revision_preview_open(path):
                 kept.append(resolved)
                 continue
             try:
@@ -148,9 +196,10 @@ def collect_garbage(project, *, dry_run: bool = True, min_age_seconds: int = 7 *
                 except OSError:
                     removed.pop()
                     freed -= stat.st_size
+        retention = {} if dry_run else _apply_db_retention(project, time.time())
         return {"status": "dry_run" if dry_run else "collected", "dry_run": bool(dry_run),
                 "removed": removed, "kept": len(kept), "bytes": freed,
-                "count": len(removed)}
+                "count": len(removed), "db_retention": retention}
 
 
 def register_artifact(project, path, *, kind: str = "history", ref_count: int = 0,
@@ -177,7 +226,12 @@ def resource_ledger(project, costs_db=None) -> Dict[str, Any]:
     if not wb.db_path(project).exists():
         return {"states": states, "tasks": {}, "artifacts": {"count": 0, "bytes": 0},
                 "total_tokens": 0, "total_cost_cny": 0.0}
-    wb.initialize(project)
+    try:
+        wb.initialize(project)
+    except sqlite3.Error:
+        # 审计 C3-05：只读项目/归档书仍可导出诊断包（哈希/计数），
+        # 数据库只读时后续查询各自降级为空，而不是让导出 500。
+        pass
     budget_db = Path(costs_db) if costs_db is not None and Path(costs_db).is_file() else None
     if budget_db is None:
         candidate = wb.db_path(project)
@@ -288,35 +342,88 @@ def _required_tables() -> Set[str]:
     return set(_schema_definitions()) | {"search_fts"}
 
 
+def _schema_primary_keys() -> Dict[str, List[str]]:
+    """Expected primary-key column order parsed from ``workbench_db.SCHEMA``."""
+    keys: Dict[str, List[str]] = {}
+    for statement in str(wb.SCHEMA).split(";"):
+        statement = statement.strip()
+        match = re.match(
+            r"(?is)^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$",
+            statement)
+        if not match:
+            continue
+        table, body = match.group(1), match.group(2)
+        primary: List[str] = []
+        for part in _split_top_level(body):
+            part = part.strip()
+            if not part:
+                continue
+            table_key = re.match(r"(?is)^PRIMARY\s+KEY\s*\((.*)\)\s*$", part)
+            if table_key:
+                primary = [item.strip().strip('"`[]')
+                           for item in table_key.group(1).split(",") if item.strip()]
+                break
+            if re.search(r"(?i)\bPRIMARY\s+KEY\b", part):
+                primary = [part.split(None, 1)[0].strip('"`[]')]
+        if primary:
+            keys[table] = primary
+    return keys
+
+
+def _schema_create_statements() -> Dict[str, str]:
+    """``{table: CREATE TABLE statement}`` for constraint-preserving rebuilds."""
+    statements: Dict[str, str] = {}
+    for statement in (part.strip() for part in str(wb.SCHEMA).split(";") if part.strip()):
+        match = re.match(
+            r"(?is)^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+            statement)
+        if match:
+            statements[match.group(1)] = statement
+    return statements
+
+
 def _inspect_schema(db: sqlite3.Connection) -> Dict[str, Any]:
     tables = {str(row[0]) for row in db.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     definitions = _schema_definitions()
+    expected_keys = _schema_primary_keys()
     missing_tables = sorted(name for name in _required_tables() if name not in tables)
     missing_columns: Dict[str, List[str]] = {}
+    constraint_mismatches: Dict[str, Dict[str, List[str]]] = {}
     for table, columns in definitions.items():
         if table not in tables:
             continue
-        actual = {str(row[1]) for row in db.execute(f"PRAGMA table_info({table})")}
+        info = [dict(row) for row in db.execute(f"PRAGMA table_info({table})")]
+        actual = {str(row["name"]) for row in info}
         missing = [name for name in columns if name not in actual]
         if missing:
             missing_columns[table] = missing
+        if table in expected_keys:
+            ordered = sorted((row for row in info if int(row.get("pk") or 0) > 0),
+                             key=lambda row: int(row["pk"]))
+            found = [str(row["name"]) for row in ordered]
+            expected = expected_keys[table]
+            if found != expected:
+                # 审计 C4-03：列名齐全但缺主键/主键顺序不同的表不能报 current，
+                # 否则 schema 修复后仍可写重复 scope/事实。
+                constraint_mismatches[table] = {"expected": expected, "actual": found}
     try:
         row = db.execute("SELECT value FROM workbench_meta WHERE key='schema_version'").fetchone()
         version = str(row[0]) if row else None
     except sqlite3.Error:
         version = None
-    current = (not missing_tables and not missing_columns
+    current = (not missing_tables and not missing_columns and not constraint_mismatches
                and version is not None and version == str(wb.SCHEMA_VERSION))
     return {"current": current, "version": version,
-            "missing_tables": missing_tables, "missing_columns": missing_columns}
+            "missing_tables": missing_tables, "missing_columns": missing_columns,
+            "constraint_mismatches": constraint_mismatches}
 
 
 def schema_report(project) -> Dict[str, Any]:
     """Read-only schema drift report; never creates the database (audit C3-04)."""
     path = wb.db_path(project)
     base = {"current": False, "exists": path.is_file(), "version": None,
-            "missing_tables": [], "missing_columns": {}}
+            "missing_tables": [], "missing_columns": {}, "constraint_mismatches": {}}
     if not base["exists"]:
         return base
     key = str(path.resolve())
@@ -361,6 +468,7 @@ def ensure_schema(project, *, create: bool = False) -> Dict[str, Any]:
     if report.get("current") or report.get("error"):
         return report
     definitions = _schema_definitions()
+    create_statements = _schema_create_statements()
     try:
         with wb.write_tx(project) as db:
             for statement in (part.strip() for part in str(wb.SCHEMA).split(";") if part.strip()):
@@ -374,6 +482,25 @@ def ensure_schema(project, *, create: bool = False) -> Dict[str, Any]:
                     if not definition:
                         continue
                     db.execute(f"ALTER TABLE {table} ADD COLUMN {_addable_column(definition)}")
+            # 审计 C4-03：主键/约束不一致时 ADD COLUMN 无法修复，必须重建表。
+            # 先重命名旧表，再按 SCHEMA 建新表并复制公共列（重复主键 OR IGNORE）。
+            for table in list(report.get("constraint_mismatches") or {}):
+                statement = create_statements.get(table)
+                if not statement:
+                    continue
+                old_columns = {str(row[1]) for row in db.execute(f"PRAGMA table_info({table})")}
+                common = [name for name in definitions.get(table, {}) if name in old_columns]
+                temporary = f"{table}__fixc_{wb.new_id('r')[:8]}"
+                db.execute(f"ALTER TABLE {table} RENAME TO {temporary}")
+                db.execute(statement)
+                if common:
+                    columns_sql = ", ".join(common)
+                    db.execute(f"INSERT OR IGNORE INTO {table}({columns_sql}) "
+                               f"SELECT {columns_sql} FROM {temporary}")
+                db.execute(f"DROP TABLE {temporary}")
+            # 重建会随旧表一起删掉索引；再执行一次 SCHEMA 的 IF NOT EXISTS 索引。
+            for statement in (part.strip() for part in str(wb.SCHEMA).split(";") if part.strip()):
+                db.execute(statement)
             db.execute("INSERT INTO workbench_meta(key, value) VALUES('schema_version', ?) "
                        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                        (str(wb.SCHEMA_VERSION),))
@@ -408,6 +535,7 @@ def health(project) -> Dict[str, Any]:
             issues.append({"code": "schema_incomplete", "severity": "P0",
                            "missing_tables": list(schema.get("missing_tables") or []),
                            "missing_columns": dict(schema.get("missing_columns") or {}),
+                           "constraint_mismatches": dict(schema.get("constraint_mismatches") or {}),
                            "detail": schema.get("error") or ""})
             schema = ensure_schema(project)
         try:
@@ -415,7 +543,9 @@ def health(project) -> Dict[str, Any]:
         except sqlite3.Error as exc:
             return {"status": "degraded", "integrity": "error", "issues": [
                 {"code": "db_open_failed", "severity": "P0", "detail": str(exc)}],
-                "chapters": 0, "versions": 0, "drafts": 0, "schema": schema}
+                "chapters": 0, "versions": 0, "drafts": 0, "schema": schema,
+                "counts": {"P0": 1, "P1": 0, "P2": 0}, "disk_free_bytes": 0,
+                "checked_at": _now()}
         db = None
         try:
             db = sqlite3.connect(str(db_path))
@@ -430,10 +560,12 @@ def health(project) -> Dict[str, Any]:
                 db.close()
     mapping = versions.chapter_map(project)
     indexed: Set[str] = set()
+    drafts = 0
     if db_ready:
         try:
             with wb.connect(project) as db:
                 indexed = {str(row[0]) for row in db.execute("SELECT chapter_id FROM chapter_meta")}
+                drafts = int(db.execute("SELECT COUNT(*) FROM chapter_drafts").fetchone()[0])
         except sqlite3.Error:
             indexed = set()
     for chapter in sorted(indexed):
@@ -465,7 +597,8 @@ def health(project) -> Dict[str, Any]:
         issues.append({"code": "disk_low", "severity": "P1", "free_bytes": free})
     blocking = [item for item in issues if item["severity"] in {"P0", "P1"}]
     return {"status": "degraded" if blocking else "ok", "integrity": integrity,
-            "chapters": len(mapping), "issues": issues, "schema": schema,
+            "chapters": len(mapping), "versions": len(mapping), "drafts": drafts,
+            "issues": issues, "schema": schema,
             "counts": {level: sum(1 for item in issues if item["severity"] == level)
                        for level in ("P0", "P1", "P2")},
             "disk_free_bytes": free, "checked_at": _now()}

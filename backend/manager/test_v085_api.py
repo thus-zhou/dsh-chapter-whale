@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from manager import app as module
-from integration import agent_room
+from integration import agent_hub, agent_room, costs
 
 
 class V085ApiTests(unittest.TestCase):
@@ -179,6 +179,121 @@ class V085ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403, response.text)
         self.assertEqual(response.json()["code"], "agents_cannot_approve")
 
+    def test_agent_created_card_needs_the_author_channel_capability(self):
+        db = self.root / "agent_room.sqlite3"
+        directive = agent_room.create_directive(
+            db, session_id="author", project_id=self.identity, title="发布",
+            raw_instruction="发布")
+        card = agent_room.create_approval(
+            db, session_id="author", project_id=self.identity, directive_id=directive["id"],
+            directive_revision=1, task_id=None, kind="publish", title="Agent 制卡",
+            artifact_fingerprint="fp-a", approved_scope_hash="scope-a", detail={},
+            requester="agent")
+        self.assertNotIn("capability", card)
+        base = f"/api/projects/{self.identity}/approvals/{card['id']}/capability"
+        denied = self.client.post(base, headers=self.headers)
+        self.assertEqual(denied.status_code, 403, denied.text)
+        issued = self.client.post(base, headers={**self.headers, "X-Novel-Author": "1"})
+        self.assertEqual(issued.status_code, 200, issued.text)
+        capability = issued.json()["capability"]
+        resolved = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{card['id']}/resolve",
+            json={"approved": True, "capability": capability}, headers=self.headers)
+        self.assertEqual(resolved.status_code, 200, resolved.text)
+
+    def test_expired_legacy_card_can_be_recreated_by_the_author(self):
+        db = self.root / "agent_room.sqlite3"
+        directive = agent_room.create_directive(
+            db, session_id="author", project_id=self.identity, title="旧卡",
+            raw_instruction="写")
+        card = agent_room.create_approval(
+            db, session_id="author", project_id=self.identity, directive_id=directive["id"],
+            directive_revision=1, task_id=None, kind="publish", title="旧卡",
+            artifact_fingerprint="fp-old", approved_scope_hash="scope-old", detail={})
+        import sqlite3
+        connection = sqlite3.connect(db)
+        try:
+            connection.execute("UPDATE agent_approvals SET capability_hash=NULL WHERE id=?",
+                               (card["id"],))
+            connection.commit()
+        finally:
+            connection.close()
+        agent_room.initialize(db)
+        self.assertEqual(agent_room.get_approval(db, card["id"])["status"], "expired")
+        denied = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{card['id']}/recreate",
+            headers=self.headers)
+        self.assertEqual(denied.status_code, 403, denied.text)
+        recreated = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{card['id']}/recreate",
+            headers={**self.headers, "X-Novel-Author": "1"})
+        self.assertEqual(recreated.status_code, 200, recreated.text)
+        fresh = recreated.json()
+        self.assertNotEqual(fresh["id"], card["id"])
+        self.assertTrue(fresh["capability"])
+        resolved = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{fresh['id']}/resolve",
+            json={"approved": True, "capability": fresh["capability"]},
+            headers=self.headers)
+        self.assertEqual(resolved.status_code, 200, resolved.text)
+
+    def test_author_can_resolve_a_project_cost_gap(self):
+        costs.record_gap(self.root / "costs.sqlite3", "fallback_settlement_unknown",
+                         project=str(self.project))
+        url = f"/api/projects/{self.identity}/costs/resolve-gaps"
+        denied = self.client.post(url, json={}, headers=self.headers)
+        self.assertEqual(denied.status_code, 403, denied.text)
+        resolved = self.client.post(url, json={},
+                                    headers={**self.headers, "X-Novel-Author": "1"})
+        self.assertEqual(resolved.status_code, 200, resolved.text)
+        self.assertEqual(resolved.json()["resolved"], 1)
+        self.assertEqual(costs.ledger_gaps(self.root / "costs.sqlite3",
+                                           project=str(self.project)), 0)
+
+    def test_role_e_failure_card_is_consumed_after_author_approval(self):
+        directive = self.client.post(
+            f"/api/projects/{self.identity}/chief/directives",
+            json={"title": "改令", "instruction": "写三章"}, headers=self.headers).json()
+        db = self.root / "agent_room.sqlite3"
+        task = agent_room.create_task(db, directive_id=directive["id"], session_id="author",
+                                      project_id=self.identity, role="writer",
+                                      title="写第二章", tool_name="write_chapter",
+                                      status="running")
+        started = self.client.post(
+            f"/api/projects/{self.identity}/directives/{directive['id']}/amend",
+            json={"instruction": "第二章别进山", "task_ids": [task["id"]]},
+            headers=self.headers)
+        self.assertEqual(started.status_code, 200, started.text)
+        amendment_id = started.json()["amendment"]["amendment_id"]
+
+        def broken(_gateway, **_kwargs):
+            def evaluator(_context):
+                raise RuntimeError("model down")
+            return evaluator
+
+        with patch.object(agent_hub, "role_e_evaluator", side_effect=broken), \
+                patch("integration.model_gateway.ModelGateway", return_value=object()):
+            evaluated = self.client.post(
+                f"/api/projects/{self.identity}/directives/{directive['id']}/amendments/"
+                f"{amendment_id}/evaluate", json={"role_e": True}, headers=self.headers)
+        self.assertEqual(evaluated.status_code, 200, evaluated.text)
+        body = evaluated.json()
+        self.assertEqual(body["status"], "fallback")
+        card = body["approval"]
+        self.assertNotIn("capability", card)
+        issued = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{card['id']}/capability",
+            headers={**self.headers, "X-Novel-Author": "1"})
+        self.assertEqual(issued.status_code, 200, issued.text)
+        resolved = self.client.post(
+            f"/api/projects/{self.identity}/approvals/{card['id']}/resolve",
+            json={"approved": True, "capability": issued.json()["capability"]},
+            headers=self.headers)
+        self.assertEqual(resolved.status_code, 200, resolved.text)
+        self.assertEqual(resolved.json()["followup"]["consumed"], "evaluated")
+        self.assertEqual(agent_room.get_task(db, task["id"])["status"], "pending")
+        self.assertEqual(agent_room.get_amendment(db, amendment_id)["status"], "evaluated")
+
 
     def _second_project(self) -> str:
         other = self.root / "book-b"
@@ -338,16 +453,24 @@ class V085ApiTests(unittest.TestCase):
                                    headers=self.headers)
         self.assertEqual(message.status_code, 200, message.text)
         self.assertEqual(message.json()["sender_role"], "system")
+        # A body field alone cannot claim authorship (B3-17); only the author
+        # channel header can.
         explicit = self.client.post(base + "/messages",
                                     json={"text": "作者本人", "sender_role": "author"},
                                     headers=self.headers)
-        self.assertEqual(explicit.json()["sender_role"], "author")
+        self.assertEqual(explicit.status_code, 403, explicit.text)
+        self.assertEqual(explicit.json()["code"], "author_channel_required")
+        author = self.client.post(base + "/messages",
+                                  json={"text": "作者本人", "sender_role": "author"},
+                                  headers={**self.headers, "X-Novel-Author": "1"})
+        self.assertEqual(author.status_code, 200, author.text)
+        self.assertEqual(author.json()["sender_role"], "author")
         bad = self.client.post(base + "/messages",
                                json={"text": "冒充", "sender_role": "root"},
                                headers=self.headers)
         self.assertEqual(bad.status_code, 400, bad.text)
 
-    def _stream_ids(self, after: int, expected: int):
+    def _stream_ids(self, after, expected, *, query=None):
         async def collect():
             endpoint = next(route.endpoint for route in self.app.routes
                             if getattr(route, "path", "") == "/api/projects/{identity}/room/stream")
@@ -358,7 +481,9 @@ class V085ApiTests(unittest.TestCase):
                 async def is_disconnected(self):
                     return True
 
-            response = await endpoint(self.identity, ImmediateDisconnect(), str(after))
+            kwargs = {} if query is None else {"after_seq": query}
+            response = await endpoint(self.identity, ImmediateDisconnect(),
+                                      "" if after is None else str(after), **kwargs)
             chunks = []
             async for chunk in response.body_iterator:
                 chunks.append(chunk)
@@ -378,11 +503,10 @@ class V085ApiTests(unittest.TestCase):
             agent_room.append_event(db_path, session_id="author", project_id=self.identity,
                                     channel="task_signal", sender_role="system",
                                     kind="task_update", summary=f"事件 {index}")
-        recent = self._stream_ids(0, 200)
+        recent = self._stream_ids(None, 200)
         self.assertEqual(len(recent), 200)
         self.assertEqual(len(set(recent)), 200)
-        # A fresh connection keeps the most recent 200 (seq 31..230), so the
-        # 201..230 backlog is no longer skipped forever.
+        # A fresh connection keeps the most recent 200 (seq 31..230).
         self.assertEqual(recent[0], 31)
         self.assertEqual(recent[-1], 230)
         resumed = self._stream_ids(100, 130)
@@ -394,6 +518,69 @@ class V085ApiTests(unittest.TestCase):
         self.assertEqual(paged[-1], 230)
         self.assertEqual(len(paged), 229)
         self.assertEqual(len(paged), len(set(paged)))
+        # Explicit cursor 0 pages from the beginning: the older 1..30 backlog
+        # is recoverable instead of being skipped forever (B3-07).
+        from_zero = self._stream_ids(0, 230)
+        self.assertEqual(from_zero[0], 1)
+        self.assertEqual(from_zero[-1], 230)
+        self.assertEqual(len(set(from_zero)), 230)
+        # ?after_seq=0 has the same from-scratch meaning.
+        query_zero = self._stream_ids(None, 230, query=0)
+        self.assertEqual(query_zero[0], 1)
+        self.assertEqual(query_zero[-1], 230)
+
+    def test_sse_overflow_marker_exposes_oldest_available_seq(self):
+        db_path = self.root / "agent_room.sqlite3"
+        event = agent_room.append_event(db_path, session_id="author", project_id=self.identity,
+                                        channel="task_signal", sender_role="system",
+                                        kind="task_update", summary="最早事件")
+        self.assertEqual(agent_room.oldest_seq(db_path, project_id=self.identity), event["seq"])
+        agent_room.append_event(db_path, session_id="author", project_id="other-book",
+                                channel="task_signal", sender_role="system",
+                                kind="task_update", summary="别的书")
+        # Scoped: another book's older seq must not leak into this stream.
+        self.assertEqual(agent_room.oldest_seq(db_path, project_id=self.identity), event["seq"])
+
+    def test_chief_session_stream_returns_only_unbound_rows(self):
+        db_path = self.root / "agent_room.sqlite3"
+        agent_room.append_event(db_path, session_id="author", project_id=self.identity,
+                                channel="chief_chat", sender_role="author",
+                                kind="text", summary="书内消息")
+        unbound = agent_room.append_event(db_path, session_id="author", project_id=None,
+                                          channel="chief_chat", sender_role="author",
+                                          kind="text", summary="开书前消息")
+
+        async def collect():
+            endpoint = next(route.endpoint for route in self.app.routes
+                            if getattr(route, "path", "") == "/api/chief/room/stream")
+
+            class ImmediateDisconnect:
+                headers: dict = {}
+
+                async def is_disconnected(self):
+                    return True
+
+            response = await endpoint(ImmediateDisconnect(), "author", None, "")
+            chunks = []
+            async for chunk in response.body_iterator:
+                chunks.append(chunk)
+            return "".join(chunks)
+
+        body = asyncio.run(collect())
+        self.assertIn("开书前消息", body)
+        self.assertNotIn("书内消息", body)
+        self.assertIn(str(unbound["seq"]), body)
+
+    def test_snapshot_covers_the_same_200_event_window_as_sse(self):
+        db_path = self.root / "agent_room.sqlite3"
+        for index in range(230):
+            agent_room.append_event(db_path, session_id="author", project_id=self.identity,
+                                    channel="task_signal", sender_role="system",
+                                    kind="task_update", summary=f"事件 {index}")
+        snapshot = agent_room.snapshot(db_path, project_id=self.identity)
+        self.assertEqual(len(snapshot["events"]), 200)
+        self.assertEqual(snapshot["events"][0]["seq"], 31)
+        self.assertEqual(snapshot["events"][-1]["seq"], 230)
 
     def test_sse_fresh_replay_is_project_scoped_not_global_window(self):
         db_path = self.root / "agent_room.sqlite3"
@@ -409,7 +596,7 @@ class V085ApiTests(unittest.TestCase):
             db_path, session_id="author", project_id=self.identity,
             channel="task_signal", sender_role="system", kind="task_update",
             summary=f"A late {index}")["seq"] for index in range(44)]
-        ids = self._stream_ids(0, 144)
+        ids = self._stream_ids(None, 144)
         # The global seq is sparse for this book; fresh replay must still
         # include all 144 of its own events, not only the last 44 (B3-07).
         self.assertEqual(ids, first + second)

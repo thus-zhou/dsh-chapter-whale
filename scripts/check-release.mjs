@@ -56,11 +56,113 @@ function declaredRootEntries(definition) {
   }
   return names;
 }
+/* `files` is only the publish allow-list; `main`/`exports`/`dsh.patch` are
+   the load points the host actually imports.  A file can exist in the source
+   tree and still be absent from the tarball when `files` omits it
+   (D-R4-02).  Relative imports of those entries are load-bearing too:
+   index.js imports ./managed-runtime.mjs and ./dsh-model-bridge.mjs. */
+function loadPointEntries(definition) {
+  const names = new Set();
+  const add = (value) => {
+    if (typeof value !== 'string') return;
+    const entry = value.trim();
+    if (!entry.startsWith('./')) return;
+    const name = entry.slice(2);
+    if (!name || name.includes('*') || name.endsWith('/')) return;
+    names.add(name);
+  };
+  const walk = (value) => {
+    if (typeof value === 'string') { add(value); return; }
+    if (Array.isArray(value)) { value.forEach(walk); return; }
+    if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  add(definition.main);
+  walk(definition.exports);
+  if (definition.dsh && typeof definition.dsh === 'object') {
+    add(definition.dsh.bundle && definition.dsh.bundle.patch);
+  }
+  const queue = Array.from(names);
+  const seen = new Set();
+  while (queue.length && seen.size < 8) {
+    const name = queue.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (!/\.(m?js|cjs)$/i.test(name)) continue;
+    const path = join(root, name);
+    if (!existsSync(path) || !statSync(path).isFile()) continue;
+    let text = '';
+    try { text = readFileSync(path, 'utf8'); } catch (error) { continue; }
+    const pattern = /(?:from\s*|import\s*\(?\s*)(['"])(\.\/[^'"]+)\1/g;
+    for (const match of text.matchAll(pattern)) {
+      const target = match[2].slice(2);
+      if (!target || target.includes('*') || names.has(target)) continue;
+      if (!/\.(m?js|cjs)$/i.test(target)) continue;
+      const targetPath = join(root, target);
+      if (!existsSync(targetPath) || !statSync(targetPath).isFile()) continue;
+      names.add(target);
+      queue.push(target);
+    }
+  }
+  return names;
+}
+
+function normalizePackEntry(value) {
+  return String(value || '').trim().replace(/^\.\//, '');
+}
+
+/* npm's `files` entries are minimatch patterns.  The gate only needs the
+   common shapes (exact file, directory, `*.ext`), so implement those
+   deterministically instead of adding a dependency to a prepublish check. */
+function globMatch(pattern, name) {
+  let source = '^';
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === '*') {
+      if (pattern[index + 1] === '*') {
+        source += '.*';
+        index += 1;
+        if (pattern[index + 1] === '/') index += 1;
+      } else {
+        source += '[^/]*';
+      }
+    } else if (char === '?') {
+      source += '[^/]';
+    } else if ('\\^$+?.()|{}[]'.includes(char)) {
+      source += '\\' + char;
+    } else {
+      source += char;
+    }
+  }
+  return new RegExp(source + '$').test(name);
+}
+
+function packEntryMatches(name, entry) {
+  const rule = normalizePackEntry(entry);
+  if (!rule || rule.startsWith('!')) return false;
+  if (rule === name) return true;
+  if (!/[?*]/.test(rule) && name.startsWith(rule.replace(/\/$/, '') + '/')) return true;
+  return /[?*]/.test(rule) && globMatch(rule, name);
+}
+
+function packedByAllowList(name, files) {
+  // No `files` means npm publishes everything that is not ignored.
+  if (!Array.isArray(files)) return true;
+  return files.some((entry) => packEntryMatches(name, entry));
+}
+
+const loadEntries = loadPointEntries(pkg);
 const rootEntries = declaredRootEntries(pkg);
+for (const name of loadEntries) rootEntries.add(name);
 for (const name of rootEntries) {
   const path = join(root, name);
   if (!existsSync(path) || !statSync(path).isFile()) {
     errors.push(`缺少根入口：${name}（package.json 声明为发布包入口，缺失的包无法加载或安装）。`);
+  }
+}
+for (const name of loadEntries) {
+  if (name === 'package.json') continue; // npm always packs package.json
+  if (!packedByAllowList(name, pkg.files)) {
+    errors.push(`根入口未包含在 package.json files 中：${name}（源码里存在，但 npm pack 的发布 allow-list 不会收录它，安装后的宿主无法加载）。`);
   }
 }
 if (manifestText.includes('\r\n')) {
@@ -153,6 +255,40 @@ for (const [name, hash] of Object.entries(manifest.files || {})) {
       && buffer.includes(0x0d) && buffer.includes(0x0a)
       && buffer.toString('utf8').includes('\r\n')) {
     errors.push(`文本文件含 CRLF，分发字节必须是 LF：${name}`);
+  }
+}
+
+// D-RG2 / D-15：发布记录与包体必须在门禁输出里可见。版本号、manifest 与
+// RELEASE_STATUS 的最终同步属于发布步骤；这里先证明门禁能发现漂移，
+// 并把 client.js / 字体双份的实际字节数报出来，避免“同版本多包体”静默通过。
+const clientPath = join(root, 'client.js');
+const clientBytes = existsSync(clientPath) && statSync(clientPath).isFile() ? statSync(clientPath).size : 0;
+const MAX_CLIENT_BYTES = 6 * 1024 * 1024;
+if (clientBytes > MAX_CLIENT_BYTES) {
+  errors.push(`client.js 超过包体上限：${clientBytes} B > ${MAX_CLIENT_BYTES} B（D-15）。`);
+}
+let fontBytes = 0;
+for (const file of ['manrope.woff2', 'notosanssc.woff2', 'notoserifsc.woff2']) {
+  const fontPath = join(root, 'assets', 'fonts', file);
+  if (existsSync(fontPath) && statSync(fontPath).isFile()) fontBytes += statSync(fontPath).size;
+}
+if (clientBytes && fontBytes) {
+  notes.push(`包体：client.js ${clientBytes} B；字体同时内嵌与随包分发 ${fontBytes} B（D-15，建议子集化/外链并评估 assets/fonts 是否必须随包）。`);
+}
+const releaseStatusPath = join(root, 'RELEASE_STATUS.md');
+if (existsSync(releaseStatusPath)) {
+  try {
+    const releaseText = readFileSync(releaseStatusPath, 'utf8');
+    const hashes = [...releaseText.matchAll(/\b[a-f0-9]{64}\b/g)].map((match) => match[0]);
+    if (hashes.length && !hashes.includes(String(manifest.buildId))) {
+      notes.push(`RELEASE_STATUS.md 的 buildId ${hashes[0].slice(0, 8)}… 与当前清单 ${String(manifest.buildId).slice(0, 8)}… 不一致；发布前必须同步发布记录（D-RG2）。`);
+    }
+    const counts = [...releaseText.matchAll(/(\d{3,6})\s*(?:个文件|files)(?![0-9A-Za-z])/g)].map((match) => Number(match[1]));
+    if (counts.length && !counts.includes(checked)) {
+      notes.push(`RELEASE_STATUS.md 的文件数记录（${counts.slice(0, 4).join('/')}）与本次检查的 ${checked} 个文件不一致；发布前必须同步（D-RG2）。`);
+    }
+  } catch (error) {
+    notes.push('RELEASE_STATUS.md 无法读取：' + error.message);
   }
 }
 
@@ -393,7 +529,8 @@ try {
 const summary = {
   root, version: pkg.version, packageVersion: manifest.packageVersion,
   buildId: manifest.buildId, recomputedBuildId, files: Object.keys(manifest.files || {}).length,
-  checked, skippedRuntime, errors: errors.length, notes,
+  checked, skippedRuntime, clientBytes, fontBytes,
+  loadEntries: Array.from(loadEntries), errors: errors.length, notes,
 };
 if (jsonAt) {
   const { writeFileSync } = await import('node:fs');

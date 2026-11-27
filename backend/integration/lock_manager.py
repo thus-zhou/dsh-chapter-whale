@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -70,9 +71,42 @@ def note_sqlite_exit() -> None:
     _STATE.sqlite_depth = max(0, _sqlite_depth() - 1)
 
 
+def _project_key(project) -> str:
+    try:
+        target = str(Path(project).expanduser().resolve())
+    except (OSError, RuntimeError):
+        target = str(project or "")
+    return hashlib.sha256(os.path.normcase(target).encode("utf-8")).hexdigest()[:16]
+
+
+def lock_directory(project) -> Path:
+    """Where this project's lock files live.
+
+    审计 C3-05：旧实现把锁写进被审计项目的 ``.webnovel/locks``。一次
+    dry-run GC 也会在只读书/归档书上留下永久锁文件并抛 PermissionError。
+    锁因此移到管理器数据目录（``NOVEL_HELPER_MANAGER_DATA/locks``），没有
+    数据目录时退到系统临时目录；项目路径只作为命名空间哈希。
+    """
+    override = os.getenv("NOVEL_HELPER_LOCK_DIR")
+    if override:
+        root = Path(override)
+    else:
+        # 固定使用系统临时目录下的同一命名空间：管理器与子进程即使环境变量
+        # 不同也必须竞争同一把锁。项目路径只作为命名空间哈希。
+        root = Path(tempfile.gettempdir()) / "novel-helper-locks"
+    return root / _project_key(project)
+
+
 def _lock_path(project, level: str, key: str) -> Path:
     digest = hashlib.sha256(f"{level}:{key}".encode("utf-8")).hexdigest()[:16]
-    return Path(project) / ".webnovel" / "locks" / f"L{LEVELS[level]}-{digest}.lock"
+    try:
+        directory = lock_directory(project)
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        # 只读项目/只读临时目录不能再变成 500；上层把 LockError 映射为 503。
+        raise LockError("lock_unavailable", status=503,
+                        detail={"level": level, "reason": type(exc).__name__}) from None
+    return directory / f"L{LEVELS[level]}-{digest}.lock"
 
 
 @contextmanager
@@ -106,6 +140,10 @@ def hold(project, level: str, key: str = "", *, timeout: float = 5.0):
             if time.monotonic() >= deadline:
                 raise LockError("lock_busy", detail={"level": level, "key": key}) from None
             time.sleep(0.02)
+        except OSError as exc:
+            # 权限/磁盘错误是「锁不可用」，不是 500；调用方按 503 重试。
+            raise LockError("lock_unavailable", status=503,
+                            detail={"level": level, "reason": type(exc).__name__}) from None
     stack.append((LEVELS[level], level))
     try:
         yield path

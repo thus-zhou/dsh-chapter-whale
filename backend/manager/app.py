@@ -83,6 +83,11 @@ PYTHON = Path(sys.executable) if sys.executable else (
 )
 logger = logging.getLogger("chapter_whale.manager")
 
+# 审计 C3-17：`deferred` 是真实存在的等待态（daily/polish/其他 failure_kind），
+# 必须参与 active 过滤、项目互斥与 resume_due；旧实现把它当死记录。
+ACTIVE_OPERATION_STATUSES = ("queued", "running", "awaiting_login", "waiting", "deferred")
+_RESUMABLE_STATUSES = {"waiting", "deferred"}
+
 
 class Store:
     def __init__(self, path: Path):
@@ -123,8 +128,11 @@ class Store:
     def operations(self, active_only=False):
         with self.connect() as db:
             query = "SELECT payload FROM operations"
-            query += " WHERE json_extract(payload, '$.status') IN ('queued','running','awaiting_login','waiting') ORDER BY rowid DESC" if active_only else " ORDER BY rowid DESC LIMIT 100"
-            return [json.loads(row[0]) for row in db.execute(query)]
+            marks = ",".join("?" for _ in ACTIVE_OPERATION_STATUSES)
+            query += (f" WHERE json_extract(payload, '$.status') IN ({marks}) ORDER BY rowid DESC"
+                      if active_only else " ORDER BY rowid DESC LIMIT 100")
+            params = ACTIVE_OPERATION_STATUSES if active_only else ()
+            return [json.loads(row[0]) for row in db.execute(query, params)]
 
     def operation(self, identity):
         with self.connect() as db:
@@ -171,6 +179,14 @@ def redact(value: str) -> str:
     return value
 
 
+def redact_paths(value: str) -> str:
+    """Hide server absolute paths from remote error envelopes (audit C3-24)."""
+    text = str(value or "")
+    text = re.sub(r"(?<![:A-Za-z0-9/])/(?:[^\s'\"/]+/)+[^\s'\"/]*", "[path]", text)
+    text = re.sub(r"\b[A-Za-z]:\\[^\s'\"]+", "[path]", text)
+    return text
+
+
 def stop_process_tree(process: subprocess.Popen):
     """Stop only descendants of the worker launched by this manager."""
     if process.poll() is not None:
@@ -207,6 +223,18 @@ class Operations:
         for old in store.operations(active_only=True):
             if old.get("status") in {"queued", "running", "awaiting_login"}:
                 old.update(status="interrupted", finished_at=bridge.now_iso(), error="管理服务已重启；请核对队列后重新执行")
+                store.save_operation(old)
+            elif old.get("status") == "deferred":
+                # 审计 C3-17：deferred 跨重启曾永久保留。能恢复的批次转回
+                # waiting 交给 resume_due 复核；其余转 interrupted，避免僵尸
+                # 记录永久占用项目互斥却不被调度。
+                result = old.get("result") if isinstance(old.get("result"), dict) else {}
+                if (old.get("kind") == "generate" and old.get("batch_id")
+                        and result.get("next_retry_at")):
+                    old["status"] = "waiting"
+                else:
+                    old.update(status="interrupted", finished_at=bridge.now_iso(),
+                               error="等待结果无法自动恢复；请核对队列后重新执行")
                 store.save_operation(old)
 
     def start(self, *args, **kwargs):
@@ -300,7 +328,7 @@ class Operations:
                         metadata = {**(metadata or {}), "project_id": meta_pid}
                 if meta_pid and any(
                     x.get("project_id") == meta_pid and x.get("kind") in _PROJECT_MUTEX_KINDS
-                    and x.get("status") in {"queued", "running", "awaiting_login", "waiting"}
+                    and x.get("status") in ACTIVE_OPERATION_STATUSES
                     for x in active
                 ):
                     raise HTTPException(409, "该作品已有写作或日更任务正在执行，请等待完成后再试")
@@ -354,20 +382,39 @@ class Operations:
         return cur
 
     def resume_due(self, now=None):
-        """Wake only durable, explicitly deferred creation batches, never publish."""
+        """Wake durable waits, re-checking pause/maintenance/mutex before spawn.
+
+        审计 C3-17/C3-18/C3-23：旧实现只认 ``waiting``，``deferred`` 既
+        不参与项目互斥也永远不会被唤醒；且拿到锁后直接 spawn，绕过全站急停。
+        """
         from datetime import datetime, timezone
         now=now or datetime.now(timezone.utc)
         if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':return
         with self.lock:
             records=self.store.operations(active_only=True)
             for payload in records:
-                if payload.get('status')!='waiting':continue
-                result=payload.get('result') or {}
-                if result.get('failure_kind') not in {'recovery_cooldown','free_pool_wait'}:continue
+                status = payload.get('status')
+                if status not in _RESUMABLE_STATUSES:
+                    continue
+                result = payload.get('result') if isinstance(payload.get('result'), dict) else {}
+                if status == 'waiting' and result.get('failure_kind') not in {'recovery_cooldown','free_pool_wait'}:
+                    continue
+                retry_at = result.get('next_retry_at')
+                if not retry_at:
+                    payload.update(status='interrupted', finished_at=bridge.now_iso(),
+                                   error='等待记录缺少恢复检查点；请核对后重新执行')
+                    self.store.save_operation(payload)
+                    continue
                 try:
-                    target=datetime.fromisoformat(result['next_retry_at'])
+                    target=datetime.fromisoformat(str(retry_at))
                     if target.tzinfo is None:raise ValueError('等待时间缺少时区')
                     if target>now:continue
+                    # 审计 C3-23：全站急停/维护中不得 spawn；这里是拿锁后的
+                    # 复检，不只是 dispatch 循环入口的一次性检查。
+                    if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                        continue
+                    if writer_runner.strict_json(DATA/'maintenance.json',{}).get('state')=='maintenance':
+                        continue
                     if any(x['id']!=payload['id'] and x.get('identity')==payload.get('identity') for x in records):continue
                     project=next((x for x in self.store.projects() if x['id']==payload.get('project_id')),None)
                     if project is None:
@@ -384,11 +431,19 @@ class Operations:
                     project_key=project['id']
                     if payload.get('project_id')!=project_key:
                         payload['project_id']=project_key
-                    # 在唤醒前复检项目互斥：另一个同项目操作可能已排队/运行/等待。
+                    # 在唤醒前复检项目互斥：deferred 现在也是 active，僵尸
+                    # 记录会挡住新的同项目操作，而不是被互斥忽略。
                     if any(x['id']!=payload['id'] and x.get('kind') in _PROJECT_MUTEX_KINDS
                            and x.get('project_id')==project_key
-                           and x.get('status') in {'queued','running','awaiting_login','waiting'}
+                           and x.get('status') in ACTIVE_OPERATION_STATUSES
                            for x in records):
+                        continue
+                    # 非 generate/batch 的 deferred 没有可复核的批次检查点，
+                    # 不能冒充“调度器会继续”；显式转人工，释放项目互斥。
+                    if status == 'deferred' and (payload.get('kind')!='generate' or not payload.get('batch_id')):
+                        payload.update(status='interrupted', finished_at=bridge.now_iso(),
+                                       error='该等待结果无法自动恢复；请核对后重新执行')
+                        self.store.save_operation(payload)
                         continue
                     if payload.get('kind')!='generate' or Path(project['path']).resolve()!=Path(result['project']).resolve():
                         raise ValueError('等待批次作品身份不一致')
@@ -397,6 +452,9 @@ class Operations:
                     batch=writer_runner.strict_json(path,{})
                     if not isinstance(batch,dict) or batch.get('id')!=payload['batch_id'] or batch.get('status')!='waiting' or batch.get('recovery',{}).get('next_retry_at')!=result['next_retry_at']:
                         raise ValueError('原批次等待检查点已变化')
+                    # 最后一次急停复检：检查与 spawn 之间不再有可绕过的窗口。
+                    if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                        continue
                     args=['batch','--project',project['path'],'--batch-id',payload['batch_id']]
                     payload.update(status='queued',resume_count=payload.get('resume_count',0)+1,last_resumed_at=bridge.now_iso())
                     payload.pop('finished_at',None);payload.pop('error',None)
@@ -410,6 +468,18 @@ class Operations:
         payload = self.store.operation(identity)
         process = None
         try:
+            # 审计 C3-23：派发后、真正 spawn 前再 fail-closed 一次；急停或
+            # 维护开始后不得再启动子进程。
+            if concurrent_engine.global_paused(DATA / "global_pause.json"):
+                payload.update(status="interrupted", finished_at=bridge.now_iso(),
+                               error="全站急停中，本次操作未执行；恢复后请重试")
+                self.store.save_operation(payload)
+                return
+            if writer_runner.strict_json(DATA / 'maintenance.json', {}).get('state') == 'maintenance':
+                payload.update(status="interrupted", finished_at=bridge.now_iso(),
+                               error="正在维护升级，本次操作未执行；完成后请重试")
+                self.store.save_operation(payload)
+                return
             env = bridge.child_environment()
             env["PYTHONUTF8"] = "1"
             env["PYTHONUNBUFFERED"] = "1"
@@ -555,6 +625,10 @@ class Operations:
             payload = self.store.operation(identity)
             if payload.get('status')=='waiting':
                 payload.update(status='cancelled',finished_at=bridge.now_iso(),error='已取消等待；原稿与批次保留')
+                self.store.save_operation(payload)
+                return {'id':identity,'status':'cancelled'}
+            if payload.get('status')=='deferred':
+                payload.update(status='cancelled',finished_at=bridge.now_iso(),error='已取消无法自动恢复的等待记录；原稿与批次保留')
                 self.store.save_operation(payload)
                 return {'id':identity,'status':'cancelled'}
             if payload.get("status") not in {"queued", "running", "awaiting_login"}:
@@ -1250,7 +1324,7 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
     api_v08.install(app, project=project, ops=ops, load_ai=load_ai,
                     project_title=project_title, data_dir=DATA)
     api_v085.install(app, project=project, data_dir=DATA)
-    api_v09.install(app, project=project, data_dir=DATA)
+    api_v09.install(app, project=project, data_dir=DATA, projects=store.projects)
     # 审计 C-47：并发引擎的唤醒路径 /internal/events/notify 曾完全不存在。
     fanout = concurrent_engine.EventFanout()
     app.state.event_fanout = fanout
@@ -1350,7 +1424,8 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
         detail = exc.detail if isinstance(exc.detail, str) else "请求未通过"
         code = {400: "invalid_request", 401: "unauthorized", 403: "forbidden",
                 404: "not_found", 405: "method_not_allowed", 409: "conflict",
-                413: "payload_too_large", 429: "too_many_requests"}.get(exc.status_code,
+                413: "payload_too_large", 422: "invalid_request",
+                429: "too_many_requests", 503: "service_unavailable"}.get(exc.status_code,
                                                                     "request_failed")
         return _JSON({"code": code, "message": detail}, status_code=exc.status_code,
                      headers=getattr(exc, "headers", None))
@@ -1359,12 +1434,14 @@ def create_app(db_path: Path | None = None, start_dispatcher: bool = True, netwo
 
     async def unhandled_handler(request, exc: Exception):
         # 兜底：未登记异常也要给同一个 {"code","message"} 形状，不能让框架返回纯文本 500。
+        error_id = uuid.uuid4().hex[:12]
+        detail = redact_paths(redact(str(exc)))
         try:
-            logger.exception("未处理的异常：%s %s", request.method, request.url.path)
+            logger.exception("未处理的异常[%s]：%s %s", error_id, request.method, request.url.path)
         except Exception:
             pass
-        return _JSON({"code": "internal_error",
-                      "message": f"服务内部错误：{redact(str(exc)) or exc.__class__.__name__}"},
+        return _JSON({"code": "internal_error", "error_id": error_id,
+                      "message": f"服务内部错误：{detail or exc.__class__.__name__}"},
                      status_code=500)
 
     app.add_exception_handler(Exception, unhandled_handler)

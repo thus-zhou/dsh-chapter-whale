@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from integration import agent_room as room
 
@@ -45,7 +46,11 @@ class RoomTest(unittest.TestCase):
         bound = room.bind_session_to_project(self.db, session_id="prebook_1", project_id="p1")
         self.assertEqual(bound["updated"]["agent_directives"], 1)
         self.assertEqual(bound["updated"]["agent_tasks"], 1)
-        self.assertEqual(bound["updated"]["agent_events"], 1)
+        self.assertEqual(bound["updated"]["agent_events"], 4)
+        kinds = {row["kind"] for row in room.events_after(self.db, after_seq=0, project_id="p1")}
+        self.assertIn("project_bound", kinds)
+        for kind in ("directive_created", "task_created", "approval_requested"):
+            self.assertIn(kind, kinds)
         self.assertEqual(bound["updated"]["agent_approvals"], 1)
         self.assertEqual(room.get_directive(self.db, directive["id"])["project_id"], "p1")
         self.assertEqual(room.snapshot(self.db, project_id="p1")["snapshot_seq"], bound["event"]["seq"])
@@ -211,9 +216,10 @@ class RoomTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "approval_expired")
         self.assertEqual(room.get_approval(self.db, approval["id"])["status"], "expired")
 
-    def test_legacy_card_requires_binding_even_with_a_capability(self):
-        # R-04: a legacy card has no capability_hash; an arbitrary non-empty
-        # capability must not bypass the binding-echo requirement.
+    def test_legacy_card_is_expired_at_resolve_not_left_unbatchable(self):
+        # R-04: a capability-less pending card can never satisfy the binding
+        # contract through the public API.  Resolve expires it fail-closed and
+        # the author recreates a fresh card instead.
         approval = room.create_approval(self.db, session_id="s", project_id="p1",
                                         directive_id=None, directive_revision=1,
                                         task_id=None, kind="publish", title="发布",
@@ -228,7 +234,131 @@ class RoomTest(unittest.TestCase):
         with self.assertRaises(room.RoomError) as caught:
             room.resolve_approval(self.db, approval["id"], approved=True,
                                   capability="anything", resolved_by="author")
-        self.assertEqual(caught.exception.code, "approval_binding_required")
+        self.assertEqual(caught.exception.code, "approval_not_pending")
+        self.assertEqual(room.get_approval(self.db, approval["id"])["status"], "expired")
+
+    def test_legacy_pending_card_is_expired_on_upgrade_and_recreatable(self):
+        directive = room.create_directive(self.db, session_id="s", project_id="p1",
+                                          title="书", raw_instruction="写")
+        approval = room.create_approval(self.db, session_id="s", project_id="p1",
+                                        directive_id=directive["id"], directive_revision=1,
+                                        task_id=None, kind="publish", title="旧卡",
+                                        artifact_fingerprint="fp", approved_scope_hash="scope",
+                                        detail={"artifact_path": "正文/1.md"})
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE agent_approvals SET capability_hash=NULL WHERE id=?", (approval["id"],))
+            db.commit()
+        finally:
+            db.close()
+        room.initialize(self.db)  # the upgrade migration runs once
+        legacy = room.get_approval(self.db, approval["id"])
+        self.assertEqual(legacy["status"], "expired")
+        self.assertEqual(legacy["decision"]["migrated"], "legacy_card_expired")
+        self.assertEqual(room.pending_approvals(self.db, project_id="p1"), [])
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, approval["id"], approved=True,
+                                  capability=approval["capability"])
+        self.assertEqual(caught.exception.code, "approval_not_pending")
+        # The supported recovery path creates a fresh, resolvable card.
+        fresh = room.recreate_approval(self.db, approval["id"])
+        self.assertEqual(fresh["status"], "pending")
+        self.assertTrue(fresh["capability"])
+        resolved = room.resolve_approval(self.db, fresh["id"], approved=True,
+                                         capability=fresh["capability"])
+        self.assertEqual(resolved["status"], "approved")
+
+    def test_agent_created_card_withholds_capability_until_author_claims(self):
+        directive = room.create_directive(self.db, session_id="s", project_id="p1",
+                                          title="书", raw_instruction="写")
+        card = room.create_approval(self.db, session_id="s", project_id="p1",
+                                    directive_id=directive["id"], directive_revision=1,
+                                    task_id=None, kind="publish", title="Agent 制卡",
+                                    artifact_fingerprint="fp", approved_scope_hash="scope",
+                                    detail={}, requester="agent")
+        self.assertNotIn("capability", card)
+        self.assertEqual(card["capability_delivery"], "author_channel_required")
+        stored = room.get_approval(self.db, card["id"])
+        self.assertTrue(stored["capability_ready"])
+        self.assertEqual(stored["created_by"], "agent")
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, card["id"], approved=True,
+                                  artifact_fingerprint="fp", approved_scope_hash="scope",
+                                  directive_revision=1)
+        self.assertEqual(caught.exception.code, "approval_capability_required")
+        issued = room.issue_capability(self.db, card["id"])
+        self.assertTrue(issued["capability"])
+        resolved = room.resolve_approval(self.db, card["id"], approved=True,
+                                         capability=issued["capability"])
+        self.assertEqual(resolved["status"], "approved")
+
+    def test_resolve_requires_strict_boolean_in_library(self):
+        card = room.create_approval(self.db, session_id="s", project_id="p1",
+                                    directive_id=None, directive_revision=1, task_id=None,
+                                    kind="publish", title="发布", artifact_fingerprint="fp",
+                                    approved_scope_hash="scope", detail={})
+        for weak in ("false", "true", 1, 0, None):
+            with self.assertRaises(room.RoomError) as caught:
+                room.resolve_approval(self.db, card["id"], approved=weak,
+                                      capability=card["capability"])
+            self.assertEqual(caught.exception.code, "invalid_approved")
+        self.assertEqual(room.get_approval(self.db, card["id"])["status"], "pending")
+
+    def test_transient_signal_is_broadcast_only_and_never_persisted(self):
+        with self.assertRaises(room.RoomError) as caught:
+            room.append_event(self.db, session_id="s", project_id="p1",
+                              kind="progress_signal", summary="40%")
+        self.assertEqual(caught.exception.code, "transient_kind_not_durable")
+        frame = room.publish_transient(self.db, session_id="s", project_id="p1",
+                                       kind="progress_signal", summary="40%")
+        self.assertIsNone(frame["seq"])
+        self.assertTrue(frame["transient"])
+        self.assertEqual(room.events_after(self.db, after_seq=0, project_id="p1"), [])
+        self.assertEqual(room.chat_context(self.db, project_id="p1"), [])
+
+    def test_session_only_readers_never_cross_books(self):
+        task_a = room.create_task(self.db, directive_id="d1", session_id="author",
+                                  project_id="p1", role="writer", title="A",
+                                  tool_name="write_chapter")
+        task_b = room.create_task(self.db, directive_id="d2", session_id="author",
+                                  project_id="p2", role="writer", title="B",
+                                  tool_name="write_chapter")
+        room.append_event(self.db, session_id="author", project_id="p1", summary="A 事件")
+        room.append_event(self.db, session_id="author", project_id="p2", summary="B 事件")
+        unbound = room.append_event(self.db, session_id="author", project_id=None,
+                                    summary="未绑定")
+        self.assertEqual([row["summary"] for row in room.events_after(
+            self.db, after_seq=0, session_id="author")], ["未绑定"])
+        self.assertEqual(room.max_seq(self.db, session_id="author"), unbound["seq"])
+        self.assertEqual([row["id"] for row in room.list_tasks(
+            self.db, session_id="author")], [])
+        self.assertEqual(room.pending_approvals(self.db, session_id="author"), [])
+        self.assertEqual(task_a["project_id"], "p1")
+        self.assertEqual(task_b["project_id"], "p2")
+
+    def test_bind_publishes_live_event_to_project_stream(self):
+        broadcaster = room.BoundedBroadcaster(maxsize=8)
+        room.append_event(self.db, session_id="prebook_b", project_id=None, summary="开书前")
+
+        async def scenario():
+            token, queue = broadcaster.subscribe(project_id="p1")
+            with mock.patch.object(room, "broadcaster", broadcaster):
+                room.bind_session_to_project(self.db, session_id="prebook_b", project_id="p1")
+            return await asyncio.wait_for(queue.get(), timeout=1)
+
+        event = asyncio.run(scenario())
+        self.assertEqual(event["kind"], "project_bound")
+        self.assertEqual(event["project_id"], "p1")
+
+    def test_approval_listing_exposes_capability_readiness_not_the_hash(self):
+        card = room.create_approval(self.db, session_id="s", project_id="p1",
+                                    directive_id=None, directive_revision=1, task_id=None,
+                                    kind="publish", title="发布", artifact_fingerprint="fp",
+                                    approved_scope_hash="scope", detail={}, requester="agent")
+        listed = room.pending_approvals(self.db, project_id="p1")[0]
+        self.assertTrue(listed["capability_ready"])
+        self.assertNotIn("capability_hash", listed)
+        self.assertEqual(listed["id"], card["id"])
 
 
 class BroadcasterTest(unittest.TestCase):

@@ -362,3 +362,36 @@ test('草稿飞行中继续输入会在保存成功后重排 (D-11)', () => {
   assert.equal(internals.wbDraftFollowUp(4, 3), 'reschedule');
   assert.equal(internals.wbDraftFollowUp('5', 3), 'reschedule');
 });
+
+test('章节 key 变化时 dirty 先落草稿，IME 才直接挂起 (D-R4-03)', () => {
+  assert.equal(internals.wbChapterKeyChangeAction(true, false), 'pending-ime');
+  assert.equal(internals.wbChapterKeyChangeAction(false, true), 'pending-dirty');
+  assert.equal(internals.wbChapterKeyChangeAction(false, false), 'apply');
+});
+
+test('冲突载荷缺 base_content 时需要一次章节 GET (D-R4-08)', () => {
+  const base = { version_id: 'v1', sha256: 'a'.repeat(64), content: 'v1 正文' };
+  assert.equal(internals.wbConflictBaseNeedsFetch(
+    { base_version_id: 'v2', base_content_sha256: 'b'.repeat(64) }, base,
+  ), true);
+  assert.equal(internals.wbConflictBaseNeedsFetch(
+    { base_version_id: 'v2', base_content_sha256: 'b'.repeat(64), base_content: 'v2 正文' }, base,
+  ), false, 'payload already carries the base body');
+  assert.equal(internals.wbConflictBaseNeedsFetch(
+    { base_version_id: 'v1', base_content_sha256: 'a'.repeat(64) }, base,
+  ), false, 'same base may reuse the local body');
+  assert.equal(internals.wbConflictBaseNeedsFetch({}, base), false);
+});
+
+test('merge-tail 使用排序后的最后两章并识别断号 (D-R4-09)', () => {
+  assert.deepEqual({ ...internals.wbMergeTailIds([{ id: 1 }, { id: 2 }]) }, { last: 2, previous: 1, adjacent: true });
+  assert.deepEqual({ ...internals.wbMergeTailIds([{ id: 3 }, { id: 1 }, { id: 2 }]) }, { last: 3, previous: 2, adjacent: true });
+  assert.deepEqual({ ...internals.wbMergeTailIds([{ id: 1 }, { id: 3 }]) }, { last: 3, previous: 1, adjacent: false });
+  assert.deepEqual({ ...internals.wbMergeTailIds([{ id: 4 }]) }, { last: 0, previous: 0, adjacent: false });
+  const warning = internals.wbMergeTailDraftMessage([
+    { id: 1, draft: { exists: true } },
+    { id: 2, draft: { exists: true } },
+  ]);
+  assert.match(warning, /合并目标章/);
+  assert.match(warning, /会保留/);
+});

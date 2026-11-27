@@ -486,8 +486,12 @@ def reverse_patch(current_text: str, entry: Dict[str, Any]) -> Dict[str, Any]:
     """Undo one ledger row without touching the author's later typing.
 
     If the applied text is still exactly present at the recorded range it is
-    replaced by the original quote.  If the author edited around it, the
-    reverse is attempted by unique-quote relocation; ambiguous cases return
+    replaced by the original quote.  When the range moved because the author
+    typed before/after it, only the context saved with the ledger row (or the
+    preview snapshot) may relocate the text.  A whole-document "unique
+    occurrence" guess is deliberately not used: after the author restores the
+    original selection and moves the AI sentence elsewhere, that guess would
+    rewrite the author's unrelated sentence (A-P3-13).  Ambiguous cases return
     ``relocated_needed`` and change nothing.
     """
     current = normalize_lf(current_text)
@@ -540,21 +544,36 @@ def reverse_patch(current_text: str, entry: Dict[str, Any]) -> Dict[str, Any]:
             points[start:end] = to_codepoints(before)
             return {"text": "".join(points), "status": "reversed", "start": start,
                     "end": start + codepoint_length(before)}
-    occurrences = []
-    cursor = 0
-    while True:
-        found = current.find(applied, cursor)
-        if found < 0:
-            break
-        occurrences.append(found)
-        cursor = found + max(1, len(applied))
-    if len(occurrences) == 1:
-        found = occurrences[0]
-        points[found:found + len(applied)] = to_codepoints(before)
-        return {"text": "".join(points), "status": "reversed", "start": found,
-                "end": found + codepoint_length(before)}
+    # The recorded range no longer holds the applied text (the author typed
+    # before it or moved it).  Only the stored context window can prove the
+    # location; a unique whole-document occurrence is not evidence because the
+    # author may have typed the same sentence elsewhere (A-P3-13).
+    prefix = str(entry.get("prefix_ctx") or "")
+    suffix = str(entry.get("suffix_ctx") or "")
+    if prefix or suffix:
+        candidates = []
+        cursor = 0
+        while True:
+            found = current.find(applied, cursor)
+            if found < 0:
+                break
+            before_ok = current[max(0, found - len(prefix)):found] == prefix if prefix else True
+            after = found + len(applied)
+            after_ok = current[after:after + len(suffix)] == suffix if suffix else True
+            if before_ok and after_ok:
+                candidates.append(found)
+            cursor = found + max(1, len(applied))
+        candidates = sorted(set(candidates))
+        if len(candidates) == 1:
+            found = candidates[0]
+            points[found:found + len(applied)] = to_codepoints(before)
+            return {"text": "".join(points), "status": "reversed", "start": found,
+                    "end": found + codepoint_length(before)}
+        if len(candidates) > 1:
+            return {"text": current, "status": "relocated_needed",
+                    "reason": "applied_text_ambiguous_context"}
     return {"text": current, "status": "relocated_needed",
-            "reason": "applied_text_not_unique" if occurrences else "applied_text_missing"}
+            "reason": "applied_text_missing"}
 
 
 def merge_preview(base_text: str, current_text: str, candidate_text: str) -> Dict[str, Any]:

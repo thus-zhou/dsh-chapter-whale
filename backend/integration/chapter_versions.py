@@ -21,10 +21,12 @@ committed。任何一步崩溃都靠 ``recover_pending()`` 补齐或明确停在
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
 import sys
+import time
 import unicodedata
 import uuid
 from datetime import datetime, timezone
@@ -501,7 +503,8 @@ def _write_chapter_bytes(project, chapter: int, data: bytes, title: str) -> Path
 
 def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optional[str] = None,
                      expected_sha256: Optional[str] = None,
-                     title: Optional[str] = None, allow_new: bool = False) -> Dict[str, Any]:
+                     title: Optional[str] = None, allow_new: bool = False,
+                     action: str = "chapter_save") -> Dict[str, Any]:
     """把候选稿提交为当前正文，并登记版本。
 
     ``expected_sha256`` 是调用方读到的当前正文原始字节哈希；与实际不符即
@@ -524,6 +527,12 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
             _commit_path(project, op).unlink(missing_ok=True)
             existing = None
         if existing is not None:
+            if str(existing.get("action") or "chapter_save") != str(action or "chapter_save"):
+                # The same op_id must not be reclaimed by a different kind of
+                # operation (new/split/import/restore): returning "saved" for
+                # another action's commit hid the save from idempotency and
+                # version history (A-P3-08).
+                raise VersionConflict("operation_id_action_conflict")
             if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
                 index = load_index(project)
                 entry = _chapter_entry(index, chapter)
@@ -559,7 +568,7 @@ def commit_candidate(project, chapter: int, candidate_id: str, *, op_id: Optiona
             "previous_sha256": current_sha, "state": "prepared", "done": [],
             "title": final_title, "title_before": title_before,
             "title_pending": title_pending, "title_rename_done": not title_pending,
-            "index_reconciled": index_reconciled,
+            "index_reconciled": index_reconciled, "action": str(action or "chapter_save"),
             "created_at": _now(), "updated_at": _now(),
         }
         atomic_json(_commit_path(project, op), record)
@@ -593,14 +602,15 @@ def write_chapter(project, chapter: int, content: str, *, op_id: Optional[str] =
                   expected_sha256: Optional[str] = None, source: str = "writer",
                   run_id: Optional[str] = None, attempt_id: Optional[str] = None,
                   note: str = "", title: Optional[str] = None,
-                  allow_new: bool = False) -> Dict[str, Any]:
+                  allow_new: bool = False, action: str = "chapter_save") -> Dict[str, Any]:
     """保存候选 + 提交，一步完成（供写作/修订路径调用）。"""
     document = save_candidate(project, chapter, content, source=source,
                               base_sha256=expected_sha256, run_id=run_id,
                               attempt_id=attempt_id, note=note, title=title,
                               op_id=op_id)
     result = commit_candidate(project, chapter, document["candidate_id"], op_id=op_id,
-                              expected_sha256=expected_sha256, title=title, allow_new=allow_new)
+                              expected_sha256=expected_sha256, title=title, allow_new=allow_new,
+                              action=action)
     if str(result.get("state") or "") == "committed":
         # 正文一旦换了版本，依据旧正文的事实就不再成立：走统一失效入口，不各写一套。
         try:
@@ -1094,6 +1104,7 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
                      op_id: Optional[str] = None, expected_sha256: Optional[str] = None,
                      source: str = "restored", note: str = "",
                      allow_new: bool = False, expect_absent: bool = False,
+                     action: str = "chapter_save",
                      invalidation_reason: Optional[str] = "chapter_edited") -> Dict[str, Any]:
     """Byte-exact commit used for legacy restore (keeps BOM and CRLF intact).
 
@@ -1112,6 +1123,8 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
             _commit_path(project, op).unlink(missing_ok=True)
             existing = None
         if existing is not None:
+            if str(existing.get("action") or "chapter_save") != str(action or "chapter_save"):
+                raise VersionConflict("operation_id_action_conflict")
             if existing.get("chapter_id") == int(chapter) and existing.get("content_sha256") == sha:
                 index = load_index(project)
                 entry = _chapter_entry(index, chapter)
@@ -1146,7 +1159,8 @@ def commit_raw_bytes(project, chapter: int, data: bytes, *, title: Optional[str]
             "title": final_title, "title_before": title_before,
             "title_pending": title_pending, "title_rename_done": not title_pending,
             "index_reconciled": entry.get("current") not in (None, current_sha),
-            "raw_bytes": True, "created_at": _now(), "updated_at": _now(),
+            "raw_bytes": True, "action": str(action or "chapter_save"),
+            "created_at": _now(), "updated_at": _now(),
         }
         atomic_json(_commit_path(project, op), record)
         _store_object(project, data)
@@ -1244,6 +1258,52 @@ def _update_commit_chapter_path(project, op_id: Optional[str], chapter_path_valu
         return True
 
 
+def _rename_no_replace(source: Path, target: Path) -> None:
+    """Rename without silently overwriting a file that appeared meanwhile.
+
+    ``os.replace`` overwrites an external file created between the existence
+    check and the rename (A-P3-10).  A hard link is atomic and fails with
+    ``FileExistsError`` instead; Windows sharing violations are retried like
+    ``transaction_journal.rename_with_retry``.  On filesystems without hard
+    links we fall back to a re-checked ``os.replace``.
+    """
+    last_error: Optional[BaseException] = None
+    for attempt in range(6):
+        try:
+            os.link(source, target)
+            break
+        except FileExistsError:
+            raise
+        except OSError as exc:
+            retryable = (isinstance(exc, PermissionError)
+                         or getattr(exc, "winerror", None) in (5, 32, 33))
+            if retryable:
+                last_error = exc
+                if attempt + 1 >= 6:
+                    raise
+                time.sleep(0.05 * (2 ** attempt))
+                continue
+            unsupported = {errno.EPERM, errno.EACCES, errno.EXDEV, errno.ENOSYS,
+                           errno.EOPNOTSUPP if hasattr(errno, "EOPNOTSUPP") else errno.EPERM,
+                           errno.ENOTSUP if hasattr(errno, "ENOTSUP") else errno.EPERM}
+            if getattr(exc, "errno", None) not in unsupported:
+                raise
+            if target.exists():
+                raise FileExistsError(str(target))
+            os.replace(source, target)
+            return
+    else:  # pragma: no cover - the loop either breaks or raises
+        raise last_error or OSError("rename_failed")
+    try:
+        os.unlink(source)
+    except OSError:
+        # Never leave two names for one chapter if the source unlink fails.
+        try:
+            os.unlink(target)
+        finally:
+            raise
+
+
 def reconcile_title(project, chapter: int, *, title: Optional[str] = None,
                     op_id: Optional[str] = None,
                     record: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -1305,20 +1365,16 @@ def reconcile_title(project, chapter: int, *, title: Optional[str] = None,
                         # stays authoritative for this atomic move.
                         replace_with_retry(path, target)
                     else:
-                        try:
-                            from . import transaction_journal as journal
-                        except ImportError:  # direct script execution
-                            journal = None
-                        if journal is not None:
-                            journal.rename_with_retry(path, target)
-                        else:
-                            replace_with_retry(path, target)
+                        _rename_no_replace(path, target)
                     path = target
                     outcome["renamed"] = True
                     outcome["title_renamed"] = True
             except (OSError, ValueError, RuntimeError) as exc:
                 outcome.update(status="partial", title_conflict=True,
                                error=f"{type(exc).__name__}: {str(exc)[:160]}")
+                if isinstance(exc, FileExistsError):
+                    outcome["conflict_path"] = str(getattr(exc, "filename", "") or target)
+                    outcome["message"] = "目标文件名已被占用；请删除该文件后重试，或改用其他标题"
         receipt_present = _receipt_entry_present(project, chapter)
         try:
             receipt_synced_now = _update_receipt_destination(project, chapter, str(path.resolve()))
@@ -1387,7 +1443,7 @@ def restore_version(project, chapter: int, version_id: str, *, op_id: Optional[s
     result = commit_raw_bytes(project, chapter, data, title=title, op_id=op_id,
                               expected_sha256=file_sha256(path),
                               source="restored", note=note or f"restore {sha[:12]}",
-                              allow_new=path is None,
+                              allow_new=path is None, action="version_restore",
                               invalidation_reason="version_restored")
     # The body commit deliberately does not rename: finish the title/receipt/
     # commit-path state through one idempotent reconciliation, so a retry with

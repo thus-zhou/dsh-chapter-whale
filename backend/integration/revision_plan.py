@@ -282,7 +282,29 @@ def diff(before: str, after: str, *, max_hunks: int = MAX_HUNKS) -> Dict[str, An
 # ------------------------------------------------------------------ 预览存储
 
 def previews_dir(project) -> Path:
-    return Path(project) / ".webnovel" / "revision_previews"
+    """Return ``.webnovel/revision_previews`` after rejecting symlink escapes.
+
+    The directory may arrive as a link from a synced/hostile project; writing
+    preview JSON through it would place revisions outside the book and omit
+    them from backups (A-P2-10).
+    """
+    root = Path(project).resolve()
+    base = Path(project) / ".webnovel"
+    folder = base / "revision_previews"
+    for candidate in (base, folder):
+        try:
+            if candidate.is_symlink():
+                raise chapter_versions.VersionConflict("unsafe_evidence_store")
+        except OSError as exc:
+            raise chapter_versions.VersionConflict("unsafe_evidence_store") from exc
+        if candidate.exists():
+            try:
+                resolved = candidate.resolve()
+            except OSError as exc:
+                raise chapter_versions.VersionConflict("unsafe_evidence_store") from exc
+            if resolved != root and root not in resolved.parents:
+                raise chapter_versions.VersionConflict("unsafe_evidence_store")
+    return folder
 
 
 def _preview_path(project, chapter: int, preview_id: str) -> Path:

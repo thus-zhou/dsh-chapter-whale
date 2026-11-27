@@ -219,3 +219,73 @@ test('P02 package.json 声明的根入口缺失时 check-release/prepublishOnly 
     assert.match(missingClient.out, /缺少根入口：client\.js/);
   });
 });
+
+test('D-R4-02 根入口存在但被 package.json files 排除时必须非零', async () => {
+  await withPackage(async (root) => {
+    await writeFile(join(root, 'index.js'), '// index\n');
+    await writeFile(join(root, 'entry.js'), '// entry\n');
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.exports = { '.': './index.js', './entry': './entry.js' };
+    pkg.files = ['index.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const blocked = run(root, ['--local']);
+    assert.equal(blocked.code, 1, blocked.out);
+    assert.match(blocked.out, /files 中：entry\.js/);
+
+    pkg.files = ['index.js', 'entry.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const packed = run(root, ['--local']);
+    assert.equal(packed.code, 0, packed.out);
+  });
+});
+
+test('D-R4-02 files 的目录与 glob 规则都算作已打包', async () => {
+  await withPackage(async (root) => {
+    await mkdir(join(root, 'modules'), { recursive: true });
+    await writeFile(join(root, 'modules', 'index.js'), '// module entry\n');
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.exports = { '.': './modules/index.js' };
+    pkg.files = ['modules/'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    assert.equal(run(root, ['--local']).code, 0);
+
+    pkg.files = ['modules/*.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    assert.equal(run(root, ['--local']).code, 0);
+
+    pkg.files = ['modules/other.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const blocked = run(root, ['--local']);
+    assert.equal(blocked.code, 1);
+    assert.match(blocked.out, /files 中：modules\/index\.js/);
+  });
+});
+
+test('D-R4-02 根入口的相对 import 也算发布包入口', async () => {
+  await withPackage(async (root) => {
+    await writeFile(join(root, 'index.js'), "import './helper.mjs';\n");
+    await writeFile(join(root, 'helper.mjs'), 'export {};\n');
+    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    pkg.exports = { '.': './index.js' };
+    pkg.files = ['index.js'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    const blocked = run(root, ['--local']);
+    assert.equal(blocked.code, 1, blocked.out);
+    assert.match(blocked.out, /files 中：helper\.mjs/);
+
+    pkg.files = ['index.js', 'helper.mjs'];
+    await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+    assert.equal(run(root, ['--local']).code, 0);
+  });
+});
+
+test('D-RG2 RELEASE_STATUS 的 buildId/文件数漂移必须在门禁输出中可见', async () => {
+  await withPackage(async (root) => {
+    await writeFile(join(root, 'RELEASE_STATUS.md'),
+      '# 0.6.0\n\n- buildId `' + 'd'.repeat(64) + '`\n- 1000 个文件通过\n');
+    const result = run(root, ['--local']);
+    assert.equal(result.code, 0, result.out);
+    assert.match(result.out, /RELEASE_STATUS\.md 的 buildId/);
+    assert.match(result.out, /RELEASE_STATUS\.md 的文件数记录/);
+  });
+});

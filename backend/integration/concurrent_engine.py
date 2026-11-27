@@ -78,23 +78,38 @@ def _event(project, task_id: Optional[str], kind: str, detail: Optional[Dict] = 
         pass
 
 
+def _is_readonly_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(token in text for token in
+               ("readonly", "read-only", "unable to open database", "permission denied", "locked"))
+
+
 def _ensure(project, *, create: bool = True) -> bool:
     """Initialize/heal the queue schema.
 
     审计 C3-04：读路径 ``create=False`` 在作品没有 workbench 库时直接返回
     False，不再让一次 GET 创建 ``.webnovel/workbench.sqlite3``。
+    审计 C4-05：库存在但损坏时必须报 503 ``db_unavailable``，不能把故障
+    伪装成空队列；只读挂载上的读路径仍返回空（写路径再按 503 拒绝）。
     """
     if not wb.db_path(project).exists():
         if not create:
             return False
-        wb.initialize(project)
+        try:
+            wb.initialize(project)
+        except sqlite3.Error as exc:
+            raise SchedulerError("db_unavailable", status=503,
+                                 detail={"reason": type(exc).__name__}) from None
         return True
     from integration import maintenance
     try:
         maintenance.ensure_schema(project)
         wb.initialize(project)
-    except sqlite3.Error:
-        return False
+    except sqlite3.Error as exc:
+        if not create and _is_readonly_error(exc):
+            return False
+        raise SchedulerError("db_unavailable", status=503,
+                             detail={"reason": type(exc).__name__}) from None
     return True
 
 
@@ -175,9 +190,11 @@ def _blocked_reason(project, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
             other = get(project, blocker)
         except SchedulerError:
-            return {"task_id": blocker, "reason": "missing"}
+            return {"task_id": blocker, "reason": "missing", "action": "resubmit_blocker"}
         if other.get("state") == "failed":
-            return {"task_id": blocker, "reason": "failed"}
+            # 审计 C4-04：失败上游不会自动放行；给 UI 一个明确动作，而不是
+            # 让下游永久静默 pending。
+            return {"task_id": blocker, "reason": "failed", "action": "retry_blocker"}
         if other.get("state") not in {"completed", "cancelled"}:
             return {"task_id": blocker, "reason": str(other.get("state") or "pending")}
     return None
@@ -216,6 +233,12 @@ def submit(project, payload: Dict[str, Any], *, priority: str = "P2",
                                      detail={"task_id": tid})
             return {**existing, "deduplicated": True}
     blocked_items = _validate_blockers(project, tid, blocked_items)
+    # 审计 C4-04：对已经 failed 的上游直接拒绝新任务，避免入队即永久阻塞。
+    for blocker in blocked_items:
+        if get(project, blocker).get("state") == "failed":
+            raise SchedulerError("blocked_by_failed", status=409,
+                                 detail={"task_id": tid, "blocked_by": blocker,
+                                         "action": "retry_blocker"})
     state = "pending"
     hold = None
     if parent_task_id:
@@ -287,14 +310,22 @@ def _global_pause_path(path=None) -> Optional[Path]:
 
 
 def global_paused(path=None) -> bool:
+    """Fail closed: an unreadable/corrupt pause file means "paused".
+
+    审计 C3-23：旧实现对任何异常 ``return False``，损坏的急停文件会让全站
+    自动化继续运行。文件不存在仍是唯一的“未暂停”状态。
+    """
     target = _global_pause_path(path)
-    if target is None or not target.is_file():
+    if target is None or not target.exists():
         return False
     try:
         data = json.loads(target.read_text(encoding="utf-8"))
-        return bool(data.get("paused"))
-    except Exception:
-        return False
+    except Exception:  # noqa: BLE001 - unreadable pause file is not permission to run
+        return True
+    if not isinstance(data, dict) or "paused" not in data:
+        return True
+    value = data.get("paused")
+    return value is True or (isinstance(value, int) and not isinstance(value, bool) and value == 1)
 
 
 def set_global_pause(paused: bool, reason: str = "", *, path=None) -> Dict[str, Any]:
@@ -390,6 +421,8 @@ def project_paused(project) -> bool:
 
     审计 C-09：v0.8 的 ops/scheduler 在派发前也要看这里，否则「全站急停」
     只拦住一个没有消费者的 v0.9 队列。
+    审计 C3-23：暂停表损坏/被锁时按“已暂停”处理（fail-closed），不能因为
+    SQLite 错误让作者以为自动化仍在受控状态。
     """
     target = Path(project)
     if not target.is_dir() or not wb.db_path(target).exists():
@@ -399,12 +432,29 @@ def project_paused(project) -> bool:
             row = db.execute("SELECT 1 FROM task_pauses WHERE scope IN ('global', ?) LIMIT 1",
                              ("project:" + str(target.resolve()),)).fetchone()
     except sqlite3.Error:
-        return False
+        return True
     return row is not None
+
+
+def _hold_active(item: Dict[str, Any]) -> bool:
+    """True when an amendment hold must stop claim/commit/complete.
+
+    审计 C3-13：``hold_requested`` 或尚未释放的 ``hold_amendment_id`` 都必须
+    生效；``fallback='continue'`` 是显式的“继续旧计划”开关，因此只有该
+    回退值允许任务在改令评估期间继续执行。
+    """
+    if item.get("hold_requested"):
+        return True
+    amendment = item.get("hold_amendment_id")
+    if not amendment:
+        return False
+    return str(item.get("amendment_fallback") or "wait") != "continue"
 
 
 def _ready(project, item: Dict[str, Any], pause_path=None) -> bool:
     if item["state"] != "pending":
+        return False
+    if _hold_active(item):
         return False
     if _blocked_reason(project, item) is not None:
         return False
@@ -483,6 +533,11 @@ def begin_commit(project, task_id: str, owner: str, *,
         raise SchedulerError("task_not_running", status=409)
     if item["lease_owner"] != owner:
         raise SchedulerError("lease_owner_mismatch")
+    # 审计 C3-13：改令未释放时不得进入提交；旧实现允许 running 任务在
+    # hold_requested=1 时 begin_commit，改令评估时已提交，无法回滚。
+    if _hold_active(item):
+        raise SchedulerError("hold_pending", status=409,
+                             detail={"amendment_id": item.get("hold_amendment_id")})
     now = _now()
     expiry = now + float(commit_grace)
     with wb.write_tx(project) as db:
@@ -490,12 +545,17 @@ def begin_commit(project, task_id: str, owner: str, *,
         # 与 renew() 一样要求 lease_expires 仍然有效。
         cur = db.execute("UPDATE task_queue SET committing=1, lease_expires=?, updated_at=? "
                          "WHERE task_id=? AND state='running' AND lease_owner=? "
+                         "AND COALESCE(hold_requested,0)=0 "
+                         "AND (hold_amendment_id IS NULL OR amendment_fallback='continue') "
                          "AND (lease_expires IS NULL OR lease_expires >= ?)",
                          (expiry, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                           task_id, owner, now))
         updated = bool(cur.rowcount)
     if not updated:
         current = get(project, task_id)
+        if _hold_active(current):
+            raise SchedulerError("hold_pending", status=409,
+                                 detail={"amendment_id": current.get("hold_amendment_id")})
         if current.get("state") == "recovery_required":
             raise SchedulerError("recovery_required")
         if current.get("state") != "running" or current.get("lease_owner") != owner:
@@ -508,7 +568,9 @@ def begin_commit(project, task_id: str, owner: str, *,
 
 def _mark_recovery(project, task_id: str, *, owner: str = "", expired: bool = False) -> None:
     now = _now()
-    sql = ("UPDATE task_queue SET state='recovery_required', hold_requested=0, updated_at=? "
+    # 审计 C3-13：进入 recovery_required 时保留改令标志；人工对账后由
+    # release_amendment 显式清除，不能让恢复流程偷偷放行。
+    sql = ("UPDATE task_queue SET state='recovery_required', updated_at=? "
            "WHERE task_id=? AND state='running'")
     args = [time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id]
     if owner:
@@ -528,12 +590,22 @@ def complete(project, task_id: str, *, owner: str = "") -> Dict[str, Any]:
         return item
     if item.get("state") != "running" or not owner or item.get("lease_owner") != owner:
         raise SchedulerError("task_not_running", status=409)
+    # 审计 C3-13：改令挂起后不得直接完成；必须先 release_amendment。
+    if _hold_active(item):
+        raise SchedulerError("hold_pending", status=409,
+                             detail={"amendment_id": item.get("hold_amendment_id")})
     with wb.write_tx(project) as db:
         cur = db.execute("UPDATE task_queue SET state='completed', lease_owner=NULL, lease_expires=NULL, "
                    "committing=0, hold_requested=0, hold_amendment_id=NULL, amendment_fallback='wait', "
-                   "updated_at=? WHERE task_id=? AND state='running' AND lease_owner=?",
+                   "updated_at=? WHERE task_id=? AND state='running' AND lease_owner=? "
+                   "AND COALESCE(hold_requested,0)=0 "
+                   "AND (hold_amendment_id IS NULL OR amendment_fallback='continue')",
                    (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), task_id, owner))
         if not cur.rowcount:
+            current = get(project, task_id)
+            if _hold_active(current):
+                raise SchedulerError("hold_pending", status=409,
+                                     detail={"amendment_id": current.get("hold_amendment_id")})
             raise SchedulerError("task_not_running", status=409)
     _event(project, task_id, "completed")
     return get(project, task_id)
@@ -554,8 +626,10 @@ def fail(project, task_id: str, *, owner: str = "", error: str = "",
     with wb.write_tx(project) as db:
         # 审计 C3-12：owner 条件必须和 UPDATE 同一条语句。读后到写前若租约
         # 已过期并被新 worker 领取，旧 worker 的迟到失败不得清掉新租约。
+        # 审计 C3-13：失败/重试不得清除改令标志，否则 claim() 会在改令
+        # 评估前把任务重新领走；离开改令只能走 release_amendment。
         cur = db.execute("UPDATE task_queue SET state=?, lease_owner=NULL, lease_expires=NULL, "
-                         "committing=0, hold_requested=0, updated_at=? "
+                         "committing=0, updated_at=? "
                          "WHERE task_id=? AND state IN ('running','committing') "
                          "AND COALESCE(lease_owner,'')=?",
                          (state, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -590,20 +664,25 @@ def recover(project, *, max_attempts: int = MAX_ATTEMPTS) -> List[Dict[str, Any]
         elif int(item.get("attempts") or 0) >= int(max_attempts):
             with wb.write_tx(project) as db:
                 db.execute("UPDATE task_queue SET state='failed', lease_owner=NULL, lease_expires=NULL, "
-                           "committing=0, hold_requested=0, updated_at=? "
+                           "committing=0, updated_at=? "
                            "WHERE task_id=? AND state='running' AND lease_owner=? "
                            "AND lease_expires IS NOT NULL AND lease_expires < ?",
                            (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), item["task_id"],
                             item.get("lease_owner"), _now()))
             _event(project, item["task_id"], "exhausted", {"attempts": int(item.get("attempts") or 0)})
         else:
+            # 审计 C3-13：带改令标志的过期任务回到 held（而不是 pending），
+            # claim 不得绕过改令；无改令标志才普通重排队。
+            next_state = ("held" if item.get("hold_amendment_id")
+                          and str(item.get("amendment_fallback") or "wait") != "continue"
+                          else "pending")
             with wb.write_tx(project) as db:
-                db.execute("UPDATE task_queue SET state='pending', lease_owner=NULL, lease_expires=NULL, "
+                db.execute("UPDATE task_queue SET state=?, lease_owner=NULL, lease_expires=NULL, "
                            "updated_at=? WHERE task_id=? AND state='running' AND lease_owner=? "
                            "AND lease_expires IS NOT NULL AND lease_expires < ?",
-                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), item["task_id"],
-                            item.get("lease_owner"), _now()))
-            _event(project, item["task_id"], "lease_expired_requeued")
+                           (next_state, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            item["task_id"], item.get("lease_owner"), _now()))
+            _event(project, item["task_id"], "lease_expired_requeued", {"next": next_state})
         rows.append(get(project, item["task_id"]))
     return rows
 
@@ -627,23 +706,28 @@ def hold_for_amendment(project, amendment_id: str, task_ids: Iterable[str], *,
             if row is None:
                 continue
             item = _row(row)
-            if item["state"] in {"completed", "cancelled", "failed"}:
+            # 审计 C3-13：recovery_required / failed / interrupted 是人工
+            # 对账状态，普通改令不能把它们洗成 held 再放行。
+            if item["state"] not in {"pending", "held", "running"}:
                 continue
             if item["state"] == "running":
-                cur = db.execute("UPDATE task_queue SET hold_requested=1, hold_amendment_id=?, "
+                requested_flag = 1 if fallback == "wait" else 0
+                cur = db.execute("UPDATE task_queue SET hold_requested=?, hold_amendment_id=?, "
                                  "amendment_fallback=?, updated_at=? "
                                  "WHERE task_id=? AND state='running'",
-                                 (amendment_id, fallback, stamp, task_id))
+                                 (requested_flag, amendment_id, fallback, stamp, task_id))
                 if cur.rowcount:
-                    requested.append(task_id)
+                    (requested if fallback == "wait" else continued).append(task_id)
                 continue
             old_state = item["state"]
             state = "held" if fallback == "wait" else old_state
-            cur = db.execute("UPDATE task_queue SET state=?, hold_amendment_id=?, amendment_fallback=?, "
+            cur = db.execute("UPDATE task_queue SET state=?, hold_requested=?, hold_amendment_id=?, "
+                             "amendment_fallback=?, committing=CASE WHEN ?='held' THEN 0 ELSE committing END, "
                              "lease_owner=CASE WHEN ?='held' THEN NULL ELSE lease_owner END, "
                              "lease_expires=CASE WHEN ?='held' THEN NULL ELSE lease_expires END, "
                              "updated_at=? WHERE task_id=? AND state=?",
-                             (state, amendment_id, fallback, state, state, stamp, task_id, old_state))
+                             (state, 1 if state == "held" else 0, amendment_id, fallback,
+                              state, state, state, stamp, task_id, old_state))
             if cur.rowcount:
                 (held if state == "held" else continued).append(task_id)
     _event(project, None, "amendment_hold", {"amendment_id": amendment_id, "held": held,
@@ -673,18 +757,27 @@ def release_amendment(project, amendment_id: str) -> Dict[str, Any]:
     with wb.connect(project) as db:
         rows = [dict(row) for row in db.execute(
             "SELECT task_id, state FROM task_queue WHERE hold_amendment_id=? "
-            "AND (state='held' OR hold_requested=1)", (amendment_id,))]
+            "AND (state='held' OR hold_requested=1 OR amendment_fallback='continue')",
+            (amendment_id,))]
     for row in rows:
         with wb.write_tx(project) as db:
             if row["state"] == "held":
+                # 审计 C3-13：held→pending 必须同时清 committing，并只释放
+                # 仍属于本改令的任务；旧实现会把 recovery_required 洗成
+                # pending 且留下 committing=1。
                 db.execute("UPDATE task_queue SET state='pending', hold_amendment_id=NULL, "
-                           "hold_requested=0, updated_at=? WHERE task_id=?",
-                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), row["task_id"]))
+                           "hold_requested=0, amendment_fallback='wait', committing=0, updated_at=? "
+                           "WHERE task_id=? AND state='held' AND hold_amendment_id=?",
+                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            row["task_id"], amendment_id))
             else:
-                # 运行中的 worker 清掉协作停止标志后继续完成，不重跑。
+                # 运行中的 worker 清掉协作停止标志后继续完成，不重跑；
+                # recovery_required/failed 等状态保持原样，只清改令标志。
                 db.execute("UPDATE task_queue SET hold_requested=0, hold_amendment_id=NULL, "
-                           "updated_at=? WHERE task_id=?",
-                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), row["task_id"]))
+                           "amendment_fallback='wait', updated_at=? "
+                           "WHERE task_id=? AND hold_amendment_id=?",
+                           (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            row["task_id"], amendment_id))
         released.append(row["task_id"])
     _event(project, None, "amendment_released", {"amendment_id": amendment_id,
                                                   "released": released})

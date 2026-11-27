@@ -404,6 +404,110 @@ test('SSE parser honours retry: and 503 reconnects when retryOnError is enabled 
   assert.equal(connection.closed, true);
 });
 
+test('章节 GET 飞行期间输入不丢：dirty 先落草稿，blocked 先确认 (D-R4-03)', () => {
+  const hooks = loadWorkbenchHooks();
+  assert.equal(hooks.chapterArrivalAction(false, false), 'apply');
+  assert.equal(hooks.chapterArrivalAction(true, false), 'flush');
+  assert.equal(hooks.chapterArrivalAction(true, true), 'confirm');
+});
+
+test('blocked 草稿缺版本信息时不再承诺 Ctrl+S (D-R4-06)', () => {
+  const hooks = loadWorkbenchHooks();
+  const identity = { exists: true, baseVersionId: '', baseSha: '' };
+  assert.equal(hooks.blockedDraftNeedsBase(identity, { version_id: 'v1' }), true);
+  assert.equal(hooks.blockedDraftNeedsBase(
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64) }, { version_id: 'v1' },
+  ), false, 'a known base version/hash may still use Ctrl+S');
+  assert.equal(hooks.blockedDraftNeedsBase(identity, { version_id: '', sha256: '' }), false,
+    'a chapter with no version metadata may still use the legacy first save');
+  const message = hooks.blockedDraftMessage(identity, { version_id: 'v1' });
+  assert.match(message, /无法直接保存/);
+  assert.doesNotMatch(message, /可按 Ctrl\+S/);
+  assert.match(hooks.blockedDraftMessage(
+    { exists: true, baseVersionId: 'v1', baseSha: 'a'.repeat(64) }, { version_id: 'v1' },
+  ), /Ctrl\+S/);
+});
+
+test('切章后批注 hint/按钮回到检测中状态 (D-02D)', () => {
+  const reset = loadWorkbenchHooks().annotationProbeReset();
+  assert.equal(reset.annotationsReady, false);
+  assert.equal(reset.annotationProbed, false);
+  assert.equal(Array.isArray(reset.remoteAnnotations), true);
+  assert.equal(reset.remoteAnnotations.length, 0);
+  assert.equal(reset.submitDisabled, true);
+  assert.match(reset.hint, /正在检测批注接口/);
+  assert.match(reset.submitTitle, /正在检测批注接口/);
+  assert.match(js, /resetAnnotationProbe\(\)/);
+  assert.match(js, /if \(state\.rightTab === "annotations"\) \{[\s\S]{0,80}probeAnnotationEndpoint\(\)/);
+});
+
+test('抽屉打开时 page head / mobile bar / dock 都进入 inert (D-04M)', () => {
+  const selectors = loadWorkbenchHooks().backgroundInertSelectors();
+  for (const selector of ['.sidebar', '.topbar', '.wb-page-head', '.wb-mobile-bar', '.mobile-dock', '#cw-web-dock']) {
+    assert.ok(selectors.includes(selector), selector + ' must be inert while the drawer is open');
+  }
+  assert.match(js, /backgroundInertSelectors\(\)\.forEach/);
+});
+
+test('merge-tail 使用排序后的最后两章并提示断号 (D-R4-09)', () => {
+  const hooks = loadWorkbenchHooks();
+  assert.deepEqual({ ...hooks.mergeTailPair([{ id: 1 }, { id: 2 }]) }, { last: 2, previous: 1, adjacent: true });
+  assert.deepEqual({ ...hooks.mergeTailPair([{ id: 2 }, { id: 1 }, { id: 3 }]) }, { last: 3, previous: 2, adjacent: true });
+  assert.deepEqual({ ...hooks.mergeTailPair([{ id: 1 }, { id: 3 }]) }, { last: 3, previous: 1, adjacent: false });
+  assert.deepEqual({ ...hooks.mergeTailPair([{ id: 1 }]) }, { last: 0, previous: 0, adjacent: false });
+  const warning = hooks.mergeTailDraftMessage([
+    { id: 1, draft: { exists: true } },
+    { id: 2, draft: { exists: true } },
+  ]);
+  assert.match(warning, /合并目标章/);
+  assert.match(warning, /会保留/);
+  assert.match(js, /最后两章不连续/);
+});
+
+test('blocked + dirty 的 pending 章节必须先确认 (D-R4-07)', () => {
+  const start = js.indexOf('async function commitPendingChapter');
+  const end = js.indexOf('function setEditorEmpty', start);
+  assert.ok(start >= 0 && end > start);
+  const commit = js.slice(start, end);
+  assert.match(commit, /state\.draftBlocked/);
+  assert.match(commit, /window\.confirm/);
+});
+
+test('标题/大纲/设定的 IME 组合不会被自动保存截断 (D-IME2)', () => {
+  assert.match(js, /on\(els\.title, "compositionstart"/);
+  assert.match(js, /state\.composing \|\| state\.titleComposing/);
+  const outline = js.slice(js.indexOf('async function saveOutlineFile'), js.indexOf('function renderOutlineMeta'));
+  assert.match(outline, /state\.outlineComposing/);
+  const lore = js.slice(js.indexOf('async function saveLoreFile'), js.indexOf('/* ----------------------------------------------------------------- search */'));
+  assert.match(lore, /state\.loreComposing/);
+});
+
+test('更多菜单支持方向键进入与 Escape 收起 (D-ARIA1)', () => {
+  assert.match(js, /function handleMoreMenuKeyDown/);
+  assert.match(js, /els\.moreMenu\.querySelectorAll\('\[role="menuitem"\]:not\(\[disabled\]\)'\)/);
+  assert.match(js, /event\.key === "Escape"/);
+});
+
+test('冲突载入/草稿响应都绑定发起时的章节 token (D-R4-01/D-R4-04/D-R4-05)', () => {
+  const resolve = js.slice(js.indexOf('async function resolveConflict'),
+    js.indexOf('/* ------------------------------------------------------------- selection */'));
+  assert.ok(resolve.length > 2000);
+  assert.match(resolve, /const chapterToken = state\.chapterToken/);
+  assert.match(resolve, /fetchConflictDraftBase\(current, \{ chapterId: chapterId, projectId: projectId \}\)/);
+  assert.ok((resolve.match(/stillCurrent\(\)/g) || []).length >= 2,
+    'both reload and merge must re-check the chapter after their await');
+  const reload = resolve.slice(resolve.indexOf('if (action === "reload")'), resolve.indexOf('if (action === "merge")'));
+  assert.ok(reload.indexOf('setEditorValue') >= 0);
+  assert.ok(reload.indexOf('state.draft = nextDraft') > reload.indexOf('setEditorValue'),
+    'the editor write must succeed before the adopted draft identity is stored (D-R4-04)');
+
+  const save = js.slice(js.indexOf('async function saveDraftNow'), js.indexOf('async function putDraft'));
+  assert.match(save, /const chapterToken = state\.chapterToken/);
+  assert.match(save, /chapterToken !== state\.chapterToken/);
+  assert.match(save, /chapterId !== state\.currentId/);
+});
+
+
 test('761–767px stays on the desktop dock and desktop workbench layout (D-16)', () => {
   const overlapAt = css.indexOf('@media (min-width: 761px) and (max-width: 767px)');
   assert.ok(overlapAt >= 0, 'the 761–767px overlap must be handled explicitly');

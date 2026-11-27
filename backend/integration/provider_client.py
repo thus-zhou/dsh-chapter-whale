@@ -54,7 +54,7 @@ class ProviderClient:
         from pathlib import Path
         value=costs.META.get().get('project')
         return str(Path(value).resolve()).casefold() if value else None
-    PROBE_MAX_PAYLOAD_CHARS = 20000
+    PROBE_MAX_PAYLOAD_CHARS = 1024
     def _probe_payload_bounded(self, messages):
         try:
             return len(json.dumps(messages, ensure_ascii=False, default=str)) <= self.PROBE_MAX_PAYLOAD_CHARS

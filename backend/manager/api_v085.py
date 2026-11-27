@@ -6,13 +6,15 @@ import functools
 import hashlib
 import json
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from integration import agent_hub, agent_room, annotations, chapter_editor, costs
+from integration import (agent_hub, agent_room, annotations, chapter_editor, costs,
+                         maintenance, model_gateway, workbench_db)
 
 
 def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir: Path) -> None:
@@ -22,16 +24,43 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     def _book(identity: str) -> Path:
         return Path(project(identity)["path"])
 
+    def _empty_annotations(chapter, against: str, *, degraded: bool = False,
+                           reason: str = "") -> dict:
+        """Shape-compatible empty page for a missing/unreadable workbench DB.
+
+        审计 C3-04：v0.8.5 的批注列表是只读路径，不能为了列批注创建
+        ``workbench.sqlite3``；只读挂载上也不允许 500。形状与
+        ``annotations.list_annotations`` 保持一致，额外带 ``degraded`` 标记。
+        """
+        result = {"chapter_id": int(chapter), "against": against, "annotations": [],
+                  "evaluated_draft_id": None, "evaluated_draft_revision": None,
+                  "evaluated_text_sha256": None, "evaluated_version_id": None,
+                  "offset_unit": "unicode_codepoint_lf"}
+        if degraded:
+            result["degraded"] = True
+            result["degraded_reason"] = reason or "db_unavailable"
+        return result
+
     def guard(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
+                identity = kwargs.get("identity")
+                if identity:
+                    # 审计 C3-03：v0.8.5 批次读/写同样会遇到缺表缺列；旧库
+                    # 不能只有访问过 v0.9 才被修复。create=False 不建库。
+                    maintenance.ensure_schema(_book(identity))
                 return fn(*args, **kwargs)
             except (annotations.AnnotationError, agent_room.RoomError, agent_hub.HubError,
                     chapter_editor.ChapterError) as exc:
                 return JSONResponse(status_code=exc.status,
                                     content={"code": exc.code, "message": exc.code,
                                              **(getattr(exc, "detail", {}) or {})})
+            except sqlite3.OperationalError as exc:
+                # 审计 C3-04：只读挂载上的写请求返回 503，而不是 500 并回显路径。
+                return JSONResponse(status_code=503,
+                                    content={"code": "db_unavailable",
+                                             "message": "数据库当前不可写，请检查项目权限"})
             except (TypeError, ValueError, KeyError, OverflowError,
                     sqlite3.ProgrammingError) as exc:
                 # Malformed scalar where a list/object was expected is a
@@ -58,13 +87,26 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     SENDER_ROLES = {"author", "system", "chief", "planner", "writer", "editor",
                     "reviewer", "publisher", "agent", "worker"}
 
-    def _sender_role(body: dict) -> str:
+    def _author_channel(request: Request | None) -> bool:
+        # The event body is not identity.  Author-only operations (speaking as
+        # the author, claiming an approval capability, resolving cost gaps)
+        # require the dedicated author-channel header, which the desktop shell
+        # sends; an agent process cannot become the author by JSON alone
+        # (B3-17/B4-02).
+        return request is not None and request.headers.get("x-novel-author") == "1"
+
+    def _sender_role(body: dict, request: Request | None = None) -> str:
         # A body field is not identity.  Default to system so an agent that
         # omits the field cannot silently speak as the author (B3-17).
         value = str(body.get("sender_role") or "system").strip()
         if value not in SENDER_ROLES:
             raise agent_room.RoomError("invalid_sender_role",
                                        detail={"field": "sender_role"})
+        if value == "author" and not _author_channel(request):
+            raise agent_room.RoomError(
+                "author_channel_required", status=403,
+                detail={"field": "sender_role",
+                        "message": "作者身份只能经作者通道声明"})
         return value
 
     def _max_calls(body: dict) -> int:
@@ -73,6 +115,11 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             return 20
         if isinstance(value, bool):
             raise agent_room.RoomError("invalid_request", detail={"field": "max_calls"})
+        if isinstance(value, float) and not value.is_integer():
+            # 1.9 used to truncate to 1 silently (B4-08).
+            raise agent_room.RoomError(
+                "invalid_request",
+                detail={"field": "max_calls", "message": "max_calls 必须是整数"})
         try:
             parsed = int(value)
         except (TypeError, ValueError, OverflowError):
@@ -126,7 +173,19 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @app.get("/api/projects/{identity}/chapters/{chapter}/annotations")
     @guard
     def list_annotations(identity: str, chapter: int, against: str = "draft"):
-        return annotations.list_annotations(_book(identity), int(chapter), against=against)
+        book = _book(identity)
+        if not workbench_db.db_path(book).is_file():
+            return _empty_annotations(chapter, against)
+        try:
+            return annotations.list_annotations(book, int(chapter), against=against)
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+            text = str(exc).lower()
+            if "not a database" in text or "malformed" in text:
+                # 审计 C4-05：损坏库是故障，不是空数据；503 带稳定错误码，
+                # 不向 LAN 客户端回显绝对路径。
+                raise annotations.AnnotationError("db_unavailable", status=503) from None
+            return _empty_annotations(chapter, against, degraded=True,
+                                      reason="readonly_or_missing_table")
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/annotations")
     @guard
@@ -165,7 +224,17 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
     @app.get("/api/projects/{identity}/chapters/{chapter}/annotations/previews")
     @guard
     def annotation_previews(identity: str, chapter: int):
-        return annotations.list_previews(_book(identity), int(chapter))
+        book = _book(identity)
+        if not workbench_db.db_path(book).is_file():
+            return {"chapter_id": int(chapter), "previews": [], "count": 0}
+        try:
+            return annotations.list_previews(book, int(chapter))
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+            text = str(exc).lower()
+            if "not a database" in text or "malformed" in text:
+                raise annotations.AnnotationError("db_unavailable", status=503) from None
+            return {"chapter_id": int(chapter), "previews": [], "count": 0,
+                    "degraded": True, "degraded_reason": "readonly_or_missing_table"}
 
     @app.post("/api/projects/{identity}/chapters/{chapter}/revision/apply-hunks")
     @guard
@@ -206,97 +275,145 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
 
     @app.post("/api/chief/messages")
     @guard
-    def chief_message_without_project(data: dict | None = None):
+    def chief_message_without_project(request: Request, data: dict | None = None):
         body = data or {}
         session_id = str(body.get("session_id") or "author")
         return agent_room.append_event(
             room_db, session_id=session_id, topic_id=str(body.get("topic_id") or "default"),
-            project_id=None, channel="chief_chat", sender_role=_sender_role(body),
+            project_id=None, channel="chief_chat", sender_role=_sender_role(body, request),
             kind=str(body.get("kind") or "message"),
             summary=str(body.get("summary") or body.get("text") or ""),
             payload=body.get("payload") or {}, mentions=_seq(body.get("mentions"), "mentions"))
 
-    @app.get("/api/projects/{identity}/room/stream")
-    async def room_stream(identity: str, request: Request, last_event_id: str = ""):
-        """SSE four-channel stream with paged replay, gap-free subscribe and backpressure."""
-        after = 0
-        header = request.headers.get("last-event-id") or last_event_id
+    def _cursor(value) -> int:
         try:
-            after = int(header or 0)
+            parsed = int(value)
         except (TypeError, ValueError):
-            after = 0
+            return 0
         # A hostile/corrupt cursor must not overflow SQLite inside the stream
         # generator (B3-24).
-        after = max(0, min(after, 2**63 - 1))
+        return max(0, min(parsed, 2**63 - 1))
+
+    async def _event_frames(request: Request, *, project_id=None, session_id=None,
+                            after: int = 0, fresh: bool = False):
         page_size = 200
+        last_ping = time.monotonic()
 
-        async def frames():
+        async def replay(cursor: int):
             nonlocal after
-            token = None
-            try:
-                yield "retry: 1500\n\n"
+            while True:
+                batch = await asyncio.to_thread(
+                    agent_room.events_after, room_db, after_seq=cursor,
+                    project_id=project_id, session_id=session_id, limit=page_size)
+                for event in batch:
+                    yield f"id: {event['seq']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    cursor = int(event["seq"])
+                    after = cursor
+                if len(batch) < page_size:
+                    break
 
-                async def replay_from(cursor: int):
-                    nonlocal after
-                    while True:
-                        batch = await asyncio.to_thread(
-                            agent_room.events_after, room_db, after_seq=cursor,
-                            project_id=identity, limit=page_size)
-                        for event in batch:
-                            yield f"id: {event['seq']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                            cursor = int(event["seq"])
-                            after = cursor
-                            if token is not None:
-                                # Replay frames were delivered too; without an
-                                # ack an overflow marker can fall back to 0
-                                # (B3-24).
-                                agent_room.broadcaster.ack(token, cursor)
-                        if len(batch) < page_size:
-                            break
-
-                # C-43/B3-07: replay first, subscribe second.  A fresh client
-                # gets the newest page of *its own* project, not
+        token = None
+        try:
+            yield "retry: 1500\n\n"
+            if fresh:
+                # No cursor: replay the newest page of *this* scope, never
                 # ``global_latest - 200`` (sparse books would skip history).
-                if after == 0:
-                    page = await asyncio.to_thread(agent_room.recent_events, room_db,
-                                                   project_id=identity, limit=page_size)
-                    start = 0 if not page else max(0, int(page[0]["seq"]) - 1)
-                else:
-                    start = after
-                async for chunk in replay_from(start):
-                    yield chunk
-                token, queue = agent_room.broadcaster.subscribe(project_id=identity)
-                # Close the replay→subscribe race: anything appended in that
-                # window is replayed now; live duplicates are dropped by seq.
-                async for chunk in replay_from(after):
-                    yield chunk
-                while True:
-                    if await request.is_disconnected():
-                        break
-                    try:
-                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    except asyncio.TimeoutError:
+                page = await asyncio.to_thread(
+                    agent_room.recent_events, room_db, project_id=project_id,
+                    session_id=session_id, limit=page_size)
+                cursor = 0 if not page else max(0, int(page[0]["seq"]) - 1)
+            else:
+                cursor = after
+            async for chunk in replay(cursor):
+                yield chunk
+            token, queue = agent_room.broadcaster.subscribe(
+                project_id=project_id, session_id=None if project_id else session_id)
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    # Cross-process writers only touch SQLite/fanout; a short
+                    # DB poll keeps the stream live without sharing a loop
+                    # (B3-08).
+                    batch = await asyncio.to_thread(
+                        agent_room.events_after, room_db, after_seq=after,
+                        project_id=project_id, session_id=session_id, limit=page_size)
+                    delivered = False
+                    for event in batch:
+                        seq = event.get("seq")
+                        yield f"id: {seq}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                        if isinstance(seq, int):
+                            after = seq
+                            delivered = True
+                            if token is not None:
+                                agent_room.broadcaster.ack(token, seq)
+                    if not delivered and time.monotonic() - last_ping >= 15.0:
+                        last_ping = time.monotonic()
                         yield ": ping\n\n"
-                        continue
-                    seq = event.get("seq")
-                    # A resync control frame must bypass the seq<=after
-                    # filter: it can legitimately carry the last delivered
-                    # seq (including 0) and still needs to reach the client.
-                    if event.get("kind") != "resync_required" and isinstance(seq, int) and seq <= after:
-                        continue
-                    yield f"id: {seq if seq is not None else ''}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                    if isinstance(seq, int):
-                        after = seq
-                        agent_room.broadcaster.ack(token, seq)
-                    if event.get("kind") == "resync_required":
-                        break
-            finally:
-                if token is not None:
-                    agent_room.broadcaster.unsubscribe(token)
+                    continue
+                seq = event.get("seq")
+                if event.get("kind") == "resync_required":
+                    # Tell the client where replay can restart; a bare
+                    # ``full_reload`` with seq 0 used to strand the oldest
+                    # backlog (B3-07).
+                    oldest = await asyncio.to_thread(
+                        agent_room.oldest_seq, room_db, project_id=project_id,
+                        session_id=session_id)
+                    event = {**event, "oldest_available_seq": oldest}
+                elif isinstance(seq, int) and seq <= after:
+                    continue
+                yield f"id: {seq if seq is not None else ''}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                if isinstance(seq, int):
+                    after = seq
+                    agent_room.broadcaster.ack(token, seq)
+                if event.get("kind") == "resync_required":
+                    break
+        finally:
+            if token is not None:
+                agent_room.broadcaster.unsubscribe(token)
 
-        return StreamingResponse(frames(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache",
-                                          "X-Accel-Buffering": "no"})
+    def _stream_response(request: Request, *, project_id=None, session_id=None,
+                         last_event_id: str = "", after_seq=None):
+        header = request.headers.get("last-event-id") or last_event_id
+        if str(header or "").strip():
+            # An explicit Last-Event-ID/media cursor, including "0", is a
+            # from-scratch paging request rather than the newest-page default.
+            after = _cursor(header)
+            fresh = False
+        elif after_seq is not None:
+            # ?after_seq=0 is the deterministic "page from the beginning"
+            # path the overflow marker points at (B3-07).
+            after = _cursor(after_seq)
+            fresh = False
+        else:
+            after = 0
+            fresh = True
+        return StreamingResponse(
+            _event_frames(request, project_id=project_id, session_id=session_id,
+                          after=after, fresh=fresh),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/projects/{identity}/room/stream")
+    async def room_stream(identity: str, request: Request, last_event_id: str = "",
+                          after_seq: int | None = None):
+        """SSE four-channel stream with paged replay, gap-free subscribe and backpressure."""
+        return _stream_response(request, project_id=identity,
+                                last_event_id=last_event_id, after_seq=after_seq)
+
+    @app.get("/api/chief/room/stream")
+    async def chief_room_stream(request: Request, session_id: str = "author",
+                                project_id: str | None = None,
+                                last_event_id: str = "", after_seq: int | None = None):
+        # Pre-book rooms have no project yet; a session-only stream must read
+        # only unbound rows (B3-08/B3-22).
+        if project_id:
+            return _stream_response(request, project_id=project_id,
+                                    last_event_id=last_event_id, after_seq=after_seq)
+        return _stream_response(request, session_id=session_id,
+                                last_event_id=last_event_id, after_seq=after_seq)
 
     @app.post("/api/projects/{identity}/chief/topics")
     @guard
@@ -305,7 +422,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
 
     @app.post("/api/projects/{identity}/chief/messages")
     @guard
-    def chief_message(identity: str, data: dict | None = None):
+    def chief_message(identity: str, request: Request, data: dict | None = None):
         body = data or {}
         session_id = str(body.get("session_id") or "author")
         topic_id = str(body.get("topic_id") or "default")
@@ -313,7 +430,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         event = agent_room.append_event(
             room_db, session_id=session_id, topic_id=topic_id, project_id=identity,
             channel=str(body.get("channel") or "chief_chat"),
-            sender_role=_sender_role(body),
+            sender_role=_sender_role(body, request),
             kind=str(body.get("kind") or "message"),
             summary=str(body.get("summary") or body.get("text") or ""),
             payload=body.get("payload") or {}, mentions=_seq(body.get("mentions"), "mentions"))
@@ -360,8 +477,16 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
         record = agent_room.get_amendment(room_db, amendment)
         if str(record.get("directive_id")) != str(directive):
             raise agent_room.RoomError("amendment_directive_mismatch", status=404)
+        evaluator = None
+        if body.get("role_e") is True:
+            # Inject the real Role-E evaluator through the single model exit.
+            # Any model/parse failure becomes an amendment_fallback card.
+            gateway = model_gateway.ModelGateway(
+                project=str(_book(identity)), db_path=Path(data_dir) / "costs.sqlite3")
+            evaluator = agent_hub.role_e_evaluator(gateway, op_id=f"amend-{amendment}")
         return agent_hub.evaluate_amendment(room_db, amendment_id=amendment,
                                             directive_id=directive,
+                                            evaluator=evaluator,
                                             context=body.get("context") if isinstance(
                                                 body.get("context"), dict) else None)
 
@@ -431,7 +556,7 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             except (TypeError, ValueError):
                 raise agent_room.RoomError("approval_binding_required", status=400,
                                            detail={"field": "directive_revision"}) from None
-        return agent_room.resolve_approval(
+        resolved = agent_room.resolve_approval(
             room_db, approval_id=approval, approved=body["approved"],
             resolved_by="author",
             artifact_fingerprint=str(body.get("artifact_fingerprint") or ""),
@@ -440,6 +565,53 @@ def install(app: FastAPI, *, project: Callable[[str], Dict[str, Any]], data_dir:
             capability=capability or None,
             artifact_checker=lambda item: _artifact_still_valid(identity, item),
             decision=body.get("decision") if isinstance(body.get("decision"), dict) else {"note": str(body.get("note") or "")})
+        # An amendment_fallback card is only useful if approval actually moves
+        # the held task; run the consumer here (B3-15).
+        followup = agent_hub.consume_approval(room_db, resolved)
+        if followup is not None:
+            resolved = {**resolved, "followup": followup}
+        return resolved
+
+    @app.post("/api/projects/{identity}/approvals/{approval}/capability")
+    @guard
+    def approve_capability(identity: str, approval: str, request: Request):
+        # Author-channel delivery: an agent-created card stores only the hash,
+        # so the creator cannot self-approve (B4-02).
+        if not _author_channel(request):
+            raise agent_room.RoomError(
+                "author_channel_required", status=403,
+                detail={"message": "审批 capability 只能经作者通道领取"})
+        current = agent_room.get_approval(room_db, approval)
+        if str(current.get("project_id") or "") != str(identity):
+            raise agent_room.RoomError("approval_project_mismatch", status=404)
+        return agent_room.issue_capability(room_db, approval)
+
+    @app.post("/api/projects/{identity}/approvals/{approval}/recreate")
+    @guard
+    def recreate_card(identity: str, approval: str, request: Request):
+        if not _author_channel(request):
+            raise agent_room.RoomError(
+                "author_channel_required", status=403,
+                detail={"message": "重建审批卡只能经作者通道发起"})
+        current = agent_room.get_approval(room_db, approval)
+        if str(current.get("project_id") or "") != str(identity):
+            raise agent_room.RoomError("approval_project_mismatch", status=404)
+        return agent_room.recreate_approval(room_db, approval)
+
+    @app.post("/api/projects/{identity}/costs/resolve-gaps")
+    @guard
+    def resolve_cost_gaps(identity: str, request: Request, data: dict | None = None):
+        """Author-only release for cost gap markers (R-03 recovery path)."""
+        if not _author_channel(request):
+            raise agent_room.RoomError(
+                "author_channel_required", status=403,
+                detail={"message": "成本缺口只能由作者确认解除"})
+        body = data or {}
+        kind = body.get("kind")
+        book = str(Path(project(identity)["path"]).resolve())
+        resolved = costs.resolve_gaps(Path(data_dir) / "costs.sqlite3",
+                                      kind=str(kind) if kind else None, project=book)
+        return {"resolved": resolved, "project": book}
 
     @app.post("/api/projects/{identity}/chief/route")
     @guard

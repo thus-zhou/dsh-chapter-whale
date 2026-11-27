@@ -18,6 +18,18 @@ class LocalRouteTest(unittest.TestCase):
         self.assertEqual(hub.local_route("第 3 章那张地图最后谁拿走了？")["action"], "qa_lookup")
         self.assertEqual(hub.local_route("@精修 把这段改克制")["params"]["role"], "editor")
 
+    def test_negated_and_descriptive_sentences_do_not_trigger_side_effects(self):
+        # B3-18: negation prefixes and descriptive "所有" sentences must not
+        # pause the system or run annotations.
+        for text in ("不要全局暂停", "别急停所有角色", "不要执行本章批注",
+                     "继续写所有章节", "恢复所有角色的默认设置"):
+            self.assertIsNone(hub.local_route(text), text)
+        assert_pause = hub.local_route("请立即全局暂停。")
+        self.assertTrue(assert_pause["params"]["paused"])
+        long_command = hub.local_route("请马上全局暂停，另外把今天的第三章也重写一遍")
+        self.assertTrue(long_command["params"]["paused"])
+        self.assertTrue(long_command["requires_confirmation"])
+
     def test_qa_lookup_is_zero_model(self):
         result = hub.qa_lookup("地图谁拿走了", lambda q: [{"snippet": "老周把地图收进抽屉。"}])
         self.assertEqual(result["model_calls"], 0)
@@ -89,6 +101,27 @@ class DagGuardTest(unittest.TestCase):
         result = hub.route("随便编排一个有依赖的复合指令", planner=planner)
         self.assertEqual(result["level"], 2)
         self.assertEqual(result["order"], ["a", "b"])
+
+    def test_risk_metadata_is_exposed_and_flags_approval_nodes(self):
+        # B3-20: the tool table's risk column must reach callers.
+        validation = hub.validate_dag([
+            self.node("a", tool="create_book", role="chief"),
+            self.node("b", depends=["a"]),
+        ])
+        self.assertEqual(validation["risk"], {"a": "high", "b": "low"})
+        self.assertEqual(validation["requires_approval"], ["a"])
+        self.assertEqual(validation["max_risk"], "high")
+        template = hub.route("开一本县城悬疑")
+        self.assertEqual(template["level"], 1)
+        self.assertEqual(template["max_risk"], "high")
+        self.assertIn("tsk_01", template["requires_approval"])
+        self.assertEqual(template["risk"]["tsk_01"], "high")
+
+        def planner(message, context):
+            return [self.node("a", tool="request_publish_authorization", role="publisher")]
+        free = hub.route("来点复杂的自由编排", planner=planner)
+        self.assertEqual(free["requires_approval"], ["a"])
+        self.assertEqual(free["max_risk"], "high")
 
 
 class AmendmentTest(unittest.TestCase):
@@ -302,6 +335,85 @@ class ApprovalLifecycleHubTest(unittest.TestCase):
             self.assertEqual(caught.exception.code, "directive_cancelled")
         self.assertEqual(room.get_directive(self.db, self.directive["id"])["status"],
                          "cancelled")
+
+    def test_evaluate_and_release_reject_cancel_committed_after_precheck(self):
+        # B4-06: evaluator/release used to rewrite a cancelled amendment to
+        # evaluated/released after the pre-check had passed.
+        started = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                      amendment_text="改一", task_ids=[self.task["id"]])
+        hub.cancel_directive(self.db, directive_id=self.directive["id"])
+        stale = dict(self.directive, status="running")
+        with mock.patch.object(hub.room, "get_directive", return_value=stale):
+            with self.assertRaises(hub.HubError) as caught:
+                hub.evaluate_amendment(self.db, amendment_id=started["amendment_id"],
+                                       directive_id=self.directive["id"])
+            self.assertEqual(caught.exception.code, "directive_cancelled")
+            with self.assertRaises(hub.HubError) as caught:
+                hub.release_holds_for_current(self.db, directive_id=self.directive["id"],
+                                              amendment_id=started["amendment_id"])
+            self.assertEqual(caught.exception.code, "directive_cancelled")
+        amendment = room.get_amendment(self.db, started["amendment_id"])
+        self.assertEqual(amendment["status"], "cancelled")
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "cancelled")
+
+    def test_amendment_lifecycle_writes_durable_events(self):
+        started = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                      amendment_text="改一", task_ids=[self.task["id"]])
+        hub.evaluate_amendment(self.db, amendment_id=started["amendment_id"],
+                               directive_id=self.directive["id"])
+        hub.cancel_directive(self.db, directive_id=self.directive["id"])
+        kinds = [row["kind"] for row in room.events_after(self.db, after_seq=0,
+                                                          project_id="p")]
+        for kind in ("amendment_started", "amendment_evaluated", "directive_cancelled"):
+            self.assertIn(kind, kinds)
+
+    def test_role_e_evaluator_parses_model_json(self):
+        class Gateway:
+            def __init__(self):
+                self.calls = []
+
+            def invoke_sync(self, role, messages, **kwargs):
+                self.calls.append((role, kwargs))
+                return '```json\n{"keep": ["tsk_keep", "tsk_foreign"], "update": [], ' \
+                       '"wait_and_redo": ["tsk_redo"]}\n```'
+
+        gateway = Gateway()
+        evaluator = hub.role_e_evaluator(gateway, op_id="amend-op")
+        result = evaluator({"tasks": [{"id": "tsk_keep", "title": "a", "tool_name": "x",
+                                      "status": "held"},
+                                     {"id": "tsk_redo", "title": "b", "tool_name": "y",
+                                      "status": "held"}],
+                            "amendment": {"raw_text": "改"}, "amendment_id": "amd_1"})
+        self.assertEqual(result["keep"], ["tsk_keep"])
+        self.assertEqual(result["wait_and_redo"], ["tsk_redo"])
+        self.assertEqual(gateway.calls[0][0], "E")
+        self.assertEqual(gateway.calls[0][1]["stage"], "authorization")
+
+    def test_fallback_card_is_consumed_after_author_approval(self):
+        started = hub.start_amendment(self.db, directive_id=self.directive["id"],
+                                      amendment_text="改一", task_ids=[self.task["id"]])
+
+        def broken(_):
+            raise RuntimeError("model timeout")
+
+        result = hub.evaluate_amendment(self.db, amendment_id=started["amendment_id"],
+                                        directive_id=self.directive["id"], evaluator=broken)
+        self.assertEqual(result["status"], "fallback")
+        card = result["approval"]
+        self.assertNotIn("capability", card)
+        # The agent-created card needs an author-claimed capability.
+        capability = room.issue_capability(self.db, card["id"])["capability"]
+        resolved = room.resolve_approval(self.db, card["id"], approved=True,
+                                         capability=capability)
+        self.assertEqual(resolved["status"], "approved")
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "held")
+        followup = hub.consume_approval(self.db, resolved)
+        self.assertEqual(followup["consumed"], "evaluated")
+        # Deterministic evaluation releases the held task instead of leaving it
+        # frozen forever (B3-15).
+        self.assertEqual(room.get_task(self.db, self.task["id"])["status"], "pending")
+        self.assertEqual(room.get_amendment(self.db, started["amendment_id"])["status"],
+                         "evaluated")
 
     def test_repeated_holds_preserve_original_running_status(self):
         first = hub.start_amendment(self.db, directive_id=self.directive["id"],
