@@ -303,15 +303,23 @@ def route(message: str, *, extractor: Optional[Callable[[str], Dict[str, Any]]] 
 
 # --------------------------------------------------------------- amendments
 
-def _supersede_pending_approvals(db, directive_id: str, stamp: str) -> int:
-    """Invalidate every pending card of a directive inside the caller's transaction.
+def _supersede_pending_approvals(db, directive_id: str, stamp: str,
+                                 keep_task_ids=()) -> int:
+    """Invalidate pending cards of a directive inside the caller's transaction.
 
-    Amendment/cancel/resume all change the authorization context; a card that
-    survives them can approve stale work (B3-02).
+    Amendment/cancel/resume change the authorization context; a card that
+    survives them can approve stale work (B3-02).  ``keep_task_ids`` preserves
+    cards for tasks that remain ``awaiting_approval`` during resume; those
+    tasks must not be requeued without a card (R-02).
     """
-    cur = db.execute(
-        "UPDATE agent_approvals SET status='superseded', resolved_at=? "
-        "WHERE directive_id=? AND status='pending'", (stamp, directive_id))
+    keep = [str(value) for value in keep_task_ids if value]
+    sql = ("UPDATE agent_approvals SET status='superseded', resolved_at=? "
+           "WHERE directive_id=? AND status='pending'")
+    args = [stamp, directive_id]
+    if keep:
+        sql += " AND (task_id IS NULL OR task_id NOT IN (" + ",".join("?" for _ in keep) + "))"
+        args.extend(keep)
+    cur = db.execute(sql, tuple(args))
     return int(cur.rowcount or 0)
 
 
@@ -569,17 +577,22 @@ def resume_directive(db_path, *, directive_id: str) -> Dict[str, Any]:
                 raise room.RoomError("directive_missing", status=404)
             raise HubError("directive_cancelled", status=409,
                            detail={"message": "已取消的指令不能直接恢复；请新建指令"})
-        # paused_budget/awaiting_approval are active states too; a resume that
-        # only released 'held' left them stuck (B3-13).  Their old approval
-        # cards are superseded below, so they must be requeued, not left
-        # waiting on a card that can never be approved.
+        # Release only tasks whose hold is an author pause.  A task in
+        # awaiting_approval must keep its status and its pending approval card:
+        # requeueing it while superseding the card would be an approval bypass
+        # (R-02).  Its card remains resolvable against the new live revision
+        # only if the card revision still matches; otherwise the author must
+        # create a fresh card.
+        awaiting = {str(row[0]) for row in db.execute(
+            "SELECT id FROM agent_tasks WHERE directive_id=? AND status='awaiting_approval'",
+            (directive_id,))}
         released = db.execute(
             "UPDATE agent_tasks SET status='pending', wait_reason=? "
-            "WHERE directive_id=? AND status IN ('held','paused_budget','awaiting_approval')",
+            "WHERE directive_id=? AND status IN ('held','paused_budget')",
             ("作者已恢复指令，重新排队", directive_id))
         db.execute("UPDATE agent_amendments SET status='released', updated_at=? "
                    "WHERE directive_id=? AND status='pending'", (stamp, directive_id))
-        _supersede_pending_approvals(db, directive_id, stamp)
+        _supersede_pending_approvals(db, directive_id, stamp, keep_task_ids=awaiting)
     counts = int(released.rowcount or 0)
     return {"status": "running", "directive_id": directive_id, "released_tasks": counts,
             **room.get_directive(db_path, directive_id)}

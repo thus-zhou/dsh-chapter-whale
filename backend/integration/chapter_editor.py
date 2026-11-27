@@ -1192,8 +1192,14 @@ def _split_entry_is_ours(entry: Dict[str, Any], second_sha: str, op_b: str) -> b
     if entry.get("current") != second_sha:
         return False
     versions_list = entry.get("versions") if isinstance(entry.get("versions"), list) else []
-    return any(isinstance(meta, dict) and meta.get("op_id") == op_b
-               and meta.get("sha256") == second_sha for meta in versions_list)
+    if not versions_list:
+        return False
+    latest = versions_list[-1]
+    # Only the newest version identifies the current writer.  A concurrent
+    # title-only save can keep the same sha; matching any old op_b entry would
+    # then delete that save's index/receipt (P1-03 same-sha residual).
+    return (isinstance(latest, dict) and latest.get("op_id") == op_b
+            and latest.get("sha256") == second_sha)
 
 
 def _rollback_split(project, chapter: int, raw: bytes, first_sha: str, second_sha: str,

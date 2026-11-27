@@ -13,7 +13,8 @@ def reserve(db_path, project, price, messages, max_tokens):
     # Only this project's recent unresolved gaps may close its fallback path.
     # A gap from another book, an old gap, or a process-global counter used to
     # disable paid fallback forever (B3-05).
-    if costs.ledger_gaps(db_path, within_hours=24, project=project):
+    if (costs.ledger_gaps(db_path, within_hours=24, project=project)
+            or costs.unrecorded_gap_count(project)):
         raise ValueError('成本记录不完整，禁止自动付费回退')
     price = dict(price or {})
     if any(k not in price for k in ('input','output','currency')):raise ValueError('备选模型缺少报价')

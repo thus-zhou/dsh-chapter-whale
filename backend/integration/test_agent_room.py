@@ -211,6 +211,25 @@ class RoomTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "approval_expired")
         self.assertEqual(room.get_approval(self.db, approval["id"])["status"], "expired")
 
+    def test_legacy_card_requires_binding_even_with_a_capability(self):
+        # R-04: a legacy card has no capability_hash; an arbitrary non-empty
+        # capability must not bypass the binding-echo requirement.
+        approval = room.create_approval(self.db, session_id="s", project_id="p1",
+                                        directive_id=None, directive_revision=1,
+                                        task_id=None, kind="publish", title="发布",
+                                        artifact_fingerprint="fp", approved_scope_hash="scope",
+                                        detail={})
+        db = sqlite3.connect(self.db)
+        try:
+            db.execute("UPDATE agent_approvals SET capability_hash=NULL WHERE id=?", (approval["id"],))
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaises(room.RoomError) as caught:
+            room.resolve_approval(self.db, approval["id"], approved=True,
+                                  capability="anything", resolved_by="author")
+        self.assertEqual(caught.exception.code, "approval_binding_required")
+
 
 class BroadcasterTest(unittest.TestCase):
     def test_slow_client_gets_resync_and_is_dropped(self):

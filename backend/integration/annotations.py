@@ -750,6 +750,16 @@ def _hunk_already_present(project, base_text: str, current_text: str,
         if (text_merge.slice_codepoints(base_text, start, end) == before
                 and text_merge.slice_codepoints(current_text, start, end) == applied):
             return {"start": start, "end": end, "applied_text": applied}
+        # Insertion case: the old crash landed the candidate at the exact
+        # hunk position (the base still has only ``before`` there).  This is
+        # narrow evidence; do not use a whole-document "unique occurrence"
+        # guess that can mistake the author's own sentence for a landed patch
+        # (R-01).
+        if (text_merge.slice_codepoints(base_text, start, end) == before
+                and text_merge.slice_codepoints(current_text, start, start + text_merge.codepoint_length(applied))
+                == applied):
+            return {"start": start, "end": start + text_merge.codepoint_length(applied),
+                    "applied_text": applied}
     anchor = {"quote": before, "char_start": row.get("char_start"),
               "char_end": row.get("char_end"),
               "base_snapshot_id": base_snapshot_id or row.get("base_snapshot_id")}
@@ -759,20 +769,11 @@ def _hunk_already_present(project, base_text: str, current_text: str,
             start, end = int(located["start"]), int(located["end"])
             if text_merge.slice_codepoints(current_text, start, end) == applied:
                 return {"start": start, "end": end, "applied_text": applied}
-    # A replacement/deletion invalidates the old quote, so relocation returns
-    # ``overlap_conflict``.  If the candidate is uniquely present and the base
-    # never contained it, the earlier attempt landed it.
-    start = 0
-    hits = []
-    while True:
-        found = current_text.find(applied, start)
-        if found < 0:
-            break
-        hits.append(found)
-        start = found + max(1, len(applied))
-    if len(hits) == 1 and applied not in base_text:
-        found = hits[0]
-        return {"start": found, "end": found + len(applied), "applied_text": applied}
+    # Do not infer "already applied" from a unique occurrence of the target
+    # text.  The author may have typed the same sentence elsewhere; treating
+    # that as a landed patch silently skips the real selection edit, and a
+    # later undo would rewrite the author's unrelated sentence.  Only the
+    # exact range/relocated quote above is evidence of this hunk (R-01).
     return None
 
 

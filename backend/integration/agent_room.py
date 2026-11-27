@@ -597,6 +597,16 @@ def resolve_approval(db_path=None, approval_id: str = "", *, approved: bool,
                         detail={"message": "审批卡需要创建者提供的一次性 capability，不能只回传库内字段"})
                 if not hmac.compare_digest(stored_capability, _capability_hash(capability)):
                     raise RoomError("approval_capability_invalid", status=403)
+            else:
+                # Legacy card without a capability: the binding echo is still
+                # mandatory.  A caller-supplied capability must not turn a
+                # legacy row into an unbound approval (R-04).
+                if (not str(artifact_fingerprint or "").strip()
+                        or not str(approved_scope_hash or "").strip()
+                        or directive_revision is None):
+                    raise RoomError(
+                        "approval_binding_required", status=400,
+                        detail={"message": "旧审批卡必须回传指纹、作用域和指令 revision"})
             # Read the live directive inside the same write transaction: a
             # cancel or revision bump that committed after the card was read
             # must invalidate the card (B3-02).

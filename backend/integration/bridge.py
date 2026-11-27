@@ -1044,13 +1044,16 @@ def run_publish(
             atomic_json(report_path, child)
             sync_manifest()
             evidence = latest_publish_report(book, account)
+            # Record every chapter the platform confirmed and archived, even
+            # when a later chapter in the same batch failed.  Waiting for a
+            # whole-batch verified_success left platform-confirmed chapters
+            # deletable and created a platform/local divergence (E-01).
+            child["publication_receipts"] = _record_published_receipts(plan, child, identity)
             if not evidence["verified_success"]:
                 child["exit_code"] = 2
                 child.setdefault("reason", "publication_evidence_incomplete")
                 atomic_json(report_path, child)
                 return 2
-            # 真实发布成功（平台确认 + 归档 + 证据齐全）才写 published 回执。
-            child["publication_receipts"] = _record_published_receipts(plan, child, identity)
             atomic_json(report_path, child)
             return 0
     except Exception as exc:

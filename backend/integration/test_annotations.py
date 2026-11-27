@@ -731,3 +731,34 @@ class ApplyAtomicityTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AlreadyLandedRegressions(unittest.TestCase):
+    def test_author_text_elsewhere_is_not_adopted_as_a_landed_patch(self):
+        # R-01: the author typed the same candidate sentence elsewhere; apply
+        # must still edit the annotated selection and never treat the author's
+        # sentence as proof this hunk landed earlier.
+        with tempfile.TemporaryDirectory() as folder:
+            project = make_project(folder)
+            text = "开头。\n她推开门。\n结尾。\n"
+            seed(project, text)
+            aid = ann.create_annotation(project, 1, {
+                "scope": "selection", "instruction": "改得更克制", "against": "version",
+                "anchor": {"char_start": text.index("她推开门。"),
+                           "char_end": text.index("她推开门。") + len("她推开门。"),
+                           "quote": "她推开门。"}})["id"]
+            preview = ann.run_annotations(
+                project, 1, {"op_id": "r01-run", "annotation_ids": [aid]},
+                generate=lambda a, c: "<replacement>她攥紧门把手。</replacement>")["previews"][0]
+            hunk_id = preview["hunks"][0]["id"]
+            draft = wb.save_draft(project, 1, title="开端",
+                                  content=text + "她攥紧门把手。\n",
+                                  expected_draft_epoch=0, expected_draft_revision=0)
+            applied = ann.apply_hunks(project, 1, {
+                "op_id": "r01-apply", "hunk_ids": [hunk_id],
+                "expected_draft_id": draft["draft_id"],
+                "expected_draft_epoch": draft["draft_epoch"],
+                "expected_draft_revision": draft["draft_revision"]})
+            self.assertEqual(applied["status"], "applied")
+            self.assertEqual(applied["draft"]["content"].count("她攥紧门把手。"), 2)
+            self.assertTrue(applied["draft"]["content"].startswith("开头。\n她攥紧门把手。\n结尾。"))

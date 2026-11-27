@@ -27,6 +27,10 @@ STAGES = {"planning":"剧情规划", "draft":"正文初稿", "polish":"润色与
 META = ContextVar("novel_cost_context", default={})
 # 成本事件写入失败次数（仅本进程）。用于 /api/costs 暴露“可能漏记”的告警。
 MISSED_EVENTS = 0
+# Gap persistence failures are money-safety signals.  They cannot be written
+# to disk, so keep them in-process (per project) and make the fallback gate and
+# report fail closed until the process restarts (R-03).
+UNRECORDED_GAPS = {}
 _INITIALIZED_DBS = set()
 _INIT_GUARD = None
 
@@ -144,6 +148,8 @@ def record_gap(db_path, kind, project=None):
                     {'at': datetime.now(timezone.utc).isoformat(), 'kind': kind,
                      'project': str(project) if project else None, 'resolved_at': None})
     except Exception:
+        key = _project_key(project) if project else "*"
+        UNRECORDED_GAPS[key] = int(UNRECORDED_GAPS.get(key, 0)) + 1
         print('[费用记录] 严重：独立告警也无法写入，禁止自动付费回退', flush=True)
 
 
@@ -183,6 +189,21 @@ def ledger_gaps(db_path, *, within_hours=None, project=None, unresolved_only=Tru
             continue
         count += 1
     return count
+
+
+def unrecorded_gap_count(project=None):
+    """Process-local count of gaps whose file could not be written.
+
+    A global (project-less) failed write applies to every project; otherwise
+    only the affected project is gated.  Deliberately conservative: this is a
+    money-safety backstop, not a durable ledger (R-03).
+    """
+    if not UNRECORDED_GAPS:
+        return 0
+    if project:
+        key = _project_key(project)
+        return int(UNRECORDED_GAPS.get(key, 0)) + int(UNRECORDED_GAPS.get("*", 0))
+    return sum(int(value) for value in UNRECORDED_GAPS.values())
 
 
 def gap_records(db_path, *, project=None, unresolved_only=True):
@@ -944,10 +965,12 @@ def report(db_path, project=None, chapter=None, days=0):
         for event in events:grouped.setdefault(key(event),[]).append(event)
         return [{"key":value,"label":label(items[0]),**aggregate(items)} for value,items in sorted(grouped.items())]
     summary = aggregate(events)
-    gaps = ledger_gaps(db_path)
-    gaps_recent = ledger_gaps(db_path, within_hours=24)
+    gaps = ledger_gaps(db_path, project=project)
+    gaps_recent = ledger_gaps(db_path, within_hours=24, project=project)
+    unrecorded = unrecorded_gap_count(project)
     summary.update(ledger_gaps=gaps, gaps_recent=gaps_recent,
-                   complete=summary['complete'] and not gaps_recent)
+                   unrecorded_gaps=unrecorded,
+                   complete=summary['complete'] and not gaps_recent and not unrecorded)
     return {"summary":summary,"stages":groups(lambda e:e["stage"],lambda e:STAGES.get(e["stage"],e["stage"])),
             'providers':groups(lambda e:e.get('provider_id') or e['base_url'],lambda e:e.get('provider_name') or e['base_url']),
             'fallback':aggregate([e for e in events if e.get('fallback_from')]),
@@ -958,7 +981,7 @@ def report(db_path, project=None, chapter=None, days=0):
             "daily":groups(lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat(),
                            lambda e:datetime.fromisoformat(e["created_at"]).astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()),
             "recent":list(reversed(events[-100:])),"total_records":len(events),
-            "missed_events":gaps_recent}
+            "missed_events":gaps_recent,"unrecorded_gaps":unrecorded}
 
 
 def export_csv(db_path, **filters):

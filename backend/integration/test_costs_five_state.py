@@ -277,3 +277,19 @@ class FallbackGapTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnrecordedGapTest(unittest.TestCase):
+    def test_gap_write_failure_blocks_paid_fallback(self):
+        # R-03: a gap that cannot be persisted must still fail closed.
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "costs.sqlite3"
+            with mock.patch("fanqie_auto_publish.publication_safety.atomic_json",
+                            side_effect=OSError("disk full")):
+                costs.record_gap(db, "fallback_settlement_unknown", project="/book/a")
+            self.assertGreaterEqual(costs.unrecorded_gap_count("/book/a"), 1)
+            with self.assertRaises(ValueError):
+                fallback_budget.reserve(db, "/book/a", {}, [], 1)
+            costs.UNRECORDED_GAPS.clear()

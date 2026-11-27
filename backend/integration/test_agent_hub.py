@@ -258,6 +258,19 @@ class ApprovalLifecycleHubTest(unittest.TestCase):
         self.assertEqual(room.get_task(self.db, paused["id"])["status"], "pending")
         self.assertEqual(room.get_approval(self.db, card["id"])["status"], "superseded")
 
+    def test_resume_keeps_awaiting_approval_task_and_card(self):
+        # R-02: resuming must not turn an approval-gated task into pending.
+        waiting = room.create_task(self.db, directive_id=self.directive["id"], session_id="s",
+                                   project_id="p", role="writer", title="等审批",
+                                   tool_name="publish", status="awaiting_approval")
+        card = room.create_approval(self.db, session_id="s", project_id="p",
+                                    directive_id=self.directive["id"], directive_revision=1,
+                                    task_id=waiting["id"], kind="publish", title="发布",
+                                    artifact_fingerprint="fp", approved_scope_hash="scope", detail={})
+        hub.resume_directive(self.db, directive_id=self.directive["id"])
+        self.assertEqual(room.get_task(self.db, waiting["id"])["status"], "awaiting_approval")
+        self.assertEqual(room.get_approval(self.db, card["id"])["status"], "pending")
+
     def test_amend_and_resume_reject_cancel_committed_after_precheck(self):
         hub.cancel_directive(self.db, directive_id=self.directive["id"])
         stale = dict(self.directive, status="running")
